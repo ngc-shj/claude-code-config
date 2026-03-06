@@ -8,6 +8,7 @@ set -euo pipefail
 
 OLLAMA_HOST="${OLLAMA_HOST:-http://gx10-a9c0:11434}"
 MODEL="${REVIEW_MODEL:-gpt-oss:120b}"
+TIMEOUT="${REVIEW_TIMEOUT:-300}"
 MODE="${1:-code}"
 
 case "$MODE" in
@@ -34,7 +35,7 @@ case "$MODE" in
 esac
 
 # Call Ollama API
-RESPONSE=$(curl -sf --max-time 120 "$OLLAMA_HOST/api/generate" \
+RESPONSE=$(curl -sf --max-time "$TIMEOUT" "$OLLAMA_HOST/api/generate" \
   -d "$(jq -n \
     --arg model "$MODEL" \
     --arg system "$SYSTEM" \
