@@ -1,0 +1,208 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~*)",
+      "Bash(rm -rf $HOME*)",
+      "Bash(rm -rf ./*)",
+      "Bash(rm -r *)",
+      "Bash(sudo *)",
+      "Bash(su *)",
+      "Bash(chmod 777 *)",
+      "Bash(chmod -R *)",
+      "Bash(chown *)",
+      "Bash(mkfs *)",
+      "Bash(dd *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -fd*)",
+      "Bash(git clean -fx*)",
+      "Bash(git checkout -- .)",
+      "Bash(git branch -D *)",
+      "Bash(> *)",
+      "Bash(curl * -d *)",
+      "Bash(curl * --data*)",
+      "Bash(curl * -X POST*)",
+      "Bash(curl * -X PUT*)",
+      "Bash(curl * -X DELETE*)",
+      "Bash(wget * --post*)",
+      "Bash(pkill *)",
+      "Bash(killall *)",
+      "Bash(shutdown *)",
+      "Bash(reboot *)",
+      "Bash(launchctl *)",
+      "Bash(docker system prune*)",
+      "Bash(docker volume prune*)",
+      "Bash(docker network prune*)",
+      "Bash(docker image prune*)",
+      "Bash(docker container prune*)",
+      "Bash(docker push*)",
+      "Bash(docker login*)",
+      "Bash(docker save*)",
+      "Bash(docker load*)",
+      "Bash(docker-compose down -v*)",
+      "Bash(docker compose down -v*)",
+      "Bash(npm publish*)",
+      "Bash(npm unpublish*)",
+      "Bash(npx -y *)",
+      "Bash(eval *)",
+      "Bash(source *)",
+      "Bash(xargs *)",
+      ":(Skill*)"
+    ],
+    "allow": [
+      "mcp__ollama__ollama_generate",
+      "mcp__ollama__ollama_chat",
+      "mcp__ollama__ollama_list",
+      "mcp__ollama__ollama_show",
+      "mcp__ollama__ollama_pull",
+      "mcp__ollama__ollama_embeddings",
+      "mcp__searxng__searxng_search",
+      "mcp__searxng__searxng_images",
+      "mcp__searxng__searxng_news",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git stash list*)",
+      "Bash(git remote -v*)",
+      "Bash(git fetch*)",
+      "Bash(git pull*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git switch *)",
+      "Bash(git merge *)",
+      "Bash(git rebase *)",
+      "Bash(git cherry-pick *)",
+      "Bash(git tag *)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(gh repo view*)",
+      "Bash(ls *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(cat *)",
+      "Bash(wc *)",
+      "Bash(od *)",
+      "Bash(diff *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(which *)",
+      "Bash(echo *)",
+      "Bash(pwd*)",
+      "Bash(env*)",
+      "Bash(set *)",
+      "Bash(npm list*)",
+      "Bash(npm run *)",
+      "Bash(npm test*)",
+      "Bash(npm install*)",
+      "Bash(npm ci*)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(lsof *)",
+      "Bash(curl -s *)",
+      "Bash(curl --silent *)",
+      "Bash(docker ps*)",
+      "Bash(docker images*)",
+      "Bash(docker image ls*)",
+      "Bash(docker container ls*)",
+      "Bash(docker logs*)",
+      "Bash(docker inspect*)",
+      "Bash(docker volume ls*)",
+      "Bash(docker network ls*)",
+      "Bash(docker stats*)",
+      "Bash(docker top*)",
+      "Bash(docker port*)",
+      "Bash(docker history*)",
+      "Bash(docker info*)",
+      "Bash(docker version*)",
+      "Bash(docker build*)",
+      "Bash(docker compose build*)",
+      "Bash(docker-compose build*)",
+      "Bash(docker compose up*)",
+      "Bash(docker-compose up*)",
+      "Bash(docker compose logs*)",
+      "Bash(docker-compose logs*)",
+      "Bash(docker compose ps*)",
+      "Bash(docker-compose ps*)",
+      "Bash(docker compose config*)",
+      "Bash(docker-compose config*)",
+      "Bash(docker exec *)",
+      "Bash(docker run *)",
+      "Bash(docker cp *)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(git stash drop*)",
+      "Bash(git stash clear*)",
+      "Bash(gh pr merge*)",
+      "Bash(gh pr close*)",
+      "Bash(gh issue close*)",
+      "Bash(kill *)",
+      "Bash(rm *)",
+      "Bash(mv *)",
+      "Bash(docker stop *)",
+      "Bash(docker rm *)",
+      "Bash(docker rmi *)",
+      "Bash(docker volume rm *)",
+      "Bash(docker network rm *)",
+      "Bash(docker compose down*)",
+      "Bash(docker-compose down*)",
+      "Bash(docker compose restart*)",
+      "Bash(docker-compose restart*)",
+      "Bash(docker pull *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/block-sensitive-files.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/commit-msg-check.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/stop-notify.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/notify.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
