@@ -1,11 +1,11 @@
-# claude-code
+# claude-code-config
 
 Safe default settings for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with agentic multi-model architecture.
 
 ## Repository structure
 
 ```text
-claude-code/
+claude-code-config/
 ├── .editorconfig                  # Editor formatting rules
 ├── .gitignore                     # Ignore .DS_Store, *.bak, etc.
 ├── LICENSE                        # MIT License
@@ -160,8 +160,8 @@ Each review phase uses local LLM (`gpt-oss:120b`) to catch obvious issues before
 ### Setup
 
 ```bash
-git clone https://github.com/ngc-shj/claude-code.git
-cd claude-code
+git clone https://github.com/ngc-shj/claude-code-config.git
+cd claude-code-config
 bash install.sh
 ```
 
