@@ -6,19 +6,22 @@ Safe default settings for [Claude Code](https://docs.anthropic.com/en/docs/claud
 
 ```text
 claude-code/
-├── README.md              # This file
-├── CLAUDE.md              # Global behavior rules + model routing strategy
-├── settings.json          # Permissions + hooks configuration
-├── install.sh             # Installer script
+├── .editorconfig                  # Editor formatting rules
+├── .gitignore                     # Ignore .DS_Store, *.bak, etc.
+├── LICENSE                        # MIT License
+├── README.md                      # This file
+├── CLAUDE.md                      # Global behavior rules + model routing strategy
+├── settings.json                  # Permissions + hooks configuration
+├── install.sh                     # Installer script
 ├── hooks/
 │   ├── block-sensitive-files.sh   # Block edits to secrets/lock files
 │   ├── commit-msg-check.sh       # Commit message validation via local LLM
 │   ├── pre-review.sh             # Code/plan pre-screening via local LLM
-│   ├── notify.sh                  # Desktop notifications (macOS)
-│   └── stop-notify.sh             # Task completion notifications
+│   ├── notify.sh                 # Desktop notifications (macOS)
+│   └── stop-notify.sh            # Task completion notifications
 └── skills/
     └── multi-agent-review/
-        └── SKILL.md       # Multi-agent review workflow
+        └── SKILL.md              # Multi-agent review workflow
 ```
 
 ## Agentic architecture
