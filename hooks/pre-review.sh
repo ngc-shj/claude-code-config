@@ -18,7 +18,7 @@ case "$MODE" in
     else
       CONTENT=$(cat)
     fi
-    SYSTEM="You are a senior engineer. Review the following plan for obvious issues. Focus on: missing requirements, unclear scope, security red flags, untestable designs. Be concise. List only clear problems. If no issues found, reply with exactly: No issues found."
+    SYSTEM="You are a senior engineer. Review the following plan for obvious issues. Focus on: missing requirements, unclear scope, security red flags, untestable designs. Be concise. Classify each finding as [Critical], [Major], or [Minor]. Critical: blocks release, data loss, security vulnerability. Major: significant functional issue. Minor: style, naming. List only clear problems. If no issues found, reply with exactly: No issues found."
     ;;
   code)
     CONTENT=$(git diff main...HEAD 2>/dev/null)
@@ -32,7 +32,7 @@ case "$MODE" in
       echo "No code changes to review."
       exit 0
     fi
-    SYSTEM="You are a code reviewer. Review the following code changes for obvious issues. Focus on: bugs, security vulnerabilities, missing error handling, naming issues. Be concise. List only clear problems with file name and line number. If no issues found, reply with exactly: No issues found."
+    SYSTEM="You are a code reviewer. Review the following code changes for obvious issues. Focus on: bugs, security vulnerabilities (OWASP Top 10, injection, auth bypass), missing error handling, naming issues. Be concise. Classify each finding as [Critical], [Major], or [Minor]. Critical: data loss, security vulnerability, crash. Major: incorrect logic, missing error handling. Minor: naming, style. List only clear problems with file name and line number. If no issues found, reply with exactly: No issues found."
     ;;
   *)
     echo "Usage: $0 [plan|code]"
