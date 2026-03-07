@@ -59,6 +59,8 @@ PLAN_FILE=~/.claude/plans/[plan-name].md bash ~/.claude/hooks/pre-review.sh plan
 If the output contains issues, fix them in the plan before proceeding to expert review.
 If Ollama is unavailable, the script outputs a warning and exits gracefully — proceed to Step 1-4.
 
+Save the local LLM output for reference in Step 1-4 (to avoid duplicate findings).
+
 ### Step 1-4: Plan Review by Three Expert Agents (Claude Sub-agents)
 
 Launch three sub-agents in parallel with the following roles (fall back to sequential inline execution if unavailable).
@@ -66,10 +68,12 @@ Launch three sub-agents in parallel with the following roles (fall back to seque
 | Agent | Role | Evaluation perspective |
 |-------|------|----------------------|
 | Functionality expert | Senior Software Engineer | Requirements coverage, architecture, feasibility, edge cases |
-| Security expert | Security Engineer | Threat model, authentication/authorization, data protection, vulnerability patterns |
+| Security expert | Security Engineer | Threat model, authentication/authorization, data protection, OWASP Top 10, injection, auth bypass |
 | Testing expert | QA Engineer | Test strategy, coverage, testability, CI/CD integration |
 
 Instruction template for each sub-agent:
+
+**Round 1 (full review):**
 ```
 You are a [role name].
 Evaluate the following plan from a [perspective] perspective.
@@ -77,19 +81,46 @@ Evaluate the following plan from a [perspective] perspective.
 Plan contents:
 [Plan file contents]
 
-Previous evaluation results (none for first round):
-[Previous findings]
+Local LLM pre-screening results (already addressed — do not re-report these):
+[Local LLM output, or "None" if skipped]
 
 Requirements:
 - Only raise specific and actionable findings
-- For each finding, specify "Problem", "Impact", and "Recommended action"
-- If there are changes from the previous round, indicate them
+- Classify each finding by severity: Critical / Major / Minor
+  - Critical: Blocks release, causes data loss, security vulnerability
+  - Major: Significant functional issue, performance problem
+  - Minor: Style, naming, minor improvement suggestion
+- For each finding, specify "Severity", "Problem", "Impact", and "Recommended action"
+- Do not duplicate issues already caught by local LLM pre-screening
 - If there are no findings, explicitly state "No findings"
 ```
 
-### Step 1-5: Save Review Results
+**Round 2+ (incremental review):**
+```
+You are a [role name].
+Review the changes made since the last round from a [perspective] perspective.
 
-Consolidate the three agents' evaluations and save to `./docs/review/[plan-name]-review.md` (create `./docs/review/` if it doesn't exist).
+Changes since last round:
+[Diff or description of changes]
+
+Previous findings and their resolution:
+[Previous findings with status: resolved/continuing]
+
+Requirements:
+- Verify that previous fixes are correct and complete
+- Check if fixes introduced regression or new issues in surrounding context
+- Report any previously overlooked issues
+- Classify each finding by severity: Critical / Major / Minor
+- If there are no findings, explicitly state "No findings"
+```
+
+### Step 1-5: Save Review Results and Deduplicate
+
+Consolidate the three agents' evaluations. Before saving, deduplicate findings:
+- Merge findings that describe the same underlying issue from different perspectives
+- Keep the most comprehensive description and note all perspectives that flagged it
+
+Save to `./docs/review/[plan-name]-review.md` (create `./docs/review/` if it doesn't exist).
 
 ```markdown
 # Plan Review: [plan-name]
@@ -100,22 +131,31 @@ Review round: [nth]
 [For first round: "Initial review", for subsequent rounds: describe changes]
 
 ## Functionality Findings
-[Functionality expert output]
+[Functionality expert output — deduplicated]
 
 ## Security Findings
-[Security expert output]
+[Security expert output — deduplicated]
 
 ## Testing Findings
-[Testing expert output]
+[Testing expert output — deduplicated]
 ```
 
 ### Step 1-6: Validity Assessment and Plan Update
 
 The main agent scrutinizes each finding:
-- **Valid finding**: Reflect in the plan file
+- **Critical/Major finding**: Must be reflected in the plan file
+- **Minor finding**: Reflect if straightforward, otherwise record reason and skip, explain to user
 - **Unnecessary finding**: Record reason and skip, explain to user
 
-Return to Step 1-4 until all agents return "No findings".
+Return to Step 1-4 until all agents return "No findings", or the maximum of **10 rounds** is reached.
+
+If the loop limit is reached with unresolved findings:
+```
+=== Review Loop Limit Reached (10 rounds) ===
+Remaining findings: [list with severity]
+Decision needed: Continue manually or accept current state?
+```
+Consult the user before proceeding.
 
 ### Step 1-7: Branch Creation and Commit
 
@@ -222,11 +262,13 @@ bash ~/.claude/hooks/pre-review.sh code
 If the output contains issues, fix them before proceeding to expert review.
 If Ollama is unavailable, the script outputs a warning and exits gracefully — proceed to Step 3-3.
 
+Save the local LLM output for reference in Step 3-3 (to avoid duplicate findings).
+
 ### Step 3-3: Code Review by Three Expert Agents (Claude Sub-agents)
 
 Launch the same three roles in parallel as the plan review.
 
-Instruction template for each sub-agent:
+**Round 1 (full review):**
 ```
 You are a [role name].
 Review the code on the current branch from a [perspective] perspective.
@@ -240,19 +282,48 @@ Deviation log:
 Target code:
 [Code contents]
 
-Previous findings and responses (none for first round):
-[Previous findings and responses]
+Local LLM pre-screening results (already addressed — do not re-report these):
+[Local LLM output, or "None" if skipped]
 
 Requirements:
 - Only specific and actionable findings (vague findings are prohibited)
-- For each finding, specify file name, line number, problem, and recommended fix
+- Classify each finding by severity: Critical / Major / Minor
+  - Critical: Bugs causing data loss/corruption, security vulnerabilities, crashes
+  - Major: Incorrect logic, missing error handling, performance issues
+  - Minor: Naming, style, minor improvements
+- For each finding, specify file name, line number, severity, problem, and recommended fix
 - Consider the deviation log when reviewing
-- Take into account responses to previous findings
+- Do not duplicate issues already caught by local LLM pre-screening
+- If there are no findings, explicitly state "No findings"
+```
+
+**Round 2+ (incremental review):**
+```
+You are a [role name].
+Review the fixes made since the last round from a [perspective] perspective.
+
+Changes since last round (diff):
+[git diff of fixes]
+
+Previous findings and their resolution:
+[Previous findings with status: resolved/new/continuing]
+
+Context files (files affected by the changes):
+[Relevant surrounding code]
+
+Requirements:
+- Verify that previous fixes are correct and complete
+- Check if fixes introduced regression or new issues in surrounding context
+- Report any previously overlooked issues
+- Classify each finding by severity: Critical / Major / Minor
+- For each finding, specify file name, line number, severity, problem, and recommended fix
 - Indicate status from previous round (resolved, new, continuing)
 - If there are no findings, explicitly state "No findings"
 ```
 
-### Step 3-4: Save Review Results
+### Step 3-4: Save Review Results and Deduplicate
+
+Consolidate and deduplicate findings (merge same underlying issue flagged by multiple agents).
 
 Save to `./docs/review/[plan-name]-code-review.md` (overwrite).
 
@@ -265,13 +336,13 @@ Review round: [nth]
 [For first round: "Initial review", for subsequent rounds: classify as resolved/new/continuing]
 
 ## Functionality Findings
-[Functionality expert output]
+[Functionality expert output — deduplicated]
 
 ## Security Findings
-[Security expert output]
+[Security expert output — deduplicated]
 
 ## Testing Findings
-[Testing expert output]
+[Testing expert output — deduplicated]
 
 ## Resolution Status
 [Updated after fixes]
@@ -279,10 +350,13 @@ Review round: [nth]
 
 ### Step 3-5: Fix the Code
 
-The main agent scrutinizes findings and fixes all valid ones.
+The main agent scrutinizes findings and fixes based on severity:
+- **Critical**: Must fix immediately
+- **Major**: Must fix
+- **Minor**: Fix if straightforward, otherwise consult the user
 
 Important rules:
-- **No deferring**: "Address later" is not an option
+- **No deferring**: "Address later" is not an option for Critical/Major
 - For findings that are difficult to fix, consult the user before deciding
 - Always run tests after fixes
 
@@ -303,15 +377,24 @@ Append to the "Resolution Status" section of `./docs/review/[plan-name]-code-rev
 
 ```markdown
 ## Resolution Status
-### [Finding number] [Problem summary]
+### [Finding number] [Severity] [Problem summary]
 - Action: [Fix performed]
 - Modified file: [filename:line number]
 ```
 
 ### Step 3-8: Termination Check
 
-End the loop when all agents return "No findings".
-If findings remain, return to Step 3-3.
+End the loop when all agents return "No findings", or the maximum of **10 rounds** is reached.
+
+If the loop limit is reached with unresolved findings:
+```
+=== Review Loop Limit Reached (10 rounds) ===
+Remaining findings: [list with severity]
+Decision needed: Continue manually or accept current state?
+```
+Consult the user before proceeding.
+
+If findings remain and under the limit, return to Step 3-3.
 
 ### Step 3-9: Final Commit
 
@@ -343,8 +426,9 @@ Artifacts:
 
 Report at the start of each review loop:
 ```
-=== [Phase name] Review Loop [round n] ===
-Previous findings: Functionality [x] / Security [y] / Testing [z]
+=== [Phase name] Review Loop [round n/10] ===
+Previous findings: Critical [x] / Major [y] / Minor [z]
+Resolved: [n] / New: [n] / Continuing: [n]
 ```
 
 ### Ensure docs/review Directory
@@ -363,3 +447,11 @@ Explain to the user that evaluation objectivity may be reduced.
 
 All commits must be made on the `[plan-name]` branch.
 If accidentally on main, create a new branch before continuing work.
+
+### Severity Classification Reference
+
+| Severity | Criteria | Action |
+|----------|----------|--------|
+| Critical | Data loss, security vulnerability, crash, blocks release | Must fix immediately |
+| Major | Incorrect logic, missing error handling, performance issue | Must fix |
+| Minor | Naming, style, minor improvement | Fix if straightforward, otherwise user decides |
