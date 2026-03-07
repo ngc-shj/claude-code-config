@@ -120,7 +120,7 @@ Consolidate the three agents' evaluations. Before saving, deduplicate findings:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-Save to `./docs/review/[plan-name]-review.md` (create `./docs/review/` if it doesn't exist).
+Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
 ```markdown
 # Plan Review: [plan-name]
@@ -167,11 +167,11 @@ git checkout main
 git checkout -b [plan-name]
 
 # Copy finalized plan to docs/review
-cp ~/.claude/plans/[plan-name].md ./docs/review/[plan-name]-plan.md
+cp ~/.claude/plans/[plan-name].md ./docs/archive/review/[plan-name]-plan.md
 
 # Commit
-git add ./docs/review/[plan-name]-plan.md
-git add ./docs/review/[plan-name]-review.md
+git add ./docs/archive/review/[plan-name]-plan.md
+git add ./docs/archive/review/[plan-name]-review.md
 
 git commit -m "plan: [plan-name] - plan creation and review complete"
 ```
@@ -180,7 +180,7 @@ Report to user:
 ```
 === Phase 1 Complete ===
 Plan: ~/.claude/plans/[plan-name].md (original)
-      ./docs/review/[plan-name]-plan.md (repository copy)
+      ./docs/archive/review/[plan-name]-plan.md (repository copy)
 Branch: [plan-name]
 Review rounds: [n]
 Next step: Proceeding to Phase 2 (Coding)
@@ -204,7 +204,7 @@ Recording rules during implementation:
 
 ### Step 2-3: Deviation Log Management
 
-Record deviations from the plan in `./docs/review/[plan-name]-deviation.md`.
+Record deviations from the plan in `./docs/archive/review/[plan-name]-deviation.md`.
 
 ```markdown
 # Coding Deviation Log: [plan-name]
@@ -237,7 +237,7 @@ Report to user when implementation is done:
 Files implemented: [n]
 Tests: [pass/fail]
 Build: [pass/fail]
-Deviations from plan: [yes/no] (log: ./docs/review/[plan-name]-deviation.md)
+Deviations from plan: [yes/no] (log: ./docs/archive/review/[plan-name]-deviation.md)
 Next step: Proceeding to Phase 3 (Code Review)
 ```
 
@@ -249,7 +249,7 @@ Next step: Proceeding to Phase 3 (Code Review)
 
 Read the following three items:
 1. Finalized plan: `~/.claude/plans/[plan-name].md`
-2. Deviation log: `./docs/review/[plan-name]-deviation.md`
+2. Deviation log: `./docs/archive/review/[plan-name]-deviation.md`
 3. All code on the current branch
 
 ```bash
@@ -333,7 +333,7 @@ Requirements:
 
 Consolidate and deduplicate findings (merge same underlying issue flagged by multiple agents).
 
-Save to `./docs/review/[plan-name]-code-review.md` (overwrite).
+Save to `./docs/archive/review/[plan-name]-code-review.md` (overwrite).
 
 ```markdown
 # Code Review: [plan-name]
@@ -386,7 +386,7 @@ git commit -m "review([n]): [summary of fixes]"
 
 ### Step 3-7: Update Resolution Status
 
-Append to the "Resolution Status" section of `./docs/review/[plan-name]-code-review.md`:
+Append to the "Resolution Status" section of `./docs/archive/review/[plan-name]-code-review.md`:
 
 ```markdown
 ## Resolution Status
@@ -412,8 +412,8 @@ If findings remain and under the limit, return to Step 3-3.
 ### Step 3-9: Final Commit
 
 ```bash
-git add ./docs/review/[plan-name]-code-review.md
-git add ./docs/review/[plan-name]-deviation.md
+git add ./docs/archive/review/[plan-name]-code-review.md
+git add ./docs/archive/review/[plan-name]-deviation.md
 git commit -m "review: code review complete - all findings resolved"
 ```
 
@@ -425,10 +425,10 @@ Branch: [plan-name]
 Plan review rounds: [n]
 Code review rounds: [n]
 Artifacts:
-  - ./docs/review/[plan-name]-plan.md (finalized plan)
-  - ./docs/review/[plan-name]-review.md (plan review log)
-  - ./docs/review/[plan-name]-deviation.md (deviation log)
-  - ./docs/review/[plan-name]-code-review.md (code review log)
+  - ./docs/archive/review/[plan-name]-plan.md (finalized plan)
+  - ./docs/archive/review/[plan-name]-review.md (plan review log)
+  - ./docs/archive/review/[plan-name]-deviation.md (deviation log)
+  - ./docs/archive/review/[plan-name]-code-review.md (code review log)
 ```
 
 ---
@@ -444,11 +444,11 @@ Previous findings: Critical [x] / Major [y] / Minor [z]
 Resolved: [n] / New: [n] / Continuing: [n]
 ```
 
-### Ensure docs/review Directory
+### Ensure docs/archive/review Directory
 
-Create `./docs/review/` before starting review if it doesn't exist:
+Create `./docs/archive/review/` before starting review if it doesn't exist:
 ```bash
-mkdir -p ./docs/review
+mkdir -p ./docs/archive/review
 ```
 
 ### When Sub-agents Are Unavailable
