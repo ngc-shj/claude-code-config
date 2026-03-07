@@ -225,10 +225,18 @@ If there are no deviations, create the file with "No deviations".
 
 ### Step 2-4: Implementation Completion Check
 
+Before reporting completion, run BOTH:
+1. Tests: `[test command]`
+2. Production build: `[build command]`
+
+Both must pass. Fix any failures before proceeding.
+
 Report to user when implementation is done:
 ```
 === Phase 2 Complete ===
 Files implemented: [n]
+Tests: [pass/fail]
+Build: [pass/fail]
 Deviations from plan: [yes/no] (log: ./docs/review/[plan-name]-deviation.md)
 Next step: Proceeding to Phase 3 (Code Review)
 ```
@@ -358,18 +366,23 @@ The main agent scrutinizes findings and fixes based on severity:
 Important rules:
 - **No deferring**: "Address later" is not an option for Critical/Major
 - For findings that are difficult to fix, consult the user before deciding
-- Always run tests after fixes
+- Always run tests AND production build after fixes
 
-### Step 3-6: Test and Commit
+### Step 3-6: Test, Build, and Commit
 
 ```bash
 # Run tests (use project-appropriate command)
 [test command]
 
-# Commit if tests pass
+# Run production build to catch SSR/bundling/type errors not covered by tests
+[build command]
+
+# Commit only if BOTH tests AND build pass
 git add -A
 git commit -m "review([n]): [summary of fixes]"
 ```
+
+**IMPORTANT**: Tests alone are insufficient. The production build catches SSR-only module resolution failures, TypeScript errors in non-test code, and bundler issues. Both must pass before committing.
 
 ### Step 3-7: Update Resolution Status
 
