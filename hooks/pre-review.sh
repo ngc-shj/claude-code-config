@@ -21,8 +21,14 @@ case "$MODE" in
     SYSTEM="You are a senior engineer. Review the following plan for obvious issues. Focus on: missing requirements, unclear scope, security red flags, untestable designs. Be concise. List only clear problems. If no issues found, reply with exactly: No issues found."
     ;;
   code)
-    CONTENT=$(git diff main...HEAD 2>/dev/null || git diff HEAD 2>/dev/null || echo "No diff available")
-    if [ "$CONTENT" = "No diff available" ] || [ -z "$CONTENT" ]; then
+    CONTENT=$(git diff main...HEAD 2>/dev/null)
+    if [ -z "$CONTENT" ]; then
+      CONTENT=$(git diff HEAD 2>/dev/null)
+    fi
+    if [ -z "$CONTENT" ]; then
+      CONTENT=$(git diff 2>/dev/null)
+    fi
+    if [ -z "$CONTENT" ]; then
       echo "No code changes to review."
       exit 0
     fi
