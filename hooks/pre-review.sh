@@ -11,6 +11,12 @@ MODEL="${REVIEW_MODEL:-gpt-oss:120b}"
 TIMEOUT="${REVIEW_TIMEOUT:-300}"
 MODE="${1:-code}"
 
+# Token budget: reserve 2048 for output, use rest for input
+# ~3 chars per token as rough estimate
+NUM_CTX=131072
+NUM_PREDICT=2048
+MAX_INPUT_CHARS=$(( (NUM_CTX - NUM_PREDICT) * 3 ))
+
 case "$MODE" in
   plan)
     if [ -n "${PLAN_FILE:-}" ] && [ -f "$PLAN_FILE" ]; then
@@ -21,18 +27,61 @@ case "$MODE" in
     SYSTEM="You are a senior engineer. Review the following plan for obvious issues. Focus on: missing requirements, unclear scope, security red flags, untestable designs. Be concise. Classify each finding as [Critical], [Major], or [Minor]. Critical: blocks release, data loss, security vulnerability. Major: significant functional issue. Minor: style, naming. List only clear problems. If no issues found, reply with exactly: No issues found."
     ;;
   code)
-    CONTENT=$(git diff main...HEAD 2>/dev/null)
-    if [ -z "$CONTENT" ]; then
-      CONTENT=$(git diff HEAD 2>/dev/null)
+    # Use -U10 for expanded context (default is 3 lines)
+    DIFF=$(git diff -U10 main...HEAD 2>/dev/null)
+    if [ -z "$DIFF" ]; then
+      DIFF=$(git diff -U10 HEAD 2>/dev/null)
     fi
-    if [ -z "$CONTENT" ]; then
-      CONTENT=$(git diff 2>/dev/null)
+    if [ -z "$DIFF" ]; then
+      DIFF=$(git diff -U10 2>/dev/null)
     fi
-    if [ -z "$CONTENT" ]; then
+    if [ -z "$DIFF" ]; then
       echo "No code changes to review."
       exit 0
     fi
-    SYSTEM="You are a code reviewer. Review the following code changes for obvious issues. Focus on: bugs, security vulnerabilities (OWASP Top 10, injection, auth bypass), missing error handling, naming issues. Be concise. Classify each finding as [Critical], [Major], or [Minor]. Critical: data loss, security vulnerability, crash. Major: incorrect logic, missing error handling. Minor: naming, style. List only clear problems with file name and line number. If no issues found, reply with exactly: No issues found."
+
+    # Collect full file contents for context, with budget control
+    FILE_CONTEXT=""
+    FILE_CONTEXT_LEN=0
+    DIFF_LEN=${#DIFF}
+    # Budget for file context = total budget - diff size - margin for system prompt
+    FILE_BUDGET=$(( MAX_INPUT_CHARS - DIFF_LEN - 2000 ))
+    if [ "$FILE_BUDGET" -lt 0 ]; then
+      FILE_BUDGET=0
+    fi
+
+    while IFS= read -r f; do
+      [ -z "$f" ] && continue
+      if [ -f "$f" ] && [ "$FILE_CONTEXT_LEN" -lt "$FILE_BUDGET" ]; then
+        FILE_CONTENT=$(cat "$f" 2>/dev/null)
+        FILE_CONTENT_LEN=${#FILE_CONTENT}
+        if [ $(( FILE_CONTEXT_LEN + FILE_CONTENT_LEN )) -le "$FILE_BUDGET" ]; then
+          # Full file fits in budget
+          FILE_CONTEXT="${FILE_CONTEXT}
+--- Full file: ${f} ---
+${FILE_CONTENT}
+"
+          FILE_CONTEXT_LEN=$(( FILE_CONTEXT_LEN + FILE_CONTENT_LEN ))
+        else
+          # Fallback to header only
+          HEADER=$(head -40 "$f" 2>/dev/null)
+          if [ -n "$HEADER" ]; then
+            FILE_CONTEXT="${FILE_CONTEXT}
+--- File header: ${f} (first 40 lines, truncated due to budget) ---
+${HEADER}
+"
+            FILE_CONTEXT_LEN=$(( FILE_CONTEXT_LEN + ${#HEADER} ))
+          fi
+        fi
+      fi
+    done < <(echo "$DIFF" | grep -E '^\+\+\+ b/' | sed 's|^+++ b/||')
+
+    CONTENT="=== FILE CONTEXT ===
+${FILE_CONTEXT}
+=== DIFF (with 10 lines of surrounding context) ===
+${DIFF}"
+
+    SYSTEM="You are a code reviewer. Review the following code changes for obvious issues. The input contains full file contents (or headers if truncated) followed by the diff. Use the file contents to verify imports, function definitions, and variable usage before flagging issues. Focus on: bugs, security vulnerabilities (OWASP Top 10, injection, auth bypass), missing error handling, naming issues. Be concise. Classify each finding as [Critical], [Major], or [Minor]. Critical: data loss, security vulnerability, crash. Major: incorrect logic, missing error handling. Minor: naming, style. IMPORTANT: Only flag issues you can confirm from the provided context. If a file was truncated, do NOT assume symbols are missing. List only clear problems with file name and line number. If no issues found, reply with exactly: No issues found."
     ;;
   *)
     echo "Usage: $0 [plan|code]"
@@ -41,12 +90,15 @@ case "$MODE" in
 esac
 
 # Call Ollama API
-RESPONSE=$(curl -sf --max-time "$TIMEOUT" "$OLLAMA_HOST/api/generate" \
+RESPONSE=$(curl -sf --fail-with-body --max-time "$TIMEOUT" "$OLLAMA_HOST/api/generate" \
   -d "$(jq -n \
     --arg model "$MODEL" \
     --arg system "$SYSTEM" \
     --arg prompt "$CONTENT" \
-    '{model: $model, system: $system, prompt: $prompt, stream: false}')" \
+    --argjson num_ctx "$NUM_CTX" \
+    --argjson num_predict "$NUM_PREDICT" \
+    '{model: $model, system: $system, prompt: $prompt, stream: false,
+      options: {num_ctx: $num_ctx, num_predict: $num_predict}}')" \
   2>/dev/null | jq -r '.response // empty')
 
 if [ -z "$RESPONSE" ]; then
