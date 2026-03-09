@@ -17,7 +17,16 @@ BASENAME=$(basename "$FILE_PATH")
 
 # Block patterns
 case "$BASENAME" in
-  .env|.env.*|.env.local|.env.production|.env.staging)
+  .env|.env.local|.env.production|.env.staging)
+    echo '{"decision": "block", "reason": "Blocked: editing environment file '"$BASENAME"' which may contain secrets"}'
+    exit 0
+    ;;
+  .env.*)
+    # Allow .env.example (template without secrets)
+    if [ "$BASENAME" = ".env.example" ]; then
+      echo '{"decision": "approve"}'
+      exit 0
+    fi
     echo '{"decision": "block", "reason": "Blocked: editing environment file '"$BASENAME"' which may contain secrets"}'
     exit 0
     ;;
