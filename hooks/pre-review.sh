@@ -89,20 +89,45 @@ ${DIFF}"
     ;;
 esac
 
+# Build request JSON via temp files to avoid ARG_MAX limits
+TMPDIR_REQ=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_REQ"' EXIT
+printf '%s' "$SYSTEM" > "$TMPDIR_REQ/system"
+printf '%s' "$CONTENT" > "$TMPDIR_REQ/prompt"
+
 # Call Ollama API
-RESPONSE=$(curl -sf --fail-with-body --max-time "$TIMEOUT" "$OLLAMA_HOST/api/generate" \
-  -d "$(jq -n \
+jq -n \
     --arg model "$MODEL" \
-    --arg system "$SYSTEM" \
-    --arg prompt "$CONTENT" \
+    --rawfile system "$TMPDIR_REQ/system" \
+    --rawfile prompt "$TMPDIR_REQ/prompt" \
     --argjson num_ctx "$NUM_CTX" \
     --argjson num_predict "$NUM_PREDICT" \
     '{model: $model, system: $system, prompt: $prompt, stream: false,
-      options: {num_ctx: $num_ctx, num_predict: $num_predict}}')" \
-  2>/dev/null | jq -r '.response // empty')
+      options: {num_ctx: $num_ctx, num_predict: $num_predict}}' \
+  > "$TMPDIR_REQ/request.json"
+
+CURL_OUTPUT=$(curl -s --max-time "$TIMEOUT" -w '\n%{http_code}' \
+  "$OLLAMA_HOST/api/generate" \
+  -d @"$TMPDIR_REQ/request.json" 2>&1) || true
+
+HTTP_CODE=$(echo "$CURL_OUTPUT" | tail -1)
+BODY=$(echo "$CURL_OUTPUT" | sed '$d')
+
+if [ -z "$BODY" ] || [ "$HTTP_CODE" = "000" ]; then
+  echo "Warning: Ollama unavailable at $OLLAMA_HOST. Skipping pre-review."
+  exit 0
+fi
+
+if [ "$HTTP_CODE" != "200" ]; then
+  echo "Warning: Ollama returned HTTP $HTTP_CODE. Skipping pre-review."
+  echo "$BODY" | head -5 >&2
+  exit 0
+fi
+
+RESPONSE=$(echo "$BODY" | jq -r '.response // empty')
 
 if [ -z "$RESPONSE" ]; then
-  echo "Warning: Ollama unavailable at $OLLAMA_HOST. Skipping pre-review."
+  echo "Warning: Ollama returned empty response. Skipping pre-review."
   exit 0
 fi
 
