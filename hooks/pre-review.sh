@@ -8,14 +8,14 @@ set -euo pipefail
 
 OLLAMA_HOST="${OLLAMA_HOST:-http://gx10-a9c0:11434}"
 MODEL="${REVIEW_MODEL:-gpt-oss:120b}"
-TIMEOUT="${REVIEW_TIMEOUT:-300}"
+TIMEOUT="${REVIEW_TIMEOUT:-600}"
 MODE="${1:-code}"
 
-# Token budget: reserve 2048 for output, use rest for input
-# ~3 chars per token as rough estimate
-NUM_CTX=131072
-NUM_PREDICT=2048
-MAX_INPUT_CHARS=$(( (NUM_CTX - NUM_PREDICT) * 3 ))
+# Token budget: reserve space for output, use rest for input
+# ~3 chars per token as rough estimate; let Ollama manage num_ctx
+MAX_INPUT_TOKENS=128000
+NUM_PREDICT=8192
+MAX_INPUT_CHARS=$(( MAX_INPUT_TOKENS * 3 ))
 
 case "$MODE" in
   plan)
@@ -100,31 +100,33 @@ jq -n \
     --arg model "$MODEL" \
     --rawfile system "$TMPDIR_REQ/system" \
     --rawfile prompt "$TMPDIR_REQ/prompt" \
-    --argjson num_ctx "$NUM_CTX" \
     --argjson num_predict "$NUM_PREDICT" \
     '{model: $model, system: $system, prompt: $prompt, stream: false,
-      options: {num_ctx: $num_ctx, num_predict: $num_predict}}' \
+      options: {num_predict: $num_predict}}' \
   > "$TMPDIR_REQ/request.json"
 
-CURL_OUTPUT=$(curl -s --max-time "$TIMEOUT" -w '\n%{http_code}' \
+HTTP_CODE=$(curl -s --max-time "$TIMEOUT" -w '%{http_code}' \
+  -o "$TMPDIR_REQ/response.json" \
   "$OLLAMA_HOST/api/generate" \
-  -d @"$TMPDIR_REQ/request.json" 2>&1) || true
+  -d @"$TMPDIR_REQ/request.json" 2>/dev/null) || true
 
-HTTP_CODE=$(echo "$CURL_OUTPUT" | tail -1)
-BODY=$(echo "$CURL_OUTPUT" | sed '$d')
-
-if [ -z "$BODY" ] || [ "$HTTP_CODE" = "000" ]; then
+if [ "$HTTP_CODE" = "000" ] || [ ! -s "$TMPDIR_REQ/response.json" ]; then
   echo "Warning: Ollama unavailable at $OLLAMA_HOST. Skipping pre-review."
   exit 0
 fi
 
 if [ "$HTTP_CODE" != "200" ]; then
   echo "Warning: Ollama returned HTTP $HTTP_CODE. Skipping pre-review."
-  echo "$BODY" | head -5 >&2
+  head -5 "$TMPDIR_REQ/response.json" >&2
   exit 0
 fi
 
-RESPONSE=$(echo "$BODY" | jq -r '.response // empty')
+# Extract response; some models (thinking models) put output in .thinking
+RESPONSE=$(jq -r '
+  if (.response // "") != "" then .response
+  elif (.thinking // "") != "" then .thinking
+  else empty
+  end' "$TMPDIR_REQ/response.json")
 
 if [ -z "$RESPONSE" ]; then
   echo "Warning: Ollama returned empty response. Skipping pre-review."
