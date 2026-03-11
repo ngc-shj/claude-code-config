@@ -24,15 +24,22 @@ Determine the starting phase from the user's instructions:
 
 ## Phase 1: Plan Creation, Review & Commit
 
-### Step 1-1: Determine Plan Name
+### Step 1-1: Determine Plan Name and Branch Name
 
-If no plan name is specified, auto-generate a short English slug (kebab-case) from the task content and confirm with the user.
-If specified, use that name.
+If no plan name is specified, auto-generate a short English slug (kebab-case) from the task content.
+If no branch name is specified, auto-generate one with an appropriate prefix (e.g., `feature/`, `fix/`, `refactor/`, `docs/`).
+
+Confirm both with the user before proceeding:
 
 ```
 Plan name: [plan-name]
+Branch name: [branch-name]
 Save to: ~/.claude/plans/[plan-name].md
 ```
+
+Naming guidelines:
+- **Plan name**: Short descriptive slug in kebab-case (e.g., `add-user-auth`, `fix-login-bug`)
+- **Branch name**: Prefix + slug in kebab-case (e.g., `feature/add-user-auth`, `fix/login-bug`, `refactor/extract-utils`)
 
 ### Step 1-2: Create the Plan
 
@@ -164,7 +171,7 @@ Once plan review is complete, create a branch and commit.
 ```bash
 # Create new branch from main
 git checkout main
-git checkout -b [plan-name]
+git checkout -b [branch-name]
 
 # Copy finalized plan to docs/review
 cp ~/.claude/plans/[plan-name].md ./docs/archive/review/[plan-name]-plan.md
@@ -181,7 +188,7 @@ Report to user:
 === Phase 1 Complete ===
 Plan: ~/.claude/plans/[plan-name].md (original)
       ./docs/archive/review/[plan-name]-plan.md (repository copy)
-Branch: [plan-name]
+Branch: [branch-name]
 Review rounds: [n]
 Next step: Proceeding to Phase 2 (Coding)
 ```
@@ -421,7 +428,7 @@ Final report:
 ```
 === All Phases Complete ===
 Plan name: [plan-name]
-Branch: [plan-name]
+Branch: [branch-name]
 Plan review rounds: [n]
 Code review rounds: [n]
 Artifacts:
@@ -458,7 +465,7 @@ Explain to the user that evaluation objectivity may be reduced.
 
 ### No Commits to main
 
-All commits must be made on the `[plan-name]` branch.
+All commits must be made on the `[branch-name]` branch.
 If accidentally on main, create a new branch before continuing work.
 
 ### Severity Classification Reference
