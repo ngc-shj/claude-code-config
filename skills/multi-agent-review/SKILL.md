@@ -26,14 +26,20 @@ Determine the starting phase from the user's instructions:
 
 ### Step 1-1: Determine Plan Name and Branch Name
 
-If no plan name is specified, auto-generate a short English slug (kebab-case) from the task content.
-If no branch name is specified, auto-generate one with an appropriate prefix (e.g., `feature/`, `fix/`, `refactor/`, `docs/`).
+Generate name candidates using local LLM (zero Claude tokens):
 
-Confirm both with the user before proceeding:
+```bash
+# Generate plan name slug from task description
+PLAN_SLUG=$(echo "[one-line task summary]" | bash ~/.claude/hooks/ollama-utils.sh generate-slug)
+```
+
+If Ollama is unavailable or the result is unsatisfactory, generate the slug yourself as fallback.
+
+Determine the branch prefix (`feature/`, `fix/`, `refactor/`, `docs/`) from the task type, then confirm with the user:
 
 ```
 Plan name: [plan-name]
-Branch name: [branch-name]
+Branch name: [prefix]/[plan-name]
 Save to: ~/.claude/plans/[plan-name].md
 ```
 
@@ -123,7 +129,15 @@ Requirements:
 
 ### Step 1-5: Save Review Results and Deduplicate
 
-Consolidate the three agents' evaluations. Before saving, deduplicate findings:
+First, save each agent's raw output to temporary files, then use local LLM for deduplication (zero Claude tokens):
+
+```bash
+# Concatenate all agent outputs and merge via Ollama
+cat "$FUNC_FINDINGS" "$SEC_FINDINGS" "$TEST_FINDINGS" \
+  | bash ~/.claude/hooks/ollama-utils.sh merge-findings
+```
+
+If Ollama is unavailable, deduplicate manually as fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
@@ -201,9 +215,18 @@ Next step: Proceeding to Phase 2 (Coding)
 
 Read `~/.claude/plans/[plan-name].md` and understand the implementation steps.
 
-### Step 2-2: Implementation
+### Step 2-2: Implementation (Delegate to Sonnet Sub-agents)
 
-Code according to the plan's "Implementation steps".
+Split the plan's "Implementation steps" into independent batches and delegate to Sonnet sub-agents:
+
+1. **Task splitting**: Group implementation steps into batches that can be executed independently
+2. **Sonnet delegation**: Launch Sonnet sub-agent(s) for each batch with:
+   - The full plan for context
+   - The specific steps to implement
+   - Any outputs from previous batches (for dependencies)
+3. **Review**: After each batch completes, verify the output before proceeding to the next batch
+
+If sub-agents are unavailable, implement directly as fallback.
 
 Recording rules during implementation:
 - Sections implemented as planned: No recording needed
@@ -211,7 +234,14 @@ Recording rules during implementation:
 
 ### Step 2-3: Deviation Log Management
 
-Record deviations from the plan in `./docs/archive/review/[plan-name]-deviation.md`.
+After implementation, delegate deviation log creation to a Sonnet sub-agent:
+- Provide the plan and `git diff main...HEAD` to Sonnet
+- Sonnet compares the diff against the plan and generates the deviation log
+- Review Sonnet's output for accuracy
+
+If sub-agents are unavailable, record deviations directly.
+
+Save to `./docs/archive/review/[plan-name]-deviation.md`.
 
 ```markdown
 # Coding Deviation Log: [plan-name]
@@ -338,7 +368,14 @@ Requirements:
 
 ### Step 3-4: Save Review Results and Deduplicate
 
-Consolidate and deduplicate findings (merge same underlying issue flagged by multiple agents).
+First, save each agent's raw output to temporary files, then use local LLM for deduplication (zero Claude tokens):
+
+```bash
+cat "$FUNC_FINDINGS" "$SEC_FINDINGS" "$TEST_FINDINGS" \
+  | bash ~/.claude/hooks/ollama-utils.sh merge-findings
+```
+
+If Ollama is unavailable, consolidate and deduplicate manually (merge same underlying issue flagged by multiple agents).
 
 Save to `./docs/archive/review/[plan-name]-code-review.md` (overwrite).
 

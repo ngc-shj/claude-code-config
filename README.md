@@ -17,11 +17,20 @@ claude-code-config/
 │   ├── block-sensitive-files.sh   # Block edits to secrets/lock files
 │   ├── commit-msg-check.sh       # Commit message validation via local LLM
 │   ├── pre-review.sh             # Code/plan pre-screening via local LLM
+│   ├── ollama-utils.sh           # Shared Ollama utility commands for skills
 │   ├── notify.sh                 # Desktop notifications (macOS)
 │   └── stop-notify.sh            # Task completion notifications
 └── skills/
-    └── multi-agent-review/
-        └── SKILL.md              # Multi-agent review workflow
+    ├── multi-agent-review/
+    │   └── SKILL.md              # Multi-agent review workflow
+    ├── simplify/
+    │   └── SKILL.md              # Code simplification and cleanup
+    ├── test-gen/
+    │   └── SKILL.md              # Automatic test generation
+    ├── pr-create/
+    │   └── SKILL.md              # Pull request creation with auto-description
+    └── explore/
+        └── SKILL.md              # Deep codebase exploration and Q&A
 ```
 
 ## Agentic architecture
@@ -122,6 +131,28 @@ bash ~/.claude/hooks/pre-review.sh code
 - Configurable via `OLLAMA_HOST` and `REVIEW_MODEL` environment variables
 - Gracefully skips if Ollama is unavailable
 
+### ollama-utils.sh (Utility — called by skills)
+
+Shared Ollama utility commands for skills and hooks:
+
+```bash
+# Generate a kebab-case slug from task description
+echo "Add user authentication" | bash ~/.claude/hooks/ollama-utils.sh generate-slug
+
+# Summarize a git diff
+git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh summarize-diff
+
+# Merge and deduplicate review findings from multiple agents
+cat findings1.txt findings2.txt | bash ~/.claude/hooks/ollama-utils.sh merge-findings
+
+# Classify changed files (feature/fix/refactor/docs/test/chore)
+git diff --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes
+```
+
+- All commands read stdin, write stdout — composable with pipes
+- Gracefully returns empty output if Ollama is unavailable
+- Supports thinking models (`.response` → `.thinking` fallback)
+
 ### notify.sh (Notification)
 
 macOS desktop notifications when:
@@ -145,10 +176,38 @@ Notifies when Claude finishes a response:
 A development workflow skill with three phases:
 
 1. **Plan creation & review** — Local LLM pre-screening + 3 Claude expert agents
-2. **Coding** — Implementation with deviation tracking
+2. **Coding** — Sonnet sub-agent implementation with deviation tracking
 3. **Code review** — Local LLM pre-screening + 3 Claude expert agents
 
-Each review phase uses local LLM (`gpt-oss:120b`) to catch obvious issues before launching Claude sub-agents, reducing API cost while maintaining quality.
+Each review phase uses local LLM (`gpt-oss:120b`) to catch obvious issues before launching Claude sub-agents. Implementation is delegated to Sonnet sub-agents while Opus orchestrates, reducing API cost while maintaining quality.
+
+### simplify
+
+Reviews changed code for reuse, quality, and efficiency improvements:
+- Local LLM pre-analysis for complexity hotspots and duplication (zero Claude tokens)
+- Sonnet sub-agent explores codebase for concrete before/after proposals
+- User selects which proposals to apply
+
+### test-gen
+
+Generates tests for specified or changed code:
+- Auto-detects test framework and conventions
+- Local LLM generates test case outlines (zero Claude tokens)
+- Sonnet sub-agent implements and verifies tests with fix loop (max 3 iterations)
+
+### pr-create
+
+Creates a pull request with auto-generated description:
+- Local LLM summarizes diff and classifies change type (zero Claude tokens)
+- Sonnet sub-agent composes PR body with summary, changes, and test plan
+- User reviews draft before `gh pr create`
+
+### explore
+
+Deep codebase exploration and Q&A:
+- Local LLM extracts search keywords and builds file relevance map (zero Claude tokens)
+- Sonnet sub-agent traces code paths and builds structured answers
+- Supports: explanation, usage search, architecture, location, data flow queries
 
 ## Installation
 

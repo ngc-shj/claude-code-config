@@ -134,7 +134,8 @@
       "Bash(docker-compose config*)",
       "Bash(docker exec *)",
       "Bash(docker run *)",
-      "Bash(docker cp *)"
+      "Bash(docker cp *)",
+      "Bash(bash ~/.claude/hooks/ollama-utils.sh *)"
     ],
     "ask": [
       "Bash(git push*)",
