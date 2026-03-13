@@ -133,7 +133,8 @@ First, save each agent's raw output to temporary files, then use local LLM for d
 
 ```bash
 # Concatenate all agent outputs and merge via Ollama
-cat "$FUNC_FINDINGS" "$SEC_FINDINGS" "$TEST_FINDINGS" \
+# Save each agent's output to files, then merge
+cat /tmp/func-findings.txt /tmp/sec-findings.txt /tmp/test-findings.txt \
   | bash ~/.claude/hooks/ollama-utils.sh merge-findings
 ```
 
@@ -371,7 +372,8 @@ Requirements:
 First, save each agent's raw output to temporary files, then use local LLM for deduplication (zero Claude tokens):
 
 ```bash
-cat "$FUNC_FINDINGS" "$SEC_FINDINGS" "$TEST_FINDINGS" \
+# Save each agent's output to files, then merge
+cat /tmp/func-findings.txt /tmp/sec-findings.txt /tmp/test-findings.txt \
   | bash ~/.claude/hooks/ollama-utils.sh merge-findings
 ```
 

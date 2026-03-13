@@ -7,10 +7,6 @@ set -euo pipefail
 
 OLLAMA_HOST="${OLLAMA_HOST:-http://gx10-a9c0:11434}"
 
-# Script-level temp directory for all requests
-TMPDIR_UTILS=$(mktemp -d)
-trap 'rm -rf "$TMPDIR_UTILS"' EXIT
-
 # Common request function: sends prompt to Ollama, prints response
 # Args: $1=model $2=system_prompt $3=timeout $4=num_predict
 _ollama_request() {
@@ -22,7 +18,13 @@ _ollama_request() {
     return
   fi
 
-  local tmpdir="$TMPDIR_UTILS"
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  # Use double quotes so $tmpdir is expanded now, not at EXIT time.
+  # Single-quoted trap would fail with set -euo pipefail because $tmpdir
+  # is a local variable and becomes unbound when evaluated at script EXIT.
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmpdir'" EXIT
 
   printf '%s' "$system" > "$tmpdir/system"
   printf '%s' "$content" > "$tmpdir/prompt"
@@ -49,20 +51,20 @@ _ollama_request() {
 
   if [ "$http_code" != "200" ]; then
     echo "Warning: Ollama returned HTTP $http_code" >&2
-    head -3 "$tmpdir/response.json" >&2
+    head -5 "$tmpdir/response.json" >&2
     return
   fi
 
   # Support thinking models: prefer .response, fall back to .thinking
   local response
-  response=$(jq -r '.response // empty' "$tmpdir/response.json")
-
-  if [ -z "$response" ]; then
-    response=$(jq -r '.thinking // empty' "$tmpdir/response.json")
-  fi
+  response=$(jq -r '
+    if (.response // "") != "" then .response
+    elif (.thinking // "") != "" then .thinking
+    else empty
+    end' "$tmpdir/response.json")
 
   if [ -n "$response" ]; then
-    printf '%s' "$response"
+    printf '%s\n' "$response"
   fi
 }
 
