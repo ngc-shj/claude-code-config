@@ -284,16 +284,18 @@ If there are no deviations, create the file with "No deviations".
 
 ### Step 2-4: Implementation Completion Check
 
-Before reporting completion, run BOTH:
-1. Tests: `[test command]`
-2. Production build: `[build command]`
+Before reporting completion, run ALL three:
+1. Lint: `[lint command]`
+2. Tests: `[test command]`
+3. Production build: `[build command]`
 
-Both must pass. Fix any failures before proceeding.
+All must pass. Fix any failures before proceeding.
 
 Report to user when implementation is done:
 ```
 === Phase 2 Complete ===
 Files implemented: [n]
+Lint: [pass/fail]
 Tests: [pass/fail]
 Build: [pass/fail]
 Deviations from plan: [yes/no] (log: ./docs/archive/review/[plan-name]-deviation.md)
@@ -460,23 +462,26 @@ The main agent scrutinizes findings and fixes based on severity:
 Important rules:
 - **No deferring**: "Address later" is not an option for Critical/Major
 - For findings that are difficult to fix, consult the user before deciding
-- Always run tests AND production build after fixes
+- Always run lint, tests, AND production build after fixes
 
 ### Step 3-6: Test, Build, and Commit
 
 ```bash
+# Run lint to catch unused imports, style violations, etc.
+[lint command]
+
 # Run tests (use project-appropriate command)
 [test command]
 
 # Run production build to catch SSR/bundling/type errors not covered by tests
 [build command]
 
-# Commit only if BOTH tests AND build pass
+# Commit only if ALL three pass
 git add -A
 git commit -m "review([n]): [summary of fixes]"
 ```
 
-**IMPORTANT**: Tests alone are insufficient. The production build catches SSR-only module resolution failures, TypeScript errors in non-test code, and bundler issues. Both must pass before committing.
+**IMPORTANT**: Tests and build alone are insufficient. Lint catches unused imports, style violations, and other issues that neither tests nor builds detect. The production build catches SSR-only module resolution failures, TypeScript errors in non-test code, and bundler issues. All three must pass before committing.
 
 ### Step 3-7: Update Resolution Status
 
