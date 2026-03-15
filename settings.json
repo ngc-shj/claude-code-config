@@ -66,6 +66,8 @@
       "Bash(git diff*)",
       "Bash(git show*)",
       "Bash(git branch*)",
+      "Bash(git submodule status *)",
+      "Bash(git ls-tree *)",
       "Bash(git stash list*)",
       "Bash(git remote -v*)",
       "Bash(git fetch*)",
@@ -104,6 +106,7 @@
       "Bash(npm ci*)",
       "Bash(npx *)",
       "Bash(node *)",
+      "Bash(nvidia-smi*)",
       "Bash(lsof *)",
       "Bash(curl -s *)",
       "Bash(curl --silent *)",
@@ -138,6 +141,7 @@
       "Bash(bash ~/.claude/hooks/ollama-utils.sh *)"
     ],
     "ask": [
+      "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(git push*)",
       "Bash(git stash drop*)",
       "Bash(git stash clear*)",
