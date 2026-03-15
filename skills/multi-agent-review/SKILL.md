@@ -78,11 +78,13 @@ Save the local LLM output for reference in Step 1-4 (to avoid duplicate findings
 
 Launch three sub-agents in parallel with the following roles (fall back to sequential inline execution if unavailable).
 
-| Agent | Role | Evaluation perspective |
-|-------|------|----------------------|
-| Functionality expert | Senior Software Engineer | Requirements coverage, architecture, feasibility, edge cases |
-| Security expert | Security Engineer | Threat model, authentication/authorization, data protection, OWASP Top 10, injection, auth bypass |
-| Testing expert | QA Engineer | Test strategy, coverage, testability, CI/CD integration |
+| Agent | Role | Evaluation perspective | Out of scope |
+|-------|------|----------------------|-------------|
+| Functionality expert | Senior Software Engineer | Requirements coverage, architecture, feasibility, edge cases, error handling | Security vulnerabilities, test design/coverage |
+| Security expert | Security Engineer | Threat model, auth/authz, data protection, OWASP Top 10, injection, auth bypass, business logic vulnerabilities (OWASP A04) | Functional correctness (non-security), test strategy |
+| Testing expert | QA Engineer | Test strategy, coverage, testability, CI/CD integration, test quality | Implementation correctness, security analysis |
+
+**[Adjacent] tag obligation**: When an expert encounters an issue outside their scope but with potential impact, they MUST flag it using the format: `[Adjacent] Severity: Problem — this may overlap with [other expert]'s scope`. This is mandatory, not optional.
 
 Instruction template for each sub-agent:
 
@@ -91,6 +93,9 @@ Instruction template for each sub-agent:
 You are a [role name].
 Evaluate the following plan from a [perspective] perspective.
 
+Scope: [In-scope items for this expert]
+Out of scope: [Out-of-scope items for this expert]
+
 Plan contents:
 [Plan file contents]
 
@@ -98,14 +103,19 @@ Local LLM pre-screening results (already addressed — do not re-report these):
 [Local LLM output, or "None" if skipped]
 
 Requirements:
-- Only raise specific and actionable findings
-- Classify each finding by severity: Critical / Major / Minor
-  - Critical: Blocks release, causes data loss, security vulnerability
-  - Major: Significant functional issue, performance problem
-  - Minor: Style, naming, minor improvement suggestion
+- Only raise specific and actionable findings within your scope
+- If you encounter an issue outside your scope but with potential impact, flag it as: [Adjacent] Severity: Problem — this may overlap with [other expert]'s scope
+- Classify each finding by severity using YOUR expert-specific criteria (see below)
 - For each finding, specify "Severity", "Problem", "Impact", and "Recommended action"
 - Do not duplicate issues already caught by local LLM pre-screening
 - If there are no findings, explicitly state "No findings"
+
+Severity criteria for [role name]:
+  [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]
+
+For Security expert only — append to each Critical finding:
+  escalate: true/false
+  escalate_reason: [reason if true — e.g., multi-step auth flow, complex trust boundary, chained vulnerabilities]
 ```
 
 **Round 2+ (incremental review):**
@@ -113,18 +123,26 @@ Requirements:
 You are a [role name].
 Review the changes made since the last round from a [perspective] perspective.
 
+Scope: [In-scope items for this expert]
+Out of scope: [Out-of-scope items for this expert]
+
 Changes since last round:
 [Diff or description of changes]
 
 Previous findings and their resolution:
-[Previous findings with status: resolved/continuing]
+[Previous findings with status: resolved/new/continuing]
 
 Requirements:
 - Verify that previous fixes are correct and complete
 - Check if fixes introduced regression or new issues in surrounding context
-- Report any previously overlooked issues
-- Classify each finding by severity: Critical / Major / Minor
+- Report any previously overlooked issues within your scope
+- Flag out-of-scope issues with potential impact as: [Adjacent] Severity: Problem — this may overlap with [other expert]'s scope
+- Classify each finding by severity using YOUR expert-specific criteria
 - If there are no findings, explicitly state "No findings"
+
+For Security expert only — append to each Critical finding:
+  escalate: true/false
+  escalate_reason: [reason if true]
 ```
 
 ### Step 1-5: Save Review Results and Deduplicate
@@ -160,6 +178,9 @@ Review round: [nth]
 
 ## Testing Findings
 [Testing expert output — deduplicated]
+
+## Adjacent Findings
+[Adjacent-tagged findings from all experts — preserved for routing]
 ```
 
 ### Step 1-6: Validity Assessment and Plan Update
@@ -314,10 +335,21 @@ Save the local LLM output for reference in Step 3-3 (to avoid duplicate findings
 
 Launch the same three roles in parallel as the plan review.
 
+| Agent | Role | Evaluation perspective | Out of scope |
+|-------|------|----------------------|-------------|
+| Functionality expert | Senior Software Engineer | Requirements coverage, architecture, feasibility, edge cases, error handling | Security vulnerabilities, test design/coverage |
+| Security expert | Security Engineer | Threat model, auth/authz, data protection, OWASP Top 10, injection, auth bypass, business logic vulnerabilities (OWASP A04) | Functional correctness (non-security), test strategy |
+| Testing expert | QA Engineer | Test strategy, coverage, testability, CI/CD integration, test quality | Implementation correctness, security analysis |
+
+**[Adjacent] tag obligation**: When an expert encounters an issue outside their scope but with potential impact, they MUST flag it using the format: `[Adjacent] Severity: Problem — this may overlap with [other expert]'s scope`. This is mandatory, not optional.
+
 **Round 1 (full review):**
 ```
 You are a [role name].
 Review the code on the current branch from a [perspective] perspective.
+
+Scope: [In-scope items for this expert]
+Out of scope: [Out-of-scope items for this expert]
 
 Finalized plan:
 [Plan contents]
@@ -332,21 +364,29 @@ Local LLM pre-screening results (already addressed — do not re-report these):
 [Local LLM output, or "None" if skipped]
 
 Requirements:
-- Only specific and actionable findings (vague findings are prohibited)
-- Classify each finding by severity: Critical / Major / Minor
-  - Critical: Bugs causing data loss/corruption, security vulnerabilities, crashes
-  - Major: Incorrect logic, missing error handling, performance issues
-  - Minor: Naming, style, minor improvements
+- Only specific and actionable findings within your scope (vague findings are prohibited)
+- If you encounter an issue outside your scope but with potential impact, flag it as: [Adjacent] Severity: Problem — this may overlap with [other expert]'s scope
+- Classify each finding by severity using YOUR expert-specific criteria (see below)
 - For each finding, specify file name, line number, severity, problem, and recommended fix
 - Consider the deviation log when reviewing
 - Do not duplicate issues already caught by local LLM pre-screening
 - If there are no findings, explicitly state "No findings"
+
+Severity criteria for [role name]:
+  [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]
+
+For Security expert only — append to each Critical finding:
+  escalate: true/false
+  escalate_reason: [reason if true — e.g., multi-step auth flow, complex trust boundary, chained vulnerabilities]
 ```
 
 **Round 2+ (incremental review):**
 ```
 You are a [role name].
 Review the fixes made since the last round from a [perspective] perspective.
+
+Scope: [In-scope items for this expert]
+Out of scope: [Out-of-scope items for this expert]
 
 Changes since last round (diff):
 [git diff of fixes]
@@ -360,11 +400,16 @@ Context files (files affected by the changes):
 Requirements:
 - Verify that previous fixes are correct and complete
 - Check if fixes introduced regression or new issues in surrounding context
-- Report any previously overlooked issues
-- Classify each finding by severity: Critical / Major / Minor
+- Report any previously overlooked issues within your scope
+- Flag out-of-scope issues with potential impact as: [Adjacent] Severity: Problem — this may overlap with [other expert]'s scope
+- Classify each finding by severity using YOUR expert-specific criteria
 - For each finding, specify file name, line number, severity, problem, and recommended fix
 - Indicate status from previous round (resolved, new, continuing)
 - If there are no findings, explicitly state "No findings"
+
+For Security expert only — append to each Critical finding:
+  escalate: true/false
+  escalate_reason: [reason if true]
 ```
 
 ### Step 3-4: Save Review Results and Deduplicate
@@ -397,6 +442,9 @@ Review round: [nth]
 
 ## Testing Findings
 [Testing expert output — deduplicated]
+
+## Adjacent Findings
+[Adjacent-tagged findings from all experts — preserved for routing]
 
 ## Resolution Status
 [Updated after fixes]
@@ -507,10 +555,53 @@ Explain to the user that evaluation objectivity may be reduced.
 All commits must be made on the `[branch-name]` branch.
 If accidentally on main, create a new branch before continuing work.
 
+### Sub-agent Model Selection
+
+| Expert | Default model | Escalation |
+|--------|--------------|------------|
+| Functionality expert | Sonnet | — |
+| Security expert | Sonnet | Opus (when `escalate: true` is flagged) |
+| Testing expert | Sonnet | — |
+
+**Escalation mechanism** (Security expert only):
+1. **Detection**: After Security expert (Sonnet) returns findings, check each Critical finding for `escalate: true` flag. As a safety net, the orchestrator should also independently assess whether any Critical finding warrants escalation, even if `escalate: false` is reported
+2. **Re-run**: If any `escalate: true` is present, re-launch Security expert with `model: "opus"`, passing the same input (Round 1: full plan/code; Round 2+: current round's diff and previous findings) plus the Sonnet findings as additional context
+3. **Merge**: Opus findings are merged with Sonnet findings (not replaced). Findings are considered "overlapping" when they share the same root cause (same file, same vulnerability type). Opus takes precedence for overlapping Critical findings; Sonnet's non-overlapping Major/Minor findings are preserved
+
+### Handling [Adjacent] Findings
+
+Processing rules for `[Adjacent]`-tagged findings:
+1. **During deduplication** (Step 1-5 / Step 3-4): `[Adjacent]` findings are preserved and NOT merged with the originating expert's findings
+2. **During fix assessment** (Step 1-6 / Step 3-5): The main orchestrator routes each `[Adjacent]` finding to the appropriate expert's scope for evaluation
+3. **If the appropriate expert already reported the same issue**: merge and keep the more comprehensive description
+4. **If the appropriate expert did not report it**: treat it as a new finding from that expert's perspective
+5. **If the routing target is unclear or unavailable**: the main orchestrator evaluates the finding directly
+
 ### Severity Classification Reference
+
+Each expert uses their own severity criteria. When populating `[Expert-specific severity definitions]` in prompt templates, use the definitions below.
+
+**Functionality expert:**
 
 | Severity | Criteria | Action |
 |----------|----------|--------|
-| Critical | Data loss, security vulnerability, crash, blocks release | Must fix immediately |
-| Major | Incorrect logic, missing error handling, performance issue | Must fix |
-| Minor | Naming, style, minor improvement | Fix if straightforward, otherwise user decides |
+| Critical | Requirements not met, data corruption, infinite loop/deadlock | Must fix immediately |
+| Major | Logic error, unhandled edge case, architecture violation | Must fix |
+| Minor | Naming, code structure, readability | Fix if straightforward, otherwise user decides |
+
+**Security expert:**
+
+| Severity | Criteria | Action |
+|----------|----------|--------|
+| Critical | RCE, auth bypass, SQLi/XSS, sensitive data exposure | Must fix immediately |
+| Major | Insufficient access control, crypto misuse, SSRF | Must fix |
+| Minor | Missing headers, excessive logging | Fix if straightforward, otherwise user decides |
+| Conditional | Deprecated algorithms — Minor by default; escalate to Critical if used for authentication credentials, password hashing, or data integrity verification | Depends on context |
+
+**Testing expert:**
+
+| Severity | Criteria | Action |
+|----------|----------|--------|
+| Critical | No tests for critical path, false-positive tests (always pass) | Must fix immediately |
+| Major | Insufficient coverage, flaky tests, mock inconsistency | Must fix |
+| Minor | Test naming, assertion order, test redundancy | Fix if straightforward, otherwise user decides |
