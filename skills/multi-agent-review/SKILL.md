@@ -284,12 +284,26 @@ If there are no deviations, create the file with "No deviations".
 
 ### Step 2-4: Implementation Completion Check
 
-Before reporting completion, run ALL three:
-1. Lint: `[lint command]`
-2. Tests: `[test command]`
-3. Production build: `[build command]`
+Before reporting completion, check migrations and run ALL three verification steps:
+
+```bash
+# Check for pending migrations
+bash ~/.claude/hooks/check-migrations.sh
+
+# Run ALL three checks:
+# 1. Lint
+[lint command]
+
+# 2. Tests
+[test command]
+
+# 3. Production build
+[build command]
+```
 
 All must pass. Fix any failures before proceeding.
+
+**IMPORTANT**: Fix ALL errors found by lint/test/build — including pre-existing errors in files not touched by the current task. Never dismiss failures as "unrelated to our changes." We are building the whole project, not just a diff.
 
 Report to user when implementation is done:
 ```
@@ -462,11 +476,15 @@ The main agent scrutinizes findings and fixes based on severity:
 Important rules:
 - **No deferring**: "Address later" is not an option for Critical/Major
 - For findings that are difficult to fix, consult the user before deciding
-- Always run lint, tests, AND production build after fixes
+- Always run migration check, lint, tests, AND production build after fixes
+- **Fix ALL errors** — including pre-existing errors in files not touched by the current task. Never dismiss failures as "unrelated to our changes."
 
 ### Step 3-6: Test, Build, and Commit
 
 ```bash
+# Check for pending migrations
+bash ~/.claude/hooks/check-migrations.sh
+
 # Run lint to catch unused imports, style violations, etc.
 [lint command]
 

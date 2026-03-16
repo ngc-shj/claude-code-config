@@ -84,15 +84,28 @@ For each proposal, the user can:
 - **Skip**: Leave the code as-is
 - **Modify**: Adjust the proposal before applying
 
-After applying accepted changes:
+After applying accepted changes, check migrations and run ALL three verification steps:
 
 ```bash
-# Run tests to verify no regressions
+# Check for pending migrations
+bash ~/.claude/hooks/check-migrations.sh
+
+# Run ALL three checks:
+# 1. Lint
+[lint command]
+
+# 2. Tests
 [test command]
 
-# Run build to catch type/bundler errors
+# 3. Production build
 [build command]
 ```
+
+All must pass. Fix any failures before proceeding.
+
+**IMPORTANT**: Tests and build alone are insufficient. Lint catches unused imports, style violations, and other issues that neither tests nor builds detect. The production build catches SSR-only module resolution failures, TypeScript errors in non-test code, and bundler issues. All three must pass.
+
+**IMPORTANT**: Fix ALL errors found by lint/test/build — including pre-existing errors in files not touched by the current task. Never dismiss failures as "unrelated to our changes." We are building the whole project, not just a diff.
 
 Report:
 ```
@@ -100,6 +113,7 @@ Report:
 Proposals: [total]
 Accepted: [n]
 Skipped: [n]
+Lint: [pass/fail]
 Tests: [pass/fail]
 Build: [pass/fail]
 ```
