@@ -138,7 +138,8 @@
       "Bash(docker exec *)",
       "Bash(docker run *)",
       "Bash(docker cp *)",
-      "Bash(bash ~/.claude/hooks/ollama-utils.sh *)"
+      "Bash(bash ~/.claude/hooks/ollama-utils.sh *)",
+      "Bash(bash ~/.claude/hooks/check-migrations.sh*)"
     ],
     "ask": [
       "WebFetch(domain:raw.githubusercontent.com)",

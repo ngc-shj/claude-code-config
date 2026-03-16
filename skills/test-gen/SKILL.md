@@ -76,7 +76,12 @@ Task:
    - Integration: key interactions between components (if applicable)
 3. Run the tests to verify they pass
 4. If tests fail, fix them (max 3 fix iterations)
-5. Report any tests that cannot be made to pass
+5. If tests still fail after 3 iterations, report:
+   - Which tests failed and why
+   - Root cause analysis (test issue vs source code issue)
+   - Whether the source code needs fixing (escalate to orchestrator)
+6. Check that test assertions are meaningful (not just "doesn't throw")
+7. Verify test independence (no shared mutable state between tests)
 
 Output: generated test files with pass/fail status.
 ```
@@ -92,6 +97,29 @@ Review generated tests for completeness:
 
 If gaps are found, delegate additional test generation to Sonnet.
 
+Before reporting completion, check migrations and run ALL three verification steps:
+
+```bash
+# Check for pending migrations
+bash ~/.claude/hooks/check-migrations.sh
+
+# Run ALL three checks:
+# 1. Lint
+[lint command]
+
+# 2. Tests
+[test command]
+
+# 3. Production build
+[build command]
+```
+
+All must pass. Fix any failures before proceeding.
+
+**IMPORTANT**: Tests and build alone are insufficient. Lint catches unused imports, style violations, and other issues that neither tests nor builds detect. The production build catches SSR-only module resolution failures, TypeScript errors in non-test code, and bundler issues. All three must pass.
+
+**IMPORTANT**: Fix ALL errors found by lint/test/build — including pre-existing errors in files not touched by the current task. Never dismiss failures as "unrelated to our changes." We are building the whole project, not just a diff.
+
 Final report:
 ```
 === Test Generation Complete ===
@@ -101,5 +129,7 @@ Test cases: [total]
   Edge cases: [n]
   Error paths: [n]
 Tests passing: [n/total]
+Lint: [pass/fail]
+Build: [pass/fail]
 Coverage: [if measurable]
 ```
