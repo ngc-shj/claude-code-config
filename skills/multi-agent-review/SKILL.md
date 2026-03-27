@@ -59,6 +59,7 @@ Ensure the following sections are included for review expert agents to evaluate.
 - **Implementation steps**: Concrete implementation steps (numbered)
 - **Testing strategy**: How to test
 - **Considerations & constraints**: Known risks, constraints, and out-of-scope items
+- **User operation scenarios**: Concrete usage scenarios with specific sites/forms/workflows to surface edge cases (e.g., form structure variations, input field conflicts, fallback paths)
 
 ### Step 1-3: Local LLM Pre-screening (Optional)
 
@@ -110,6 +111,14 @@ Requirements:
 - Do not duplicate issues already caught by local LLM pre-screening
 - If there are no findings, explicitly state "No findings"
 
+Plan-specific obligations:
+- Account for all downstream invariants of schema changes. When adding a new enum value, constant, or type, search for tests that enumerate all values of that type and check what invariants they enforce. Common patterns to check:
+  - i18n key coverage tests (every enum value needs a translation key)
+  - Exhaustive switch/if-else statements
+  - Group membership arrays (audit action groups, permission groups)
+  - OpenAPI spec generation
+- The plan MUST list all files that need updating, not just the direct schema/constant files
+
 Severity criteria for [role name]:
   [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]
 
@@ -139,6 +148,8 @@ Requirements:
 - Flag out-of-scope issues with potential impact as: [Adjacent] Severity: Problem — this may overlap with [other expert]'s scope
 - Classify each finding by severity using YOUR expert-specific criteria
 - If there are no findings, explicitly state "No findings"
+
+All obligations from Round 1 remain in effect (Plan-specific obligations, severity criteria, etc.).
 
 For Security expert only — append to each Critical finding:
   escalate: true/false
@@ -233,9 +244,18 @@ Next step: Proceeding to Phase 2 (Coding)
 
 ## Phase 2: Coding
 
-### Step 2-1: Review the Plan
+### Step 2-1: Review the Plan and Analyze Impact (Mandatory)
 
 Read `~/.claude/plans/[plan-name].md` and understand the implementation steps.
+
+Before writing any code, perform the following impact analysis:
+
+1. **Enumerate all code paths**: grep for the target identifiers (e.g., function names, API endpoint paths, message types, and file name patterns) to identify every location that will need changes
+2. **Check for duplicate implementations**: Verify there are no parallel implementations of the same feature (e.g., `.js` and `.ts` versions, direct and message-based paths, primary and fallback paths)
+3. **Read related type definitions and constants**: Confirm actual enum values, type shapes, and constant definitions before using them in implementation
+4. **Append checklist to plan**: Record the results as a checklist in `~/.claude/plans/[plan-name].md` under a new "## Implementation Checklist" section, listing every file and location that must be modified
+
+This step prevents: using wrong constant values, missing fallback code paths, and leaving stale duplicate implementations untouched.
 
 ### Step 2-2: Implementation (Delegate to Sonnet Sub-agents)
 
@@ -386,7 +406,29 @@ Requirements:
 - For each finding, specify file name, line number, severity, problem, and recommended fix
 - Consider the deviation log when reviewing
 - Do not duplicate issues already caught by local LLM pre-screening
+- Cross-check the plan's "Implementation Checklist" section against the git diff. Report any file listed in the checklist that does not appear in the diff as a finding
 - If there are no findings, explicitly state "No findings"
+
+Cross-cutting verification (mandatory for all experts):
+- For each changed pattern (e.g., URL matching logic, message payload structure, form input handling), grep the codebase to verify the same pattern is not used elsewhere without the equivalent change
+- Report any missed locations as findings with the pattern name and file locations
+- For security-relevant pattern changes (input validation, auth checks, sanitization), treat missed locations as at least Major severity findings
+
+Write-read consistency verification (mandatory for all experts):
+- When a feature writes data in one endpoint and reads it in another (e.g., audit logs, notifications, sync), note: "Unit tests with mocked write and read cannot verify data format consistency. The written value must be valid for the read query's type constraints."
+- Specifically check:
+  - Values written to DB columns must be valid for any query (filter, lookup) that reads them
+  - Enum values written must exist in both the DB schema and the ORM/client's generated types
+  - String IDs written must match the expected format (UUID, CUID, etc.) of any ID-based lookup query
+  - Values passed to DB queries must be validated/sanitized at the input boundary (e.g., request schema) before reaching the query layer
+
+Sub-agent test validation (mandatory for all experts):
+- After implementation sub-agents generate tests, spot-check complex test cases for these red flags:
+  - Mock/spy reset calls placed inside a test body instead of setup/teardown hooks — this invalidates the test's own setup
+  - Test assertions that don't reference values from the mock setup — the test may pass vacuously
+  - Mock return values whose shape doesn't match the actual API response format (e.g., returning an array when the real API returns an object with status fields)
+  - Async test functions that do not await the target call — assertions may execute before the async operation completes, always passing
+  - Per-test state initialized in a once-before-all hook instead of a per-test hook — causes test-order dependency and intermittent failures
 
 Severity criteria for [role name]:
   [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]
@@ -422,6 +464,16 @@ Requirements:
 - For each finding, specify file name, line number, severity, problem, and recommended fix
 - Indicate status from previous round (resolved, new, continuing)
 - If there are no findings, explicitly state "No findings"
+
+Cross-cutting verification (mandatory for all experts):
+- For each changed pattern, grep the codebase to verify no other locations use the same pattern without the equivalent change
+- Report any missed locations as findings
+
+Write-read consistency verification (mandatory for all experts):
+- Same rules as Round 1 apply to any newly written or modified code in this round
+
+Sub-agent test validation (mandatory for all experts):
+- Same red flags as Round 1 apply to any tests generated or modified in this round
 
 For Security expert only — append to each Critical finding:
   escalate: true/false
@@ -599,6 +651,25 @@ Processing rules for `[Adjacent]`-tagged findings:
 3. **If the appropriate expert already reported the same issue**: merge and keep the more comprehensive description
 4. **If the appropriate expert did not report it**: treat it as a new finding from that expert's perspective
 5. **If the routing target is unclear or unavailable**: the main orchestrator evaluates the finding directly
+
+### Expert Agent Obligations
+
+**Do not fabricate technical justifications**
+When comparing design options, each technical argument must be independently valid. If the true differentiator is implementation cost, state that explicitly — never present cost preference as an architectural constraint. Experts must challenge any argument that conflates "harder to implement" with "technically incompatible."
+
+**Do not blindly follow existing patterns**
+When implementation follows an existing codebase pattern, each expert MUST explicitly evaluate: "Is the existing pattern correct, or is it a latent bug we are propagating?" In particular:
+
+- If a field stores UUIDs, writing non-UUID values (e.g., sentinel strings like `"bulk"`) must be flagged regardless of existing code
+- If a value is stored by one endpoint and read by another, verify the value is valid for both the write schema and the read query
+
+**Verify type definitions before proposing value changes**
+Before changing any value in a function call or object literal, read the type/schema definition of the target field. Common mistakes:
+
+- Optional vs nullable: optional fields may not accept explicit null (e.g., `undefined` ≠ `null` in languages that distinguish them)
+- Schema validators may reject values that the language's type system accepts (e.g., a UUID-format validator rejects arbitrary strings even if the static type is `string`)
+
+This applies to both the Plan phase (pseudocode) and the Code Review phase (actual code).
 
 ### Severity Classification Reference
 
