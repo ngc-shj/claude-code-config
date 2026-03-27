@@ -5,7 +5,8 @@
 
 set -euo pipefail
 
-OLLAMA_HOST="${OLLAMA_HOST:-http://gx10-a9c0:11434}"
+# shellcheck source=resolve-ollama-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-ollama-host.sh"
 
 # Common request function: sends prompt to Ollama, prints response
 # Args: $1=model $2=system_prompt $3=timeout $4=num_predict
