@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# shellcheck source=resolve-ollama-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-ollama-host.sh"
+
 INPUT=$(cat)
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
@@ -31,7 +34,7 @@ if [ -z "$COMMIT_MSG" ]; then
 fi
 
 # Check with local LLM via Ollama API
-REVIEW=$(curl -sf --max-time 10 http://gx10-a9c0:11434/api/generate \
+REVIEW=$(curl -sf --max-time 10 "$OLLAMA_HOST/api/generate" \
   -d "$(jq -n \
     --arg model "gpt-oss:20b" \
     --arg prompt "Review this git commit message. Reply with ONLY 'OK' if it follows best practices (concise, English, explains why not what, uses conventional prefix like feat/fix/refactor/docs/test/chore). Reply with a one-line suggestion if it needs improvement.\n\nCommit message: $COMMIT_MSG" \

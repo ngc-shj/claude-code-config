@@ -6,7 +6,8 @@
 
 set -euo pipefail
 
-OLLAMA_HOST="${OLLAMA_HOST:-http://gx10-a9c0:11434}"
+# shellcheck source=resolve-ollama-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-ollama-host.sh"
 MODEL="${REVIEW_MODEL:-gpt-oss:120b}"
 TIMEOUT="${REVIEW_TIMEOUT:-600}"
 MODE="${1:-code}"
