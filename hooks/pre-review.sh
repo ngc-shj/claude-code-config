@@ -25,7 +25,34 @@ case "$MODE" in
     else
       CONTENT=$(cat)
     fi
-    SYSTEM="You are a senior engineer. Review the following plan for obvious issues. Focus on: missing requirements, unclear scope, security red flags, untestable designs. Be concise. Classify each finding as [Critical], [Major], or [Minor]. Critical: blocks release, data loss, security vulnerability. Major: significant functional issue. Minor: style, naming. List only clear problems. If no issues found, reply with exactly: No issues found."
+    # Prepend shared utility inventory if scanner is available
+    SCANNER="$(dirname "${BASH_SOURCE[0]}")/scan-shared-utils.sh"
+    if [ -x "$SCANNER" ]; then
+      PLAN_UTILS=$(bash "$SCANNER" 2>/dev/null | head -200 || true)
+      if [ -n "$PLAN_UTILS" ]; then
+        CONTENT="=== SHARED UTILITIES INVENTORY (existing project code) ===
+${PLAN_UTILS}
+
+=== PLAN TO REVIEW ===
+${CONTENT}"
+      fi
+    fi
+    SYSTEM="You are a senior engineer. Review the following plan for obvious issues.
+
+The input may contain a shared utilities inventory followed by the plan. Use the inventory to check whether the plan reuses existing code.
+
+Focus on:
+1. Missing requirements, unclear scope, security red flags, untestable designs
+2. Whether the plan accounts for reusing existing shared utilities listed in the inventory instead of building new ones
+3. Whether the plan covers ALL locations that need changes (not just the primary file)
+
+Known recurring issues to check:
+- R1: Does the plan propose creating logic that may already exist as a shared utility?
+- R2: Does the plan hardcode constants that should be imported from a shared module?
+- R3: If a pattern is changed, does the plan list ALL files using that pattern?
+- R4: If mutations are added, does the plan include event/notification dispatch for all sites?
+
+Be concise. Classify each finding as [Critical], [Major], or [Minor]. Critical: blocks release, data loss, security vulnerability. Major: significant functional issue, shared utility missed. Minor: style, naming. List only clear problems. If no issues found, reply with exactly: No issues found."
     ;;
   code)
     # Use -U10 for expanded context (default is 3 lines)
@@ -41,12 +68,29 @@ case "$MODE" in
       exit 0
     fi
 
+    # Collect shared utility inventory FIRST (needed for budget calculation)
+    SHARED_UTILS=""
+    SHARED_UTILS_LEN=0
+    SCANNER="$(dirname "${BASH_SOURCE[0]}")/scan-shared-utils.sh"
+    if [ -x "$SCANNER" ]; then
+      FULL_SCAN=$(bash "$SCANNER" 2>/dev/null || true)
+      SCAN_LINES=$(echo "$FULL_SCAN" | wc -l)
+      if [ "$SCAN_LINES" -gt 200 ]; then
+        SHARED_UTILS=$(echo "$FULL_SCAN" | head -200)
+        SHARED_UTILS="${SHARED_UTILS}
+# WARNING: inventory truncated at 200 lines — later sections may be missing"
+      else
+        SHARED_UTILS="$FULL_SCAN"
+      fi
+      SHARED_UTILS_LEN=${#SHARED_UTILS}
+    fi
+
     # Collect full file contents for context, with budget control
     FILE_CONTEXT=""
     FILE_CONTEXT_LEN=0
     DIFF_LEN=${#DIFF}
-    # Budget for file context = total budget - diff size - margin for system prompt
-    FILE_BUDGET=$(( MAX_INPUT_CHARS - DIFF_LEN - 2000 ))
+    # Budget for file context = total budget - diff - shared utils inventory - margin
+    FILE_BUDGET=$(( MAX_INPUT_CHARS - DIFF_LEN - SHARED_UTILS_LEN - 2000 ))
     if [ "$FILE_BUDGET" -lt 0 ]; then
       FILE_BUDGET=0
     fi
@@ -82,7 +126,31 @@ ${FILE_CONTEXT}
 === DIFF (with 10 lines of surrounding context) ===
 ${DIFF}"
 
-    SYSTEM="You are a code reviewer. Review the following code changes for obvious issues. The input contains full file contents (or headers if truncated) followed by the diff. Use the file contents to verify imports, function definitions, and variable usage before flagging issues. Focus on: bugs, security vulnerabilities (OWASP Top 10, injection, auth bypass), missing error handling, naming issues. Be concise. Classify each finding as [Critical], [Major], or [Minor]. Critical: data loss, security vulnerability, crash. Major: incorrect logic, missing error handling. Minor: naming, style. IMPORTANT: Only flag issues you can confirm from the provided context. If a file was truncated, do NOT assume symbols are missing. List only clear problems with file name and line number. If no issues found, reply with exactly: No issues found."
+    if [ -n "$SHARED_UTILS" ]; then
+      CONTENT="=== SHARED UTILITIES INVENTORY ===
+${SHARED_UTILS}
+
+${CONTENT}"
+    fi
+
+    SYSTEM="You are a code reviewer. Review the following code changes for obvious issues.
+
+The input contains: (1) optionally, a shared utilities inventory, (2) full file contents (or headers if truncated), (3) the diff. Use these to verify imports, function definitions, and variable usage before flagging issues.
+
+Focus on:
+1. Bugs, security vulnerabilities (OWASP Top 10, injection, auth bypass), missing error handling
+2. Code that reimplements logic already available in shared utilities (check the inventory if provided)
+3. Constants or values hardcoded instead of imported from shared modules
+4. Pattern changes applied in one location but missed in others
+
+Known recurring issues to check:
+- R1: New code reimplements existing shared utility (flag as Major)
+- R2: Literal values that should be shared constants
+- R3: Pattern changed in one file but not in other files using the same pattern
+- RS1: Credential/token comparison using === instead of timingSafeEqual (flag as Critical)
+
+Be concise. Classify each finding as [Critical], [Major], or [Minor]. Critical: data loss, security vulnerability, crash. Major: incorrect logic, missing error handling, shared utility reimplementation. Minor: naming, style.
+IMPORTANT: Only flag issues you can confirm from the provided context. If a file was truncated, do NOT assume symbols are missing. List only clear problems with file name and line number. If no issues found, reply with exactly: No issues found."
     ;;
   *)
     echo "Usage: $0 [plan|code]"
