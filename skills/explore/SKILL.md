@@ -32,10 +32,12 @@ echo "[user's question]" | bash ~/.claude/hooks/ollama-utils.sh generate-slug
 Then use shell tools for initial file discovery (zero Claude tokens):
 
 ```bash
-# Search for relevant files using keywords
-grep -rl "[keyword]" --include="*.ts" --include="*.tsx" .
+# Search for relevant files using keywords (use appropriate file types for the project)
+grep -rl "[keyword]" .
 # Or use glob patterns for structural exploration
-find src/ -name "*.ts" | head -50
+find src/ -type f | head -50
+# For architecture queries, get an overview of shared utilities
+bash ~/.claude/hooks/scan-shared-utils.sh
 ```
 
 For larger codebases, use local LLM to build a relevance map:
@@ -82,11 +84,12 @@ If sub-agents are unavailable, perform the analysis directly.
 ## Step 4: Synthesize and Present
 
 Review Sonnet's analysis for completeness and accuracy:
-- Verify key claims by spot-checking referenced files
+- **Verify referenced files exist**: For each file:line reference in the output, confirm the file exists and the line content matches the claim. Remove or correct stale references.
+- **Verify function/type existence**: For each named function, type, or constant, grep to confirm it exists at the stated location. Sub-agents may hallucinate names or locations.
 - Fill in any gaps the sub-agent may have missed
 - Resolve any ambiguities
 
 Present the answer to the user with:
 - Clear structure (summary → details → diagram)
-- Clickable file:line references
+- Clickable file:line references (verified to exist)
 - Follow-up suggestions for deeper exploration

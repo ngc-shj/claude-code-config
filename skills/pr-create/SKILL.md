@@ -21,8 +21,9 @@ git diff main...HEAD --stat
 # Get commit history
 git log main...HEAD --oneline
 
-# Check for deviation log
-ls ./docs/archive/review/*-deviation.md 2>/dev/null
+# Check for review artifacts (plan, review log, deviation log, code review log)
+ls ./docs/archive/review/*-plan.md ./docs/archive/review/*-review.md \
+   ./docs/archive/review/*-deviation.md ./docs/archive/review/*-code-review.md 2>/dev/null
 ```
 
 If on main branch, ask the user for the target branch or create one.
@@ -60,6 +61,9 @@ Commit history:
 
 Deviation log (if exists):
 [deviation log contents, or "None"]
+
+Code review log (if exists):
+[code review log contents — include resolved finding count and any remaining items, or "None"]
 
 Task:
 Generate a PR body in this format:
