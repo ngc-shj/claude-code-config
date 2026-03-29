@@ -85,12 +85,21 @@ cmd_summarize_diff() {
 
 cmd_merge_findings() {
   _ollama_request "gpt-oss:120b" \
-    "You receive review findings from multiple expert agents. Deduplicate and merge them:
+    "You receive review findings from multiple expert agents. Deduplicate, merge, and quality-check them.
+
+Deduplication rules:
 - Merge findings that describe the same underlying issue (keep the most comprehensive description)
 - Note which perspectives flagged each finding
 - Sort by severity: Critical → Major → Minor
 - Preserve the format: Severity, Problem, Impact, Recommended action
-- If all inputs say 'No findings', output exactly: No findings" \
+- If all inputs say 'No findings', output exactly: No findings
+
+Quality gate — flag findings that fail these checks:
+- [VAGUE] Finding has no specific file/line reference or says 'consider improving' without a concrete fix
+- [NO-EVIDENCE] Finding claims something exists/doesn't exist but provides no grep output or file path as evidence
+- [UNTESTED-CLAIM] Finding recommends adding tests without confirming the target is testable
+
+Append a '## Quality Warnings' section at the end listing any flagged findings. The orchestrator will return these to the expert for revision." \
     600
 }
 

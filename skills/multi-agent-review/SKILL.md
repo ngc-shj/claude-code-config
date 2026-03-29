@@ -118,6 +118,7 @@ Plan-specific obligations:
   - Group membership arrays (audit action groups, permission groups)
   - OpenAPI spec generation
 - The plan MUST list all files that need updating, not just the direct schema/constant files
+- Verify the plan accounts for existing shared utilities (see "Codebase Awareness Obligations" in Common Rules)
 
 Severity criteria for [role name]:
   [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]
@@ -192,9 +193,14 @@ Review round: [nth]
 
 ## Adjacent Findings
 [Adjacent-tagged findings from all experts — preserved for routing]
+
+## Quality Warnings
+[Findings flagged by merge-findings quality gate: VAGUE, NO-EVIDENCE, UNTESTED-CLAIM]
 ```
 
 ### Step 1-6: Validity Assessment and Plan Update
+
+**Quality gate check (mandatory)**: Before assessing findings, check the `## Quality Warnings` section of the merged output. For each flagged finding (`[VAGUE]`, `[NO-EVIDENCE]`, `[UNTESTED-CLAIM]`), return it to the originating expert with the specific flag and request revision. Do not proceed with those findings until the expert provides a revised version with the required evidence or specificity.
 
 The main agent scrutinizes each finding:
 - **Critical/Major finding**: Must be reflected in the plan file
@@ -253,9 +259,22 @@ Before writing any code, perform the following impact analysis:
 1. **Enumerate all code paths**: grep for the target identifiers (e.g., function names, API endpoint paths, message types, and file name patterns) to identify every location that will need changes
 2. **Check for duplicate implementations**: Verify there are no parallel implementations of the same feature (e.g., `.js` and `.ts` versions, direct and message-based paths, primary and fallback paths)
 3. **Read related type definitions and constants**: Confirm actual enum values, type shapes, and constant definitions before using them in implementation
-4. **Append checklist to plan**: Record the results as a checklist in `~/.claude/plans/[plan-name].md` under a new "## Implementation Checklist" section, listing every file and location that must be modified
+4. **Inventory reusable code**: Run the shared utility scanner, then supplement with manual search:
+   ```bash
+   INVENTORY=$(mktemp /tmp/shared-utils-inventory.XXXXXX)
+   bash ~/.claude/hooks/scan-shared-utils.sh > "$INVENTORY"
+   ```
+   Review the output and add any additional findings:
+   - Shared helper functions (e.g., rate limiters, encoders/decoders, URL builders)
+   - Shared constants and validation schemas (e.g., constants modules, validation config)
+   - Existing patterns for event dispatch, error handling, and DB transactions
+   - Record each as: `[file:line] [function/constant name] — [what it does]`
+5. **Append checklist to plan**: Record the results as a checklist in `~/.claude/plans/[plan-name].md` under a new "## Implementation Checklist" section, listing:
+   - Every file and location that must be modified
+   - Every shared utility that must be reused (from step 4)
+   - Every pattern that must be followed consistently across all sites
 
-This step prevents: using wrong constant values, missing fallback code paths, and leaving stale duplicate implementations untouched.
+This step prevents: using wrong constant values, missing fallback code paths, leaving stale duplicate implementations untouched, and reimplementing logic that already exists in shared modules.
 
 ### Step 2-2: Implementation (Delegate to Sonnet Sub-agents)
 
@@ -266,7 +285,11 @@ Split the plan's "Implementation steps" into independent batches and delegate to
    - The full plan for context
    - The specific steps to implement
    - Any outputs from previous batches (for dependencies)
-3. **Review**: After each batch completes, verify the output before proceeding to the next batch
+   - **The shared utility inventory from Step 2-1** (list of existing helpers, constants, and patterns that MUST be reused — sub-agents are prohibited from reimplementing these)
+3. **Review**: After each batch completes, verify the output before proceeding to the next batch. Specifically check:
+   - Did the sub-agent reuse existing shared utilities, or did it create new ones?
+   - Did the sub-agent follow existing patterns, or did it invent a parallel approach?
+   - If new helper functions were created, are they genuinely new, or do they duplicate existing code?
 
 If sub-agents are unavailable, implement directly as fallback.
 
@@ -409,6 +432,11 @@ Requirements:
 - Cross-check the plan's "Implementation Checklist" section against the git diff. Report any file listed in the checklist that does not appear in the diff as a finding
 - If there are no findings, explicitly state "No findings"
 
+Codebase awareness (mandatory — see "Codebase Awareness Obligations" in Common Rules):
+- Before writing any finding or recommendation, search the codebase for existing shared utilities, helpers, and patterns related to the changed code
+- If new code reimplements logic that already exists in a shared module, flag it as a finding
+- Include the evidence (grep results, file paths) in your findings
+
 Cross-cutting verification (mandatory for all experts):
 - For each changed pattern (e.g., URL matching logic, message payload structure, form input handling), grep the codebase to verify the same pattern is not used elsewhere without the equivalent change
 - Report any missed locations as findings with the pattern name and file locations
@@ -514,11 +542,16 @@ Review round: [nth]
 ## Adjacent Findings
 [Adjacent-tagged findings from all experts — preserved for routing]
 
+## Quality Warnings
+[Findings flagged by merge-findings quality gate: VAGUE, NO-EVIDENCE, UNTESTED-CLAIM]
+
 ## Resolution Status
 [Updated after fixes]
 ```
 
 ### Step 3-5: Fix the Code
+
+**Quality gate check (mandatory)**: Before fixing findings, check the `## Quality Warnings` section. For each flagged finding (`[VAGUE]`, `[NO-EVIDENCE]`, `[UNTESTED-CLAIM]`), return it to the originating expert with the specific flag and request revision. Do not fix findings that lack evidence or specificity — send them back first.
 
 The main agent scrutinizes findings and fixes based on severity:
 - **Critical**: Must fix immediately
@@ -652,6 +685,60 @@ Processing rules for `[Adjacent]`-tagged findings:
 4. **If the appropriate expert did not report it**: treat it as a new finding from that expert's perspective
 5. **If the routing target is unclear or unavailable**: the main orchestrator evaluates the finding directly
 
+### Codebase Awareness Obligations
+
+Every expert agent MUST perform codebase-wide investigation before writing findings. Reviewing only the changed files is insufficient — you must understand how the changes fit into the whole system.
+
+**Before-review investigation (mandatory for all experts):**
+
+1. **Discover shared utilities**: Search (`grep -r`, `Glob`) for existing helper functions, shared modules, and utility files related to the feature under review. Common locations: `lib/`, `utils/`, `shared/`, `common/`, `helpers/`.
+2. **Find parallel implementations**: Search for similar logic elsewhere in the codebase. If the new code reimplements something that already exists, flag it as a finding (Major severity minimum).
+3. **Trace the full pattern**: When the change touches a pattern (e.g., event dispatch, rate limiting, validation), search for ALL other places that use the same pattern. List them explicitly.
+4. **Check constant/enum consumers**: When constants, enums, or types are added or changed, search for all consumers (switch statements, if-else chains, array membership checks, i18n keys, test assertions).
+
+**Evidence requirement**: Every finding that references existing code must include the file path and line number where the evidence was found. Findings without evidence are rejected.
+
+**Anti-pattern: "Missing the forest"**
+The following are language-agnostic examples of costly misses from past reviews:
+- Rate limiter reimplemented 3 times in separate files when a shared helper already existed
+- Encoding/decoding function copied locally instead of importing from the existing shared module
+- Event/notification dispatch added in 2 of 6 mutation sites, missed the other 4 (required 3 review rounds)
+- Validation constants hardcoded in UI, API schema, AND test mocks instead of imported from a shared constants module
+- URL construction helper duplicated in 4 files instead of calling the centralized one
+
+### Finding Quality Standards
+
+**Prohibited finding types:**
+
+1. **Vague recommendations**: "Consider adding tests" or "Error handling could be improved" — must specify WHICH function, WHAT test case, and HOW to handle the error
+2. **Untested testability claims**: Before recommending "add a test for X", verify that X is actually testable in the project's test infrastructure (e.g., Auth.js internal provider config is NOT unit-testable)
+3. **Architecture misunderstandings**: Before flagging crypto, auth, or complex domain logic, read the surrounding code to understand the design intent. False alarms on crypto (e.g., flagging HKDF-derived hashes as "password hashes") waste review rounds
+4. **Cargo-cult security findings**: Flagging standard library usage as "insecure" without a concrete attack vector. Every security finding must describe: attacker, attack vector, preconditions, and impact
+
+**Required finding format (code review):**
+```
+[Finding ID] [Severity]: [Problem title]
+- File: [path:line]
+- Evidence: [grep output, code snippet, or specific observation]
+- Problem: [Concrete description — what is wrong and why]
+- Impact: [What breaks, what data is at risk, what users experience]
+- Fix: [Specific code change or approach — not "consider improving"]
+```
+
+Findings that omit Evidence or provide a vague Fix are returned to the expert for revision.
+
+### Anti-Deferral Rules
+
+**"Out of scope" and "pre-existing" are not free passes.**
+
+1. **Pre-existing issues in changed files**: If a file is already being modified and contains a pre-existing bug, it MUST be flagged (severity based on impact, not on who introduced it). The CLAUDE.md rule "Fix ALL errors" applies.
+2. **Out-of-scope finding obligations**: When marking a finding as "out of scope", the expert MUST:
+   - State which expert's scope it belongs to (use [Adjacent] tag)
+   - Provide enough detail for the other expert to evaluate it
+   - Never use "out of scope" to avoid investigating a finding
+3. **"Acceptable risk" requires quantification**: Do not accept risks with hand-waving like "acceptable for personal tool" or "low probability." State: what is the worst case, what is the likelihood, and what is the cost to fix. If cost-to-fix is low, fix it.
+4. **Deferred findings must be tracked**: Any finding deferred to a future PR must be recorded in the review log with a clear reason and an explicit "TODO" marker that can be grepped.
+
 ### Expert Agent Obligations
 
 **Do not fabricate technical justifications**
@@ -670,6 +757,49 @@ Before changing any value in a function call or object literal, read the type/sc
 - Schema validators may reject values that the language's type system accepts (e.g., a UUID-format validator rejects arbitrary strings even if the static type is `string`)
 
 This applies to both the Plan phase (pseudocode) and the Code Review phase (actual code).
+
+### Known Recurring Issue Checklist
+
+These issues have been found repeatedly in past reviews. Every expert MUST explicitly check for these patterns and report their findings (even if "not applicable" — this confirms the check was performed).
+
+**All experts must check:**
+
+| # | Pattern | What to grep/check | Severity if missed |
+|---|---------|--------------------|--------------------|
+| R1 | Shared utility reimplementation | `grep -r` for existing helpers (rate limiters, validators, encoders, formatters) before accepting new implementations | Major |
+| R2 | Constants hardcoded in multiple places | Search for literal values that should be shared constants (validation limits, enum values, config defaults) | Major |
+| R3 | Incomplete pattern propagation | When a pattern is changed in one file, search for ALL other files using the same pattern | Critical if security-relevant, Major otherwise |
+| R4 | Event/notification dispatch gaps | When mutations are added, verify ALL similar mutation sites dispatch the corresponding event | Major |
+| R5 | Missing transaction wrapping | findMany + update/delete in separate calls without DB transaction | Major |
+| R6 | Cascade delete orphans | DB cascade deletes that don't clean up external storage (blob store, file system, cache) | Major |
+
+**Security expert must additionally check:**
+
+| # | Pattern | What to check | Severity |
+|---|---------|---------------|----------|
+| RS1 | Timing-safe comparison | Any credential/token/hash comparison using `===` or `!==` instead of `timingSafeEqual` | Critical |
+| RS2 | Rate limiter on new routes | Every new API endpoint must have rate limiting (check if shared rate limiter exists) | Major |
+| RS3 | Input validation at boundaries | New request parameters must be validated/sanitized at the schema level, not deep in business logic | Major |
+
+**Testing expert must additionally check:**
+
+| # | Pattern | What to check | Severity |
+|---|---------|---------------|----------|
+| RT1 | Mock-reality divergence | Mock return values must match actual API response shapes | Critical |
+| RT2 | Testability verification | Before recommending "add test for X", confirm X is testable with the project's test infrastructure | — (reject finding if untestable) |
+| RT3 | Shared constant in tests | Test assertions using hardcoded values that should import from shared constants | Major |
+
+Each expert must include a "Recurring Issue Check" section in their output:
+```
+## Recurring Issue Check
+- R1 (Shared utility reimplementation): [Checked — no issue / Finding F-XX]
+- R2 (Constants hardcoded): [Checked — no issue / Finding F-XX]
+- R3 (Pattern propagation): [Checked — no issue / Finding F-XX]
+- R4 (Event dispatch gaps): [N/A — no mutations / Finding F-XX]
+- R5 (Missing transactions): [N/A — no multi-step DB ops / Finding F-XX]
+- R6 (Cascade delete orphans): [N/A — no deletes / Finding F-XX]
+- [Expert-specific checks as applicable]
+```
 
 ### Severity Classification Reference
 
