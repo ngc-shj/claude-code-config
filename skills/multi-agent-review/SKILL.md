@@ -563,6 +563,7 @@ Important rules:
 - For findings that are difficult to fix, consult the user before deciding
 - Always run migration check, lint, tests, AND production build after fixes
 - **Fix ALL errors** — including pre-existing errors in files not touched by the current task. Never dismiss failures as "unrelated to our changes."
+- **Test-verified behavior conflict check**: Before accepting any finding that reverses a configuration or behavior confirmed during implementation/testing (Phase 2), verify: (1) the finding cites a specific spec or concrete attack vector, not a general heuristic, (2) the finding explains why the tested scenario is invalid. If neither is met, reject the finding and note the test evidence. After applying any fix that changes security boundaries (CSP, CORS, auth, rate limiting), re-run the relevant E2E flow in production-equivalent mode.
 
 ### Step 3-6: Test, Build, and Commit
 
@@ -714,6 +715,7 @@ The following are language-agnostic examples of costly misses from past reviews:
 2. **Untested testability claims**: Before recommending "add a test for X", verify that X is actually testable in the project's test infrastructure (e.g., Auth.js internal provider config is NOT unit-testable)
 3. **Architecture misunderstandings**: Before flagging crypto, auth, or complex domain logic, read the surrounding code to understand the design intent. False alarms on crypto (e.g., flagging HKDF-derived hashes as "password hashes") waste review rounds
 4. **Cargo-cult security findings**: Flagging standard library usage as "insecure" without a concrete attack vector. Every security finding must describe: attacker, attack vector, preconditions, and impact
+5. **Heuristic-only security restrictions**: Recommending removal of a configuration (e.g., CSP directive, CORS origin, allowed redirect URI) based on "generally this shouldn't be in production" without verifying the actual use case. Security findings that restrict functionality MUST cite the relevant specification (RFC, OWASP, vendor docs) and explain why the specific use case does not apply. Example of a prohibited finding: "Remove localhost from CSP form-action in production" — without checking whether OAuth native app flow (RFC 8252) requires it
 
 **Required finding format (code review):**
 ```
@@ -740,6 +742,14 @@ Findings that omit Evidence or provide a vague Fix are returned to the expert fo
 4. **Deferred findings must be tracked**: Any finding deferred to a future PR must be recorded in the review log with a clear reason and an explicit "TODO" marker that can be grepped.
 
 ### Expert Agent Obligations
+
+**Do not override test-verified behavior with general heuristics**
+When a finding recommends changing a configuration or behavior that was previously tested and confirmed working (e.g., during implementation or E2E testing), the burden of proof is on the finding. The expert MUST:
+- Cite a specific specification (RFC, OWASP rule, language spec) — not "generally you shouldn't do X"
+- Explain why the tested scenario does not apply, with a concrete counter-example
+- If unable to provide spec-level evidence, downgrade to an informational note, not a finding
+
+Real example: A security expert recommended removing `http://localhost:*` from CSP `form-action` in production, citing "localhost is not used in production." This broke OAuth native app flow (RFC 8252 §7.3 requires localhost redirect for desktop apps). The tested E2E flow had already confirmed localhost was needed, but the orchestrator accepted the finding without re-verification.
 
 **Do not fabricate technical justifications**
 When comparing design options, each technical argument must be independently valid. If the true differentiator is implementation cost, state that explicitly — never present cost preference as an architectural constraint. Experts must challenge any argument that conflates "harder to implement" with "technically incompatible."
