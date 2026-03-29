@@ -186,7 +186,8 @@ fi
 
 if [ "$HTTP_CODE" != "200" ]; then
   echo "Warning: Ollama returned HTTP $HTTP_CODE. Skipping pre-review."
-  head -5 "$TMPDIR_REQ/response.json" >&2
+  # Do not dump response body — it may contain echoed request with user code
+  echo "  (response body suppressed — check Ollama server logs for details)" >&2
   exit 0
 fi
 

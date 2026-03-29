@@ -52,7 +52,8 @@ _ollama_request() {
 
   if [ "$http_code" != "200" ]; then
     echo "Warning: Ollama returned HTTP $http_code" >&2
-    head -5 "$tmpdir/response.json" >&2
+    # Do not dump response body — it may contain echoed request with user code
+    echo "  (response body suppressed — check Ollama server logs for details)" >&2
     return
   fi
 
