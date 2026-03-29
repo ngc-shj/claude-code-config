@@ -141,9 +141,7 @@
       "Bash(bash ~/.claude/hooks/ollama-utils.sh *)",
       "Bash(bash ~/.claude/hooks/check-migrations.sh*)",
       "Bash(bash ~/.claude/hooks/scan-shared-utils.sh)",
-      "Read(~/.claude/plans/*)",
-      "Edit(~/.claude/plans/*)",
-      "Write(~/.claude/plans/*)"
+      "Read(~/.claude/plans/*)"
     ],
     "ask": [
       "WebFetch(domain:raw.githubusercontent.com)",

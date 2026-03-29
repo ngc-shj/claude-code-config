@@ -40,7 +40,7 @@ Determine the branch prefix (`feature/`, `fix/`, `refactor/`, `docs/`) from the 
 ```
 Plan name: [plan-name]
 Branch name: [prefix]/[plan-name]
-Save to: ~/.claude/plans/[plan-name].md
+Save to: ./docs/archive/review/[plan-name]-plan.md
 ```
 
 Naming guidelines:
@@ -49,7 +49,7 @@ Naming guidelines:
 
 ### Step 1-2: Create the Plan
 
-Use Claude Code's built-in plan creation feature to create a plan and save it to `~/.claude/plans/[plan-name].md`.
+Use Claude Code's built-in plan creation feature to create a plan and save it to `./docs/archive/review/[plan-name]-plan.md`.
 
 Ensure the following sections are included for review expert agents to evaluate. Add missing sections as needed:
 
@@ -67,7 +67,7 @@ Before launching Claude sub-agents, run a quick pre-screening pass using local L
 The script reads the plan file directly and calls Ollama via curl — no Claude tokens consumed.
 
 ```bash
-PLAN_FILE=~/.claude/plans/[plan-name].md bash ~/.claude/hooks/pre-review.sh plan
+PLAN_FILE=./docs/archive/review/[plan-name]-plan.md bash ~/.claude/hooks/pre-review.sh plan
 ```
 
 If the output contains issues, fix them in the plan before proceeding to expert review.
@@ -226,9 +226,6 @@ Once plan review is complete, create a branch and commit.
 git checkout main
 git checkout -b [branch-name]
 
-# Copy finalized plan to docs/review
-cp ~/.claude/plans/[plan-name].md ./docs/archive/review/[plan-name]-plan.md
-
 # Commit
 git add ./docs/archive/review/[plan-name]-plan.md
 git add ./docs/archive/review/[plan-name]-review.md
@@ -239,8 +236,7 @@ git commit -m "plan: [plan-name] - plan creation and review complete"
 Report to user:
 ```
 === Phase 1 Complete ===
-Plan: ~/.claude/plans/[plan-name].md (original)
-      ./docs/archive/review/[plan-name]-plan.md (repository copy)
+Plan: ./docs/archive/review/[plan-name]-plan.md
 Branch: [branch-name]
 Review rounds: [n]
 Next step: Proceeding to Phase 2 (Coding)
@@ -252,7 +248,7 @@ Next step: Proceeding to Phase 2 (Coding)
 
 ### Step 2-1: Review the Plan and Analyze Impact (Mandatory)
 
-Read `~/.claude/plans/[plan-name].md` and understand the implementation steps.
+Read `./docs/archive/review/[plan-name]-plan.md` and understand the implementation steps.
 
 Before writing any code, perform the following impact analysis:
 
@@ -269,7 +265,7 @@ Before writing any code, perform the following impact analysis:
    - Shared constants and validation schemas (e.g., constants modules, validation config)
    - Existing patterns for event dispatch, error handling, and DB transactions
    - Record each as: `[file:line] [function/constant name] — [what it does]`
-5. **Append checklist to plan**: Record the results as a checklist in `~/.claude/plans/[plan-name].md` under a new "## Implementation Checklist" section, listing:
+5. **Append checklist to plan**: Record the results as a checklist in `./docs/archive/review/[plan-name]-plan.md` under a new "## Implementation Checklist" section, listing:
    - Every file and location that must be modified
    - Every shared utility that must be reused (from step 4)
    - Every pattern that must be followed consistently across all sites
@@ -366,7 +362,7 @@ Next step: Proceeding to Phase 3 (Code Review)
 ### Step 3-1: Gather Review Input
 
 Read the following three items:
-1. Finalized plan: `~/.claude/plans/[plan-name].md`
+1. Finalized plan: `./docs/archive/review/[plan-name]-plan.md`
 2. Deviation log: `./docs/archive/review/[plan-name]-deviation.md`
 3. All code on the current branch
 
