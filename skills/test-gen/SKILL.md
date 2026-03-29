@@ -31,6 +31,17 @@ Identify the project's test conventions:
 - Test directory structure (e.g., `__tests__/`, `tests/`, co-located)
 - Existing test examples to follow as patterns
 
+Discover existing test infrastructure (mandatory):
+```bash
+# Scan for shared test helpers, fixtures, and mock utilities
+bash ~/.claude/hooks/scan-shared-utils.sh
+```
+Search the test directories for:
+- Shared test helpers/setup functions (e.g., `test-utils`, `test-helpers`, `factories`, `fixtures`)
+- Common mock patterns already in use (e.g., `mockServer`, `createMock*`, `fake*`)
+- Shared setup/teardown hooks (e.g., `beforeAll` in a shared file)
+- Record what exists so the sub-agent reuses them instead of creating new ones
+
 ## Step 2: Test Outline Generation (Local LLM, Zero Claude Tokens)
 
 Classify files and generate test case outlines using local LLM:
@@ -61,6 +72,9 @@ Test framework: [detected framework]
 Test conventions: [naming pattern, directory structure]
 Existing test examples: [sample test file contents for pattern reference]
 
+Shared test infrastructure (MUST reuse — do NOT recreate):
+[List of existing test helpers, mock utilities, fixtures from Step 1]
+
 Local LLM analysis (for reference):
 [Local LLM output, or "None"]
 
@@ -69,7 +83,8 @@ Source files to test:
 
 Task:
 1. Generate test files following the project's existing conventions
-2. Cover these categories:
+2. Reuse existing shared test helpers and mock utilities — do NOT create new helpers when equivalent ones already exist
+3. Cover these categories:
    - Happy path: normal expected behavior
    - Edge cases: boundary values, empty inputs, null/undefined
    - Error paths: invalid inputs, failure scenarios
@@ -82,6 +97,11 @@ Task:
    - Whether the source code needs fixing (escalate to orchestrator)
 6. Check that test assertions are meaningful (not just "doesn't throw")
 7. Verify test independence (no shared mutable state between tests)
+8. Verify mock-reality consistency:
+   - Mock return values must match actual API response shapes (read the real type/interface)
+   - Mock/spy resets must be in setup/teardown hooks, not inside test bodies
+   - Async functions under test must be awaited before assertions
+   - Per-test state must use per-test hooks (beforeEach), not once-before-all (beforeAll)
 
 Output: generated test files with pass/fail status.
 ```
@@ -94,6 +114,8 @@ Review generated tests for completeness:
 - Identify missing edge cases or error paths
 - Check that test assertions are meaningful (not just "doesn't throw")
 - Verify test independence (no shared mutable state between tests)
+- Verify the sub-agent reused existing test helpers (not reimplemented)
+- Spot-check mock return values against actual type definitions
 
 If gaps are found, delegate additional test generation to Sonnet.
 

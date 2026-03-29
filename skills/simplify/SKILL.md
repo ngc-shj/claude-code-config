@@ -25,7 +25,13 @@ git diff main...HEAD --stat  # Understand what changed
 
 ## Step 2: Local LLM Pre-analysis (Zero Claude Tokens)
 
-Run pre-screening to identify complexity hotspots and duplication:
+First, inventory existing shared utilities to inform reuse proposals:
+
+```bash
+bash ~/.claude/hooks/scan-shared-utils.sh
+```
+
+Then run pre-screening to identify complexity hotspots and duplication:
 
 ```bash
 bash ~/.claude/hooks/pre-review.sh code
@@ -51,12 +57,15 @@ You are a senior engineer specializing in code simplification.
 Local LLM pre-analysis (for reference — do not re-report):
 [Local LLM output, or "None"]
 
+Shared utility inventory (existing reusable code — check before proposing new abstractions):
+[scan-shared-utils.sh output, or "None"]
+
 Changed files:
 [File list from git diff --stat]
 
 Task:
 1. Read each changed file and its surrounding context
-2. Search the codebase for similar patterns or existing utilities that could be reused
+2. Search the codebase for similar patterns or existing utilities that could be reused — cross-reference the shared utility inventory above
 3. Identify concrete simplification opportunities:
    - Duplicate logic that can be extracted into a shared function
    - Complex conditionals that can be simplified
@@ -68,8 +77,10 @@ Task:
    - Before: current code snippet
    - After: proposed simplified code
    - Estimated impact: LOC reduction, readability improvement
+   - Evidence: for reuse proposals, include the path and line of the existing utility being recommended
 
 Output format: numbered list of proposals with before/after code blocks.
+Proposals that recommend reuse without specifying the existing utility's location will be rejected.
 If no simplification opportunities found, state "No simplification opportunities found."
 ```
 
