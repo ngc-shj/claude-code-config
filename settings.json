@@ -139,9 +139,12 @@
       "Bash(docker run *)",
       "Bash(docker cp *)",
       "Bash(bash ~/.claude/hooks/ollama-utils.sh *)",
-      "Bash(bash ~/.claude/hooks/check-migrations.sh*)"
+      "Bash(bash ~/.claude/hooks/check-migrations.sh*)",
+      "Read(~/.claude/plans/*)",
+      "Edit(~/.claude/plans/*)"
     ],
     "ask": [
+      "Write(~/.claude/plans/*)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(git push*)",
       "Bash(git stash drop*)",
