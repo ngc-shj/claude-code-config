@@ -119,6 +119,12 @@ Plan-specific obligations:
   - OpenAPI spec generation
 - The plan MUST list all files that need updating, not just the direct schema/constant files
 - Verify the plan accounts for existing shared utilities (see "Codebase Awareness Obligations" in Common Rules)
+- When the plan involves event dispatch (webhooks, notifications, etc.) or audit log changes, explicitly check:
+  - Fire-and-forget async calls (e.g., `void asyncFn()`) must not run inside a DB transaction scope — async context inheritance can cause "transaction already closed" errors (R9)
+  - Module dependency graph must not form circular imports — if A imports B and B imports A, module initialization order may produce undefined references (R10)
+  - Display/UI grouping (e.g., audit log filter categories) and subscription/delivery grouping (e.g., webhook event filters) are separate concerns — reusing one for the other risks scope leakage or update gaps (R11)
+  - Every action value passed to the logging/audit function must be registered in the corresponding action group definition, i18n labels, UI label maps, and tests (R12)
+  - Delivery failure events must not trigger re-delivery — verify the design includes a suppression mechanism to prevent infinite dispatch loops (R13)
 
 Severity criteria for [role name]:
   [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]
@@ -797,6 +803,11 @@ These issues have been found repeatedly in past reviews. Every expert MUST expli
 | R6 | Cascade delete orphans | DB cascade deletes that don't clean up external storage (blob store, file system, cache) | Major |
 | R7 | E2E selector breakage | When routes, CSS classes, exports, aria-label, id, data-testid, or data-slot are changed/deleted, check E2E tests for broken references | Major |
 | R8 | UI pattern inconsistency | When adding/restyling list, card, or form components, verify style patterns match existing same-category components | Minor |
+| R9 | Transaction boundary for fire-and-forget | `void asyncFn()` inside a DB transaction scope inherits async context — the transaction may close before the async work completes, causing runtime errors. Move fire-and-forget calls outside the transaction | Critical |
+| R10 | Circular module dependency | A imports B and B imports A — module initialization order may produce `undefined`. Refactor to unidirectional dependency or use lazy imports on both sides | Major |
+| R11 | Display group ≠ subscription group | UI display grouping (e.g., audit log filters) and event subscription grouping (e.g., webhook topics) serve different purposes. Reusing one for the other causes scope leakage or update gaps when new features are added | Major |
+| R12 | Enum/action group coverage gap | Every action value used in logging/audit calls must be registered in the corresponding group definition, i18n labels, UI label maps, and tests. Search all call sites and cross-check against group arrays | Major |
+| R13 | Re-entrant dispatch loop | Event delivery failure → audit log → triggers new event delivery → infinite loop. Delivery-failure actions must be on a dispatch suppression list | Critical |
 
 **Security expert must additionally check:**
 
@@ -825,6 +836,11 @@ Each expert must include a "Recurring Issue Check" section in their output:
 - R6 (Cascade delete orphans): [N/A — no deletes / Finding F-XX]
 - R7 (E2E selector breakage): [Checked — no issue / Finding F-XX]
 - R8 (UI pattern inconsistency): [Checked — no issue / Finding F-XX]
+- R9 (Transaction boundary for fire-and-forget): [N/A — no async dispatch in tx / Finding F-XX]
+- R10 (Circular module dependency): [Checked — no issue / Finding F-XX]
+- R11 (Display group ≠ subscription group): [N/A — no event grouping / Finding F-XX]
+- R12 (Enum/action group coverage gap): [N/A — no audit actions / Finding F-XX]
+- R13 (Re-entrant dispatch loop): [N/A — no event dispatch / Finding F-XX]
 - [Expert-specific checks as applicable]
 ```
 
