@@ -323,11 +323,16 @@ If there are no deviations, create the file with "No deviations".
 
 ### Step 2-4: Implementation Completion Check
 
-Before reporting completion, check migrations and run ALL three verification steps:
+Before reporting completion, check migrations, E2E impact, and run ALL three verification steps:
 
 ```bash
 # Check for pending migrations
 bash ~/.claude/hooks/check-migrations.sh
+
+# E2E test impact check (if E2E tests exist in the project)
+# When the diff deletes or renames routes, CSS selectors, component exports,
+# data-testid/aria-label/id/data-slot attributes, grep E2E test files to verify
+# no test references the old value. Fix broken E2E references before proceeding.
 
 # Run ALL three checks:
 # 1. Lint
@@ -437,6 +442,15 @@ Cross-cutting verification (mandatory for all experts):
 - For each changed pattern (e.g., URL matching logic, message payload structure, form input handling), grep the codebase to verify the same pattern is not used elsewhere without the equivalent change
 - Report any missed locations as findings with the pattern name and file locations
 - For security-relevant pattern changes (input validation, auth checks, sanitization), treat missed locations as at least Major severity findings
+- E2E test impact check (if E2E tests exist in the project): When the diff deletes or renames any of the following, grep E2E test files to verify no test references the old value:
+  - Route paths (URL navigation in E2E tests)
+  - CSS class selectors or element selectors used by E2E locators
+  - Component/module exports referenced by E2E page-objects or helpers
+  - `aria-label` / `id` / `data-testid` / `data-slot` or other selector attributes used by E2E tests
+
+UI consistency verification (mandatory for Functionality expert):
+- When new UI components (lists, cards, forms, tables) are added or existing ones restyled, grep for the same category of component across the codebase and verify style pattern consistency (spacing, borders, dividers, corner radius, etc.)
+- Report inconsistencies where one component uses a different visual pattern than all other same-category components
 
 Write-read consistency verification (mandatory for all experts):
 - When a feature writes data in one endpoint and reads it in another (e.g., audit logs, notifications, sync), note: "Unit tests with mocked write and read cannot verify data format consistency. The written value must be valid for the read query's type constraints."
@@ -492,6 +506,7 @@ Requirements:
 Cross-cutting verification (mandatory for all experts):
 - For each changed pattern, grep the codebase to verify no other locations use the same pattern without the equivalent change
 - Report any missed locations as findings
+- E2E test impact check and UI consistency verification: Same rules as Round 1 apply to any changes in this round
 
 Write-read consistency verification (mandatory for all experts):
 - Same rules as Round 1 apply to any newly written or modified code in this round
@@ -566,6 +581,8 @@ Important rules:
 ```bash
 # Check for pending migrations
 bash ~/.claude/hooks/check-migrations.sh
+
+# E2E test impact check (same as Step 2-4 — verify no E2E test references deleted selectors)
 
 # Run lint to catch unused imports, style violations, etc.
 [lint command]
@@ -778,6 +795,8 @@ These issues have been found repeatedly in past reviews. Every expert MUST expli
 | R4 | Event/notification dispatch gaps | When mutations are added, verify ALL similar mutation sites dispatch the corresponding event | Major |
 | R5 | Missing transaction wrapping | findMany + update/delete in separate calls without DB transaction | Major |
 | R6 | Cascade delete orphans | DB cascade deletes that don't clean up external storage (blob store, file system, cache) | Major |
+| R7 | E2E selector breakage | When routes, CSS classes, exports, aria-label, id, data-testid, or data-slot are changed/deleted, check E2E tests for broken references | Major |
+| R8 | UI pattern inconsistency | When adding/restyling list, card, or form components, verify style patterns match existing same-category components | Minor |
 
 **Security expert must additionally check:**
 
@@ -804,6 +823,8 @@ Each expert must include a "Recurring Issue Check" section in their output:
 - R4 (Event dispatch gaps): [N/A — no mutations / Finding F-XX]
 - R5 (Missing transactions): [N/A — no multi-step DB ops / Finding F-XX]
 - R6 (Cascade delete orphans): [N/A — no deletes / Finding F-XX]
+- R7 (E2E selector breakage): [Checked — no issue / Finding F-XX]
+- R8 (UI pattern inconsistency): [Checked — no issue / Finding F-XX]
 - [Expert-specific checks as applicable]
 ```
 
