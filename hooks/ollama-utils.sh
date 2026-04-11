@@ -100,7 +100,13 @@ Quality gate — flag findings that fail these checks:
 - [NO-EVIDENCE] Finding claims something exists/doesn't exist but provides no grep output or file path as evidence
 - [UNTESTED-CLAIM] Finding recommends adding tests without confirming the target is testable
 
-Append a '## Quality Warnings' section at the end listing any flagged findings. The orchestrator will return these to the expert for revision." \
+Append a '## Quality Warnings' section at the end listing any flagged findings. The orchestrator will return these to the expert for revision.
+
+PRESERVE Recurring Issue Check (mandatory, do NOT deduplicate):
+- Each expert's input includes a '## Recurring Issue Check' section listing R1-R13 (and expert-specific RS*/RT*) status.
+- These are NOT findings — they are checklists proving each pattern was checked.
+- Output them verbatim under a single top-level '## Recurring Issue Check' section, organized by expert (### Functionality expert / ### Security expert / ### Testing expert).
+- Do NOT merge, deduplicate, or summarize the R-codes across experts. Each expert's check status is independent evidence." \
     600
 }
 

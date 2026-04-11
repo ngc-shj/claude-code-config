@@ -53,6 +53,10 @@ Use Claude Code's built-in plan creation feature to create a plan and save it to
 
 Ensure the following sections are included for review expert agents to evaluate. Add missing sections as needed:
 
+- **Project context**: Declare so experts can tailor recommendations:
+  - Type: `config-only` / `library` / `CLI tool` / `web app` / `service` / `mixed`
+  - Test infrastructure: `none` / `unit tests only` / `unit + integration` / `+E2E` / `+CI/CD`
+  - When type is `config-only` or test infrastructure is `none`, experts MUST NOT raise Major/Critical findings recommending the addition of automated tests — such recommendations are downgraded to Minor informational notes only. This prevents repeated friction from over-engineered test suggestions in repos that have no automated test framework.
 - **Objective**: What to achieve
 - **Requirements**: Functional and non-functional requirements
 - **Technical approach**: Technologies, architecture, and design decisions
@@ -97,6 +101,9 @@ Evaluate the following plan from a [perspective] perspective.
 Scope: [In-scope items for this expert]
 Out of scope: [Out-of-scope items for this expert]
 
+Project context:
+[Project type and test infrastructure declared in the plan, e.g., "config-only repo, no CI/CD"]
+
 Plan contents:
 [Plan file contents]
 
@@ -109,6 +116,7 @@ Requirements:
 - Classify each finding by severity using YOUR expert-specific criteria (see below)
 - For each finding, specify "Severity", "Problem", "Impact", and "Recommended action"
 - Do not duplicate issues already caught by local LLM pre-screening
+- **Project context obligation**: If the project context above is `config-only` or test infrastructure is `none`, do NOT raise Major/Critical findings recommending the addition of automated tests, CI/CD, or test framework setup. Such recommendations are downgraded to Minor informational notes only. Recommending bats/jq tests for a config-only repo without CI is over-engineering and wastes review rounds.
 - If there are no findings, explicitly state "No findings"
 
 Plan-specific obligations:
@@ -178,6 +186,8 @@ If Ollama is unavailable, deduplicate manually as fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R13 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
 ```markdown
@@ -202,6 +212,26 @@ Review round: [nth]
 
 ## Quality Warnings
 [Findings flagged by merge-findings quality gate: VAGUE, NO-EVIDENCE, UNTESTED-CLAIM]
+
+## Recurring Issue Check
+### Functionality expert
+- R1: [status]
+- R2: [status]
+- ... (R1-R13)
+
+### Security expert
+- R1: [status]
+- ... (R1-R13)
+- RS1: [status]
+- RS2: [status]
+- RS3: [status]
+
+### Testing expert
+- R1: [status]
+- ... (R1-R13)
+- RT1: [status]
+- RT2: [status]
+- RT3: [status]
 ```
 
 ### Step 1-6: Validity Assessment and Plan Update
@@ -212,6 +242,8 @@ The main agent scrutinizes each finding:
 - **Critical/Major finding**: Must be reflected in the plan file
 - **Minor finding**: Reflect if straightforward, otherwise record reason and skip, explain to user
 - **Unnecessary finding**: Record reason and skip, explain to user
+
+**Anti-Deferral enforcement (mandatory)**: Any finding marked Skipped / Accepted / Out of scope / Pre-existing MUST be recorded using the mandatory format defined in "Anti-Deferral Rules" below. Entries missing the Anti-Deferral check are invalid — fix the entry before proceeding to the next round.
 
 Return to Step 1-4 until all agents return "No findings", or the maximum of **10 rounds** is reached.
 
@@ -417,6 +449,9 @@ Review the code on the current branch from a [perspective] perspective.
 Scope: [In-scope items for this expert]
 Out of scope: [Out-of-scope items for this expert]
 
+Project context:
+[Project type and test infrastructure declared in the plan, e.g., "config-only repo, no CI/CD"]
+
 Finalized plan:
 [Plan contents]
 
@@ -437,6 +472,8 @@ Requirements:
 - Consider the deviation log when reviewing
 - Do not duplicate issues already caught by local LLM pre-screening
 - Cross-check the plan's "Implementation Checklist" section against the git diff. Report any file listed in the checklist that does not appear in the diff as a finding
+- **Project context obligation**: If the project context above is `config-only` or test infrastructure is `none`, do NOT raise Major/Critical findings recommending the addition of automated tests, CI/CD, or test framework setup. Such recommendations are downgraded to Minor informational notes only. Recommending bats/jq tests for a config-only repo without CI is over-engineering and wastes review rounds.
+- **Pre-existing-in-changed-file rule**: Any pre-existing bug in a file that appears in `git diff main...HEAD` (even with a one-line edit) is IN SCOPE. Do not skip such findings as "pre-existing" — flag them with severity based on impact.
 - If there are no findings, explicitly state "No findings"
 
 Codebase awareness (mandatory — see "Codebase Awareness Obligations" in Common Rules):
@@ -537,6 +574,8 @@ cat /tmp/func-findings.txt /tmp/sec-findings.txt /tmp/test-findings.txt \
 
 If Ollama is unavailable, consolidate and deduplicate manually (merge same underlying issue flagged by multiple agents).
 
+**Preserve Recurring Issue Check sections (mandatory)**: Same rule as Step 1-5 — each expert's `## Recurring Issue Check` block must survive deduplication and appear verbatim in the merged file. Return any expert output missing this section for revision before saving.
+
 Save to `./docs/archive/review/[plan-name]-code-review.md` (overwrite).
 
 ```markdown
@@ -562,6 +601,25 @@ Review round: [nth]
 ## Quality Warnings
 [Findings flagged by merge-findings quality gate: VAGUE, NO-EVIDENCE, UNTESTED-CLAIM]
 
+## Recurring Issue Check
+### Functionality expert
+- R1: [status]
+- ... (R1-R13)
+
+### Security expert
+- R1: [status]
+- ... (R1-R13)
+- RS1: [status]
+- RS2: [status]
+- RS3: [status]
+
+### Testing expert
+- R1: [status]
+- ... (R1-R13)
+- RT1: [status]
+- RT2: [status]
+- RT3: [status]
+
 ## Resolution Status
 [Updated after fixes]
 ```
@@ -580,6 +638,7 @@ Important rules:
 - For findings that are difficult to fix, consult the user before deciding
 - Always run migration check, lint, tests, AND production build after fixes
 - **Fix ALL errors** — including pre-existing errors in files not touched by the current task. Never dismiss failures as "unrelated to our changes."
+- **Anti-Deferral enforcement**: Any finding recorded as Skipped / Accepted / Out of scope / Pre-existing MUST follow the mandatory format defined in "Anti-Deferral Rules" (Common Rules). Resolution Status entries that omit the Anti-Deferral check are invalid and must be revised before commit.
 - **Test-verified behavior conflict check**: Before accepting any finding that reverses a configuration or behavior confirmed during implementation/testing (Phase 2), verify: (1) the finding cites a specific spec or concrete attack vector, not a general heuristic, (2) the finding explains why the tested scenario is invalid. If neither is met, reject the finding and note the test evidence. After applying any fix that changes security boundaries (CSP, CORS, auth, rate limiting), re-run the relevant E2E flow in production-equivalent mode.
 
 ### Step 3-6: Test, Build, and Commit
@@ -736,6 +795,17 @@ The following are language-agnostic examples of costly misses from past reviews:
 4. **Cargo-cult security findings**: Flagging standard library usage as "insecure" without a concrete attack vector. Every security finding must describe: attacker, attack vector, preconditions, and impact
 5. **Heuristic-only security restrictions**: Recommending removal of a configuration (e.g., CSP directive, CORS origin, allowed redirect URI) based on "generally this shouldn't be in production" without verifying the actual use case. Security findings that restrict functionality MUST cite the relevant specification (RFC, OWASP, vendor docs) and explain why the specific use case does not apply. Example of a prohibited finding: "Remove localhost from CSP form-action in production" — without checking whether OAuth native app flow (RFC 8252) requires it
 
+**Finding ID convention (mandatory):**
+
+All experts MUST use this ID scheme. The orchestrator rejects any review that mixes prefixes (e.g., `F-01` and `F1` in the same review) or introduces new prefixes for round 2+ findings.
+
+- Functionality expert: `F1, F2, F3, ...`
+- Security expert: `S1, S2, S3, ...`
+- Testing expert: `T1, T2, T3, ...`
+- Round 2+ new findings continue numbering from the previous round and append `(new in round N)` — e.g., `S4 (new in round 2)`. Do NOT introduce new prefixes like `N1`, `M-1`, or `m-1` for round 2 findings.
+- [Adjacent] findings keep the originating expert's prefix and append `-A`: e.g., `F3-A`. The routing target expert is named in the finding body, not encoded in the ID.
+- IDs are stable across rounds: once a finding is `F2` in round 1, it stays `F2` through resolution.
+
 **Required finding format (code review):**
 ```
 [Finding ID] [Severity]: [Problem title]
@@ -752,13 +822,38 @@ Findings that omit Evidence or provide a vague Fix are returned to the expert fo
 
 **"Out of scope" and "pre-existing" are not free passes.**
 
-1. **Pre-existing issues in changed files**: If a file is already being modified and contains a pre-existing bug, it MUST be flagged (severity based on impact, not on who introduced it). The CLAUDE.md rule "Fix ALL errors" applies.
+1. **Pre-existing issues in changed files**: If a file is already being modified and contains a pre-existing bug, it MUST be flagged (severity based on impact, not on who introduced it). The CLAUDE.md rule "Fix ALL errors" applies. A file is "changed" if it appears in `git diff main...HEAD` for any reason — even a one-line edit puts the entire file in scope.
 2. **Out-of-scope finding obligations**: When marking a finding as "out of scope", the expert MUST:
    - State which expert's scope it belongs to (use [Adjacent] tag)
    - Provide enough detail for the other expert to evaluate it
    - Never use "out of scope" to avoid investigating a finding
 3. **"Acceptable risk" requires quantification**: Do not accept risks with hand-waving like "acceptable for personal tool" or "low probability." State: what is the worst case, what is the likelihood, and what is the cost to fix. If cost-to-fix is low, fix it.
 4. **Deferred findings must be tracked**: Any finding deferred to a future PR must be recorded in the review log with a clear reason and an explicit "TODO" marker that can be grepped.
+
+**Mandatory format for Skipped / Accepted / Out-of-scope findings (enforcement):**
+
+When the orchestrator records a finding as `Skipped`, `Accepted`, `Out of scope`, or `Pre-existing` in Resolution Status, the entry MUST follow this format. Resolution Status entries that omit the Anti-Deferral check are invalid and must be returned for revision before commit.
+
+```markdown
+### [Finding ID] [Severity] [Title] — [Skipped|Accepted|Out of scope|Pre-existing]
+- **Anti-Deferral check**: [which exception applies — one of the four below]
+- **Justification**:
+  - If "pre-existing in changed file" → NOT ALLOWED. Must fix, or escalate to user with explicit user approval recorded here. Cite the diff line that proves the file is in scope.
+  - If "pre-existing in unchanged file" → Provide [Adjacent] routing: name the expert who should evaluate it, and the file:line. Do not silently drop.
+  - If "acceptable risk" → State three values explicitly:
+    - Worst case: [concrete impact]
+    - Likelihood: [low/medium/high with reason]
+    - Cost to fix: [LOC, time, or risk of regression]
+    Phrases like "acceptable for personal tool", "low probability", "negligible", "edge case" without these three values are PROHIBITED.
+  - If "out of scope (different feature)" → Cite the plan/issue that tracks it, OR create a TODO marker (`TODO(plan-name): ...`) that can be grepped.
+- **Orchestrator sign-off**: [explicit confirmation that one of the four exceptions above is satisfied]
+```
+
+Examples of REJECTED skip entries (from past reviews — do not repeat):
+- "Acceptable degradation; cache is an optimization, not a requirement" → missing worst case / likelihood / cost
+- "Acceptable for personal developer tool" → forbidden phrase, no quantification
+- "Pre-existing issue in commit-msg-check.sh, not introduced by this change" → the file IS in the diff, so it is in scope; must fix or escalate
+- "Out of scope for this refactoring" → no [Adjacent] routing, no other expert assignment, no TODO marker
 
 ### Expert Agent Obligations
 
