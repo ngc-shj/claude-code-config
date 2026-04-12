@@ -118,6 +118,20 @@ All must pass. Fix any failures before proceeding.
 
 **IMPORTANT**: Fix ALL errors found by lint/test/build — including pre-existing errors in files not touched by the current task. Never dismiss failures as "unrelated to our changes." We are building the whole project, not just a diff.
 
+**Manual verification (mandatory when refactoring affects runtime behavior)**:
+When the refactoring changes **any** of the following, lint/test/build alone are insufficient — mocked tests may pass even when runtime behavior is broken (e.g., mock shape not updated to match the new API, or permissions insufficient for the new query pattern):
+- API call patterns (e.g., single-record fetch → batch fetch, sync → async)
+- Database queries (e.g., adding JOIN, changing WHERE conditions, switching query methods)
+- Event dispatch (e.g., adding or removing event emission, changing payload shape)
+- Worker/background job logic (e.g., changing job payload, queue routing, retry behavior)
+
+In such cases:
+1. Start the dev server (and workers/background processes if applicable)
+2. Exercise the affected code path at least once through the running application
+3. Verify no runtime errors in server logs
+
+Do not commit until manual verification passes or the user explicitly waives it. If the user waives manual verification, record the waiver reason in the commit message or deviation log.
+
 Report:
 ```
 === Simplify Complete ===

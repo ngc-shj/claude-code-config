@@ -133,6 +133,10 @@ Plan-specific obligations:
   - Display/UI grouping (e.g., audit log filter categories) and subscription/delivery grouping (e.g., webhook event filters) are separate concerns — reusing one for the other risks scope leakage or update gaps (R11)
   - Every action value passed to the logging/audit function must be registered in the corresponding action group definition, i18n labels, UI label maps, and tests (R12)
   - Delivery failure events must not trigger re-delivery — verify the design includes a suppression mechanism to prevent infinite dispatch loops (R13)
+- When the plan involves new DB roles or permission grants, explicitly check:
+  - Grants must cover all implicit operations — `ON CONFLICT DO NOTHING` requires SELECT, foreign key checks require SELECT on the referenced table, FORCE RLS adds additional requirements beyond the explicit statement (R14)
+- When the plan involves database migrations, explicitly check:
+  - Database names, role names, hostnames, and other environment-dependent values must use dynamic resolution (e.g., `current_database()`, environment variables, or templating) — not hardcoded values that will fail in CI or other environments (R15)
 
 Severity criteria for [role name]:
   [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]
@@ -186,7 +190,7 @@ If Ollama is unavailable, deduplicate manually as fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R13 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R15 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -217,18 +221,18 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R13)
+- ... (R1-R15)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R13)
+- ... (R1-R15)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R13)
+- ... (R1-R15)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -324,6 +328,7 @@ Split the plan's "Implementation steps" into independent batches and delegate to
    - Did the sub-agent reuse existing shared utilities, or did it create new ones?
    - Did the sub-agent follow existing patterns, or did it invent a parallel approach?
    - If new helper functions were created, are they genuinely new, or do they duplicate existing code?
+   - **Cross-batch symbol deduplication**: grep for any new symbol (constant, function, type) introduced by this batch to verify no other batch already defined the same symbol in a different file. Parallel sub-agents cannot see each other's output, so duplicate definitions across batches are expected — catch and merge them before proceeding.
 
 If sub-agents are unavailable, implement directly as fallback.
 
@@ -333,7 +338,9 @@ Recording rules during implementation:
 
 ### Step 2-3: Deviation Log Management
 
-After implementation, delegate deviation log creation to a Sonnet sub-agent:
+**Timing**: Run deviation check after each commit, not just at the end of implementation. If a commit message describes changes that differ from the plan, update the deviation log immediately. This prevents accumulation of unrecorded deviations that are harder to trace later.
+
+After each commit (and at implementation end), delegate deviation log creation/update to a Sonnet sub-agent:
 - Provide the plan and `git diff main...HEAD` to Sonnet
 - Sonnet compares the diff against the plan and generates the deviation log
 - Review Sonnet's output for accuracy
@@ -371,6 +378,11 @@ bash ~/.claude/hooks/check-migrations.sh
 # When the diff deletes or renames routes, CSS selectors, component exports,
 # data-testid/aria-label/id/data-slot attributes, grep E2E test files to verify
 # no test references the old value. Fix broken E2E references before proceeding.
+
+# Allowlist/safelist update check:
+# When using privileged wrappers (e.g., bypass-RLS, elevated permissions, admin-only APIs)
+# in a new file, verify whether the project has an allowlist or safelist that gates their usage.
+# If so, add the new file to the allowlist. CI or pre-push hooks may enforce this.
 
 # Run ALL three checks:
 # 1. Lint
@@ -604,18 +616,18 @@ Review round: [nth]
 ## Recurring Issue Check
 ### Functionality expert
 - R1: [status]
-- ... (R1-R13)
+- ... (R1-R15)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R13)
+- ... (R1-R15)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R13)
+- ... (R1-R15)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -828,6 +840,7 @@ Findings that omit Evidence or provide a vague Fix are returned to the expert fo
    - Provide enough detail for the other expert to evaluate it
    - Never use "out of scope" to avoid investigating a finding
 3. **"Acceptable risk" requires quantification**: Do not accept risks with hand-waving like "acceptable for personal tool" or "low probability." State: what is the worst case, what is the likelihood, and what is the cost to fix. If cost-to-fix is low, fix it.
+   - **30-minute rule**: If the estimated implementation cost is under 30 minutes, deferral to a future phase or PR is not allowed. Fix it now. This prevents accumulation of "easy but skipped" items that individually seem harmless but collectively degrade quality. Exception: security-sensitive fixes (auth, crypto, input validation) must complete impact analysis before applying, even if the fix itself appears small — rushing a security change without tracing all affected paths can introduce new vulnerabilities.
 4. **Deferred findings must be tracked**: Any finding deferred to a future PR must be recorded in the review log with a clear reason and an explicit "TODO" marker that can be grepped.
 
 **Mandatory format for Skipped / Accepted / Out-of-scope findings (enforcement):**
@@ -864,6 +877,9 @@ When a finding recommends changing a configuration or behavior that was previous
 - If unable to provide spec-level evidence, downgrade to an informational note, not a finding
 
 Real example: A security expert recommended removing `http://localhost:*` from CSP `form-action` in production, citing "localhost is not used in production." This broke OAuth native app flow (RFC 8252 §7.3 requires localhost redirect for desktop apps). The tested E2E flow had already confirmed localhost was needed, but the orchestrator accepted the finding without re-verification.
+
+**Do not modify production code to simplify test setup**
+When a production API provides both a safe variant (e.g., parameterized queries, tagged templates, structured builders) and an unsafe escape hatch, never switch from safe to unsafe solely to simplify test setup. If the safe API is harder to mock, adapt the test infrastructure (mock shape, test helper, or fixture) to match the safe API — not the other way around. The test must prove the production code works correctly, not that the test is easy to write. This obligation applies equally to the functionality expert (correctness) and the testing expert (test quality).
 
 **Do not fabricate technical justifications**
 When comparing design options, each technical argument must be independently valid. If the true differentiator is implementation cost, state that explicitly — never present cost preference as an architectural constraint. Experts must challenge any argument that conflates "harder to implement" with "technically incompatible."
@@ -903,6 +919,8 @@ These issues have been found repeatedly in past reviews. Every expert MUST expli
 | R11 | Display group ≠ subscription group | UI display grouping (e.g., audit log filters) and event subscription grouping (e.g., webhook topics) serve different purposes. Reusing one for the other causes scope leakage or update gaps when new features are added | Major |
 | R12 | Enum/action group coverage gap | Every action value used in logging/audit calls must be registered in the corresponding group definition, i18n labels, UI label maps, and tests. Search all call sites and cross-check against group arrays | Major |
 | R13 | Re-entrant dispatch loop | Event delivery failure → audit log → triggers new event delivery → infinite loop. Delivery-failure actions must be on a dispatch suppression list | Critical |
+| R14 | DB role grant completeness | When creating a new DB role, `ON CONFLICT DO NOTHING` requires SELECT privilege (not just INSERT). Foreign key integrity checks require SELECT on the referenced table. Under row-level security (FORCE RLS), verify grants cover all implicit operations, not just the explicit statement. Note: insufficient grants cause functional failures (Major); over-privileged grants that bypass RLS or expose unauthorized data are Critical | Major (Critical if over-privilege direction) |
+| R15 | Hardcoded environment-specific values in migrations | Database names, role names, hostnames, and other environment-dependent values must not be hardcoded in migration SQL. Use dynamic resolution (e.g., `current_database()`, environment variables, or templating) so migrations work across dev, CI, staging, and production. Note: hardcoded values also persist in git history, potentially leaking production infrastructure topology | Major |
 
 **Security expert must additionally check:**
 
@@ -936,6 +954,8 @@ Each expert must include a "Recurring Issue Check" section in their output:
 - R11 (Display group ≠ subscription group): [N/A — no event grouping / Finding F-XX]
 - R12 (Enum/action group coverage gap): [N/A — no audit actions / Finding F-XX]
 - R13 (Re-entrant dispatch loop): [N/A — no event dispatch / Finding F-XX]
+- R14 (DB role grant completeness): [N/A — no new DB roles / Finding F-XX]
+- R15 (Hardcoded env values in migrations): [N/A — no migrations / Finding F-XX]
 - [Expert-specific checks as applicable]
 ```
 
