@@ -102,6 +102,7 @@ Task:
    - Mock/spy resets must be in setup/teardown hooks, not inside test bodies
    - Async functions under test must be awaited before assertions
    - Per-test state must use per-test hooks (beforeEach), not once-before-all (beforeAll)
+9. When generating tests: NEVER modify production code to make it easier to test. If the production code uses a safe API variant (e.g., parameterized queries, tagged templates, structured builders), adapt the test mock to match that safe API — do not switch production code to an unsafe escape hatch for testability.
 
 Output: generated test files with pass/fail status.
 ```
