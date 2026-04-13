@@ -190,7 +190,7 @@ If Ollama is unavailable, deduplicate manually as fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R15 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R16 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -221,18 +221,18 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R15)
+- ... (R1-R16)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R15)
+- ... (R1-R16)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R15)
+- ... (R1-R16)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -314,6 +314,17 @@ Before writing any code, perform the following impact analysis:
 
 This step prevents: using wrong constant values, missing fallback code paths, leaving stale duplicate implementations untouched, and reimplementing logic that already exists in shared modules.
 
+6. **Database schema verification** (when tests involve raw SQL or DB role assertions):
+   - **Read actual migration SQL** — not just the ORM schema. Migrations contain CHECK constraints (e.g., conditional NOT NULL), triggers (e.g., BEFORE DELETE guards), and privilege grants (`ALTER DEFAULT PRIVILEGES`, `GRANT`/`REVOKE`) that the ORM schema does not represent.
+   - **Query the live database** for the exact privilege set before writing privilege-assertion tests:
+     ```sql
+     SELECT table_name, privilege_type
+     FROM information_schema.table_privileges
+     WHERE grantee = '<role>' AND table_schema = 'public'
+     ```
+   - **Verify all NOT NULL columns** for every INSERT statement by reading the schema definition, not guessing. CHECK constraints with conditional NOT NULL (e.g., `CHECK (status != 'active' OR email IS NOT NULL)`) are invisible to the ORM.
+   - **Do not rely on SUPERUSER side-effects** in test assertions. SUPERUSER implicitly grants privileges (e.g., REFERENCES on FK-referenced tables) that non-SUPERUSER roles in CI do not have. Test assertions must match migration-defined grants only.
+
 ### Step 2-2: Implementation (Delegate to Sonnet Sub-agents)
 
 Split the plan's "Implementation steps" into independent batches and delegate to Sonnet sub-agents:
@@ -329,6 +340,11 @@ Split the plan's "Implementation steps" into independent batches and delegate to
    - Did the sub-agent follow existing patterns, or did it invent a parallel approach?
    - If new helper functions were created, are they genuinely new, or do they duplicate existing code?
    - **Cross-batch symbol deduplication**: grep for any new symbol (constant, function, type) introduced by this batch to verify no other batch already defined the same symbol in a different file. Parallel sub-agents cannot see each other's output, so duplicate definitions across batches are expected — catch and merge them before proceeding.
+   - **Dev/CI environment parity check** (when integration tests involve DB roles, RLS, or privilege assertions):
+     - SUPERUSER behavior: Local dev often uses a SUPERUSER role. CI may use the same role name but with different effective privileges due to `ALTER DEFAULT PRIVILEGES`, role ownership, or `BYPASSRLS` settings. Tests must not depend on SUPERUSER-only implicit grants.
+     - FORCE RLS: A SUPERUSER with `BYPASSRLS` always bypasses RLS regardless of GUC settings. Tests that verify "FORCE RLS blocks table owner" must use a `NOSUPERUSER` + `NOBYPASSRLS` role.
+     - initdb timing: Container initdb scripts run BEFORE migrations. Dynamic SQL that queries `information_schema.table_privileges` will find nothing because tables do not exist yet. Use `ALTER DEFAULT PRIVILEGES` for prospective grants/revokes, not dynamic `REVOKE`.
+     - Test setup file conflicts: Unit test setup files may override `DATABASE_URL` or set mocks that break integration tests. Integration tests need their own setup file that connects to the real service.
 
 If sub-agents are unavailable, implement directly as fallback.
 
@@ -398,6 +414,17 @@ bash ~/.claude/hooks/check-migrations.sh
 All must pass. Fix any failures before proceeding.
 
 **IMPORTANT**: Fix ALL errors found by lint/test/build — including pre-existing errors in files not touched by the current task. Never dismiss failures as "unrelated to our changes." We are building the whole project, not just a diff.
+
+**Real-environment test obligation (integration tests)**:
+When the implementation includes tests that require external services (database, Redis, message queue, etc.), the developer MUST run those tests locally against the real service BEFORE pushing to CI.
+- Unit tests only verify mocked behavior — they CANNOT catch:
+  - Database CHECK/NOT NULL constraint violations
+  - FK cascade deletion order issues
+  - RLS/privilege mismatches between database roles
+  - Column name discrepancies between test SQL and actual schema
+- Run the integration test command (e.g., `npm run test:integration`, `pytest -m integration`) with a live service before every push
+- If the local service is not running, start it first (e.g., `docker compose up -d db`)
+- A CI failure that could have been caught locally is a **process failure**, not a code failure
 
 Report to user when implementation is done:
 ```
@@ -616,18 +643,18 @@ Review round: [nth]
 ## Recurring Issue Check
 ### Functionality expert
 - R1: [status]
-- ... (R1-R15)
+- ... (R1-R16)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R15)
+- ... (R1-R16)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R15)
+- ... (R1-R16)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -676,6 +703,8 @@ git commit -m "review([n]): [summary of fixes]"
 ```
 
 **IMPORTANT**: Tests and build alone are insufficient. Lint catches unused imports, style violations, and other issues that neither tests nor builds detect. The production build catches SSR-only module resolution failures, TypeScript errors in non-test code, and bundler issues. All three must pass before committing.
+
+**Real-environment test obligation**: Same rule as Step 2-4 — when the fix involves or touches integration tests that depend on external services, run them locally against the real service before committing. Do not rely on CI to catch failures that are reproducible locally.
 
 ### Step 3-7: Update Resolution Status
 
@@ -921,6 +950,7 @@ These issues have been found repeatedly in past reviews. Every expert MUST expli
 | R13 | Re-entrant dispatch loop | Event delivery failure → audit log → triggers new event delivery → infinite loop. Delivery-failure actions must be on a dispatch suppression list | Critical |
 | R14 | DB role grant completeness | When creating a new DB role, `ON CONFLICT DO NOTHING` requires SELECT privilege (not just INSERT). Foreign key integrity checks require SELECT on the referenced table. Under row-level security (FORCE RLS), verify grants cover all implicit operations, not just the explicit statement. Note: insufficient grants cause functional failures (Major); over-privileged grants that bypass RLS or expose unauthorized data are Critical | Major (Critical if over-privilege direction) |
 | R15 | Hardcoded environment-specific values in migrations | Database names, role names, hostnames, and other environment-dependent values must not be hardcoded in migration SQL. Use dynamic resolution (e.g., `current_database()`, environment variables, or templating) so migrations work across dev, CI, staging, and production. Note: hardcoded values also persist in git history, potentially leaking production infrastructure topology | Major |
+| R16 | Dev/CI environment parity | When tests assert database privileges, RLS behavior, or role-specific operations, verify the assertion holds in both local dev (often SUPERUSER owner) and CI (minimal roles created by setup scripts). Common divergences: implicit REFERENCES grants from SUPERUSER, BYPASSRLS on SUPERUSER, `ALTER DEFAULT PRIVILEGES` scope, initdb-vs-migration execution order | Major |
 
 **Security expert must additionally check:**
 
@@ -956,6 +986,7 @@ Each expert must include a "Recurring Issue Check" section in their output:
 - R13 (Re-entrant dispatch loop): [N/A — no event dispatch / Finding F-XX]
 - R14 (DB role grant completeness): [N/A — no new DB roles / Finding F-XX]
 - R15 (Hardcoded env values in migrations): [N/A — no migrations / Finding F-XX]
+- R16 (Dev/CI environment parity): [N/A — no DB role/privilege tests / Finding F-XX]
 - [Expert-specific checks as applicable]
 ```
 
