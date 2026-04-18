@@ -190,7 +190,7 @@ If Ollama is unavailable, deduplicate manually as fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R22 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R28 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -221,18 +221,18 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R22)
+- ... (R1-R28)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R22)
+- ... (R1-R28)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R22)
+- ... (R1-R28)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -396,7 +396,8 @@ bash ~/.claude/hooks/check-migrations.sh
 # If so, add the new file to the allowlist. CI or pre-push hooks may enforce this.
 
 # Run ALL three checks:
-# 1. Lint
+# 1. Lint (in the same strict mode CI uses — e.g., zero-warning gate).
+# Pre-existing warnings on touched files count: they must also be cleared.
 [lint command]
 
 # 2. Tests
@@ -404,6 +405,28 @@ bash ~/.claude/hooks/check-migrations.sh
 
 # 3. Production build
 [build command]
+
+##### MANUAL CHECKS (not runnable commands — review obligations) #####
+
+# MANUAL CHECK — Translation-constant drift (R27): if the diff touches
+# translation or other user-facing string files, scan for numeric literals
+# that duplicate validation constants and replace with interpolation
+# placeholders sourced from the canonical constants.
+
+# MANUAL CHECK — Persisted-state symmetry (R25): if the diff adds a field
+# to any persisted state that crosses process / session / restart boundaries,
+# verify BOTH the persist path AND the hydrate path appear in the diff,
+# AND that at least one test performs: persist → cross a true process /
+# worker / container boundary → hydrate → assert field equality.
+
+# MANUAL CHECK — Migration split (R24): if the diff introduces a required
+# (non-null without default) column/field on a table/type with existing
+# callers, verify the change is split into additive + backfill and
+# strict-constraint flip migrations, not combined into one, AND that a
+# test exercises the intermediate state (after step 1, before step 2) with
+# concurrent writers including at least one caller not yet updated.
+
+##### END MANUAL CHECKS #####
 ```
 
 All must pass. Fix any failures before proceeding.
@@ -524,6 +547,9 @@ Cross-cutting verification (mandatory for all experts):
   - CSS class selectors or element selectors used by E2E locators
   - Component/module exports referenced by E2E page-objects or helpers
   - `aria-label` / `id` / `data-testid` / `data-slot` or other selector attributes used by E2E tests
+- Numeric input handler check (R23): when the diff touches or duplicates an input change handler for a numeric/constrained field, verify the handler does NOT apply range/clamp/min/max enforcement on every keystroke — range enforcement belongs at commit time. If an existing handler has the bug, every place it is duplicated inherits it.
+- Disabled-state visible cue check (R26): when the diff adds or modifies UI controls with a logical disabled/readonly state, verify each such control has a paired visual-state style rule in the same diff (class / variant / style prop / CSS pseudo-state).
+- Toggle/switch label grammatical consistency check (R28): when the diff adds or modifies toggle/switch controls, enumerate adjacent toggle/switch labels in the same feature area and verify the grammatical form is consistent (all verb-form or all noun-form).
 
 UI consistency verification (mandatory for Functionality expert):
 - When new UI components (lists, cards, forms, tables) are added or existing ones restyled, grep for the same category of component across the codebase and verify style pattern consistency (spacing, borders, dividers, corner radius, etc.)
@@ -638,18 +664,18 @@ Review round: [nth]
 ## Recurring Issue Check
 ### Functionality expert
 - R1: [status]
-- ... (R1-R22)
+- ... (R1-R28)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R22)
+- ... (R1-R28)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R22)
+- ... (R1-R28)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -922,6 +948,24 @@ Before changing any value in a function call or object literal, read the type/sc
 
 This applies to both the Plan phase (pseudocode) and the Code Review phase (actual code).
 
+**Check runtime environment constraints against security-relevant minimum values**
+When the plan proposes a minimum value for a security-relevant interval (token TTL, session idle timeout, auto-lock, retention window, grace period, re-authentication interval), the expert MUST check the value against the actual runtime constraints of the deployment target, not just the spec-mandated range:
+
+- Background-task dormancy / suspension windows (e.g., background service worker or worker thread suspension; mobile app backgrounding; serverless cold-start)
+- Timer / alarm granularity floors provided by the runtime
+- Network round-trip jitter for refresh / renewal flows
+
+Security values smaller than the sum of these jitters are "compliant on paper but broken in practice" — a session set to auto-lock after 5 minutes in a runtime whose background work is suspended every 5 minutes will either never fire (fail-open) or always fire prematurely (fail-closed). **Fail-open is the materially worse direction** for the listed examples: an auto-lock that never fires leaves a privileged surface open, while one that always fires is an annoying false positive but preserves the security property. When both directions are possible, flag based on the worse direction.
+
+**Flag as Major even if the value is within the spec-mandated range** — this obligation applies specifically to security-relevant interval minimums against runtime jitter; it is not a general license to override spec compliance elsewhere.
+
+Concrete trigger: any security-relevant minimum interval at or below the deployment runtime's dormancy window. Decision procedure for borderline values (note: the "dormancy window" is a distribution with a tail — battery saver, thermal throttling, nested suspension, network disconnection can extend it substantially — use the p99 or documented worst case, NOT the median):
+- If the proposed value ≤ 1× the worst observed dormancy window → Major (fail-open likely)
+- If the proposed value is between 1× and 3× the worst observed dormancy window → Minor + require an empirical test against the actual runtime (real wall-clock, NOT fake timers / simulated time), demonstrating the interval fires correctly under dormancy
+- If the proposed value ≥ 3× the worst observed dormancy window → no finding on this axis, UNLESS the runtime's tail is known to be unbounded (user-controlled battery-saver, OS-level thermal suspension with no cap) — in that case fall back to the mid-band test requirement
+
+Interaction with R21 (Subagent completion vs verification): R21's security-relevant test-path re-run obligation focuses on code diffs; this obligation focuses on value/constant choices. Both apply independently — changing a security-relevant interval invokes this rule AND, if touched by a subagent, R21 as well.
+
 ### Known Recurring Issue Checklist
 
 These issues have been found repeatedly in past reviews. Every expert MUST explicitly check for these patterns and report their findings (even if "not applicable" — this confirms the check was performed).
@@ -932,7 +976,7 @@ These issues have been found repeatedly in past reviews. Every expert MUST expli
 |---|---------|--------------------|--------------------|
 | R1 | Shared utility reimplementation | `grep -r` for existing helpers (rate limiters, validators, encoders, formatters) before accepting new implementations | Major |
 | R2 | Constants hardcoded in multiple places | Search for literal values that should be shared constants (validation limits, enum values, config defaults) | Major |
-| R3 | Incomplete pattern propagation | When a pattern is changed in one file, search for ALL other files using the same pattern | Critical if security-relevant, Major otherwise |
+| R3 | Incomplete pattern propagation | When a pattern is changed in one file, search for ALL other files using the same pattern. **Flagged-instance enumeration obligation**: when a user or reviewer flags a single instance of an anti-pattern, the reviewer MUST enumerate every other instance of the same anti-pattern in the same response — not only fix the flagged one. "Fix what was pointed out and nothing else" defers the other instances to the next review round and wastes rounds on avoidable repetition | Critical if security-relevant, Major otherwise |
 | R4 | Event/notification dispatch gaps | When mutations are added, verify ALL similar mutation sites dispatch the corresponding event | Major |
 | R5 | Missing transaction wrapping | A read query (e.g., listing rows) followed by a separate write query (update/delete) without wrapping both in a DB transaction — the row set may change between read and write (TOCTOU race). Note: unit tests with mocked DB calls pass vacuously because the mock returns a stable result; only integration tests under concurrent load expose the race | Major |
 | R6 | Cascade delete orphans | DB cascade deletes that don't clean up external storage (blob store, file system, cache) | Major |
@@ -948,12 +992,18 @@ These issues have been found repeatedly in past reviews. Every expert MUST expli
 | R16 | Dev/CI environment parity | When tests assert database privileges, row-level/permission policies, or role-specific operations, verify the assertion holds in both local dev (often a high-privilege owner role) and CI (minimal roles created by setup scripts). Common divergences: implicit grants held only by privileged/admin roles, row-level-security bypass on privileged roles, default-privilege scope, and the order in which container-init scripts run relative to migrations | Major |
 | R17 | Helper adoption coverage | When the PR introduces a new shared helper, enumerate every call site of the underlying primitive the helper wraps and verify each either uses the helper or has a concrete skip reason — do not rely on pattern-surface search alone (see Extended obligations below) | Major |
 | R18 | Config allowlist / safelist synchronization | When privileged operations (elevated DB access, admin-only APIs, escape hatches) move into or out of files, verify any project-defined allowlist/safelist that gates their usage is updated in both directions — add new users, AND remove (or narrow) entries ONLY when the privileged call provably moved into a shared helper that itself appears on the allowlist (never just because the literal call disappeared from one file). Removing an entry without confirming the new call site is itself gated widens blast radius | Major |
-| R19 | Test mock alignment with helper additions | When a new export is added to a module whose mocks are declared elsewhere (in-test mock factories, manual mock files, test fixtures), enumerate every mock declaration for that module and confirm the new export is represented AND covered by at least one assertion — otherwise tests either fail at import time or pass vacuously because the new symbol is `undefined`/no-op when invoked | Major |
+| R19 | Test mock alignment with helper additions | When a new export is added to a module whose mocks are declared elsewhere (in-test mock factories, manual mock files, test fixtures), enumerate every mock declaration for that module and confirm the new export is represented AND covered by at least one assertion — otherwise tests either fail at import time or pass vacuously because the new symbol is `undefined`/no-op when invoked. **Exact-shape assertion obligation**: when a reviewed struct / interface / payload gains a new field, grep for exact-shape equality assertions on that type and update them. "Exact-shape" means assertions that fail when a new field appears — identify these by searching the test files for the framework's strict/deep equality primitives (common spellings across frameworks: `deepEqual`/`deepStrictEqual`, `assertEqual`/`assert_equal`, `toEqual`/`toStrictEqual`/`toBe`, `should.eql`, `==` on records in typed languages). Partial-match assertions ("matches"/"contains"/"includes") are NOT a substitute, they let the shape test stale silently when fields are added | Major |
 | R20 | Multi-statement preservation in mechanical edits | When code is inserted mechanically (by scripts or sub-agents) into structured constructs such as multi-line import lists, switch/case blocks, or chained builders, verify the insertion did not split an unrelated existing construct. Concrete reviewer actions: (a) grep for the project's block-opening token immediately followed by another block-opening token with no matching closer in between (the exact regex depends on the project's syntax); (b) run the project's parser/linter — most syntax-aware tools surface the broken structure as a parse error, often with a more useful location than a textual grep | Major |
 | R21 | Subagent completion vs verification | A subagent's "completed successfully" report states intent, not outcome. Before accepting: (a) re-run the project's full test command yourself (not just the agent's summary or a subset of tests it picked), (b) spot-check at least one modified file, (c) for large changes (rule of thumb: 50+ files) additionally re-run lint AND tests AND production build AND any project-defined pre-PR/CI hooks. When the subagent touched auth, crypto, input validation, permission grants, or other security-sensitive surfaces, re-run the security-relevant test path explicitly AND complete the R3 propagation check (trace all affected paths, confirm no propagation gap) even if the change appears small | Critical (silent regression risk) |
 | R22 | Perspective inversion for established helpers | Supplements R17. Every review that touches a shared helper must check BOTH perspectives: forward (does the PR migrate consumers?) and inverted (does the PR leave any syntactically-different equivalent pattern untouched?) | Major |
+| R23 | Mid-stroke input mutation in UI controls | UI input handlers that apply range/clamp/validation on every keystroke prevent users from typing valid multi-character values (e.g., a value of "15" on the way to "150" gets rejected or rewritten the moment it is below the minimum). Keystroke-level handlers should strip only obviously-invalid characters; range/min/max enforcement must run at commit time (blur, submit, save). Check: grep change/input handlers for clamp/min/max/parse calls that operate on raw user input before commit. **Security angle**: for security-relevant numeric inputs (token lifetime, session timeout, rate limit thresholds), mid-stroke clamp silently coerces the user-entered value into something they did not intend — verify the committed value equals what the user entered at blur/submit, not the clamped intermediate | Major |
+| R24 | Single migration mixing additive + strict constraint | Adding a new required column/field (non-null without a default) and updating all consumers in a single migration creates a type-error window for every consumer that has not yet been migrated. Split into (1) additive nullable/defaulted + backfill, (2) flip to the strict constraint after all callers are updated. The two steps may share a PR but MUST be separate migrations. Applies equally to typed schema changes in any storage backend that generates typed clients. **Security angle**: when the new field governs authorization/tenancy/identity (e.g., `tenant_id`, `role`, `owner_id`), the mid-migration window is an authz-bypass window — a request hitting a half-migrated instance can read/write rows whose access would be denied under the final schema. **Testing obligation**: verify the intermediate state (after step 1, before step 2) with CONCURRENT writers including at least one caller that has NOT yet been updated to use the new field — a serial test or a test where all callers have been updated passes vacuously; the authz-bypass window manifests only when interleaved pre-migration and post-migration requests hit the half-migrated state simultaneously | Major |
+| R25 | Persist / hydrate symmetry | When a new field is added to state that crosses process / session / restart boundaries (browser or session storage, DB, file, cache, keychain, secure enclave), both the persist path AND the hydrate path must be updated. Write-only adds cause silent data loss on restart — hard to reproduce in tests that do not cross the boundary. Check: pair save/persist functions with their load/hydrate counterparts and confirm the new field appears on both sides. **Security angle**: for auth tokens, revocation lists, encryption material, consent flags, and audit-trail fields, write-only adds are not "data loss" but silent security downgrade — on restart the system reverts to a pre-policy state (un-revoked tokens appear valid again, consent appears never granted, encryption material missing). Name such fields explicitly when flagging. **Testing obligation**: a round-trip test that crosses a TRUE process / worker / container boundary (new process, cold worker, restarted container) — NOT a same-process in-memory reinstantiation or cache clear — is required. The test must: persist the field → cross the boundary → hydrate → assert the field equals what was persisted. Tests that mock both persist and hydrate in the same process, or that only reinstantiate the in-memory state, cannot catch the symmetry gap | Major |
+| R26 | Disabled-state UI without visible cue | When a UI control gains a logical disabled/readonly state, a visual indication of that state must be present too — the logical attribute alone leaves users believing the control is broken or unresponsive. Applies to any styling system (utility classes, component variants, style tokens): every control that sets a disabled/readonly attribute needs a paired visual style rule for that state. Check: grep for controls with disabled/readonly attributes and verify each one has a paired disabled-state style rule (class, variant, style prop, or CSS pseudo-state) — an attribute without a paired style is a finding | Minor |
+| R27 | Numeric range hardcoded in user-facing strings | Translation or UI strings that embed numeric limits (e.g., "between 5 and 1440 minutes", "max 100 items") drift from the validation constants over time. Use interpolation placeholders and pass the value from the canonical constant at the call site. Check: in the diff's translation/UI-string files, grep for numeric literals that duplicate MIN/MAX validation constants — any match is a finding. Excluded from this check: numbers that are domain-literal, not limits (e.g., year literals like `2026`, HTTP status codes like `404`, version numbers like `1.0`). **Severity escalation**: Minor by default; escalate to Major when the drifting constant governs ANY security or privacy policy boundary — auth credentials, rate limits, password policy, session/token lifetime, MFA grace period, lockout threshold, key rotation interval, consent flag, data retention window, audit threshold, or any other policy value with security or privacy implications. User-facing text that claims a looser limit than the tightened policy actively encourages users to attempt disallowed values, erodes trust in the UI when the limit is hit, and creates audit-log discrepancies | Minor (Major when constant governs any security or privacy policy boundary) |
+| R28 | Grammatical inconsistency in toggle/switch labels | Toggle/switch controls across the app should use a single grammatical form for their labels (e.g., all verb-form "Enable X" vs all noun-form "X enabled"). Mixed forms make it ambiguous whether the label describes the control's ON state or its OFF state. Enumerate adjacent toggle/switch labels in the affected feature area and verify form consistency. Note: this is primarily a human-review check — automated detection requires NLP beyond what a grep can do; the review action is to list the labels and judge visually | Minor |
 
-See "Extended obligations (R17-R22)" below for full procedures.
+See "Extended obligations (R17-R22)" below for full procedures on R17-R22. R23-R28 are self-contained in the table row above.
 
 **Security expert must additionally check:**
 
@@ -1006,6 +1056,8 @@ Procedure when a helper is added to a mockable module:
 
 This applies regardless of test framework — every framework that supports module mocks has the same exposure.
 
+**Exact-shape assertion obligation** (companion to the above): when a reviewed struct / interface / payload gains a new field, grep the test files for exact-shape equality assertions on that type and update them. "Exact-shape" means assertions that will fail when a new field appears — identify by the framework's strict/deep equality primitives (common spellings across frameworks, illustrative only: `deepEqual` / `deepStrictEqual`, `assertEqual` / `assert_equal` / `assertEquals` / `assert_eq!`, `toEqual` / `toStrictEqual` / `toBe`, `should.eql`, `==` on records in typed languages). Partial-match assertions ("matches", "contains", "includes", "matchObject") are NOT a substitute — they let the shape test stale silently when fields are added. Update or replace the stale exact-shape assertions in the same PR.
+
 **R20: Multi-statement preservation in mechanical edits**
 
 When using scripts or subagents to insert code mechanically into structured constructs (multi-line import lists, switch/case blocks, chained builder calls, table-driven configs), verify the insertion did not split an unrelated adjacent construct.
@@ -1038,7 +1090,7 @@ Each expert must include a "Recurring Issue Check" section in their output:
 ## Recurring Issue Check
 - R1 (Shared utility reimplementation): [Checked — no issue / Finding F-XX]
 - R2 (Constants hardcoded): [Checked — no issue / Finding F-XX]
-- R3 (Pattern propagation): [Checked — no issue / Finding F-XX]
+- R3 (Pattern propagation + Flagged-instance enumeration): [Checked — no issue / Finding F-XX]
 - R4 (Event dispatch gaps): [N/A — no mutations / Finding F-XX]
 - R5 (Missing transactions): [N/A — no multi-step DB ops / Finding F-XX]
 - R6 (Cascade delete orphans): [N/A — no deletes / Finding F-XX]
@@ -1054,10 +1106,16 @@ Each expert must include a "Recurring Issue Check" section in their output:
 - R16 (Dev/CI environment parity): [N/A — no DB role/privilege tests / Finding F-XX]
 - R17 (Helper adoption coverage): [N/A — no new helper / Checked — no issue / Finding F-XX]
 - R18 (Allowlist/safelist sync): [N/A — no privileged-op changes / Checked — no issue / Finding F-XX]
-- R19 (Test mock alignment with helper additions): [N/A — no new exports in mocked modules / Checked — no issue / Finding F-XX]
+- R19 (Test mock alignment + Exact-shape assertion obligation): [N/A — no new exports in mocked modules / Checked — no issue / Finding F-XX]
 - R20 (Multi-statement preservation in mechanical edits): [N/A — no mechanical insertions / Checked — no issue / Finding F-XX]
 - R21 (Subagent completion vs verification): [N/A — no subagent-driven changes / Checked — tests+build re-run / Finding F-XX]
 - R22 (Perspective inversion for helpers): [N/A — no helper introduced or used / Checked — both perspectives / Finding F-XX]
+- R23 (Mid-stroke input mutation): [N/A — no UI input handler changes / Checked — no issue / Finding F-XX]
+- R24 (Migration additive+strict split): [N/A — no schema/migration changes / Checked — no issue / Finding F-XX]
+- R25 (Persist/hydrate symmetry): [N/A — no persisted-state field additions / Checked — both sides updated / Finding F-XX]
+- R26 (Disabled-state visible cue): [N/A — no UI disabled-state changes / Checked — no issue / Finding F-XX]
+- R27 (Numeric range in user-facing strings): [N/A — no translation/UI-string changes / Checked — no issue / Finding F-XX]
+- R28 (Toggle label grammatical consistency): [N/A — no toggle/switch changes / Checked — no issue / Finding F-XX]
 - [Expert-specific checks as applicable]
 ```
 
