@@ -91,3 +91,60 @@ None (all findings include concrete file/line references, evidence, and specific
 ### T2 [Minor] Measurement numbers missing — Resolved
 - Action: Added D5 to the deviation log with baseline/seed sizes and percentage.
 - Modified file: `docs/archive/review/add-ollama-expert-analyze-commands-deviation.md`
+
+---
+
+# Code Review: add-ollama-expert-analyze-commands — Round 2
+Date: 2026-04-19
+Review round: 2
+
+## Changes from Previous Round
+F1 (SIGPIPE), F2 (R1-R13 stale), T1 (trailing-blank test case), T2 (measurement numbers) all addressed in commit `bd72182`.
+
+## Seed Finding Disposition (Round 2)
+
+### Functionality expert
+- seed2-func = "No findings" → independent R1-R28 check performed; no new issues.
+
+### Security expert
+- seed2-sec = "No findings" → independent check performed; no new security surface introduced by Round 1 fixes.
+
+### Testing expert
+- Seed 1 (inline sentinel test case): Rejected. Coverage transitive through the trailing-blank-line case; code comment at `hooks/ollama-utils.sh:121-131` documents the `sed` split behavior. Additional checklist entry would add marginal value for a manual-only infra.
+- Seed 2 (no-sentinel scenario missing): Rejected. The "Truncated case (MUST warn)" in the plan IS the no-sentinel scenario. Already present.
+- Seed 3 (amend description to name the hardening): Downgraded to informational — the plan already names `sed '/^[[:space:]]*$/d' | tail -1` verbatim and states the pass condition. Further wording adds no detection value.
+
+## Round 2 Findings
+No new findings. All three experts confirm Round 1 fixes are correct and no regression.
+
+- Functionality: `_ollama_analyze_normalize` drain-based awk verified (no `exit`; SIGPIPE structurally eliminated). `R1-R13` absent from the file. Truncation-detection test well-formed.
+- Security: prompt-injection advisory intact in all 3 `cmd_analyze_*` functions. No new injection surface in the normalize filter (fixed-literal awk patterns). F2 text-only edit has no security relevance.
+- Testing: T1 (trailing-blank case) and T2 (measurement numbers) verified in the artifacts.
+
+## Adjacent Findings (Round 2)
+None.
+
+## Quality Warnings (Round 2)
+None.
+
+## Recurring Issue Check (Round 2 — incremental)
+
+### Functionality expert
+- R3 (pattern propagation): sentinel string consistent across normalize + Step 3-2 loop + Step 3-3 template
+- R6 (exit-code propagation under pipefail): root-caused and fixed
+- R11 (comment accuracy): new code comment accurately describes drain rationale and cites SIGPIPE/pipefail
+- R1-R2, R4-R5, R7-R10, R12-R28: N/A
+
+### Security expert
+- R3, R6: prompt-injection advisory intact in all 3 analyze-* functions
+- RS1-RS3: N/A (no credential handling, no HTTP route, diff flow via jq --rawfile remains safe)
+- Other R rows: N/A
+
+### Testing expert
+- RT1: Ollama calls are live, not mocked
+- RT2: self-applied; all 3 seed findings rejected or downgraded
+- RT3: trailing-blank case explicitly names the `sed` hardening
+- Other R rows: N/A
+
+## Round 2 Termination
+All experts return "No findings". All Round 1 findings verified as resolved. Phase 3 loop complete at Round 2.
