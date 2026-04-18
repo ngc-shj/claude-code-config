@@ -502,7 +502,9 @@ git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing     
 
 ```bash
 for seed in /tmp/seed-func.txt /tmp/seed-sec.txt /tmp/seed-test.txt; do
-  if [ -s "$seed" ] && ! tail -1 "$seed" | grep -q '^## END-OF-ANALYSIS$'; then
+  # Strip trailing empty lines before checking the last line, so a file
+  # written as `...## END-OF-ANALYSIS\n\n` still matches the sentinel.
+  if [ -s "$seed" ] && ! sed '/^[[:space:]]*$/d' "$seed" | tail -1 | grep -q '^## END-OF-ANALYSIS$'; then
     echo "Warning: $seed appears truncated (missing END-OF-ANALYSIS sentinel) — sub-agent will fall back to full-diff review" >&2
   fi
 done
