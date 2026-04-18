@@ -137,6 +137,11 @@ Plan-specific obligations:
   - Grants must cover all implicit operations the application code performs — e.g., conflict-resolution clauses on writes may require read permission in addition to write, foreign-key validation may require read permission on the referenced table, row-level-security modes may add further requirements beyond the explicit statement (R14)
 - When the plan involves database migrations, explicitly check:
   - Database names, role names, hostnames, and other environment-dependent values must use dynamic resolution (e.g., `current_database()`, environment variables, or templating) — not hardcoded values that will fail in CI or other environments (R15)
+- When the plan or existing docs cite an external standard (RFC, NIST SP, OWASP ASVS, OWASP cheat sheet, IETF BCP, W3C, FIPS, ISO/IEC), apply R29 (External spec citation accuracy) — see the table-row procedure for the four-step verification. Hallucinated or wrong-section citations are Major findings regardless of whether they affect runtime behavior, and Critical when they drive a security decision. Specifically check:
+  - Standards with known renumbering between revisions (e.g., NIST SP 800-63B Rev 3 vs Rev 4; OWASP ASVS 4.0.3 vs 5.0)
+  - Quoted phrases in backticks or quotes — must appear verbatim in the source
+  - URL anchors — many headings auto-generate anchors that differ from the visible heading text; the link target must resolve to the cited section, not a similarly-named one
+  - **Inverse anchor mismatch**: link text says one section while the `href` resolves to a different live anchor (e.g., the link reads "§4.2.3" but the URL fragment is `#section-4-3-2`). Casual review reads only the link text and misses the discrepancy. Verify both surfaces match.
 
 Severity criteria for [role name]:
   [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]
@@ -190,7 +195,7 @@ If Ollama is unavailable, deduplicate manually as fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R28 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R30 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -221,18 +226,18 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R28)
+- ... (R1-R30)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R28)
+- ... (R1-R30)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R28)
+- ... (R1-R30)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -550,7 +555,7 @@ Ollama seed findings (your perspective only — verify each, do not re-report as
      Insert: "Seed unavailable or truncated — perform full-diff review. Read `git diff main...HEAD` directly for this perspective."
 
  (b) File ends with sentinel AND contains exactly `No findings` followed by the sentinel:
-     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R28 Recurring Issue Check using targeted greps."
+     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R30 Recurring Issue Check using targeted greps."
 
  (c) File ends with sentinel AND contains finding entries:
      Insert the finding entries verbatim (stripping only the trailing `## END-OF-ANALYSIS` line).
@@ -563,7 +568,7 @@ Seed trust advisory (MANDATORY):
 Verification contract (MANDATORY):
 - For each seed finding, run targeted verification: `grep -n <symbol> <file>` or `Read <file>` with `offset`/`limit` scoped to the reported line range (±20 lines context). Do NOT read entire files.
 - Accept only seed findings you independently verify. Reject and note any seed finding that does not reproduce.
-- After processing seeds, perform your R1-R28 Recurring Issue Check using targeted greps (not full-file reads) to catch patterns the seed missed.
+- After processing seeds, perform your R1-R30 Recurring Issue Check using targeted greps (not full-file reads) to catch patterns the seed missed.
 - You MAY read a full file only when the seed is empty OR when targeted verification is inconclusive; record the file+reason in your output.
 
 Seed Finding Disposition section (MANDATORY — addresses audit gap):
@@ -626,6 +631,7 @@ Sub-agent test validation (mandatory for all experts):
   - Mock return values whose shape doesn't match the actual API response format (e.g., returning an array when the real API returns an object with status fields)
   - Async test functions that do not await the target call — assertions may execute before the async operation completes, always passing
   - Per-test state initialized in a once-before-all hook instead of a per-test hook — causes test-order dependency and intermittent failures
+  - Sub-agent citation hallucination (R29): if the sub-agent's output cites an RFC / NIST / OWASP / W3C / FIPS / ISO section, verify the citation per R29 before accepting — sub-agents are particularly prone to retrofitting plausible-sounding section numbers
 
 Severity criteria for [role name]:
   [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]
@@ -720,18 +726,18 @@ Review round: [nth]
 ## Recurring Issue Check
 ### Functionality expert
 - R1: [status]
-- ... (R1-R28)
+- ... (R1-R30)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R28)
+- ... (R1-R30)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R28)
+- ... (R1-R30)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -895,7 +901,7 @@ Every expert agent MUST perform codebase-wide investigation before writing findi
 
 **Evidence requirement**: Every finding that references existing code must include the file path and line number where the evidence was found. Findings without evidence are rejected.
 
-**Ollama seed findings are starting evidence, not authoritative.** When an expert consumes Ollama-generated seed findings (Step 3-3 Round 1 template), the expert retains full responsibility for codebase-wide investigation. Adopting a seed finding without independent verification is a quality-gate failure. Conversely, an empty or `No findings` seed does NOT discharge the expert from performing the full R1-R28 Recurring Issue Check — the seed analyzer has a narrower context window and less domain awareness than the expert sub-agent.
+**Ollama seed findings are starting evidence, not authoritative.** When an expert consumes Ollama-generated seed findings (Step 3-3 Round 1 template), the expert retains full responsibility for codebase-wide investigation. Adopting a seed finding without independent verification is a quality-gate failure. Conversely, an empty or `No findings` seed does NOT discharge the expert from performing the full R1-R30 Recurring Issue Check — the seed analyzer has a narrower context window and less domain awareness than the expert sub-agent.
 
 **Anti-pattern: "Missing the forest"**
 The following are language-agnostic examples of costly misses from past reviews:
@@ -914,6 +920,13 @@ The following are language-agnostic examples of costly misses from past reviews:
 3. **Architecture misunderstandings**: Before flagging crypto, auth, or complex domain logic, read the surrounding code to understand the design intent. False alarms — such as flagging a key-derivation output as a "password hash", or treating a per-message authentication tag as a long-term secret — waste review rounds.
 4. **Cargo-cult security findings**: Flagging standard library usage as "insecure" without a concrete attack vector. Every security finding must describe: attacker, attack vector, preconditions, and impact
 5. **Heuristic-only security restrictions**: Recommending removal of a configuration (e.g., a security-policy directive, an allowed origin, an allowed redirect URI) based on "generally this shouldn't be in production" without verifying the actual use case. Security findings that restrict functionality MUST cite the relevant specification (RFC, OWASP, vendor docs) and explain why the specific use case does not apply. Example of a prohibited pattern: recommending removal of an entry from a security allowlist on a generic heuristic, without checking whether a specification or supported client flow requires that entry
+6. **Unverified spec citations**: Before citing an external spec (RFC, NIST SP, OWASP ASVS, OWASP cheat sheet, IETF BCP, ISO/IEC, FIPS, W3C, etc.) in a finding OR in plan/code being reviewed, the expert MUST verify:
+   - The section number exists in the cited revision of that document
+   - The claimed requirement text or paraphrase actually appears at that section
+   - The revision/version is specified when the standard has been revised (e.g., "NIST SP 800-63B-4 §2.3.3" — not bare "NIST SP 800-63B §2.3.3", because section numbers renumber between revisions)
+   - Quoted phrases (`"..."`) exist verbatim in the source; paraphrases are marked as such
+
+   Hallucinated citations are worse than no citation — they move a heuristic claim into an authoritative-looking frame that readers will trust without checking. Findings that include unverified citations are returned to the expert for revision. When the expert cannot verify (no network access, paywalled doc), state that explicitly ("citation unverified — please confirm") rather than emitting a confident reference.
 
 **Finding ID convention (mandatory):**
 
@@ -1006,6 +1019,31 @@ Before changing any value in a function call or object literal, read the type/sc
 
 This applies to both the Plan phase (pseudocode) and the Code Review phase (actual code).
 
+**Verify citations, do not fabricate them**
+When a finding, recommendation, or deferral justification references an external standard (RFC, NIST SP, OWASP ASVS, OWASP cheat sheet, IETF BCP, ISO/IEC, FIPS, W3C), the expert's default state is that the citation is unverified. To elevate it to a cited authority, the expert MUST have confirmed all four (matching the Finding Quality Standards "Unverified spec citations" rule):
+
+1. The section number exists in the cited revision.
+2. The paraphrase or quote actually appears at that section.
+3. The revision is specified when the standard has been revised (e.g., "SP 800-63B-4 §2.3.3", not bare "SP 800-63B §2.3.3").
+4. Quoted phrases (in backticks or quotes) appear verbatim in the source; paraphrases are explicitly marked as such.
+
+If verification is not possible in the current environment (no network, paywalled), either:
+- Cite the standard without a specific section number, and flag the claim as `citation unverified — please confirm before action`
+- Rely on an orthogonal argument (attack vector, spec-free reasoning) instead of appealing to authority
+
+Retrofitting a number after the claim is written ("I need a spec reference — §4.2.3 sounds right") is the exact failure mode that produces hallucinations. The section number must come out of verification, not recall.
+
+**Propagation sweep must include comment / doc / test-title sites**
+When a citation correction is applied, the R3 propagation sweep must grep not only the primary doc but also every place where the same standard might be cited:
+
+- Source-code comments and structured doc-comment blocks referencing the same standard
+- Test case names / descriptions that embed section numbers (e.g., a test description string referencing `... (RFC 8252 §8.3)`)
+- Commit messages and PR bodies that cite the standard
+- Allowlist/safelist rationale that cites the standard
+- Security-relevant docs and operational artifacts where citations carry decision weight: threat models, `SECURITY.md`, ADRs (architecture decision records), runbooks, incident reports, post-mortems, audit responses, release-notes security callouts, on-call escalation docs
+
+Citation drift inside comments, test names, and operational docs is the form of hallucination that most often survives review because the R3 scan often targets only the primary doc. A single grep by the bare standard name is the cheap catch-all — adapt the search term to the standard family (e.g., `grep -rn "RFC 8252"` for an IETF citation; `grep -rn "ASVS V[0-9]"` for an OWASP ASVS chapter reference; `grep -rn "SP 800-63"` for a NIST SP family). Run the appropriate variant for every standard touched by the correction.
+
 **Check runtime environment constraints against security-relevant minimum values**
 When the plan proposes a minimum value for a security-relevant interval (token TTL, session idle timeout, auto-lock, retention window, grace period, re-authentication interval), the expert MUST check the value against the actual runtime constraints of the deployment target, not just the spec-mandated range:
 
@@ -1060,6 +1098,8 @@ These issues have been found repeatedly in past reviews. Every expert MUST expli
 | R26 | Disabled-state UI without visible cue | When a UI control gains a logical disabled/readonly state, a visual indication of that state must be present too — the logical attribute alone leaves users believing the control is broken or unresponsive. Applies to any styling system (utility classes, component variants, style tokens): every control that sets a disabled/readonly attribute needs a paired visual style rule for that state. Check: grep for controls with disabled/readonly attributes and verify each one has a paired disabled-state style rule (class, variant, style prop, or CSS pseudo-state) — an attribute without a paired style is a finding | Minor |
 | R27 | Numeric range hardcoded in user-facing strings | Translation or UI strings that embed numeric limits (e.g., "between 5 and 1440 minutes", "max 100 items") drift from the validation constants over time. Use interpolation placeholders and pass the value from the canonical constant at the call site. Check: in the diff's translation/UI-string files, grep for numeric literals that duplicate MIN/MAX validation constants — any match is a finding. Excluded from this check: numbers that are domain-literal, not limits (e.g., year literals like `2026`, HTTP status codes like `404`, version numbers like `1.0`). **Severity escalation**: Minor by default; escalate to Major when the drifting constant governs ANY security or privacy policy boundary — auth credentials, rate limits, password policy, session/token lifetime, MFA grace period, lockout threshold, key rotation interval, consent flag, data retention window, audit threshold, or any other policy value with security or privacy implications. User-facing text that claims a looser limit than the tightened policy actively encourages users to attempt disallowed values, erodes trust in the UI when the limit is hit, and creates audit-log discrepancies | Minor (Major when constant governs any security or privacy policy boundary) |
 | R28 | Grammatical inconsistency in toggle/switch labels | Toggle/switch controls across the app should use a single grammatical form for their labels (e.g., all verb-form "Enable X" vs all noun-form "X enabled"). Mixed forms make it ambiguous whether the label describes the control's ON state or its OFF state. Enumerate adjacent toggle/switch labels in the affected feature area and verify form consistency. Note: this is primarily a human-review check — automated detection requires NLP beyond what a grep can do; the review action is to list the labels and judge visually | Minor |
+| R29 | External spec citation accuracy | When citing an RFC / NIST / OWASP / W3C / FIPS / ISO document, verify all four: (1) the cited section exists in the cited revision, (2) the quoted/paraphrased text actually appears at that section, (3) the revision is disambiguated when the standard has been revised and section numbers have shifted, (4) quoted phrases (in backticks or quotes) appear verbatim in the source; paraphrases are explicitly marked as such. Sources of drift commonly seen: NIST SP 800-63B Rev 3 → Rev 4 renumbered reauthentication sections AND changed AAL2 values; OWASP ASVS 4.0.3 → 5.0 renumbered chapters. **Illustrative past-hallucination patterns** (user-reported from prior reviews; pin revisions and re-verify against the source before citing in new findings): confidently citing a section number where the named topic actually lives elsewhere; quoting wording that does not appear verbatim in the source; omitting the revision when section numbers have shifted between revisions. **Severity**: Major by default (trust damage to future readers — they act on wrong info because the citation looks authoritative). **Escalate to Critical** when the hallucinated citation directly drives a security decision (recommending disabling a control, widening an allowlist, loosening a crypto parameter, raising a session lifetime) — in that case the wrong "authority" causes immediate security regression, not just trust erosion. See "Verify citations, do not fabricate them" in Expert Agent Obligations | Major (Critical when the hallucinated citation drives a security-tightening or security-loosening decision) |
+| R30 | Markdown autolink footguns in citations | When writing citations in PR bodies, commit messages, or Markdown docs hosted on GitHub-flavored Markdown surfaces, avoid constructs that auto-link unintentionally: bare `#<number>` becomes a PR/issue link; bare `@<name>` becomes a user mention; bare commit-SHA-shaped hex becomes a commit link. **Confidentiality / disclosure angle**: an unintended `@<name>` notifies an uninvolved party (information disclosure if the PR discusses an embargoed fix); an unintended `#<n>` creates a backlink visible to watchers of the referenced issue (leaks the existence of the new PR's content to that issue's watchers). Workarounds (preferred order — preserve original phrasing): (a) wrap in backticks (`` `#6` ``); (b) escape (`\#6`); (c) only as a last resort, drop the `#` ("tenet 6" instead of "tenet #6") because dropping the marker changes the document's semantic content. Check (grep example): `grep -nE '(^|[^a-zA-Z0-9])#[0-9]+' file.md` to enumerate bare `#<number>` occurrences in a Markdown file. Applies to both the doc being reviewed and the review output itself. Scope: GitHub-hosted repos and any tool that renders GitHub-flavored Markdown identically; for repos hosted on other platforms with different autolink rules, adjust accordingly | Minor |
 
 See "Extended obligations (R17-R22)" below for full procedures on R17-R22. R23-R28 are self-contained in the table row above.
 
@@ -1174,6 +1214,8 @@ Each expert must include a "Recurring Issue Check" section in their output:
 - R26 (Disabled-state visible cue): [N/A — no UI disabled-state changes / Checked — no issue / Finding F-XX]
 - R27 (Numeric range in user-facing strings): [N/A — no translation/UI-string changes / Checked — no issue / Finding F-XX]
 - R28 (Toggle label grammatical consistency): [N/A — no toggle/switch changes / Checked — no issue / Finding F-XX]
+- R29 (External spec citation accuracy): [N/A — no spec citations / Checked — citations verified / Finding F-XX]
+- R30 (Markdown autolink footguns): [N/A — no Markdown citations / Checked — no issue / Finding F-XX]
 - [Expert-specific checks as applicable]
 ```
 
