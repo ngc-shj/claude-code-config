@@ -103,7 +103,7 @@ Quality gate — flag findings that fail these checks:
 Append a '## Quality Warnings' section at the end listing any flagged findings. The orchestrator will return these to the expert for revision.
 
 PRESERVE Recurring Issue Check (mandatory, do NOT deduplicate):
-- Each expert's input includes a '## Recurring Issue Check' section listing R1-R13 (and expert-specific RS*/RT*) status.
+- Each expert's input includes a '## Recurring Issue Check' section listing R1-R28 (and expert-specific RS*/RT*) status.
 - These are NOT findings — they are checklists proving each pattern was checked.
 - Output them verbatim under a single top-level '## Recurring Issue Check' section, organized by expert (### Functionality expert / ### Security expert / ### Testing expert).
 - Do NOT merge, deduplicate, or summarize the R-codes across experts. Each expert's check status is independent evidence." \
@@ -121,13 +121,24 @@ If mixed, choose the dominant category." \
 # Normalize analyze-* output: handle model quirks in gpt-oss:120b where the
 # mandatory `## END-OF-ANALYSIS` sentinel is sometimes (a) emitted repeatedly
 # in a generation loop, or (b) concatenated to the end of a finding line
-# instead of on its own line. The pipeline:
-#   1. Split any inline sentinel onto its own line (sed).
-#   2. Print lines until the first standalone sentinel is reached, then stop.
+# instead of on its own line. Strategy:
+#   1. sed splits any inline sentinel onto its own line.
+#   2. awk emits the first standalone sentinel, then silently drains the
+#      rest of stdin. Draining (rather than `exit`) avoids SIGPIPE on the
+#      upstream `_ollama_request`'s printf when the response exceeds the
+#      pipe buffer (~64KB), which would otherwise propagate as exit 141
+#      under `set -o pipefail` and fail the analyze-* invocation.
 # Fallthrough without sentinel → EOF, caller's truncation-detection handles it.
 _ollama_analyze_normalize() {
   sed 's|\(.\)## END-OF-ANALYSIS *$|\1\n## END-OF-ANALYSIS|' \
-    | awk '/^## END-OF-ANALYSIS[[:space:]]*$/ { print "## END-OF-ANALYSIS"; exit } { print }'
+    | awk '
+        /^[[:space:]]*## END-OF-ANALYSIS[[:space:]]*$/ {
+          if (!seen) { print "## END-OF-ANALYSIS"; seen = 1 }
+          next
+        }
+        seen { next }
+        { print }
+      '
 }
 
 cmd_analyze_functionality() {
