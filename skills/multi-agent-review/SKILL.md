@@ -116,7 +116,7 @@ Requirements:
 - Classify each finding by severity using YOUR expert-specific criteria (see below)
 - For each finding, specify "Severity", "Problem", "Impact", and "Recommended action"
 - Do not duplicate issues already caught by local LLM pre-screening
-- **Project context obligation**: If the project context above is `config-only` or test infrastructure is `none`, do NOT raise Major/Critical findings recommending the addition of automated tests, CI/CD, or test framework setup. Such recommendations are downgraded to Minor informational notes only. Recommending bats/jq tests for a config-only repo without CI is over-engineering and wastes review rounds.
+- **Project context obligation**: If the project context above is `config-only` or test infrastructure is `none`, do NOT raise Major/Critical findings recommending the addition of automated tests, CI/CD, or test framework setup. Such recommendations are downgraded to Minor informational notes only. Recommending the introduction of a unit-test framework or CI pipeline for a config-only repo that has none is over-engineering and wastes review rounds.
 - If there are no findings, explicitly state "No findings"
 
 Plan-specific obligations:
@@ -128,13 +128,13 @@ Plan-specific obligations:
 - The plan MUST list all files that need updating, not just the direct schema/constant files
 - Verify the plan accounts for existing shared utilities (see "Codebase Awareness Obligations" in Common Rules)
 - When the plan involves event dispatch (webhooks, notifications, etc.) or audit log changes, explicitly check:
-  - Fire-and-forget async calls (e.g., `void asyncFn()`) must not run inside a DB transaction scope — async context inheritance can cause "transaction already closed" errors (R9)
+  - Fire-and-forget async dispatch (any async work launched without awaiting/joining its completion) must not run inside a DB transaction scope — async context inheritance can cause the transaction to close before the dispatched work completes, producing runtime errors (R9)
   - Module dependency graph must not form circular imports — if A imports B and B imports A, module initialization order may produce undefined references (R10)
   - Display/UI grouping (e.g., audit log filter categories) and subscription/delivery grouping (e.g., webhook event filters) are separate concerns — reusing one for the other risks scope leakage or update gaps (R11)
   - Every action value passed to the logging/audit function must be registered in the corresponding action group definition, i18n labels, UI label maps, and tests (R12)
   - Delivery failure events must not trigger re-delivery — verify the design includes a suppression mechanism to prevent infinite dispatch loops (R13)
 - When the plan involves new DB roles or permission grants, explicitly check:
-  - Grants must cover all implicit operations — `ON CONFLICT DO NOTHING` requires SELECT, foreign key checks require SELECT on the referenced table, FORCE RLS adds additional requirements beyond the explicit statement (R14)
+  - Grants must cover all implicit operations the application code performs — e.g., conflict-resolution clauses on writes may require read permission in addition to write, foreign-key validation may require read permission on the referenced table, row-level-security modes may add further requirements beyond the explicit statement (R14)
 - When the plan involves database migrations, explicitly check:
   - Database names, role names, hostnames, and other environment-dependent values must use dynamic resolution (e.g., `current_database()`, environment variables, or templating) — not hardcoded values that will fail in CI or other environments (R15)
 
@@ -190,7 +190,7 @@ If Ollama is unavailable, deduplicate manually as fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R16 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R22 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -221,18 +221,18 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R16)
+- ... (R1-R22)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R16)
+- ... (R1-R22)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R16)
+- ... (R1-R22)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -314,16 +314,11 @@ Before writing any code, perform the following impact analysis:
 
 This step prevents: using wrong constant values, missing fallback code paths, leaving stale duplicate implementations untouched, and reimplementing logic that already exists in shared modules.
 
-6. **Database schema verification** (when tests involve raw SQL or DB role assertions):
-   - **Read actual migration SQL** — not just the ORM schema. Migrations contain CHECK constraints (e.g., conditional NOT NULL), triggers (e.g., BEFORE DELETE guards), and privilege grants (`ALTER DEFAULT PRIVILEGES`, `GRANT`/`REVOKE`) that the ORM schema does not represent.
-   - **Query the live database** for the exact privilege set before writing privilege-assertion tests:
-     ```sql
-     SELECT table_name, privilege_type
-     FROM information_schema.table_privileges
-     WHERE grantee = '<role>' AND table_schema = 'public'
-     ```
-   - **Verify all NOT NULL columns** for every INSERT statement by reading the schema definition, not guessing. CHECK constraints with conditional NOT NULL (e.g., `CHECK (status != 'active' OR email IS NOT NULL)`) are invisible to the ORM.
-   - **Do not rely on SUPERUSER side-effects** in test assertions. SUPERUSER implicitly grants privileges (e.g., REFERENCES on FK-referenced tables) that non-SUPERUSER roles in CI do not have. Test assertions must match migration-defined grants only.
+6. **Storage-backend schema verification** (when tests involve raw queries, role/permission assertions, or storage-engine specifics):
+   - **Read the actual migration/DDL** — not just the ORM/abstraction-layer schema. Migrations encode constraints (conditional non-null via predicate constraints, triggers, default-permission grants) that an ORM-level schema may not surface.
+   - **Query the live storage engine** for the exact permission/privilege set before writing assertion tests, using whatever catalog/introspection mechanism the engine provides. The mechanism varies — SQL engines expose `information_schema` views or vendor commands like `SHOW GRANTS`; document/key-value stores expose connection-status or admin commands; cloud-managed storage exposes IAM-policy queries. The list is illustrative, not exhaustive — for any other engine, consult its documentation for the equivalent introspection surface. Do not infer from documentation alone — verify against the running instance.
+   - **Verify every required column** for every write statement by reading the schema definition, not guessing. Conditional required-column constraints (e.g., a predicate constraint that requires column X only in certain states) are typically invisible to the ORM.
+   - **Do not rely on privileged-role side-effects** in test assertions. A privileged/admin role in local dev may implicitly hold permissions that a minimal CI role does not (e.g., implicit access to referenced tables through foreign-key checks). Test assertions must match migration-defined grants only.
 
 ### Step 2-2: Implementation (Delegate to Sonnet Sub-agents)
 
@@ -340,11 +335,11 @@ Split the plan's "Implementation steps" into independent batches and delegate to
    - Did the sub-agent follow existing patterns, or did it invent a parallel approach?
    - If new helper functions were created, are they genuinely new, or do they duplicate existing code?
    - **Cross-batch symbol deduplication**: grep for any new symbol (constant, function, type) introduced by this batch to verify no other batch already defined the same symbol in a different file. Parallel sub-agents cannot see each other's output, so duplicate definitions across batches are expected — catch and merge them before proceeding.
-   - **Dev/CI environment parity check** (when integration tests involve DB roles, RLS, or privilege assertions):
-     - SUPERUSER behavior: Local dev often uses a SUPERUSER role. CI may use the same role name but with different effective privileges due to `ALTER DEFAULT PRIVILEGES`, role ownership, or `BYPASSRLS` settings. Tests must not depend on SUPERUSER-only implicit grants.
-     - FORCE RLS: A SUPERUSER with `BYPASSRLS` always bypasses RLS regardless of GUC settings. Tests that verify "FORCE RLS blocks table owner" must use a `NOSUPERUSER` + `NOBYPASSRLS` role.
-     - initdb timing: Container initdb scripts run BEFORE migrations. Dynamic SQL that queries `information_schema.table_privileges` will find nothing because tables do not exist yet. Use `ALTER DEFAULT PRIVILEGES` for prospective grants/revokes, not dynamic `REVOKE`.
-     - Test setup file conflicts: Unit test setup files may override `DATABASE_URL` or set mocks that break integration tests. Integration tests need their own setup file that connects to the real service.
+   - **Dev/CI environment parity check** (when integration tests involve DB roles, row-level/permission policies, or privilege assertions):
+     - Privileged-role behavior: Local dev often uses a high-privilege/admin role. CI may use the same role name but with different effective privileges due to default-privilege scope, role ownership, or row-level-security bypass settings. Tests must not depend on implicit grants that exist only for the privileged role.
+     - Bypass modes: Roles with row-level-security bypass capability always skip RLS regardless of session settings. Tests that verify "RLS blocks the table owner" must use a role without bypass capability.
+     - Container init timing: Container initialization scripts often run BEFORE migrations. Dynamic queries against catalog/introspection tables run during init will find nothing because schema objects do not exist yet. Use prospective/default-privilege mechanisms for grants/revokes that should apply to objects created later.
+     - Test setup file conflicts: Unit-test setup files may override connection strings or set mocks that break integration tests. Integration tests need their own setup file that connects to the real service.
 
 If sub-agents are unavailable, implement directly as fallback.
 
@@ -396,7 +391,7 @@ bash ~/.claude/hooks/check-migrations.sh
 # no test references the old value. Fix broken E2E references before proceeding.
 
 # Allowlist/safelist update check:
-# When using privileged wrappers (e.g., bypass-RLS, elevated permissions, admin-only APIs)
+# When using privileged wrappers (e.g., elevated DB access, admin-only APIs, security escape hatches)
 # in a new file, verify whether the project has an allowlist or safelist that gates their usage.
 # If so, add the new file to the allowlist. CI or pre-push hooks may enforce this.
 
@@ -420,9 +415,9 @@ When the implementation includes tests that require external services (database,
 - Unit tests only verify mocked behavior — they CANNOT catch:
   - Database CHECK/NOT NULL constraint violations
   - FK cascade deletion order issues
-  - RLS/privilege mismatches between database roles
+  - Permission/privilege mismatches between database roles
   - Column name discrepancies between test SQL and actual schema
-- Run the integration test command (e.g., `npm run test:integration`, `pytest -m integration`) with a live service before every push
+- Run the project's integration test command with a live service before every push
 - If the local service is not running, start it first (e.g., `docker compose up -d db`)
 - A CI failure that could have been caught locally is a **process failure**, not a code failure
 
@@ -511,7 +506,7 @@ Requirements:
 - Consider the deviation log when reviewing
 - Do not duplicate issues already caught by local LLM pre-screening
 - Cross-check the plan's "Implementation Checklist" section against the git diff. Report any file listed in the checklist that does not appear in the diff as a finding
-- **Project context obligation**: If the project context above is `config-only` or test infrastructure is `none`, do NOT raise Major/Critical findings recommending the addition of automated tests, CI/CD, or test framework setup. Such recommendations are downgraded to Minor informational notes only. Recommending bats/jq tests for a config-only repo without CI is over-engineering and wastes review rounds.
+- **Project context obligation**: If the project context above is `config-only` or test infrastructure is `none`, do NOT raise Major/Critical findings recommending the addition of automated tests, CI/CD, or test framework setup. Such recommendations are downgraded to Minor informational notes only. Recommending the introduction of a unit-test framework or CI pipeline for a config-only repo that has none is over-engineering and wastes review rounds.
 - **Pre-existing-in-changed-file rule**: Any pre-existing bug in a file that appears in `git diff main...HEAD` (even with a one-line edit) is IN SCOPE. Do not skip such findings as "pre-existing" — flag them with severity based on impact.
 - If there are no findings, explicitly state "No findings"
 
@@ -643,18 +638,18 @@ Review round: [nth]
 ## Recurring Issue Check
 ### Functionality expert
 - R1: [status]
-- ... (R1-R16)
+- ... (R1-R22)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R16)
+- ... (R1-R22)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R16)
+- ... (R1-R22)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -694,7 +689,7 @@ bash ~/.claude/hooks/check-migrations.sh
 # Run tests (use project-appropriate command)
 [test command]
 
-# Run production build to catch SSR/bundling/type errors not covered by tests
+# Run production build to catch compilation/bundling/type errors not covered by tests
 [build command]
 
 # Commit only if ALL three pass
@@ -702,7 +697,7 @@ git add -A
 git commit -m "review([n]): [summary of fixes]"
 ```
 
-**IMPORTANT**: Tests and build alone are insufficient. Lint catches unused imports, style violations, and other issues that neither tests nor builds detect. The production build catches SSR-only module resolution failures, TypeScript errors in non-test code, and bundler issues. All three must pass before committing.
+**IMPORTANT**: Tests and build alone are insufficient. Lint catches unused imports, style violations, and other issues that neither tests nor builds detect. The production build catches issues that only surface during full compilation/bundling — module resolution failures, type errors in non-test code, and bundler/packager-specific failures — that test runs do not exercise. All three must pass before committing.
 
 **Real-environment test obligation**: Same rule as Step 2-4 — when the fix involves or touches integration tests that depend on external services, run them locally against the real service before committing. Do not rely on CI to catch failures that are reproducible locally.
 
@@ -831,10 +826,10 @@ The following are language-agnostic examples of costly misses from past reviews:
 **Prohibited finding types:**
 
 1. **Vague recommendations**: "Consider adding tests" or "Error handling could be improved" — must specify WHICH function, WHAT test case, and HOW to handle the error
-2. **Untested testability claims**: Before recommending "add a test for X", verify that X is actually testable in the project's test infrastructure (e.g., Auth.js internal provider config is NOT unit-testable)
-3. **Architecture misunderstandings**: Before flagging crypto, auth, or complex domain logic, read the surrounding code to understand the design intent. False alarms on crypto (e.g., flagging HKDF-derived hashes as "password hashes") waste review rounds
+2. **Untested testability claims**: Before recommending "add a test for X", verify that X is actually testable in the project's test infrastructure. Some surfaces (third-party framework internals, generated code, environment-bound configuration) are not unit-testable; recommending tests for them is unactionable.
+3. **Architecture misunderstandings**: Before flagging crypto, auth, or complex domain logic, read the surrounding code to understand the design intent. False alarms — such as flagging a key-derivation output as a "password hash", or treating a per-message authentication tag as a long-term secret — waste review rounds.
 4. **Cargo-cult security findings**: Flagging standard library usage as "insecure" without a concrete attack vector. Every security finding must describe: attacker, attack vector, preconditions, and impact
-5. **Heuristic-only security restrictions**: Recommending removal of a configuration (e.g., CSP directive, CORS origin, allowed redirect URI) based on "generally this shouldn't be in production" without verifying the actual use case. Security findings that restrict functionality MUST cite the relevant specification (RFC, OWASP, vendor docs) and explain why the specific use case does not apply. Example of a prohibited finding: "Remove localhost from CSP form-action in production" — without checking whether OAuth native app flow (RFC 8252) requires it
+5. **Heuristic-only security restrictions**: Recommending removal of a configuration (e.g., a security-policy directive, an allowed origin, an allowed redirect URI) based on "generally this shouldn't be in production" without verifying the actual use case. Security findings that restrict functionality MUST cite the relevant specification (RFC, OWASP, vendor docs) and explain why the specific use case does not apply. Example of a prohibited pattern: recommending removal of an entry from a security allowlist on a generic heuristic, without checking whether a specification or supported client flow requires that entry
 
 **Finding ID convention (mandatory):**
 
@@ -894,7 +889,7 @@ When the orchestrator records a finding as `Skipped`, `Accepted`, `Out of scope`
 Examples of REJECTED skip entries (from past reviews — do not repeat):
 - "Acceptable degradation; cache is an optimization, not a requirement" → missing worst case / likelihood / cost
 - "Acceptable for personal developer tool" → forbidden phrase, no quantification
-- "Pre-existing issue in commit-msg-check.sh, not introduced by this change" → the file IS in the diff, so it is in scope; must fix or escalate
+- "Pre-existing issue in [file already in this diff], not introduced by this change" → the file IS in the diff, so it is in scope; must fix or escalate
 - "Out of scope for this refactoring" → no [Adjacent] routing, no other expert assignment, no TODO marker
 
 ### Expert Agent Obligations
@@ -905,7 +900,7 @@ When a finding recommends changing a configuration or behavior that was previous
 - Explain why the tested scenario does not apply, with a concrete counter-example
 - If unable to provide spec-level evidence, downgrade to an informational note, not a finding
 
-Real example: A security expert recommended removing `http://localhost:*` from CSP `form-action` in production, citing "localhost is not used in production." This broke OAuth native app flow (RFC 8252 §7.3 requires localhost redirect for desktop apps). The tested E2E flow had already confirmed localhost was needed, but the orchestrator accepted the finding without re-verification.
+Illustrative scenario: a security review recommends removing a configuration entry (e.g., a localhost entry from a security policy / redirect allowlist) from production based on a generic "this should not appear in production" heuristic. If a tested authentication or callback flow requires that entry per the relevant specification (e.g., a native-app OAuth flow that mandates localhost callbacks), accepting the finding breaks verified behavior. The orchestrator must demand spec-level evidence and re-run the affected flow before applying any fix that reverses a previously-tested configuration.
 
 **Do not modify production code to simplify test setup**
 When a production API provides both a safe variant (e.g., parameterized queries, tagged templates, structured builders) and an unsafe escape hatch, never switch from safe to unsafe solely to simplify test setup. If the safe API is harder to mock, adapt the test infrastructure (mock shape, test helper, or fixture) to match the safe API — not the other way around. The test must prove the production code works correctly, not that the test is easy to write. This obligation applies equally to the functionality expert (correctness) and the testing expert (test quality).
@@ -939,18 +934,26 @@ These issues have been found repeatedly in past reviews. Every expert MUST expli
 | R2 | Constants hardcoded in multiple places | Search for literal values that should be shared constants (validation limits, enum values, config defaults) | Major |
 | R3 | Incomplete pattern propagation | When a pattern is changed in one file, search for ALL other files using the same pattern | Critical if security-relevant, Major otherwise |
 | R4 | Event/notification dispatch gaps | When mutations are added, verify ALL similar mutation sites dispatch the corresponding event | Major |
-| R5 | Missing transaction wrapping | findMany + update/delete in separate calls without DB transaction | Major |
+| R5 | Missing transaction wrapping | A read query (e.g., listing rows) followed by a separate write query (update/delete) without wrapping both in a DB transaction — the row set may change between read and write (TOCTOU race). Note: unit tests with mocked DB calls pass vacuously because the mock returns a stable result; only integration tests under concurrent load expose the race | Major |
 | R6 | Cascade delete orphans | DB cascade deletes that don't clean up external storage (blob store, file system, cache) | Major |
 | R7 | E2E selector breakage | When routes, CSS classes, exports, aria-label, id, data-testid, or data-slot are changed/deleted, check E2E tests for broken references | Major |
 | R8 | UI pattern inconsistency | When adding/restyling list, card, or form components, verify style patterns match existing same-category components | Minor |
-| R9 | Transaction boundary for fire-and-forget | `void asyncFn()` inside a DB transaction scope inherits async context — the transaction may close before the async work completes, causing runtime errors. Move fire-and-forget calls outside the transaction | Critical |
+| R9 | Transaction boundary for fire-and-forget | Async dispatch launched without awaiting/joining its completion inside a DB transaction scope inherits the transaction's async context — the transaction may close before the dispatched work completes, causing runtime errors. Move fire-and-forget calls outside the transaction | Critical |
 | R10 | Circular module dependency | A imports B and B imports A — module initialization order may produce `undefined`. Refactor to unidirectional dependency or use lazy imports on both sides | Major |
 | R11 | Display group ≠ subscription group | UI display grouping (e.g., audit log filters) and event subscription grouping (e.g., webhook topics) serve different purposes. Reusing one for the other causes scope leakage or update gaps when new features are added | Major |
 | R12 | Enum/action group coverage gap | Every action value used in logging/audit calls must be registered in the corresponding group definition, i18n labels, UI label maps, and tests. Search all call sites and cross-check against group arrays | Major |
 | R13 | Re-entrant dispatch loop | Event delivery failure → audit log → triggers new event delivery → infinite loop. Delivery-failure actions must be on a dispatch suppression list | Critical |
-| R14 | DB role grant completeness | When creating a new DB role, `ON CONFLICT DO NOTHING` requires SELECT privilege (not just INSERT). Foreign key integrity checks require SELECT on the referenced table. Under row-level security (FORCE RLS), verify grants cover all implicit operations, not just the explicit statement. Note: insufficient grants cause functional failures (Major); over-privileged grants that bypass RLS or expose unauthorized data are Critical | Major (Critical if over-privilege direction) |
+| R14 | DB role grant completeness | When creating a new DB role, verify grants cover all implicit operations the application code performs — not just the literal statement. Examples: conflict-resolution clauses on writes may require read permission in addition to write; foreign-key validation may require read permission on the referenced table; row-level-security modes may add further requirements. Note: insufficient grants cause functional failures (Major); over-privileged grants that bypass security boundaries or expose unauthorized data are Critical | Major (Critical if over-privilege direction) |
 | R15 | Hardcoded environment-specific values in migrations | Database names, role names, hostnames, and other environment-dependent values must not be hardcoded in migration SQL. Use dynamic resolution (e.g., `current_database()`, environment variables, or templating) so migrations work across dev, CI, staging, and production. Note: hardcoded values also persist in git history, potentially leaking production infrastructure topology | Major |
-| R16 | Dev/CI environment parity | When tests assert database privileges, RLS behavior, or role-specific operations, verify the assertion holds in both local dev (often SUPERUSER owner) and CI (minimal roles created by setup scripts). Common divergences: implicit REFERENCES grants from SUPERUSER, BYPASSRLS on SUPERUSER, `ALTER DEFAULT PRIVILEGES` scope, initdb-vs-migration execution order | Major |
+| R16 | Dev/CI environment parity | When tests assert database privileges, row-level/permission policies, or role-specific operations, verify the assertion holds in both local dev (often a high-privilege owner role) and CI (minimal roles created by setup scripts). Common divergences: implicit grants held only by privileged/admin roles, row-level-security bypass on privileged roles, default-privilege scope, and the order in which container-init scripts run relative to migrations | Major |
+| R17 | Helper adoption coverage | When the PR introduces a new shared helper, enumerate every call site of the underlying primitive the helper wraps and verify each either uses the helper or has a concrete skip reason — do not rely on pattern-surface search alone (see Extended obligations below) | Major |
+| R18 | Config allowlist / safelist synchronization | When privileged operations (elevated DB access, admin-only APIs, escape hatches) move into or out of files, verify any project-defined allowlist/safelist that gates their usage is updated in both directions — add new users, AND remove (or narrow) entries ONLY when the privileged call provably moved into a shared helper that itself appears on the allowlist (never just because the literal call disappeared from one file). Removing an entry without confirming the new call site is itself gated widens blast radius | Major |
+| R19 | Test mock alignment with helper additions | When a new export is added to a module whose mocks are declared elsewhere (in-test mock factories, manual mock files, test fixtures), enumerate every mock declaration for that module and confirm the new export is represented AND covered by at least one assertion — otherwise tests either fail at import time or pass vacuously because the new symbol is `undefined`/no-op when invoked | Major |
+| R20 | Multi-statement preservation in mechanical edits | When code is inserted mechanically (by scripts or sub-agents) into structured constructs such as multi-line import lists, switch/case blocks, or chained builders, verify the insertion did not split an unrelated existing construct. Concrete reviewer actions: (a) grep for the project's block-opening token immediately followed by another block-opening token with no matching closer in between (the exact regex depends on the project's syntax); (b) run the project's parser/linter — most syntax-aware tools surface the broken structure as a parse error, often with a more useful location than a textual grep | Major |
+| R21 | Subagent completion vs verification | A subagent's "completed successfully" report states intent, not outcome. Before accepting: (a) re-run the project's full test command yourself (not just the agent's summary or a subset of tests it picked), (b) spot-check at least one modified file, (c) for large changes (rule of thumb: 50+ files) additionally re-run lint AND tests AND production build AND any project-defined pre-PR/CI hooks. When the subagent touched auth, crypto, input validation, permission grants, or other security-sensitive surfaces, re-run the security-relevant test path explicitly AND complete the R3 propagation check (trace all affected paths, confirm no propagation gap) even if the change appears small | Critical (silent regression risk) |
+| R22 | Perspective inversion for established helpers | Supplements R17. Every review that touches a shared helper must check BOTH perspectives: forward (does the PR migrate consumers?) and inverted (does the PR leave any syntactically-different equivalent pattern untouched?) | Major |
+
+See "Extended obligations (R17-R22)" below for full procedures.
 
 **Security expert must additionally check:**
 
@@ -967,6 +970,68 @@ These issues have been found repeatedly in past reviews. Every expert MUST expli
 | RT1 | Mock-reality divergence | Mock return values must match actual API response shapes | Critical |
 | RT2 | Testability verification | Before recommending "add test for X", confirm X is testable with the project's test infrastructure | — (reject finding if untestable) |
 | RT3 | Shared constant in tests | Test assertions using hardcoded values that should import from shared constants | Major |
+
+### Extended obligations (R17-R22)
+
+These obligations extend the checklist above with full procedures. Each maps to a row in the table and MUST be applied by every expert (unless scoped otherwise).
+
+**R17: Helper adoption coverage**
+
+When the PR introduces a new shared helper, the reviewer MUST verify adoption coverage across the codebase — not just the sites the PR changed.
+
+Procedure:
+1. Identify the underlying primitive the helper wraps (the function, API, or operation that existed before the helper was extracted).
+2. Enumerate every call site of that primitive.
+3. For each call site, determine whether it uses the new helper. For non-users, require the PR to either migrate OR document a concrete skip reason (a specific reason why the helper does not apply to that call site).
+
+Finding this gap after merge leaks as latent duplication — callers keep the pre-helper pattern alive.
+
+**R18: Config allowlist / safelist synchronization**
+
+When the PR changes which files use privileged operations (e.g., elevated DB access, admin-only APIs, security escape hatches that the project gates with an allowlist), the reviewer MUST verify the corresponding allowlist/safelist files have been updated in both directions:
+
+- **Add** new files that now use the privilege.
+- **Remove (or narrow)** entries for files that no longer need it BECAUSE the privileged call moved into a shared helper. This removal is valid only when (a) the helper itself appears on the allowlist (or is otherwise gated), and (b) all call sites of the helper are themselves on the allowlist/safelist or behind an equivalent higher-privilege gate. Removing an entry merely because the literal call disappeared from one file — without confirming the new call site is gated — widens blast radius and must be flagged.
+
+How to discover the allowlist for the project: search the repo for scripts referenced by pre-commit/pre-push/CI hooks that enumerate file paths and check for forbidden imports or calls. A missing update typically fails the project's pre-PR verification.
+
+**R19: Test mock alignment with helper additions**
+
+When the PR adds a new exported function to a module whose mocks are declared elsewhere, those mock declarations MUST be updated to include the new export. Otherwise tests either fail at import time or pass vacuously — the new symbol resolves to `undefined`/no-op when invoked under the mock, masking real failures.
+
+Procedure when a helper is added to a mockable module:
+1. Identify every place the module is mocked (search the codebase for the module's import path or name appearing in a mocking call, manual mock file, or test fixture).
+2. For each, confirm the mock either re-exports the real module's surface (delegating to the original implementation) or explicitly lists the new export.
+3. Confirm at least one test asserts on the result of calling the new export through the mock — a mock declaration with no asserting test is the same vacuous-pass failure mode as omitting the export entirely.
+
+This applies regardless of test framework — every framework that supports module mocks has the same exposure.
+
+**R20: Multi-statement preservation in mechanical edits**
+
+When using scripts or subagents to insert code mechanically into structured constructs (multi-line import lists, switch/case blocks, chained builder calls, table-driven configs), verify the insertion did not split an unrelated adjacent construct.
+
+Common failure mode: an insertion point computed from a single anchor line lands *inside* a previous multi-line construct instead of between two top-level constructs, producing invalid syntax.
+
+Reviewer action: after a mechanical edit, grep for syntactic markers of broken structure (e.g., a construct opener immediately followed by a different construct's contents with no closer in between). When detected, fix the script's insertion point or manually repair the affected location.
+
+**R21: Subagent completion vs verification**
+
+A subagent's "completed successfully" report states intent, not outcome. Before accepting the result:
+
+1. Re-run the project's full test command yourself (not just the agent's summary or whatever subset of tests it chose to run). "Full test command" means the same target the project documents/uses for pre-PR verification — typically the `test` script in the package manifest, the project's `Makefile` test target, or the command listed in the project README.
+2. Spot-check at least one modified file to confirm the change matches the described migration.
+3. If the agent modified many files (rule of thumb: 50+), additionally re-run lint AND tests AND production build AND any project-defined pre-PR/CI hooks — subagents have been observed to produce partial migrations that pass unit tests but fail full project verification (e.g., missing dependency updates, missed cross-cutting refactors).
+
+**Security carve-out (parallel obligation, applies in addition to steps 1-3 above)**: when the subagent touched auth, crypto, input validation, permission grants, or other security-sensitive surfaces, re-run the security-relevant test path explicitly even if the change appears small AND complete the R3 propagation check (trace all affected paths, confirm no propagation gap) before accepting. A single-line edit in this category can introduce a vulnerability that unit tests do not exercise.
+
+**R22: Perspective inversion for established helpers**
+
+Supplements R17. During code review, whenever the PR introduces or uses a shared helper, reviewers MUST explicitly check two perspectives:
+
+1. **Forward**: "Does the PR migrate consumers to the helper where the helper applies?"
+2. **Inverted**: "Does the PR leave any equivalent pattern untouched because the syntactic search didn't match?"
+
+The inverted perspective catches cases where the pre-helper code expressed the same intent with a different spelling (different identifier, different equivalent literal, different equivalent call shape). A pattern-only forward search misses these — only enumerating from the underlying primitive surfaces them.
 
 Each expert must include a "Recurring Issue Check" section in their output:
 ```
@@ -987,6 +1052,12 @@ Each expert must include a "Recurring Issue Check" section in their output:
 - R14 (DB role grant completeness): [N/A — no new DB roles / Finding F-XX]
 - R15 (Hardcoded env values in migrations): [N/A — no migrations / Finding F-XX]
 - R16 (Dev/CI environment parity): [N/A — no DB role/privilege tests / Finding F-XX]
+- R17 (Helper adoption coverage): [N/A — no new helper / Checked — no issue / Finding F-XX]
+- R18 (Allowlist/safelist sync): [N/A — no privileged-op changes / Checked — no issue / Finding F-XX]
+- R19 (Test mock alignment with helper additions): [N/A — no new exports in mocked modules / Checked — no issue / Finding F-XX]
+- R20 (Multi-statement preservation in mechanical edits): [N/A — no mechanical insertions / Checked — no issue / Finding F-XX]
+- R21 (Subagent completion vs verification): [N/A — no subagent-driven changes / Checked — tests+build re-run / Finding F-XX]
+- R22 (Perspective inversion for helpers): [N/A — no helper introduced or used / Checked — both perspectives / Finding F-XX]
 - [Expert-specific checks as applicable]
 ```
 
