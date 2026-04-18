@@ -147,6 +147,13 @@ cat findings1.txt findings2.txt | bash ~/.claude/hooks/ollama-utils.sh merge-fin
 
 # Classify changed files (feature/fix/refactor/docs/test/chore)
 git diff --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes
+
+# Analyze a diff from an expert perspective (functionality / security / testing)
+# Used by multi-agent-review Phase 3 to seed Claude sub-agents with findings
+# instead of each sub-agent reading the full diff — reduces Claude token usage.
+git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality
+git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security
+git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing
 ```
 
 - All commands read stdin, write stdout — composable with pipes
