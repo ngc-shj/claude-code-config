@@ -7,7 +7,30 @@
 
 set -euo pipefail
 
-ROOT="${1:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+# Default to the current git toplevel; if $1 is supplied, validate that it
+# resolves inside that same toplevel before use. Without this check, a
+# prompt-injected orchestrator could pass '/' or '$HOME' and turn the
+# scanner into a cross-project inventory leak (function/constant names,
+# file paths) through the LLM channel that consumes this output.
+TRUSTED_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+TRUSTED_ROOT=$(realpath -e -- "$TRUSTED_ROOT" 2>/dev/null || echo "$TRUSTED_ROOT")
+
+if [ -n "${1:-}" ]; then
+  ROOT_ABS=$(realpath -e -- "$1" 2>/dev/null) || {
+    echo "Error: path '$1' does not exist or is not accessible" >&2
+    exit 1
+  }
+  case "$ROOT_ABS/" in
+    "$TRUSTED_ROOT/"*) ;;
+    *)
+      echo "Error: path '$1' is outside TRUSTED_ROOT='$TRUSTED_ROOT'. Refusing to scan." >&2
+      exit 1
+      ;;
+  esac
+  ROOT="$ROOT_ABS"
+else
+  ROOT="$TRUSTED_ROOT"
+fi
 cd "$ROOT"
 
 # --- Language detection ---

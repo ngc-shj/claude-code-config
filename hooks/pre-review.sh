@@ -18,10 +18,30 @@ MAX_INPUT_TOKENS=128000
 NUM_PREDICT=8192
 MAX_INPUT_CHARS=$(( MAX_INPUT_TOKENS * 3 ))
 
+# Resolve the trusted root once: git toplevel if we're in a repo, else pwd.
+# PLAN_FILE (env var) must canonicalize to a path under this root — without
+# this check, a prompt-injected orchestrator that sets PLAN_FILE=/etc/passwd
+# (or ~/.ssh/id_rsa, etc.) would have the contents forwarded to Ollama and
+# reflected back through the review output, creating an exfiltration channel.
+TRUSTED_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+TRUSTED_ROOT=$(realpath -e -- "$TRUSTED_ROOT" 2>/dev/null || echo "$TRUSTED_ROOT")
+
 case "$MODE" in
   plan)
     if [ -n "${PLAN_FILE:-}" ] && [ -f "$PLAN_FILE" ]; then
-      CONTENT=$(cat "$PLAN_FILE")
+      plan_abs=$(realpath -e -- "$PLAN_FILE" 2>/dev/null || echo "")
+      if [ -z "$plan_abs" ]; then
+        echo "Warning: PLAN_FILE='$PLAN_FILE' could not be resolved. Falling back to stdin." >&2
+        CONTENT=$(cat)
+      else
+        case "$plan_abs/" in
+          "$TRUSTED_ROOT/"*) CONTENT=$(cat "$plan_abs") ;;
+          *)
+            echo "Warning: PLAN_FILE='$PLAN_FILE' is outside TRUSTED_ROOT='$TRUSTED_ROOT'. Refusing to read. Falling back to stdin." >&2
+            CONTENT=$(cat)
+            ;;
+        esac
+      fi
     else
       CONTENT=$(cat)
     fi

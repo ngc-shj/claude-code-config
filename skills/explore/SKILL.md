@@ -9,9 +9,16 @@ Deep codebase exploration and Q&A using local LLM for file discovery and Sonnet 
 
 ---
 
-## Step 1: Classify the Query
+## Step 1: Classify the Query (Local LLM, Zero Claude Tokens)
 
-Determine the exploration type from the user's question:
+Offload exploration-type classification to the local LLM:
+
+```bash
+echo "[user's question]" | bash ~/.claude/hooks/ollama-utils.sh classify-query
+```
+
+Expected output: one of `explanation`, `usage-search`, `architecture`, `location`, `data-flow`.
+If Ollama is unavailable, fall back to matching the question against these patterns directly:
 
 | Query pattern | Type | Strategy |
 |--------------|------|----------|
@@ -84,8 +91,14 @@ If sub-agents are unavailable, perform the analysis directly.
 ## Step 4: Synthesize and Present
 
 Review Sonnet's analysis for completeness and accuracy:
-- **Verify referenced files exist**: For each file:line reference in the output, confirm the file exists and the line content matches the claim. Remove or correct stale references.
-- **Verify function/type existence**: For each named function, type, or constant, grep to confirm it exists at the stated location. Sub-agents may hallucinate names or locations.
+- **Verify referenced files exist (automated)**: Pipe the sub-agent output through `verify-references.sh` to catch stale or missing file:line references in bulk before manual review:
+
+  ```bash
+  echo "[sub-agent output]" | bash ~/.claude/hooks/verify-references.sh
+  ```
+
+  Any `MISSING` or `OUT-OF-RANGE` line from the summary is a stale reference — remove or correct it.
+- **Verify function/type existence**: For each named function, type, or constant still in the output after the automated check, grep to confirm it exists at the stated location. Sub-agents may hallucinate names or locations even when the file:line resolves.
 - Fill in any gaps the sub-agent may have missed
 - Resolve any ambiguities
 
