@@ -43,6 +43,17 @@ The local LLM will analyze changes focusing on:
 - Unused imports or dead code
 - Simplification opportunities
 
+Also pre-screen reuse candidates against the shared utility inventory so Sonnet enters Step 3 with filtered matches instead of re-deriving them:
+
+```bash
+{ bash ~/.claude/hooks/scan-shared-utils.sh
+  echo '=== OLLAMA-INPUT-SEPARATOR ==='
+  git diff main...HEAD
+} | bash ~/.claude/hooks/ollama-utils.sh score-utility-match
+```
+
+The output is a set of `[High|Medium|Low] path:line — Proposal — Candidate` blocks (or `No matches`). Feed these into the Step 3 sub-agent prompt as seed candidates; the sub-agent still performs verification and may discard low-confidence matches.
+
 If Ollama is unavailable, proceed to Step 3 without pre-analysis.
 
 Save the output for reference in Step 3.
@@ -103,6 +114,9 @@ You are a senior engineer specializing in code simplification.
 
 Local LLM pre-analysis (for reference — do not re-report):
 [Local LLM output, or "None"]
+
+Seed reuse candidates (from score-utility-match — verify before recommending, discard Low-confidence if not justified):
+[score-utility-match output, or "None"]
 
 Shared utility inventory (existing reusable code — check before proposing new abstractions):
 [scan-shared-utils.sh output, or "None"]

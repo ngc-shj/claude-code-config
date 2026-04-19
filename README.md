@@ -148,12 +148,27 @@ cat findings1.txt findings2.txt | bash ~/.claude/hooks/ollama-utils.sh merge-fin
 # Classify changed files (feature/fix/refactor/docs/test/chore)
 git diff --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes
 
+# Classify a user question into an explore query type (explanation / usage-search / architecture / location / data-flow)
+echo "How does the request router work?" | bash ~/.claude/hooks/ollama-utils.sh classify-query
+
 # Analyze a diff from an expert perspective (functionality / security / testing)
 # Used by multi-agent-review Phase 3 to seed Claude sub-agents with findings
 # instead of each sub-agent reading the full diff — reduces Claude token usage.
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing
+
+# Pre-screen reuse candidates (shared-utils inventory + diff) for the simplify skill
+{ bash ~/.claude/hooks/scan-shared-utils.sh; echo '=== OLLAMA-INPUT-SEPARATOR ==='; \
+  git diff main...HEAD; } | bash ~/.claude/hooks/ollama-utils.sh score-utility-match
+
+# Audit mock return values in a test file against the real type definitions
+{ cat tests/foo.test.ts; echo '=== OLLAMA-INPUT-SEPARATOR ==='; \
+  cat src/types/foo.ts; } | bash ~/.claude/hooks/ollama-utils.sh verify-mock-shapes
+
+# Generate a PR title from classify-changes + summarize-diff output
+{ echo "$CATEGORY"; echo '=== OLLAMA-INPUT-SEPARATOR ==='; echo "$SUMMARY"; } \
+  | bash ~/.claude/hooks/ollama-utils.sh generate-pr-title
 
 # Generate a PR body from commits + diff stat + ALL review artifacts (mirrors the pr-create skill invocation)
 { echo '=== COMMIT LOG ==='; git log main...HEAD --oneline; \

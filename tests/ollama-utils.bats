@@ -93,6 +93,30 @@ teardown() {
   [ "$result" = "feature" ]
 }
 
+@test "classify-query: returns query type from .response field" {
+  setup_curl_mock "200" '{"response":"explanation","thinking":""}'
+  result=$(echo "How does the request router work?" | bash "$SCRIPT" classify-query)
+  [ "$result" = "explanation" ]
+}
+
+@test "score-utility-match: returns match blocks from .response field" {
+  setup_curl_mock "200" '{"response":"[High] src/a.ts:10 — replace inline with shared — slugify at lib/str.ts","thinking":""}'
+  result=$(printf 'inventory\n=== OLLAMA-INPUT-SEPARATOR ===\ndiff' | bash "$SCRIPT" score-utility-match)
+  [[ "$result" == *"[High]"* ]]
+}
+
+@test "verify-mock-shapes: returns findings from .response field" {
+  setup_curl_mock "200" '{"response":"[Major] tests/foo.test.ts:42 — mock missing field — add email","thinking":""}'
+  result=$(printf 'test content\n=== OLLAMA-INPUT-SEPARATOR ===\ntype def' | bash "$SCRIPT" verify-mock-shapes)
+  [[ "$result" == *"[Major]"* ]]
+}
+
+@test "generate-pr-title: returns title from .response field" {
+  setup_curl_mock "200" '{"response":"feat: add user authentication flow","thinking":""}'
+  result=$(printf 'feature\n=== OLLAMA-INPUT-SEPARATOR ===\n- added auth' | bash "$SCRIPT" generate-pr-title)
+  [ "$result" = "feat: add user authentication flow" ]
+}
+
 # ===========================================================================
 # Response parsing: .thinking fallback and empty response
 # ===========================================================================

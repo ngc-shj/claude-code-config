@@ -116,7 +116,16 @@ Review generated tests for completeness:
 - Check that test assertions are meaningful (not just "doesn't throw")
 - Verify test independence (no shared mutable state between tests)
 - Verify the sub-agent reused existing test helpers (not reimplemented)
-- Spot-check mock return values against actual type definitions
+- Audit mock-reality alignment with the local LLM before spot-checking manually:
+
+  ```bash
+  { cat [generated-test-file]
+    echo '=== OLLAMA-INPUT-SEPARATOR ==='
+    cat [source-or-type-definition-file]
+  } | bash ~/.claude/hooks/ollama-utils.sh verify-mock-shapes
+  ```
+
+  The output is a set of `[Severity] test-path:line — Problem — Fix` blocks (or `No findings`). Treat Critical/Major findings as mandatory fixes before reporting completion; Minor findings are informational. Remaining unflagged mocks still warrant a manual spot-check against the actual type definitions — the audit is a filter, not a substitute.
 
 If gaps are found, delegate additional test generation to Sonnet.
 

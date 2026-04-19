@@ -32,14 +32,20 @@ Ensure all changes are committed before proceeding.
 
 ## Step 2: Local LLM Analysis (Zero Claude Tokens)
 
-Summarize changes and classify the PR type:
+Summarize changes, classify the PR type, and pre-generate a title:
 
 ```bash
 # Summarize the diff
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh summarize-diff
+SUMMARY=$(git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh summarize-diff)
 
 # Classify changes
-git diff main...HEAD --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes
+CATEGORY=$(git diff main...HEAD --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes)
+
+# Generate a draft title from category + summary
+TITLE=$({ echo "$CATEGORY"; echo '=== OLLAMA-INPUT-SEPARATOR ==='; echo "$SUMMARY"; } \
+  | bash ~/.claude/hooks/ollama-utils.sh generate-pr-title)
+
+printf '%s\n' "$SUMMARY" "$CATEGORY" "$TITLE"
 ```
 
 If Ollama is unavailable, proceed to Step 3 without pre-analysis.
@@ -73,7 +79,7 @@ Present the draft PR to the user:
 
 ```
 === PR Draft ===
-Title: [short title from change type + summary]
+Title: [TITLE from Step 2, or a short title from change type + summary if Ollama was unavailable]
 Base: main
 Head: [current branch]
 
