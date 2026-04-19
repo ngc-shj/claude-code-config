@@ -228,4 +228,52 @@ All 4 new findings addressed. Round 5 will verify:
 ### T3 [Minor] — Resolved
 - Action: added cleanup error-handling smoke tests to the plan's Testing strategy.
 - Modified file: `docs/archive/review/marv-run-scoped-tmpdir-plan.md`
+
+---
+
+# Code Review: marv-run-scoped-tmpdir — Round 5
+Date: 2026-04-19
+Review round: 5
+
+## Changes from Previous Round
+Round 4 findings (F3 Major, S1 Major, F4 Minor, T3 Minor) all verified resolved. Round 5 surfaced 2 Low-severity security findings (defense-in-depth) which are addressed in this round.
+
+## Round 5 Findings
+
+### S2 [Minor] TOCTOU symlink-swap window between `[ -L ]` check and `rm -rf` — Resolved
+- **File**: `hooks/marv-tmpdir.sh` `cmd_cleanup`
+- **Evidence**: the original fix checked `[ -L "$dir" ]` once, then did the prefix check, then `rm -rf`. Between the `[ -L ]` and the `rm -rf`, a same-user attacker could unlink the dir and replace it with a symlink (sticky-bit `/tmp` permits directory owner to do this). `rm -rf` does NOT follow top-level symlinks, so this would delete the symlink itself — low practical impact — but a second `-L` check closes the window entirely.
+- **Problem**: TOCTOU race; described by Round 5 security expert as `escalate: false` with mitigating factors (requires same-user access = self-attack, `rm -rf` does not follow top-level symlinks).
+- **Fix**: Added a second `[ -L "$dir" ]` check immediately before `rm -rf` with a `pre-rm` error message. Comment in the hook explains the threat model and why it's defense-in-depth.
+
+### S3 [Minor] settings.json allow rule uses wildcard that could match concatenated commands — Resolved
+- **File**: `settings.json`
+- **Evidence**: Round 5 security expert noted `Bash(bash ~/.claude/hooks/marv-tmpdir.sh *)` uses `*` which matches any suffix, and the behavior when a `;` is present in the command depends on Claude Code's allow-rule matcher implementation.
+- **Problem**: If Claude Code's matcher accepts `bash ~/.claude/hooks/marv-tmpdir.sh create; rm -rf ~` as matching the wildcard rule, an adversarial prompt could exfiltrate via this path. The hook's own `case` dispatcher rejects unknown first arguments, which is the actual safety net.
+- **Fix**: Replaced the single wildcard rule with two narrower rules:
+  - `Bash(bash ~/.claude/hooks/marv-tmpdir.sh create)` (no args expected)
+  - `Bash(bash ~/.claude/hooks/marv-tmpdir.sh cleanup *)` (path arg only)
+  This mirrors the hook's own subcommand structure and removes ambiguity about what the wildcard can match.
+
+## Adjacent Findings
+None.
+
+## Quality Warnings
+None.
+
+## Recurring Issue Check (Round 5)
+R1-R30 + RS1-RS3 + RT1-RT3 all Pass/N/A. No new patterns introduced.
+
+## Round 5 Termination
+All findings from Rounds 1-5 resolved or formally accepted. Loop complete.
+
+## Resolution Status
+
+### S2 [Minor] TOCTOU defense-in-depth — Resolved
+- Action: second `[ -L "$dir" ]` check added immediately before `rm -rf`.
+- Modified file: `hooks/marv-tmpdir.sh`
+
+### S3 [Minor] settings.json allow-rule narrowing — Resolved
+- Action: split the wildcard rule into `create` (no args) and `cleanup *` (path only).
+- Modified file: `settings.json`
 - Meta-note: T-1's Fix line demonstrates proper backtick wrapping; T-2's Problem line failed to apply it consistently to its own prose describing the same pattern. Recording this meta-observation for future reviewers: when a finding describes an autolink trigger, grep the Finding's own Evidence/Problem/Fix prose for the same trigger before committing.

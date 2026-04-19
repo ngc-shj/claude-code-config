@@ -59,6 +59,14 @@ cmd_cleanup() {
     echo "marv-tmpdir: refusing to cleanup path outside ${expected_prefix}*: $dir" >&2
     exit 1
   fi
+  # TOCTOU defense-in-depth: re-check symlink immediately before rm. On a
+  # sticky /tmp, only the directory owner can unlink the target and swap in
+  # a symlink — making this a self-attack on single-user hosts — but a
+  # second check costs nothing and closes the window entirely.
+  if [ -L "$dir" ]; then
+    echo "marv-tmpdir: refusing to cleanup symlink (detected pre-rm): $dir" >&2
+    exit 1
+  fi
   rm -rf "$dir"
 }
 
