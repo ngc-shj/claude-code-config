@@ -69,7 +69,7 @@ Round 1 T-1 (R30 bare `#4`) committed in `a7f9d75`.
 | # | Severity | Status | Detail |
 |---|---|---|---|
 | T-1 | Minor | Resolved | Functionality/Security confirmed no regression. Testing confirmed the `#4` in review.md:16 is correctly wrapped. |
-| T-2 | Minor (new) | Resolved | Testing expert's R30 sweep across all plan docs found a second bare `#4` in `code-review.md:27` ("issue/PR #4 on"), inside the Problem prose of T-1 itself. Meta-irony: the finding that documents the autolink hazard was itself vulnerable to it. Fixed in this round. |
+| T-2 | Minor (new) | Resolved | Testing expert's R30 sweep across all plan docs found a second bare `#4` in `code-review.md:27` ("issue/PR `#4` on"), inside the Problem prose of T-1 itself. Meta-irony: the finding that documents the autolink hazard was itself vulnerable to it. Fixed in this round. |
 
 ## Adjacent Findings
 None.
@@ -98,6 +98,6 @@ All findings resolved (T-1 from Round 1, T-2 discovered and fixed in Round 2). N
 - Modified file: `docs/archive/review/marv-run-scoped-tmpdir-review.md:16`
 
 ### T-2 [Minor, Round 2] Bare `#4` in code-review.md:27 Problem prose — Resolved
-- Action: wrapped the remaining bare `#4` (in the phrase "issue/PR #4 on") in backticks.
+- Action: wrapped the remaining bare `#4` (in the phrase "issue/PR `#4` on") in backticks.
 - Modified file: `docs/archive/review/marv-run-scoped-tmpdir-code-review.md:27`
 - Meta-note: T-1's Fix line demonstrates proper backtick wrapping; T-2's Problem line failed to apply it consistently to its own prose describing the same pattern. Recording this meta-observation for future reviewers: when a finding describes an autolink trigger, grep the Finding's own Evidence/Problem/Fix prose for the same trigger before committing.
