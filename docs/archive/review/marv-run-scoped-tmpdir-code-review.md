@@ -100,4 +100,28 @@ All findings resolved (T-1 from Round 1, T-2 discovered and fixed in Round 2). N
 ### T-2 [Minor, Round 2] Bare `#4` in code-review.md:27 Problem prose — Resolved
 - Action: wrapped the remaining bare `#4` (in the phrase "issue/PR `#4` on") in backticks.
 - Modified file: `docs/archive/review/marv-run-scoped-tmpdir-code-review.md:27`
+
+---
+
+# Code Review: marv-run-scoped-tmpdir — Round 3
+Date: 2026-04-19
+Review round: 3
+
+## Changes from Previous Round
+Round 2 T-2 fix (wrap recursive bare `#4` in T-2's own description prose) committed in `3163a16`.
+
+## Round 3 Findings
+All three experts return "No findings". T-1 and T-2 confirmed resolved. Backtick-span-aware R30 sweep across all 4 plan docs returns zero output.
+
+## Adjacent Findings
+None.
+
+## Quality Warnings
+None.
+
+## Recurring Issue Check (Round 3)
+All R1-R30 + RS/RT Pass or N/A. R30 clean verified programmatically (Python strips backtick spans before grep; no bare `#N` remains).
+
+## Round 3 Termination
+All findings resolved (T-1 Round 1, T-2 Round 2). Loop complete. Proceeding to Phase 3 Step 3-9 final commit.
 - Meta-note: T-1's Fix line demonstrates proper backtick wrapping; T-2's Problem line failed to apply it consistently to its own prose describing the same pattern. Recording this meta-observation for future reviewers: when a finding describes an autolink trigger, grep the Finding's own Evidence/Problem/Fix prose for the same trigger before committing.
