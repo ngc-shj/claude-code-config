@@ -1,9 +1,10 @@
 # Code Review: expand-ollama-delegation-to-remaining-skills
 Date: 2026-04-19
-Review round: 1
+Review round: 2
 
 ## Changes from Previous Round
-Initial review. Plan phase was skipped (no plan file); review conducted directly against commit `b8d584f`.
+- **Round 1** (commit `b8d584f` → `7c6ecff`): Initial review against the Ollama-delegation diff. Found F1, S1 (traversal in verify-references.sh), S2, T1-T4. All resolved in `7c6ecff`.
+- **Round 2 (scope extension)**: User requested an audit of other `*.sh` for the S1 pattern. Found S3 in `pre-review.sh` (same class, PLAN_FILE env var → cat → Ollama reflection) and S4 in `scan-shared-utils.sh` (defensive: `$1` argument could leak cross-project inventory if orchestrator is steered). Other hooks verified safe (block-sensitive-files, marv-tmpdir, notify/stop-notify/commit-msg-check/check-migrations/ollama-utils/install).
 
 ## Functionality Findings
 
@@ -26,6 +27,23 @@ Initial review. Plan phase was skipped (no plan file); review conducted directly
 - Impact: Existence + size oracle over any user-readable file (~/.ssh/*, ~/.aws/credentials, /etc/*, etc.). Line counts fingerprint secrets. Oracle is reflected through the LLM channel.
 - Fix: Canonicalize ROOT once via `realpath -e`; for each ref, `realpath -m` the candidate and enforce containment (`case "$full_abs/" in "$ROOT_ABS/"*) ok ;; *) OUT-OF-ROOT ;; esac`). Single check closes both traversal AND symlink-escape.
 - `escalate: false` (Major, not Critical — no RCE, only metadata disclosure through lossy LLM channel).
+
+### S3 [Major] (new in round 2): pre-review.sh PLAN_FILE lacks containment — same class as S1
+- File: `hooks/pre-review.sh:23-24`
+- Attack vector: A prompt-injected orchestrator sets `PLAN_FILE=/etc/passwd` (or `~/.ssh/id_rsa`, `~/.aws/credentials`, etc.) before invoking the skill's Phase 1 pre-screening. `cat "$PLAN_FILE"` reads the content, which is sent to Ollama's `/api/generate`; Ollama's review is printed to stdout and captured by the orchestrator, reflecting existence + shape + partial content of arbitrary user-readable files through the LLM channel.
+- Evidence: `grep -n 'cat "\$PLAN_FILE"' hooks/pre-review.sh` → line 24. No realpath, no containment, no allowlist.
+- Problem: Identical to S1 — untrusted path (from env var controlled by orchestrator, steerable via prompt injection) flows into a filesystem read whose output echoes through an LLM surface.
+- Impact: Exfiltration oracle covering any file readable by the invoking user. Higher signal than S1 because Ollama may reflect larger content fragments in its review, not just existence/line-count metadata.
+- Fix: Compute `TRUSTED_ROOT=$(git rev-parse --show-toplevel || pwd)` canonicalized via `realpath -e`; for each `PLAN_FILE`, `realpath -e` the path and verify it sits under `TRUSTED_ROOT/`. Outside → warn to stderr + fall back to stdin (graceful, non-blocking).
+- `escalate: false` — Major, not Critical (requires prompt-injection precondition + orchestrator cooperation; no direct RCE).
+
+### S4 [Minor] (new in round 2): scan-shared-utils.sh $1 lacks containment — defensive hardening
+- File: `hooks/scan-shared-utils.sh:10`
+- Attack vector: If a prompt-injected orchestrator passes `/`, `$HOME`, or another path outside the current repo as `$1`, the scanner walks that tree and emits function/class names + file paths — a cross-project inventory leak through the LLM channel that consumes the output.
+- Evidence: No current caller passes `$1` (all skill docs invoke `bash scan-shared-utils.sh` with no args), so exploitation requires the orchestrator to deviate from documented usage. Defensive finding.
+- Problem: Same structural gap as S1/S3 — externally-influenced path flows into filesystem scan with no containment check.
+- Impact: Low realistic exploitability; primarily forward-defense.
+- Fix: When `$1` is supplied, `realpath -e` it and verify containment under `TRUSTED_ROOT` (the current git toplevel). Outside → error + exit 1. No `$1` → use git toplevel (unchanged behavior).
 
 ### S2 [Minor]: classify-query prompt missing "treat as data" disclaimer (R3 propagation gap)
 - File: `hooks/ollama-utils.sh:126-137`
@@ -137,10 +155,22 @@ None from merge-findings (manual consolidation; no overlapping findings).
 - Action: Added tests for `--help`, `-h`, and nonexistent-ROOT paths.
 - Modified file: `tests/verify-references.bats:82-96`
 
+### [S3] [Major] pre-review.sh PLAN_FILE traversal (round 2) — Resolved
+- Action: Compute `TRUSTED_ROOT` via `git rev-parse --show-toplevel` + `realpath -e`. Canonicalize `PLAN_FILE` via `realpath -e`; containment-check against `TRUSTED_ROOT/`. Outside → warn to stderr + fall back to stdin (non-blocking, matches the Ollama-unavailable convention).
+- Modified file: `hooks/pre-review.sh:21-43`
+- Regression tests: `tests/pre-review.bats` — 5 new tests covering `/etc/passwd`, `$HOME/.bashrc`, traversal, unset (backwards compat), and in-repo path (backwards compat). curl is mocked to fail so assertions target the containment warning before Ollama is called.
+
+### [S4] [Minor] scan-shared-utils.sh $1 traversal (round 2) — Resolved
+- Action: When `$1` is supplied, canonicalize via `realpath -e` and verify containment under `TRUSTED_ROOT`. Outside → error + exit 1. No `$1` → unchanged (use git toplevel).
+- Modified file: `hooks/scan-shared-utils.sh:10-30`
+- Regression tests: `tests/scan-shared-utils.bats` — 6 new tests covering no-arg default, in-repo arg, `/etc`, `$HOME`, nonexistent path, and traversal `../../etc`.
+
 ## Anti-Deferral Record
 No findings were deferred. All Critical/Major findings fixed; all Minor findings fixed in-session (within 30-minute rule).
 
 ## Verification
-- `bats tests/` — 56/56 pass (was 45 before fixes; +11 new regression tests).
-- Manual PoC re-run: `echo '../../etc/hostname:1' | bash verify-references.sh --root .` now reports `OUT-OF-ROOT ../../etc/hostname:1` with no file metadata. Original PoC (`../outside.txt:1`) also OUT-OF-ROOT.
+- `bats tests/` — 67/67 pass (round 1 brought it to 56; round 2 added 11 tests across pre-review + scan-shared-utils).
+- Round 1 PoC: `echo '../../etc/hostname:1' | bash verify-references.sh --root .` → `OUT-OF-ROOT`, no metadata.
+- Round 2 PoC: `PLAN_FILE=/etc/passwd bash pre-review.sh plan` → `Warning: PLAN_FILE='/etc/passwd' is outside TRUSTED_ROOT=...`, falls back to stdin, no file content reaches Ollama.
+- Round 2 PoC: `bash scan-shared-utils.sh /etc` → `Error: path '/etc' is outside TRUSTED_ROOT=...`, exit 1, no scan performed.
 
