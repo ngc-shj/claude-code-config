@@ -154,6 +154,35 @@ git diff --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing
+
+# Generate a PR body from commits + diff stat + ALL review artifacts (mirrors the pr-create skill invocation)
+{ echo '=== COMMIT LOG ==='; git log main...HEAD --oneline; \
+  echo; echo '=== DIFF STAT ==='; git diff main...HEAD --stat; \
+  for f in ./docs/archive/review/*-plan.md ./docs/archive/review/*-review.md \
+           ./docs/archive/review/*-deviation.md ./docs/archive/review/*-code-review.md; do \
+    [ -f "$f" ] || continue; echo; echo "=== $f ==="; cat "$f"; done; } \
+  | bash ~/.claude/hooks/ollama-utils.sh generate-pr-body
+
+# Generate a deviation log delta from plan + existing log + diff (three sections)
+{ cat plan.md; echo '=== OLLAMA-INPUT-SEPARATOR ==='; \
+  cat existing-deviation.md 2>/dev/null || echo '# new'; \
+  echo '=== OLLAMA-INPUT-SEPARATOR ==='; git diff main...HEAD; } \
+  | bash ~/.claude/hooks/ollama-utils.sh generate-deviation-log  # output = delta entries; APPEND to existing log
+
+# Generate a commit body (subject line still hand-written)
+git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
+
+# Generate a resolution-status entry from finding + fix commit
+{ echo "$FINDING"; echo '=== OLLAMA-INPUT-SEPARATOR ==='; git show HEAD; } \
+  | bash ~/.claude/hooks/ollama-utils.sh generate-resolution-entry
+
+# Summarize a round-to-round change for review artifacts
+{ git log r1..HEAD --oneline; echo '=== OLLAMA-INPUT-SEPARATOR ==='; cat findings.txt; } \
+  | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
+
+# Propose plan edits for a finding (anchor + insertion pairs)
+{ cat plan.md; echo '=== OLLAMA-INPUT-SEPARATOR ==='; echo "$FINDING"; } \
+  | bash ~/.claude/hooks/ollama-utils.sh propose-plan-edits
 ```
 
 - All commands read stdin, write stdout — composable with pipes
@@ -206,7 +235,7 @@ Generates tests for specified or changed code:
 
 Creates a pull request with auto-generated description:
 - Local LLM summarizes diff and classifies change type (zero Claude tokens)
-- Sonnet sub-agent composes PR body with summary, changes, and test plan
+- Local LLM composes PR body with summary, motivation, and test plan (zero Claude tokens)
 - User reviews draft before `gh pr create`
 
 ### explore

@@ -256,6 +256,17 @@ Review round: [nth]
 - RT3: [status]
 ```
 
+Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollama:
+
+```bash
+{ git log <prev-round-commit>..HEAD --oneline
+  echo '=== OLLAMA-INPUT-SEPARATOR ==='
+  cat "$MARV_DIR"/*-findings.txt  # or equivalent new-findings aggregate
+} | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
+```
+
+The orchestrator reviews the 1-3 sentence output and places it under the `## Changes from Previous Round` heading.
+
 ### Step 1-6: Validity Assessment and Plan Update
 
 **Quality gate check (mandatory)**: Before assessing findings, check the `## Quality Warnings` section of the merged output. For each flagged finding (`[VAGUE]`, `[NO-EVIDENCE]`, `[UNTESTED-CLAIM]`), return it to the originating expert with the specific flag and request revision. Do not proceed with those findings until the expert provides a revised version with the required evidence or specificity.
@@ -264,6 +275,26 @@ The main agent scrutinizes each finding:
 - **Critical/Major finding**: Must be reflected in the plan file
 - **Minor finding**: Reflect if straightforward, otherwise record reason and skip, explain to user
 - **Unnecessary finding**: Record reason and skip, explain to user
+
+**Optional local-LLM helper for plan-edit drafts**: when a finding requires a plan edit, draft the anchor + insertion pair via Ollama. Setup: orchestrator MUST set `$FINDING_BLOCK` to the finding text before invoking (e.g., via a heredoc). An empty `$FINDING_BLOCK` produces a degenerate output.
+
+```bash
+{ cat "./docs/archive/review/[plan-name]-plan.md"
+  echo '=== OLLAMA-INPUT-SEPARATOR ==='
+  echo "$FINDING_BLOCK"
+} | bash ~/.claude/hooks/ollama-utils.sh propose-plan-edits
+```
+
+**MANDATORY** before applying the drafted ANCHOR/INSERT pair via the Edit tool:
+```bash
+grep -cF "$ANCHOR" "./docs/archive/review/[plan-name]-plan.md"
+```
+MUST return exactly 1. Branch:
+- Exactly 1 → apply the INSERT via Edit tool with `old_string="$ANCHOR"`.
+- 0 → anchor hallucinated or paraphrased. Apply the intended insertion manually by locating the relevant plan section. Record the mismatch and manual-apply decision in the deviation log.
+- ≥2 → anchor ambiguous. Pick the correct occurrence by context, apply manually, record the reason in the deviation log.
+
+MUST grep-verify — the check is NOT optional.
 
 **Anti-Deferral enforcement (mandatory)**: Any finding marked Skipped / Accepted / Out of scope / Pre-existing MUST be recorded using the mandatory format defined in "Anti-Deferral Rules" below. Entries missing the Anti-Deferral check are invalid — fix the entry before proceeding to the next round.
 
@@ -369,31 +400,36 @@ Recording rules during implementation:
 
 **Timing**: Run deviation check after each commit, not just at the end of implementation. If a commit message describes changes that differ from the plan, update the deviation log immediately. This prevents accumulation of unrecorded deviations that are harder to trace later.
 
-After each commit (and at implementation end), delegate deviation log creation/update to a Sonnet sub-agent:
-- Provide the plan and `git diff main...HEAD` to Sonnet
-- Sonnet compares the diff against the plan and generates the deviation log
-- Review Sonnet's output for accuracy
+After each commit (and at implementation end), generate a deviation log delta via local LLM:
 
-If sub-agents are unavailable, record deviations directly.
-
-Save to `./docs/archive/review/[plan-name]-deviation.md`.
-
-```markdown
-# Coding Deviation Log: [plan-name]
-Created: [ISO 8601 format]
-
-## Deviations from Plan
-
-### [Deviation ID]: [Deviation summary]
-- **Plan description**: [Original plan]
-- **Actual implementation**: [What was actually done]
-- **Reason**: [Why it was changed]
-- **Impact scope**: [Areas affected by this change]
-
----
+```bash
+# Three-section input: plan + existing deviation log + current diff.
+# Create an empty existing-log placeholder on first run.
+DEV_LOG="./docs/archive/review/[plan-name]-deviation.md"
+[ -f "$DEV_LOG" ] || echo '# Coding Deviation Log: [plan-name]' > "$DEV_LOG"
+{ cat "./docs/archive/review/[plan-name]-plan.md"; \
+  echo "=== OLLAMA-INPUT-SEPARATOR ==="; \
+  cat "$DEV_LOG"; \
+  echo "=== OLLAMA-INPUT-SEPARATOR ==="; \
+  git diff main...HEAD; } \
+  | bash ~/.claude/hooks/ollama-utils.sh generate-deviation-log \
+  > "${DEV_LOG}.append"
 ```
 
-If there are no deviations, create the file with "No deviations".
+REVIEW GATE (do NOT delete the .append file before orchestrator reviews):
+- Read `${DEV_LOG}.append`.
+- If it contains exactly `No new deviations` (or is empty), discard.
+- Otherwise APPEND (not replace) to `$DEV_LOG`:
+  ```bash
+  cat "${DEV_LOG}.append" >> "$DEV_LOG"
+  ```
+  IMPORTANT: never overwrite the full `$DEV_LOG` with Ollama output — the command emits ONLY delta entries; prior entries MUST be preserved.
+- Only after the append (or decision to discard), remove the temp file:
+  ```bash
+  rm -f "${DEV_LOG}.append"
+  ```
+
+If Ollama is unavailable, record deviations directly.
 
 ### Step 2-4: Implementation Completion Check
 
@@ -423,6 +459,9 @@ bash ~/.claude/hooks/check-migrations.sh
 
 # 3. Production build
 [build command]
+
+# Optional: draft the commit body via Ollama (subject line still hand-written).
+# git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
 
 ##### MANUAL CHECKS (not runnable commands — review obligations) #####
 
@@ -779,6 +818,17 @@ Review round: [nth]
 [Updated after fixes]
 ```
 
+Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollama:
+
+```bash
+{ git log <prev-round-commit>..HEAD --oneline
+  echo '=== OLLAMA-INPUT-SEPARATOR ==='
+  cat "$MARV_DIR"/*-findings.txt  # or equivalent new-findings aggregate
+} | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
+```
+
+The orchestrator reviews the 1-3 sentence output and places it under the `## Changes from Previous Round` heading.
+
 ### Step 3-5: Fix the Code
 
 **Quality gate check (mandatory)**: Before fixing findings, check the `## Quality Warnings` section. For each flagged finding (`[VAGUE]`, `[NO-EVIDENCE]`, `[UNTESTED-CLAIM]`), return it to the originating expert with the specific flag and request revision. Do not fix findings that lack evidence or specificity — send them back first.
@@ -815,6 +865,8 @@ bash ~/.claude/hooks/check-migrations.sh
 
 # Commit only if ALL three pass
 git add -A
+# Optional: draft the commit body via Ollama (subject line still hand-written).
+# git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
 git commit -m "review([n]): [summary of fixes]"
 ```
 
@@ -832,6 +884,17 @@ Append to the "Resolution Status" section of `./docs/archive/review/[plan-name]-
 - Action: [Fix performed]
 - Modified file: [filename:line number]
 ```
+
+Optional: draft each entry via Ollama:
+
+```bash
+{ echo "$FINDING_BLOCK"
+  echo '=== OLLAMA-INPUT-SEPARATOR ==='
+  git show <fix-commit>
+} | bash ~/.claude/hooks/ollama-utils.sh generate-resolution-entry
+```
+
+The orchestrator reviews and applies the drafted entry via the Edit tool. Set `$FINDING_BLOCK` to the finding text beforehand (e.g., via heredoc).
 
 ### Step 3-8: Termination Check
 
@@ -1137,7 +1200,7 @@ These issues have been found repeatedly in past reviews. Every expert MUST expli
 | R27 | Numeric range hardcoded in user-facing strings | Translation or UI strings that embed numeric limits (e.g., "between 5 and 1440 minutes", "max 100 items") drift from the validation constants over time. Use interpolation placeholders and pass the value from the canonical constant at the call site. Check: in the diff's translation/UI-string files, grep for numeric literals that duplicate MIN/MAX validation constants — any match is a finding. Excluded from this check: numbers that are domain-literal, not limits (e.g., year literals like `2026`, HTTP status codes like `404`, version numbers like `1.0`). **Severity escalation**: Minor by default; escalate to Major when the drifting constant governs ANY security or privacy policy boundary — auth credentials, rate limits, password policy, session/token lifetime, MFA grace period, lockout threshold, key rotation interval, consent flag, data retention window, audit threshold, or any other policy value with security or privacy implications. User-facing text that claims a looser limit than the tightened policy actively encourages users to attempt disallowed values, erodes trust in the UI when the limit is hit, and creates audit-log discrepancies | Minor (Major when constant governs any security or privacy policy boundary) |
 | R28 | Grammatical inconsistency in toggle/switch labels | Toggle/switch controls across the app should use a single grammatical form for their labels (e.g., all verb-form "Enable X" vs all noun-form "X enabled"). Mixed forms make it ambiguous whether the label describes the control's ON state or its OFF state. Enumerate adjacent toggle/switch labels in the affected feature area and verify form consistency. Note: this is primarily a human-review check — automated detection requires NLP beyond what a grep can do; the review action is to list the labels and judge visually | Minor |
 | R29 | External spec citation accuracy | When citing an RFC / NIST / OWASP / W3C / FIPS / ISO document, verify all four: (1) the cited section exists in the cited revision, (2) the quoted/paraphrased text actually appears at that section, (3) the revision is disambiguated when the standard has been revised and section numbers have shifted, (4) quoted phrases (in backticks or quotes) appear verbatim in the source; paraphrases are explicitly marked as such. Sources of drift commonly seen: NIST SP 800-63B Rev 3 → Rev 4 renumbered reauthentication sections AND changed AAL2 values; OWASP ASVS 4.0.3 → 5.0 renumbered chapters. **Illustrative past-hallucination patterns** (user-reported from prior reviews; pin revisions and re-verify against the source before citing in new findings): confidently citing a section number where the named topic actually lives elsewhere; quoting wording that does not appear verbatim in the source; omitting the revision when section numbers have shifted between revisions. **Severity**: Major by default (trust damage to future readers — they act on wrong info because the citation looks authoritative). **Escalate to Critical** when the hallucinated citation directly drives a security decision (recommending disabling a control, widening an allowlist, loosening a crypto parameter, raising a session lifetime) — in that case the wrong "authority" causes immediate security regression, not just trust erosion. See "Verify citations, do not fabricate them" in Expert Agent Obligations | Major (Critical when the hallucinated citation drives a security-tightening or security-loosening decision) |
-| R30 | Markdown autolink footguns in citations | When writing citations in PR bodies, commit messages, or Markdown docs hosted on GitHub-flavored Markdown surfaces, avoid constructs that auto-link unintentionally: bare `#<number>` becomes a PR/issue link; bare `@<name>` becomes a user mention; bare commit-SHA-shaped hex becomes a commit link. **Confidentiality / disclosure angle**: an unintended `@<name>` notifies an uninvolved party (information disclosure if the PR discusses an embargoed fix); an unintended `#<n>` creates a backlink visible to watchers of the referenced issue (leaks the existence of the new PR's content to that issue's watchers). Workarounds (preferred order — preserve original phrasing): (a) wrap in backticks (`` `#6` ``); (b) escape (`\#6`); (c) only as a last resort, drop the `#` ("tenet 6" instead of "tenet #6") because dropping the marker changes the document's semantic content. Check (grep example): `grep -nE '(^|[^a-zA-Z0-9])#[0-9]+' file.md` to enumerate bare `#<number>` occurrences in a Markdown file. Applies to both the doc being reviewed and the review output itself. Scope: GitHub-hosted repos and any tool that renders GitHub-flavored Markdown identically; for repos hosted on other platforms with different autolink rules, adjust accordingly | Minor |
+| R30 | Markdown autolink footguns in citations | When writing citations in PR bodies, commit messages, or Markdown docs hosted on GitHub-flavored Markdown surfaces, avoid constructs that auto-link unintentionally: bare `#<number>` becomes a PR/issue link; bare `@<name>` becomes a user mention; bare commit-SHA-shaped hex becomes a commit link. **Confidentiality / disclosure angle**: an unintended `@<name>` notifies an uninvolved party (information disclosure if the PR discusses an embargoed fix); an unintended `#<n>` creates a backlink visible to watchers of the referenced issue (leaks the existence of the new PR's content to that issue's watchers). Workarounds (preferred order — preserve original phrasing): (a) wrap in backticks (`` `#6` ``); (b) escape (`\#6`); (c) only as a last resort, drop the `#` ("tenet 6" instead of `"tenet \#6"`) because dropping the marker changes the document's semantic content. Check (grep example): `grep -nE '(^|[^a-zA-Z0-9])#[0-9]+' file.md` to enumerate bare `#<number>` occurrences in a Markdown file. Applies to both the doc being reviewed and the review output itself. Scope: GitHub-hosted repos and any tool that renders GitHub-flavored Markdown identically; for repos hosted on other platforms with different autolink rules, adjust accordingly | Minor |
 
 See "Extended obligations (R17-R22)" below for full procedures on R17-R22. R23-R28 are self-contained in the table row above.
 

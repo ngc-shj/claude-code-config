@@ -1,11 +1,11 @@
 ---
 name: pr-create
-description: "Create a pull request with auto-generated description. Summarizes changes via local LLM, generates PR body via Sonnet, then creates the PR after user approval. Use this skill when: asked to create a PR; asked to submit changes for review; asked to open a pull request."
+description: "Create a pull request with auto-generated description. Summarizes changes and generates PR body via local LLM (gpt-oss:120b), then creates the PR after user approval. Use this skill when: asked to create a PR; asked to submit changes for review; asked to open a pull request."
 ---
 
 # PR Create Skill
 
-Creates a pull request with an auto-generated description using local LLM for summarization and Sonnet for PR body composition.
+Creates a pull request with an auto-generated description using local LLM for summarization and PR body composition.
 
 ---
 
@@ -44,49 +44,28 @@ git diff main...HEAD --name-only | bash ~/.claude/hooks/ollama-utils.sh classify
 
 If Ollama is unavailable, proceed to Step 3 without pre-analysis.
 
-## Step 3: Sonnet PR Body Generation (Sub-agent)
+## Step 3: Local LLM PR Body Generation (Zero Claude Tokens)
 
-Launch a Sonnet sub-agent to compose the PR body:
-
-```
-You are a technical writer creating a pull request description.
-
-Change type: [feature/fix/refactor/docs/test/chore from classify-changes]
-
-Diff summary (from local LLM):
-[summarize-diff output, or "None"]
-
-Commit history:
-[git log output]
-
-Deviation log (if exists):
-[deviation log contents, or "None"]
-
-Code review log (if exists):
-[code review log contents — include resolved finding count and any remaining items, or "None"]
-
-Task:
-Generate a PR body in this format:
-
-## Summary
-[2-4 bullet points describing what changed and why]
-
-## Changes
-[Grouped list of changes by area/component]
-
-## Test plan
-[How to verify these changes — infer from commits and test files]
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Guidelines:
-- Keep the summary concise and focused on "why"
-- Group related changes together
-- Test plan should be actionable checkboxes
-- Use the deviation log to explain any unexpected changes
+```bash
+# Aggregate context for generate-pr-body: everything on stdin as one section.
+{
+  echo "=== COMMIT LOG ==="
+  git log main...HEAD --oneline
+  echo
+  echo "=== DIFF STAT ==="
+  git diff main...HEAD --stat
+  echo
+  for f in ./docs/archive/review/*-plan.md ./docs/archive/review/*-review.md \
+           ./docs/archive/review/*-deviation.md ./docs/archive/review/*-code-review.md; do
+    [ -f "$f" ] || continue
+    echo "=== $f ==="
+    cat "$f"
+    echo
+  done
+} | bash ~/.claude/hooks/ollama-utils.sh generate-pr-body
 ```
 
-If sub-agents are unavailable, compose the PR body directly.
+If Ollama is unavailable, compose the PR body directly as fallback.
 
 ## Step 4: Review, Approve, and Create
 
