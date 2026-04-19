@@ -62,7 +62,7 @@ Five of the six subcommands take two logical inputs concatenated on stdin. Use a
 
 The marker is unlikely to appear in diffs, plans, or findings by accident (grep confirms zero matches across the repo before adopting). System prompts instruct the model: "The input has two sections separated by the line `=== OLLAMA-INPUT-SEPARATOR ===`. Section A is <X>; Section B is <Y>."
 
-**Shared-constant definition (addresses pre-screen Minor #2)**: define the separator once as a shell variable at the top of `hooks/ollama-utils.sh`:
+**Shared-constant definition (addresses pre-screen Minor `#2`)**: define the separator once as a shell variable at the top of `hooks/ollama-utils.sh`:
 
 ```bash
 readonly OLLAMA_INPUT_SEP="=== OLLAMA-INPUT-SEPARATOR ==="
@@ -70,7 +70,7 @@ readonly OLLAMA_INPUT_SEP="=== OLLAMA-INPUT-SEPARATOR ==="
 
 Each of the 5 multi-input `cmd_*` functions interpolates `${OLLAMA_INPUT_SEP}` into its system prompt, so a future rename only touches one line inside the hook file. The separator still appears literally in skill invocations and README examples because bash callers don't source ollama-utils.sh — the literal string IS the user-facing contract. Future renames still require coordinated edits across skills + README + hook, but the DRY win inside the hook is real.
 
-Hardcoded model identifiers and timeouts (pre-screen Minor #1) are NOT extracted to shared constants — the existing 7 subcommands hardcode them inline per-function, and mixing the new ones would break consistency. `TODO(ollama-utils-constants-refactor): extract DEFAULT_MODEL_*/TIMEOUT_* constants across all 13 cmd_* functions as a separate Plan`.
+Hardcoded model identifiers and timeouts (pre-screen Minor `#1`) are NOT extracted to shared constants — the existing 7 subcommands hardcode them inline per-function, and mixing the new ones would break consistency. `TODO(ollama-utils-constants-refactor): extract DEFAULT_MODEL_*/TIMEOUT_* constants across all 13 cmd_* functions as a separate Plan`.
 
 Callers construct input as:
 ```bash
@@ -273,7 +273,7 @@ git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
    1. Append the 6 new example pipelines to the existing `ollama-utils.sh` bash block.
 6. Re-deploy to `~/.claude`: `bash ./install.sh` (expected: backs up each existing hook/skill to `.bak`, installs the repo copy).
 7. Cross-cutting verification:
-   1. `grep -cE '^[[:space:]]*(generate-slug|summarize-diff|merge-findings|classify-changes|analyze-functionality|analyze-security|analyze-testing|generate-pr-body|generate-deviation-log|generate-commit-body|generate-resolution-entry|summarize-round-changes|propose-plan-edits)[)]' hooks/ollama-utils.sh` MUST return 13 (7 existing + 6 new dispatcher cases). Note: uses `[)]` character class for literal `)` and `[[:space:]]*` for portability — `\s` and `\)` syntax vary across grep implementations (pre-screen Minor #3).
+   1. `grep -cE '^[[:space:]]*(generate-slug|summarize-diff|merge-findings|classify-changes|analyze-functionality|analyze-security|analyze-testing|generate-pr-body|generate-deviation-log|generate-commit-body|generate-resolution-entry|summarize-round-changes|propose-plan-edits)[)]' hooks/ollama-utils.sh` MUST return 13 (7 existing + 6 new dispatcher cases). Note: uses `[)]` character class for literal `)` and `[[:space:]]*` for portability — `\s` and `\)` syntax vary across grep implementations (pre-screen Minor `#3`).
    2. `bash hooks/ollama-utils.sh help 2>&1 | grep -oE 'generate-pr-body|generate-deviation-log|generate-commit-body|generate-resolution-entry|summarize-round-changes|propose-plan-edits' | sort -u | wc -l` MUST return 6. (Note: `grep -cE` counts matching LINES, not occurrences; the help output wraps the 6 new names across 2 continuation lines, so `-cE` returns 2. Use `-oE | sort -u | wc -l` for unique-name counting — addresses F-1 Phase-3 Round 1 Functionality finding.)
    3. `grep -n 'Sonnet' skills/pr-create/SKILL.md` MUST return zero matches (description + Step 3 both updated).
    4. `grep -n 'delegate deviation log creation/update to a Sonnet sub-agent' skills/multi-agent-review/SKILL.md` MUST return zero matches.
@@ -281,8 +281,8 @@ git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
    6. `grep -cE 'OLLAMA-INPUT-SEPARATOR' hooks/ollama-utils.sh skills/multi-agent-review/SKILL.md skills/pr-create/SKILL.md README.md` MUST return ≥10 (system prompts + skill invocations + README examples).
    7. README smoke: `grep -cE 'generate-pr-body|generate-deviation-log|generate-commit-body|generate-resolution-entry|summarize-round-changes|propose-plan-edits' README.md` MUST return ≥6.
    8. `settings.json` check: the existing `Bash(bash ~/.claude/hooks/ollama-utils.sh *)` allow rule MUST still be present (no accidental removal during edits).
-   9. **Wildcard allow-rule coverage check (addresses pre-screen Minor #5)**: during manual smoke test (step 2), invoke each new subcommand from within a Claude Bash tool call. If the wildcard rule `Bash(bash ~/.claude/hooks/ollama-utils.sh *)` covers the subcommand, no permission prompt appears; if it does not, Claude Code prompts the user. A prompt indicates the wildcard does not match and the plan must add the explicit rule per-subcommand. Record the outcome in the deviation log.
-   10. **Stale-Sonnet-reference sweep (addresses pre-screen Minor #4)**: `grep -rEn 'Sonnet sub-agent|Sonnet for' skills/ docs/ README.md` — any remaining matches point to skill files still delegating to Sonnet for tasks this Plan is migrating. List each match and confirm it is either out-of-scope (e.g., Phase 2 implementation, test-gen code writing — both intentional) or needs updating. Do not accept silent drift.
+   9. **Wildcard allow-rule coverage check (addresses pre-screen Minor `#5`)**: during manual smoke test (step 2), invoke each new subcommand from within a Claude Bash tool call. If the wildcard rule `Bash(bash ~/.claude/hooks/ollama-utils.sh *)` covers the subcommand, no permission prompt appears; if it does not, Claude Code prompts the user. A prompt indicates the wildcard does not match and the plan must add the explicit rule per-subcommand. Record the outcome in the deviation log.
+   10. **Stale-Sonnet-reference sweep (addresses pre-screen Minor `#4`)**: `grep -rEn 'Sonnet sub-agent|Sonnet for' skills/ docs/ README.md` — any remaining matches point to skill files still delegating to Sonnet for tasks this Plan is migrating. List each match and confirm it is either out-of-scope (e.g., Phase 2 implementation, test-gen code writing — both intentional) or needs updating. Do not accept silent drift.
 
 ## Testing strategy
 

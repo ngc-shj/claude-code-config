@@ -26,4 +26,4 @@ All 4 batches (A hook additions, B pr-create SKILL.md, C multi-agent-review SKIL
 | 7.9 | wildcard coverage | no permission prompt | no prompt observed during smoke test ✓ |
 | 7.10 | stale Sonnet sweep | all remaining refs intentional | all remaining intentional (test-gen, Step 2-2 impl, explore, simplify, README-Ollama-architecture) ✓ |
 
-Token-measurement (informational, not pass/fail): deferred to first post-deployment `/pr-create` invocation — record tool-usage `total_tokens` and compare against an historic PR #24 or #25 baseline. No gating.
+Token-measurement (informational, not pass/fail): deferred to first post-deployment `/pr-create` invocation — record tool-usage `total_tokens` and compare against an historic PR `#24` or `#25` baseline. No gating.

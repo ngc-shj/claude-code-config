@@ -70,3 +70,45 @@ All pass or N/A. RT2 self-applied (seed T2 rejected). Manual smoke tests + three
 ### F-2 [Minor] Skill text phrasing — Resolved
 - Action: changed "The grep-verify is NOT optional." → "MUST grep-verify — the check is NOT optional."
 - Modified file: `skills/multi-agent-review/SKILL.md:297`
+
+---
+
+# Code Review: expand-ollama-delegation — Round 2
+Date: 2026-04-19
+Review round: 2
+
+## Changes from Previous Round
+F-1/F-2 fixes committed in `ce31045`.
+
+## Round 2 Findings
+
+- Functionality: F-1/F-2 verified resolved. No new findings.
+- Security: No new findings (doc-only changes).
+- Testing: No new findings. R30 sweep across modified docs surfaced 5 pre-existing bare `#N` occurrences in plan.md (pre-screen Minor `#1`-`#5` references) + 2 in deviation.md (PR `#24`/`#25` references) + 1 in the R30 rule body of SKILL.md ("tenet `#6`" as an illustrative bad example).
+
+## Round 2 Fixes (pre-existing-in-changed-file)
+
+- **R30-a** [Minor, Round 2]: plan.md references "pre-screen Minor #1"-"#5" (5 occurrences) were bare → wrapped in backticks.
+- **R30-b** [Minor, Round 2]: deviation.md "PR #24 or #25" → wrapped in backticks.
+- **R30-c** [Minor, Round 2]: SKILL.md:1203 R30 rule body contained `"tenet #6"` as an illustrative bad example that was itself autolink-able. Escaped with backslash: `"tenet \#6"`. Preserves the rhetorical value of the example (showing the hazard verbatim) while preventing the rendering hazard on GitHub.
+
+## Recurring Issue Check (Round 2)
+
+R1-R30 Pass/N/A. Python backtick-span + escaped-hash aware sweep across all 8 modified files returns zero bare-`#N` hits post-fix.
+
+## Round 2 Termination
+All findings resolved. Ready for final commit.
+
+## Resolution Status (round 2 additions)
+
+### R30-a [Minor] plan.md pre-screen `#N` references — Resolved
+- Action: wrapped 5 occurrences of "pre-screen Minor #N" in backticks.
+- Modified file: `docs/archive/review/expand-ollama-delegation-plan.md`
+
+### R30-b [Minor] deviation.md PR `#N` references — Resolved
+- Action: wrapped "PR #24 or #25" in backticks.
+- Modified file: `docs/archive/review/expand-ollama-delegation-deviation.md`
+
+### R30-c [Minor] SKILL.md R30 rule body self-hazard — Resolved
+- Action: escaped `#` in the illustrative bad example.
+- Modified file: `skills/multi-agent-review/SKILL.md:1203`
