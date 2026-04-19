@@ -124,4 +124,108 @@ All R1-R30 + RS/RT Pass or N/A. R30 clean verified programmatically (Python stri
 
 ## Round 3 Termination
 All findings resolved (T-1 Round 1, T-2 Round 2). Loop complete. Proceeding to Phase 3 Step 3-9 final commit.
+
+---
+
+# Code Review: marv-run-scoped-tmpdir — Round 4 (post scope-expansion)
+Date: 2026-04-19
+Review round: 4
+
+## Changes from Previous Round
+User-requested scope expansion:
+- D2 (commit `4203907`): added `: "${MARV_DIR:?...}"` guards at 4 skill sites.
+- D4 (commit `9a59267`): extracted tmpdir lifecycle to new `hooks/marv-tmpdir.sh`; SKILL.md refactored to call the helper at Step 1-5, Step 3-2b, Step 3-9. `settings.json` updated with allow rule for the new hook.
+
+Seed findings from a fresh Ollama pass against the expanded diff.
+
+## Seed Finding Disposition
+
+### Functionality
+- F-M1 (Major): "Step 1-5 missing `echo "MARV_DIR=$MARV_DIR"`, orchestrator cannot capture path" → **Verified — adopted as F3** (genuine gap; Step 3-2b had the echo, Step 1-5 did not).
+- F-M2 (Minor): "TMPDIR differs between create and cleanup → prefix check may reject valid path" → **Verified — adopted as F4 (Anti-Deferred)** (real edge case but rare and fails loud, not silent).
+
+### Security
+- S-M1 (Major): "`..` path traversal bypasses prefix check → `rm -rf "/tmp/marv-foo/../../etc"` nukes `/etc`" → **Verified — adopted as S1** (reproduced; pure-lexical prefix check is exploitable; fixed with multi-layer safety).
+
+### Testing
+- T-M1 (Minor): "symlink handling in cleanup" → **Partially verified — rolled into S1 fix** (symlink rejection added alongside `..` rejection).
+- T-M2 (Minor): "no manual step verifying orchestrator captures MARV_DIR" → **Verified — addressed by F3 fix** (Step 1-5 now echoes the path; Step 3-2b already did).
+- T-M3 (Minor): "Implementation checklist still references old `mktemp -d -t marv-XXXXXX` grep" → **Rejected — already covered by D5** (deviation log records the update; plan grep was refined post-F2 fix).
+- T-M4 (Minor): "no reproducible test for cleanup error handling" → **Verified — adopted as T3** (added explicit `..`/symlink/non-marv smoke tests).
+
+## Round 4 Findings
+
+### F3 [Major] — Step 1-5 snippet missing `echo "MARV_DIR=$MARV_DIR"` — Resolved
+- **File**: `skills/multi-agent-review/SKILL.md` Step 1-5 (line ~190).
+- **Evidence**: `grep -n 'echo "MARV_DIR=' skills/multi-agent-review/SKILL.md` before fix returned only 1 match (Step 3-2b); Step 1-5 had no echo.
+- **Problem**: In Phase 1 plan review, Step 1-5 creates `MARV_DIR`, then the orchestrator launches 3 Agent sub-agents and uses Write tool to save each output to `$MARV_DIR/<role>-findings.txt` before the final cat + merge. The orchestrator's Bash tool call only prints command stdout; `MARV_DIR=$(...)` assignment produces no stdout. Without an explicit `echo`, Claude cannot capture the path for later Write/Bash invocations.
+- **Impact**: Phase 1 Step 1-5 merge would silently fail — `cat $MARV_DIR/func-findings.txt` in a fresh Bash shell sees `$MARV_DIR` as unset; the `:?` guard catches it, but only after the sub-agents already ran and their outputs were written to... wherever the orchestrator guessed.
+- **Fix**: Added `echo "MARV_DIR=$MARV_DIR"` immediately after the `:?` guard in Step 1-5 (matching the existing Step 3-2b convention).
+
+### S1 [Major] `..` path traversal bypasses cleanup prefix check — Resolved
+- **File**: `hooks/marv-tmpdir.sh` `cmd_cleanup`.
+- **Evidence**: `D="/tmp/marv-foo/../../etc"; case "$D" in "/tmp/marv-"*) echo match;; esac` prints `match`. A subsequent `rm -rf "$D"` resolves the `..` at the kernel level and deletes `/etc` (for any user with write access).
+- **Problem**: The purely-lexical prefix check `"${dir#"$expected_prefix"}" = "$dir"` matches strings starting with `/tmp/marv-` but does not prevent `..` from walking up the filesystem at `rm -rf` time. A corrupted `$MARV_DIR` (orchestrator bug, hallucination, or deliberate adversarial input if any escape-hatch existed) could destroy arbitrary user-writable directories.
+- **Impact**: Potential for catastrophic data loss (`rm -rf /home/user/code`, `rm -rf /etc` for root-adjacent users, etc.). Even absent a malicious actor, a future refactor bug could trigger it.
+- **Fix**: Added 3 pre-rm safety layers in order: (1) reject any path containing `..`, (2) reject any symlink, (3) reject paths not matching `${TMPDIR:-/tmp}/marv-` prefix. All reject with specific stderr message + exit 1. Verified: `.. ` attack rejected, symlink rejected, non-marv path rejected, legit path succeeds, empty path no-op.
+
+### F4 [Minor] TMPDIR changes between create and cleanup — Accepted
+- **Anti-Deferral check**: acceptable risk.
+- **Justification**:
+  - Worst case: a valid `marv-*` directory created under TMPDIR=A gets a cleanup call while TMPDIR=B; the prefix check rejects it and cleanup aborts. User sees a specific stderr message (`refusing to cleanup path outside ${B}/marv-*: <path>`) and can `rm -rf <path>` manually.
+  - Likelihood: low. `TMPDIR` is typically stable for a shell session; changing it between `/multi-agent-review` phases requires explicit user action.
+  - Cost to fix: medium (~30-60 min). Options include storing the creation prefix in a metadata file, or accepting both `$TMPDIR/marv-` and `/tmp/marv-`. Either adds complexity without a real user-visible benefit for the dominant case.
+- **Orchestrator sign-off**: Accepted as quantified low-probability risk that fails loud, not silent.
+
+### T3 [Minor] Cleanup error-handling test coverage — Resolved
+- **Fix**: Added 4 smoke-test steps to the plan's Testing strategy covering `..`, symlink, non-marv-prefix, and legit-path paths through `cmd_cleanup`.
+
+## Adjacent Findings
+None. S1's severity was initially flagged as Security but the fix lives in the hook; since the hook was touched by this PR, S1 is resolved in-scope rather than routed.
+
+## Quality Warnings
+None.
+
+## Recurring Issue Check
+
+### Functionality expert
+R1-R30 Pass/N/A. Notable:
+- R3 (propagation): `echo "MARV_DIR=$MARV_DIR"` now consistent between Step 1-5 (line 194) and Step 3-2b (line 525).
+- R17 (helper reuse): new helper `marv-tmpdir.sh` is the DRY target.
+- R20 (surgical edits): 3 hooks changes are additive safety layers; no existing logic moved.
+
+### Security expert
+R1-R30 + RS1-RS3 Pass. Notable:
+- RS3 (input validation at boundaries): `cmd_cleanup` now validates input through 3 safety layers before `rm -rf`.
+- R29 (spec citation accuracy): no specs cited; N/A.
+
+### Testing expert
+R1-R30 + RT1-RT3 Pass/N/A.
+- RT2 self-applied: seed T-M4 (test infrastructure) accepted only because it's manual shell commands in the Testing strategy, not a test framework.
+- R30 (Markdown autolink): no new bare `#N`/`@name`/SHA-shaped hex introduced.
+
+## Round 4 Termination (pending Round 5 verification)
+All 4 new findings addressed. Round 5 will verify:
+- Step 1-5 echo present
+- Hook rejects `..`, symlinks, non-marv
+- settings.json allow rule synced
+- All 5 cross-cutting greps still pass
+
+## Resolution Status
+
+### F3 [Major] — Resolved
+- Action: added `echo "MARV_DIR=$MARV_DIR"` after the `:?` guard in Step 1-5.
+- Modified file: `skills/multi-agent-review/SKILL.md`
+
+### S1 [Major] — Resolved
+- Action: added 3 pre-rm safety layers to `cmd_cleanup` (reject `..`, reject symlinks, reject non-marv prefix). Verified experimentally.
+- Modified file: `hooks/marv-tmpdir.sh`
+
+### F4 [Minor] — Accepted with Anti-Deferral
+- Action: documented in this review as quantified acceptable risk.
+- No code change.
+
+### T3 [Minor] — Resolved
+- Action: added cleanup error-handling smoke tests to the plan's Testing strategy.
+- Modified file: `docs/archive/review/marv-run-scoped-tmpdir-plan.md`
 - Meta-note: T-1's Fix line demonstrates proper backtick wrapping; T-2's Problem line failed to apply it consistently to its own prose describing the same pattern. Recording this meta-observation for future reviewers: when a finding describes an autolink trigger, grep the Finding's own Evidence/Problem/Fix prose for the same trigger before committing.

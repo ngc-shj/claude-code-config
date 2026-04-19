@@ -141,6 +141,7 @@
       "Bash(bash ~/.claude/hooks/ollama-utils.sh *)",
       "Bash(bash ~/.claude/hooks/check-migrations.sh*)",
       "Bash(bash ~/.claude/hooks/scan-shared-utils.sh)",
+      "Bash(bash ~/.claude/hooks/marv-tmpdir.sh *)",
       "Read(~/.claude/plans/*)"
     ],
     "ask": [

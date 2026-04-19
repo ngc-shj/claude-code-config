@@ -191,6 +191,7 @@ First, save each agent's raw output to temporary files, then use local LLM for d
 # users cannot traverse the directory regardless of interior file modes.
 MARV_DIR=$(bash ~/.claude/hooks/marv-tmpdir.sh create)
 : "${MARV_DIR:?marv-tmpdir create failed; cannot continue plan-review merge}"
+echo "MARV_DIR=$MARV_DIR"
 # ORCHESTRATOR OBLIGATION: after each expert sub-agent returns, save the
 # sub-agent's raw output to the corresponding file using the Write tool,
 # substituting the LITERAL absolute path captured from the MARV_DIR= value

@@ -24,16 +24,35 @@ cmd_create() {
   printf '%s\n' "$dir"
 }
 
-# Refuse to cleanup paths that were not produced by cmd_create. The safety
-# check compares the argument against the expected marv-* prefix under
-# TMPDIR (or /tmp) — catches an accidentally-corrupted $MARV_DIR value
-# before `rm -rf` runs.
+# Refuse to cleanup paths that were not produced by cmd_create. Safety
+# layers, in order:
+#   1. Empty path → silent no-op (matches the previous [ -n ... ] && rm -rf
+#      behavior that this helper replaces).
+#   2. Path contains a `..` component → reject, even if the prefix matches.
+#      Purely-lexical prefix checks are bypassable: `/tmp/marv-foo/../../etc`
+#      matches the prefix but `rm -rf` would resolve the `..` and delete
+#      `/etc`. Rejecting any path that contains `..` is the simplest
+#      guarantee that the later prefix check is not subverted.
+#   3. Symlinks → reject. `rm -rf` does not follow symlinks on the top-level
+#      argument (it removes the symlink itself, not the target), but
+#      rejecting upfront removes an ambiguity in the safety contract.
+#   4. Path does not match the expected `${TMPDIR:-/tmp}/marv-` prefix →
+#      reject. Final prefix check is meaningful only after (2) closes the
+#      `..` bypass.
 cmd_cleanup() {
   local dir="${1:-}"
   if [ -z "$dir" ]; then
-    # Silent no-op on empty — matches the [ -n "${MARV_DIR:-}" ] && rm -rf
-    # pattern that this helper replaces.
     return 0
+  fi
+  case "$dir" in
+    *..*)
+      echo "marv-tmpdir: refusing to cleanup path containing '..': $dir" >&2
+      exit 1
+      ;;
+  esac
+  if [ -L "$dir" ]; then
+    echo "marv-tmpdir: refusing to cleanup symlink: $dir" >&2
+    exit 1
   fi
   local expected_prefix="${TMPDIR:-/tmp}/marv-"
   if [ "${dir#"$expected_prefix"}" = "$dir" ]; then

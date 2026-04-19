@@ -219,6 +219,11 @@ This is an orchestration responsibility, not a shell-scripting one. The skill te
 
 - **Smoke tests (manual, MANDATORY)**:
   - Directory permissions: `D=$(mktemp -d "${TMPDIR:-/tmp}/marv-XXXXXX"); stat -c '%a %n' "$D"; rm -rf "$D"` → expect `700 <path>`.
+  - **Helper safety — `..` traversal MUST be rejected (addresses S1)**: `bash ~/.claude/hooks/marv-tmpdir.sh cleanup "/tmp/marv-foo/../../etc"` → stderr `refusing to cleanup path containing '..'`, exit 1. No `/etc` change.
+  - **Helper safety — symlink MUST be rejected (addresses T-M1)**: `ln -sf /tmp/marv-real /tmp/marv-sym; bash ~/.claude/hooks/marv-tmpdir.sh cleanup "/tmp/marv-sym"` → stderr `refusing to cleanup symlink`, exit 1.
+  - **Helper safety — non-marv prefix MUST be rejected**: `bash ~/.claude/hooks/marv-tmpdir.sh cleanup "/home/user/somewhere"` → stderr `refusing to cleanup path outside ${TMPDIR:-/tmp}/marv-*`, exit 1.
+  - **Helper safety — empty path MUST be silent no-op**: `bash ~/.claude/hooks/marv-tmpdir.sh cleanup ""` → no output, exit 0 (matches previous `[ -n ... ] && rm -rf` behavior).
+  - **Helper legit path MUST succeed**: `D=$(bash ~/.claude/hooks/marv-tmpdir.sh create); bash ~/.claude/hooks/marv-tmpdir.sh cleanup "$D"` → no output, exit 0; `ls -d "$D"` reports "No such file or directory".
   - Abort-orphan mode persistence (addresses T1): `D=$(mktemp -d "${TMPDIR:-/tmp}/marv-XXXXXX"); stat -c '%a %n' "$D"; ls -ld "$D"; rm -rf "$D"` — confirm mode 700 before the final `rm` (simulates what a future inspector would see for an aborted-run orphan).
   - External-user reachability: confirm that a different local user cannot `cd` into, `ls`, or `cat` files inside a freshly-created `$MARV_DIR` (when available on a multi-user host). Skippable on a single-user dev box.
   - umask non-leak (regression guard): run `umask` before and after the skill's Step 3-2b-shaped snippet inside a single shell; confirm the value is unchanged (i.e., confirm the plan's no-umask-modification contract is preserved in the implementation).
