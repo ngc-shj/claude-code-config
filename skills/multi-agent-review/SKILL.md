@@ -190,6 +190,7 @@ First, save each agent's raw output to temporary files, then use local LLM for d
 # by the invoking user, so no umask modification is needed — other local
 # users cannot traverse the directory regardless of interior file modes.
 MARV_DIR=$(mktemp -d "${TMPDIR:-/tmp}/marv-XXXXXX")
+: "${MARV_DIR:?mktemp -d failed; cannot continue plan-review merge}"
 # ORCHESTRATOR OBLIGATION: after each expert sub-agent returns, save the
 # sub-agent's raw output to the corresponding file using the Write tool,
 # substituting the LITERAL absolute path captured from the MARV_DIR= value
@@ -516,6 +517,7 @@ Generate per-perspective seed findings so each Claude sub-agent can start from v
 # (Bash, Write, Edit) — Claude's tool invocations do NOT share shell state,
 # and Write tool performs no shell expansion.
 MARV_DIR=$(mktemp -d "${TMPDIR:-/tmp}/marv-XXXXXX")
+: "${MARV_DIR:?mktemp -d failed; cannot continue seed generation}"
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality > "$MARV_DIR/seed-func.txt"
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security      > "$MARV_DIR/seed-sec.txt"
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing       > "$MARV_DIR/seed-test.txt"
@@ -525,6 +527,7 @@ echo "MARV_DIR=$MARV_DIR"
 **Truncation-detection check (mandatory)**: each seed file MUST end with the sentinel `## END-OF-ANALYSIS`. A seed file that is (a) empty or (b) non-empty-but-missing-sentinel is treated as "not usable as seed" and the corresponding sub-agent falls back to full-diff review.
 
 ```bash
+: "${MARV_DIR:?MARV_DIR not set — did Step 3-2b capture fail? Substitute the literal path from the MARV_DIR= line printed at the end of Step 3-2b.}"
 for seed in "$MARV_DIR"/seed-func.txt "$MARV_DIR"/seed-sec.txt "$MARV_DIR"/seed-test.txt; do
   # Strip trailing empty lines before checking the last line, so a file
   # written as `...## END-OF-ANALYSIS\n\n` still matches the sentinel.
@@ -711,6 +714,7 @@ First, save each agent's raw output to temporary files, then use local LLM for d
 # Reuses the $MARV_DIR created in Step 3-2b. Substitute the literal absolute
 # path when running this in a fresh Bash tool invocation — Claude's Bash
 # tool does NOT share shell state between calls.
+: "${MARV_DIR:?MARV_DIR not set — did Step 3-2b capture fail? Substitute the literal path from the MARV_DIR= line printed at the end of Step 3-2b.}"
 # ORCHESTRATOR OBLIGATION: after each expert sub-agent returns, save the
 # sub-agent's raw output to the corresponding file using the Write tool,
 # substituting the LITERAL absolute path (do NOT pass "$MARV_DIR" — Write

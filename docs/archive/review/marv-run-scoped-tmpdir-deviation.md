@@ -20,3 +20,19 @@ All 6 edit sites implemented exactly per plan:
 6. Step 3-9 final commit (line 817+ region): appended `[ -n "${MARV_DIR:-}" ] && rm -rf "$MARV_DIR"` with guard explanation comment.
 
 All 5 post-implementation verification checks (after the D1 refinement) pass. `bash ./install.sh`-equivalent deployment (`cp skills/multi-agent-review/SKILL.md ~/.claude/skills/multi-agent-review/SKILL.md`) verified with `diff` showing identical content.
+
+### D2: Added `: "${MARV_DIR:?...}"` parameter-expansion guards at 4 sites (post-review user request)
+
+- **Plan description**: The plan specified `[ -n "${MARV_DIR:-}" ] &&` guards only for the two cleanup sites (Step 1-5 end, Step 3-9). Usage sites (Step 1-5 creation, Step 3-2b creation, Step 3-2 truncation loop, Step 3-4 merge) relied on downstream shell failure (EPERM on `/seed-func.txt`) or the sub-agent Seed Finding Disposition fallback to surface substitution/`mktemp` failures.
+- **Actual implementation**: User request after Phase 3 completion: "make it safe on the shell side too." Added `: "${MARV_DIR:?<message>}"` parameter-expansion guards at 4 usage sites:
+  - Step 1-5 (after `mktemp -d`): aborts if mktemp failed.
+  - Step 3-2b (after `mktemp -d`): aborts if mktemp failed.
+  - Step 3-2 truncation-detection loop (before the `for seed in ...`): aborts if orchestrator failed to substitute `$MARV_DIR` into the fresh shell.
+  - Step 3-4 code-review merge (before the `cat "$MARV_DIR"/...`): same.
+- **Reason**: Fail-fast with a specific error message is more debuggable than relying on permission-denied errors when `"$MARV_DIR"/seed-func.txt` expands to `/seed-func.txt`. The `:?` parameter-expansion form writes the message to stderr and aborts the script non-zero if the variable is unset OR empty — catching both `mktemp` failure (empty assignment under non-`set -e` execution) and orchestrator substitution failure (unset variable in fresh shell).
+- **Impact scope**: `skills/multi-agent-review/SKILL.md` only. 4 new lines. No behavior change on the happy path. All 5 cross-cutting grep checks still pass (guard lines do not match any of the verification patterns).
+
+### D3: `hooks/pre-review.sh:162` latent-issue note (not fixed — out of this PR's scope)
+
+- **Observation**: `TMPDIR_REQ=$(mktemp -d)` at `hooks/pre-review.sh:162` and the subsequent `trap 'rm -rf "$TMPDIR_REQ"' EXIT` (line 163) have the same failure mode the D2 guards address in the skill: if `mktemp -d` fails, `$TMPDIR_REQ` is empty, and the downstream `printf ... > "$TMPDIR_REQ/system"` (line 164) writes to `/system` (EPERM). Less severe than the skill case because the trap's `rm -rf ""` is a no-op on GNU coreutils, but still lacks the specific error message.
+- **Decision**: Out of scope. `hooks/pre-review.sh` is not in the `refactor/marv-run-scoped-tmpdir` diff; the pre-existing-in-changed-file rule does NOT apply (file is not in the diff). Recording here as a candidate for a future follow-up: `TODO(hook-mktemp-guards): apply the same `:?`-style guard to hooks/pre-review.sh:162 and audit other hook-level `mktemp` call sites for consistency`.
