@@ -294,7 +294,7 @@ MUST return exactly 1. Branch:
 - 0 → anchor hallucinated or paraphrased. Apply the intended insertion manually by locating the relevant plan section. Record the mismatch and manual-apply decision in the deviation log.
 - ≥2 → anchor ambiguous. Pick the correct occurrence by context, apply manually, record the reason in the deviation log.
 
-The grep-verify is NOT optional.
+MUST grep-verify — the check is NOT optional.
 
 **Anti-Deferral enforcement (mandatory)**: Any finding marked Skipped / Accepted / Out of scope / Pre-existing MUST be recorded using the mandatory format defined in "Anti-Deferral Rules" below. Entries missing the Anti-Deferral check are invalid — fix the entry before proceeding to the next round.
 
