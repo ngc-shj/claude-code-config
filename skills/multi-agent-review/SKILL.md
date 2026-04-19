@@ -186,11 +186,11 @@ First, save each agent's raw output to temporary files, then use local LLM for d
 
 ```bash
 # Per-run temp directory so parallel /multi-agent-review sessions do not
-# collide. mktemp -d creates the directory with mode 0700 (drwx------) owned
-# by the invoking user, so no umask modification is needed — other local
+# collide. marv-tmpdir.sh create produces a mode-0700 dir under TMPDIR
+# (falling back to /tmp); no umask modification is needed — other local
 # users cannot traverse the directory regardless of interior file modes.
-MARV_DIR=$(mktemp -d "${TMPDIR:-/tmp}/marv-XXXXXX")
-: "${MARV_DIR:?mktemp -d failed; cannot continue plan-review merge}"
+MARV_DIR=$(bash ~/.claude/hooks/marv-tmpdir.sh create)
+: "${MARV_DIR:?marv-tmpdir create failed; cannot continue plan-review merge}"
 # ORCHESTRATOR OBLIGATION: after each expert sub-agent returns, save the
 # sub-agent's raw output to the corresponding file using the Write tool,
 # substituting the LITERAL absolute path captured from the MARV_DIR= value
@@ -200,7 +200,7 @@ MARV_DIR=$(mktemp -d "${TMPDIR:-/tmp}/marv-XXXXXX")
 #   Write "<literal MARV_DIR>/test-findings.txt" ← Testing expert output
 cat "$MARV_DIR/func-findings.txt" "$MARV_DIR/sec-findings.txt" "$MARV_DIR/test-findings.txt" \
   | bash ~/.claude/hooks/ollama-utils.sh merge-findings
-[ -n "${MARV_DIR:-}" ] && rm -rf "$MARV_DIR"
+bash ~/.claude/hooks/marv-tmpdir.sh cleanup "$MARV_DIR"
 ```
 
 If Ollama is unavailable, deduplicate manually as fallback:
@@ -516,8 +516,8 @@ Generate per-perspective seed findings so each Claude sub-agent can start from v
 # substitute the literal absolute path into subsequent tool invocations
 # (Bash, Write, Edit) — Claude's tool invocations do NOT share shell state,
 # and Write tool performs no shell expansion.
-MARV_DIR=$(mktemp -d "${TMPDIR:-/tmp}/marv-XXXXXX")
-: "${MARV_DIR:?mktemp -d failed; cannot continue seed generation}"
+MARV_DIR=$(bash ~/.claude/hooks/marv-tmpdir.sh create)
+: "${MARV_DIR:?marv-tmpdir create failed; cannot continue seed generation}"
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality > "$MARV_DIR/seed-func.txt"
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security      > "$MARV_DIR/seed-sec.txt"
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing       > "$MARV_DIR/seed-test.txt"
@@ -853,10 +853,10 @@ git add ./docs/archive/review/[plan-name]-code-review.md
 git add ./docs/archive/review/[plan-name]-deviation.md
 git commit -m "review: code review complete - all findings resolved"
 
-# Clean up the per-run temp directory from Step 3-2b. Guarded against an
-# empty/unset MARV_DIR (e.g., if Step 3-2b was skipped or its output was
-# not captured by the orchestrator).
-[ -n "${MARV_DIR:-}" ] && rm -rf "$MARV_DIR"
+# Clean up the per-run temp directory from Step 3-2b. The cleanup helper
+# is a no-op on empty/unset paths (e.g., if Step 3-2b was skipped) and
+# refuses to remove anything outside the marv-* prefix under TMPDIR.
+bash ~/.claude/hooks/marv-tmpdir.sh cleanup "$MARV_DIR"
 ```
 
 Final report:

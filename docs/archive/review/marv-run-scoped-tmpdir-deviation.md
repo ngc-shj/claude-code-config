@@ -36,3 +36,20 @@ All 5 post-implementation verification checks (after the D1 refinement) pass. `b
 
 - **Observation**: `TMPDIR_REQ=$(mktemp -d)` at `hooks/pre-review.sh:162` and the subsequent `trap 'rm -rf "$TMPDIR_REQ"' EXIT` (line 163) have the same failure mode the D2 guards address in the skill: if `mktemp -d` fails, `$TMPDIR_REQ` is empty, and the downstream `printf ... > "$TMPDIR_REQ/system"` (line 164) writes to `/system` (EPERM). Less severe than the skill case because the trap's `rm -rf ""` is a no-op on GNU coreutils, but still lacks the specific error message.
 - **Decision**: Out of scope. `hooks/pre-review.sh` is not in the `refactor/marv-run-scoped-tmpdir` diff; the pre-existing-in-changed-file rule does NOT apply (file is not in the diff). Recording here as a candidate for a future follow-up: `TODO(hook-mktemp-guards): apply the same `:?`-style guard to hooks/pre-review.sh:162 and audit other hook-level `mktemp` call sites for consistency`.
+
+### D4: Extracted tmpdir lifecycle to `hooks/marv-tmpdir.sh` (user-requested scope expansion)
+
+- **Plan description**: The plan specified inline `mktemp -d "${TMPDIR:-/tmp}/marv-XXXXXX"` and `[ -n "${MARV_DIR:-}" ] && rm -rf "$MARV_DIR"` at each of the 4 SKILL.md lifecycle sites.
+- **Actual implementation**: User asked to externalize the bash snippets after noticing the duplication. Created new hook `hooks/marv-tmpdir.sh` exposing two subcommands:
+  - `create` — runs `mktemp -d "${TMPDIR:-/tmp}/marv-XXXXXX"` with internal stderr reporting on failure; prints the path to stdout. Under `set -euo pipefail` so any failure aborts with exit 1.
+  - `cleanup <path>` — no-op on empty path (matching the previous `[ -n "${MARV_DIR:-}" ] && rm -rf` behavior); REJECTS paths that don't match the `${TMPDIR:-/tmp}/marv-*` prefix (new safety property — catches a corrupted `$MARV_DIR` value before `rm -rf` runs).
+  Updated SKILL.md to call the helper at all 4 sites: `MARV_DIR=$(bash ~/.claude/hooks/marv-tmpdir.sh create)` at Step 1-5 + Step 3-2b, and `bash ~/.claude/hooks/marv-tmpdir.sh cleanup "$MARV_DIR"` at Step 1-5 end + Step 3-9. The `: "${MARV_DIR:?...}"` caller-side guards from D2 are preserved because command-substitution success does not propagate to the caller's variable binding.
+- **Reason**: DRY — one place to modify mktemp convention, apply shellcheck, audit for safety (TMPDIR policy, etc.). Consistent with existing hook-based architecture (`ollama-utils.sh`, `pre-review.sh`, `resolve-ollama-host.sh`, etc.). Adds a safety property (cleanup prefix check) that was not previously enforceable without duplicating logic.
+- **Impact scope**: New file `hooks/marv-tmpdir.sh` (~60 lines) + 4 edits in `skills/multi-agent-review/SKILL.md` (all at sites already marked for change in the original plan's Implementation Checklist). `install.sh` requires no change — it copies every `hooks/*.sh` file automatically.
+
+### D5: Updated verification greps (post-D4)
+
+- **Plan description**: Implementation step 7.3 previously checked for `grep -nE 'mktemp -d.*marv-' skills/multi-agent-review/SKILL.md` returning ≥2 matches.
+- **Actual implementation**: After D4, SKILL.md no longer contains `mktemp -d` at all — the helper has it. The verification grep was updated to target `bash ~/.claude/hooks/marv-tmpdir.sh create` (≥2 matches) and a separate check for the hook file's own `mktemp -d` invocation (exactly 1 match in `hooks/marv-tmpdir.sh`).
+- **Reason**: D4 consequence. Plan's Implementation Checklist was updated to reflect the new verification.
+- **Impact scope**: Verification grep patterns in the plan; no code-behavior change.
