@@ -205,7 +205,7 @@ This is an orchestration responsibility, not a shell-scripting one. The skill te
    1. `grep -nE '(/tmp/(func|sec|test)-findings|/tmp/seed-(func|sec|test))\.txt' skills/ hooks/` MUST return zero matches.
    2. `grep -nE '\$MARV_DIR/(seed-|.*-findings)' skills/multi-agent-review/SKILL.md` MUST return matches in at least 5 locations (Step 1-5, 3-2b, 3-2 loop, 3-3 template, 3-4).
    3. `grep -nE 'mktemp -d "\$\{TMPDIR:-/tmp\}/marv-XXXXXX"' skills/multi-agent-review/SKILL.md` MUST return at least 2 matches (Step 1-5 and Step 3-2b). (Broader fallback: `grep -nE 'mktemp -d.*marv-'` returns the same matches — use whichever parses cleanly in your shell.)
-   4. `grep -n 'umask' skills/multi-agent-review/SKILL.md` MUST return zero matches — we intentionally do NOT modify umask; confidentiality comes from the `0700` directory mode `mktemp -d` produces. A present `umask` line is a regression.
+   4. `grep -nE '^\s*umask [0-9]' skills/multi-agent-review/SKILL.md` MUST return zero matches — we intentionally do NOT modify umask; confidentiality comes from the `0700` directory mode `mktemp -d` produces. The regex targets actual `umask <mode>` commands at the start of a line (or after whitespace only); prose mentions of "umask" in comments are allowed and expected (the Step 1-5 snippet contains a one-line comment explaining why umask is NOT changed). A `umask 077` or `umask 0077` command line is a regression.
    5. `grep -n 'rm -rf "\$MARV_DIR"' skills/multi-agent-review/SKILL.md` MUST return at least 2 matches (Step 1-5 end and Step 3-9).
 8. Smoke test: create a transient tmpdir manually and verify the directory mode:
    ```bash
@@ -259,3 +259,37 @@ This is an orchestration responsibility, not a shell-scripting one. The skill te
 4. **Abort mid-run**: User Ctrl-C's the skill after Step 3-2b but before Step 3-9. `/tmp/marv-aB3k9X` persists with directory mode 700, still unreachable by other users. User or OS cleanup removes it later.
 5. **Orchestrator path-substitution mistake**: Orchestrator accidentally renders the Step 3-3 prompt with the literal string `$MARV_DIR/seed-func.txt` instead of the absolute path. Sub-agent tries to read that path, gets "file not found". Sub-agent's template logic treats this the same as "seed unavailable or truncated" (branch (a) of the three-way conditional) and falls back to full-diff review. Correctness preserved; only token savings are lost for that sub-agent.
 6. **No migration mid-flight**: The change is purely a SKILL.md text update. The next invocation of `/multi-agent-review` reads the new text and follows the new convention. There is no partially-migrated state because each `/multi-agent-review` invocation starts fresh.
+
+## Implementation Checklist
+
+### Files to modify
+- `./skills/multi-agent-review/SKILL.md` (single file, 6 edit sites)
+
+### Edit sites (verified against current HEAD of `refactor/marv-run-scoped-tmpdir`)
+1. Line 190 (Step 1-5 merge): `cat /tmp/func-findings.txt ...` → replace with `MARV_DIR=$(mktemp -d ...)` block + Write-tool save obligation comment + `cat "$MARV_DIR/..."` + `[ -n ... ] && rm -rf "$MARV_DIR"`.
+2. Lines 501-503 (Step 3-2b seed redirects): prepend `MARV_DIR=$(mktemp -d ...)`, change `> /tmp/seed-*.txt` to `> "$MARV_DIR/seed-*.txt"`, append `echo "MARV_DIR=$MARV_DIR"` with comment about orchestrator capture.
+3. Line 509 (Step 3-2 truncation loop): change `for seed in /tmp/seed-*.txt` to `for seed in "$MARV_DIR"/seed-func.txt "$MARV_DIR"/seed-sec.txt "$MARV_DIR"/seed-test.txt`.
+4. Line 552 (Step 3-3 Round 1 template): change `/tmp/seed-<role>.txt` to `$MARV_DIR/seed-<role>.txt` with an explicit "substitute literal path" note for the orchestrator.
+5. Line 693 (Step 3-4 merge): same shape as Step 1-5 but reusing the `$MARV_DIR` created in Step 3-2b; add Write-tool save obligation comment; no local `mktemp` or `rm -rf`.
+6. Line 817+ (Step 3-9 final commit): append `[ -n "${MARV_DIR:-}" ] && rm -rf "$MARV_DIR"` as the cleanup step after the final commit.
+
+### Shared utilities to reuse
+- No new helpers. Migrating all sites to the existing POSIX `mktemp -d` primitive with the portable positional template form (no `-t`).
+- No changes to `hooks/ollama-utils.sh` (explicitly out of scope).
+
+### Patterns that MUST be followed consistently
+- **Directory creation**: `MARV_DIR=$(mktemp -d "${TMPDIR:-/tmp}/marv-XXXXXX")` — identical string at both creation sites (Step 1-5 and Step 3-2b).
+- **Cleanup**: `[ -n "${MARV_DIR:-}" ] && rm -rf "$MARV_DIR"` — identical at both cleanup sites (Step 1-5 end, Step 3-9).
+- **Path references in commands**: always `"$MARV_DIR/..."` (quoted, never bare `$MARV_DIR/...`).
+- **No `umask` modification** — confidentiality comes from the `0700` directory mode `mktemp -d` produces.
+
+### Cross-cutting verification (post-implementation)
+The five grep checks listed in plan §Implementation steps item 7. Run all five; they must all pass before commit.
+
+### Out-of-scope sites (confirmed not changed)
+- `./skills/multi-agent-review/SKILL.md:307` — already uses `mktemp /tmp/shared-utils-inventory.XXXXXX`; out of this plan's scope.
+- `hooks/` — helper-level; out of scope per user statement.
+- Other skills (`pr-create`, `simplify`, `test-gen`, `explore`) — `grep -rn '/tmp/' skills/` returns no hits outside `multi-agent-review`.
+
+### Install step (post-edit)
+- Run `bash ./install.sh` to deploy the updated SKILL.md to `~/.claude/skills/multi-agent-review/SKILL.md`. The install script backs up the existing file to `SKILL.md.bak` before overwriting.
