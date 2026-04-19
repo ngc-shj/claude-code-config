@@ -10,7 +10,16 @@
 #   OK           path/to/file.ts:42
 #   MISSING      path/to/gone.ts:10
 #   OUT-OF-RANGE path/to/file.ts:9999 (file has 150 lines)
-#   --- Summary: total=3, ok=1, issues=2 ---
+#   OUT-OF-ROOT  ../outside.txt:1
+#   --- Summary: total=4, ok=1, issues=3 ---
+#
+# Security model:
+#   stdin is UNTRUSTED (originates from sub-agent / LLM output, potentially
+#   shaped by prompt-injection or hallucination). Path components are
+#   canonicalized via realpath and must resolve inside ROOT — absolute paths
+#   outside ROOT, `..`-traversal, and symlink escape are all rejected as
+#   OUT-OF-ROOT. Without this containment the helper becomes an
+#   existence/size oracle for any user-readable file.
 #
 # Exit 0 always (non-blocking helper).
 
@@ -28,6 +37,13 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Canonicalize ROOT once. Missing ROOT is a configuration error, not a
+# recoverable condition for a single ref — fail closed.
+ROOT_ABS=$(realpath -e -- "$ROOT" 2>/dev/null) || {
+  echo "Error: ROOT '$ROOT' does not exist or is not accessible" >&2
+  exit 1
+}
+
 INPUT=$(cat)
 if [ -z "$INPUT" ]; then
   echo "=== Reference Verification ==="
@@ -36,11 +52,11 @@ if [ -z "$INPUT" ]; then
 fi
 
 # Extract path:line refs.
-#   Path must contain at least one '/' OR end in a recognizable file extension.
-#   Line is a single number or a range (e.g., 42-51); only the start line is verified.
+#   Path may optionally begin with '/' (absolute). Line is a single number or
+#   range (e.g., 42-51); only the start line is verified.
 # Grep returns a stream of raw matches; we dedupe and sort afterward.
 REFS=$(printf '%s' "$INPUT" \
-  | grep -oE '([A-Za-z0-9_.][A-Za-z0-9_./\-]*[A-Za-z0-9_]):[0-9]+(-[0-9]+)?' \
+  | grep -oE '(/?[A-Za-z0-9_.][A-Za-z0-9_./\-]*[A-Za-z0-9_]):[0-9]+(-[0-9]+)?' \
   | sort -u)
 
 if [ -z "$REFS" ]; then
@@ -61,22 +77,51 @@ while IFS= read -r ref; do
   start_line="${linespec%%-*}"
 
   # Skip refs whose path looks non-filesystem (e.g., 'http', 'localhost', bare words).
-  # Heuristic: require a '/' OR a recognized file extension.
+  # Heuristic: require a '/' (absolute or nested) OR a recognized file extension.
   if [[ "$path" != */* ]] && [[ ! "$path" =~ \.(ts|tsx|js|jsx|py|go|rs|sh|bash|md|json|yml|yaml|toml|rb|java|kt|c|h|cpp|hpp|cs|php|sql|bats)$ ]]; then
     continue
   fi
 
   TOTAL=$((TOTAL + 1))
-  full="$ROOT/$path"
 
-  if [ ! -f "$full" ]; then
+  # Resolve candidate path: absolute stays absolute; relative joins ROOT_ABS.
+  # realpath -m resolves even when the final component does not exist, so we
+  # can still classify MISSING while enforcing containment.
+  if [[ "$path" = /* ]]; then
+    candidate="$path"
+  else
+    candidate="$ROOT_ABS/$path"
+  fi
+
+  full_abs=$(realpath -m -- "$candidate" 2>/dev/null) || full_abs=""
+  if [ -z "$full_abs" ]; then
     OUTPUT="${OUTPUT}MISSING      ${ref}
 "
     ISSUE_COUNT=$((ISSUE_COUNT + 1))
     continue
   fi
 
-  file_lines=$(wc -l < "$full" 2>/dev/null | tr -d ' ')
+  # Containment: canonical path must sit under ROOT_ABS. Catches directory
+  # traversal (../), absolute-path escapes, and symlink redirection in a
+  # single check.
+  case "$full_abs/" in
+    "$ROOT_ABS/"*) : ;;
+    *)
+      OUTPUT="${OUTPUT}OUT-OF-ROOT  ${ref}
+"
+      ISSUE_COUNT=$((ISSUE_COUNT + 1))
+      continue
+      ;;
+  esac
+
+  if [ ! -f "$full_abs" ]; then
+    OUTPUT="${OUTPUT}MISSING      ${ref}
+"
+    ISSUE_COUNT=$((ISSUE_COUNT + 1))
+    continue
+  fi
+
+  file_lines=$(wc -l < "$full_abs" 2>/dev/null | tr -d ' ')
   file_lines="${file_lines:-0}"
 
   if [ "$start_line" -gt "$file_lines" ]; then

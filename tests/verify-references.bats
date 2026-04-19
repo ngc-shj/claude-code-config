@@ -79,3 +79,86 @@ teardown() {
   run bash "$SCRIPT" --bogus arg
   [ "$status" -eq 1 ]
 }
+
+@test "--help: prints usage to stderr and exits 0" {
+  run bash "$SCRIPT" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "-h short flag: prints usage and exits 0" {
+  run bash "$SCRIPT" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "nonexistent ROOT: exits 1" {
+  run bash "$SCRIPT" --root "$ROOT_DIR/does-not-exist"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"does not exist"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# Containment checks (S1 regression guards): traversal, absolute-path escape,
+# and symlink escape must all resolve to OUT-OF-ROOT, NOT leak file metadata.
+# ---------------------------------------------------------------------------
+
+@test "traversal (../): reported as OUT-OF-ROOT, no file metadata leaked" {
+  # Create a sibling file the traversal would reach if unchecked.
+  echo "sensitive-content" > "$ROOT_DIR/../escape-target.txt"
+  run bash -c "echo '../escape-target.txt:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OUT-OF-ROOT"* ]]
+  [[ "$output" == *"../escape-target.txt:1"* ]]
+  # Explicitly must NOT report OK / OUT-OF-RANGE / file metadata.
+  [[ "$output" != *"OK "* ]]
+  [[ "$output" != *"OUT-OF-RANGE"* ]]
+  [[ "$output" != *"file has "* ]]
+  rm -f "$ROOT_DIR/../escape-target.txt"
+}
+
+@test "absolute path outside ROOT: reported as OUT-OF-ROOT" {
+  run bash -c "echo '/etc/hostname:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OUT-OF-ROOT"* ]]
+  [[ "$output" == *"/etc/hostname:1"* ]]
+  [[ "$output" != *"file has "* ]]
+}
+
+@test "absolute path inside ROOT: reported as OK" {
+  # CLAUDE.md instructs sub-agents to share absolute paths; conforming refs
+  # must verify correctly (F1 regression guard).
+  run bash -c "echo '$ROOT_DIR/src/foo.ts:3' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+  [[ "$output" == *"$ROOT_DIR/src/foo.ts:3"* ]]
+}
+
+@test "symlink escaping ROOT: reported as OUT-OF-ROOT" {
+  # Create a symlink inside ROOT that points to a file outside ROOT.
+  echo "outside-content-line1" > "$ROOT_DIR/../outside-secret.txt"
+  ln -sf "$ROOT_DIR/../outside-secret.txt" "$ROOT_DIR/src/link.ts"
+  run bash -c "echo 'src/link.ts:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OUT-OF-ROOT"* ]]
+  [[ "$output" != *"file has "* ]]
+  rm -f "$ROOT_DIR/../outside-secret.txt" "$ROOT_DIR/src/link.ts"
+}
+
+@test "symlink inside ROOT: reported as OK" {
+  # Symlinks that stay within ROOT are legitimate (e.g., monorepo aliases).
+  ln -sf "$ROOT_DIR/src/foo.ts" "$ROOT_DIR/lib/alias.ts"
+  run bash -c "echo 'lib/alias.ts:2' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+  rm -f "$ROOT_DIR/lib/alias.ts"
+}
+
+@test "traversal via '/../': reported as OUT-OF-ROOT" {
+  # Sneakier form — path with interior `..` segment.
+  run bash -c "echo 'src/../../escape.ts:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  # Either OUT-OF-ROOT (resolved and rejected) or skipped (regex filter).
+  # Both are safe outcomes; the critical invariant is no file metadata leak.
+  [[ "$output" != *"file has "* ]]
+}

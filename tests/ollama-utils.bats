@@ -102,13 +102,25 @@ teardown() {
 @test "score-utility-match: returns match blocks from .response field" {
   setup_curl_mock "200" '{"response":"[High] src/a.ts:10 — replace inline with shared — slugify at lib/str.ts","thinking":""}'
   result=$(printf 'inventory\n=== OLLAMA-INPUT-SEPARATOR ===\ndiff' | bash "$SCRIPT" score-utility-match)
-  [[ "$result" == *"[High]"* ]]
+  [ "$result" = "[High] src/a.ts:10 — replace inline with shared — slugify at lib/str.ts" ]
+}
+
+@test "score-utility-match: passes through 'No matches' sentinel" {
+  setup_curl_mock "200" '{"response":"No matches","thinking":""}'
+  result=$(printf 'inventory\n=== OLLAMA-INPUT-SEPARATOR ===\ndiff' | bash "$SCRIPT" score-utility-match)
+  [ "$result" = "No matches" ]
 }
 
 @test "verify-mock-shapes: returns findings from .response field" {
   setup_curl_mock "200" '{"response":"[Major] tests/foo.test.ts:42 — mock missing field — add email","thinking":""}'
   result=$(printf 'test content\n=== OLLAMA-INPUT-SEPARATOR ===\ntype def' | bash "$SCRIPT" verify-mock-shapes)
-  [[ "$result" == *"[Major]"* ]]
+  [ "$result" = "[Major] tests/foo.test.ts:42 — mock missing field — add email" ]
+}
+
+@test "verify-mock-shapes: passes through 'No findings' sentinel" {
+  setup_curl_mock "200" '{"response":"No findings","thinking":""}'
+  result=$(printf 'test content\n=== OLLAMA-INPUT-SEPARATOR ===\ntype def' | bash "$SCRIPT" verify-mock-shapes)
+  [ "$result" = "No findings" ]
 }
 
 @test "generate-pr-title: returns title from .response field" {
