@@ -88,8 +88,8 @@ F-1/F-2 fixes committed in `ce31045`.
 
 ## Round 2 Fixes (pre-existing-in-changed-file)
 
-- **R30-a** [Minor, Round 2]: plan.md references "pre-screen Minor #1"-"#5" (5 occurrences) were bare → wrapped in backticks.
-- **R30-b** [Minor, Round 2]: deviation.md "PR #24 or #25" → wrapped in backticks.
+- **R30-a** [Minor, Round 2]: plan.md references `"pre-screen Minor #1"`-`"#5"` (5 occurrences) were bare → wrapped in backticks.
+- **R30-b** [Minor, Round 2]: deviation.md `"PR #24 or #25"` → wrapped in backticks.
 - **R30-c** [Minor, Round 2]: SKILL.md:1203 R30 rule body contained `"tenet #6"` as an illustrative bad example that was itself autolink-able. Escaped with backslash: `"tenet \#6"`. Preserves the rhetorical value of the example (showing the hazard verbatim) while preventing the rendering hazard on GitHub.
 
 ## Recurring Issue Check (Round 2)
@@ -106,7 +106,7 @@ All findings resolved. Ready for final commit.
 - Modified file: `docs/archive/review/expand-ollama-delegation-plan.md`
 
 ### R30-b [Minor] deviation.md PR `#N` references — Resolved
-- Action: wrapped "PR #24 or #25" in backticks.
+- Action: wrapped `"PR #24 or #25"` in backticks.
 - Modified file: `docs/archive/review/expand-ollama-delegation-deviation.md`
 
 ### R30-c [Minor] SKILL.md R30 rule body self-hazard — Resolved
