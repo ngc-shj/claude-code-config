@@ -276,4 +276,26 @@ All findings from Rounds 1-5 resolved or formally accepted. Loop complete.
 ### S3 [Minor] settings.json allow-rule narrowing — Resolved
 - Action: split the wildcard rule into `create` (no args) and `cleanup *` (path only).
 - Modified file: `settings.json`
+
+---
+
+# Code Review: marv-run-scoped-tmpdir — Round 6
+Date: 2026-04-19
+Review round: 6
+
+## Changes from Previous Round
+Round 5 S2/S3 committed in `3377244`.
+
+## Round 6 Findings
+All three experts return "No findings". Round 5 fixes confirmed:
+- S2 (TOCTOU second `-L`): order verified `[ -L ]` → `..` → prefix → second `[ -L ]` → `rm -rf`, no interleaving logic; no new attack surface.
+- S3 (settings.json narrow rules): exactly 2 allow rules matching the hook's subcommand dispatcher.
+- Plan.md smoke tests still align with Round 5 hook behavior (first `-L` check fires for pre-existing symlinks; plan expects exactly that message).
+- R30 backtick-span-aware sweep: clean across all plan docs.
+
+## Round 6 Termination
+Loop complete across all 6 code-review rounds. Final findings:
+- Resolved: T-1 (R1), T-2 (R2), F3 (R4), S1 (R4), T3 (R4), S2 (R5), S3 (R5)
+- Accepted with Anti-Deferral: F4 (R4)
+- No unresolved findings.
 - Meta-note: T-1's Fix line demonstrates proper backtick wrapping; T-2's Problem line failed to apply it consistently to its own prose describing the same pattern. Recording this meta-observation for future reviewers: when a finding describes an autolink trigger, grep the Finding's own Evidence/Problem/Fix prose for the same trigger before committing.
