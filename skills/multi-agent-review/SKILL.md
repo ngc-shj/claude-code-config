@@ -256,6 +256,17 @@ Review round: [nth]
 - RT3: [status]
 ```
 
+Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollama:
+
+```bash
+{ git log <prev-round-commit>..HEAD --oneline
+  echo '=== OLLAMA-INPUT-SEPARATOR ==='
+  cat "$MARV_DIR"/*-findings.txt  # or equivalent new-findings aggregate
+} | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
+```
+
+The orchestrator reviews the 1-3 sentence output and places it under the `## Changes from Previous Round` heading.
+
 ### Step 1-6: Validity Assessment and Plan Update
 
 **Quality gate check (mandatory)**: Before assessing findings, check the `## Quality Warnings` section of the merged output. For each flagged finding (`[VAGUE]`, `[NO-EVIDENCE]`, `[UNTESTED-CLAIM]`), return it to the originating expert with the specific flag and request revision. Do not proceed with those findings until the expert provides a revised version with the required evidence or specificity.
@@ -264,6 +275,26 @@ The main agent scrutinizes each finding:
 - **Critical/Major finding**: Must be reflected in the plan file
 - **Minor finding**: Reflect if straightforward, otherwise record reason and skip, explain to user
 - **Unnecessary finding**: Record reason and skip, explain to user
+
+**Optional local-LLM helper for plan-edit drafts**: when a finding requires a plan edit, draft the anchor + insertion pair via Ollama. Setup: orchestrator MUST set `$FINDING_BLOCK` to the finding text before invoking (e.g., via a heredoc). An empty `$FINDING_BLOCK` produces a degenerate output.
+
+```bash
+{ cat "./docs/archive/review/[plan-name]-plan.md"
+  echo '=== OLLAMA-INPUT-SEPARATOR ==='
+  echo "$FINDING_BLOCK"
+} | bash ~/.claude/hooks/ollama-utils.sh propose-plan-edits
+```
+
+**MANDATORY** before applying the drafted ANCHOR/INSERT pair via the Edit tool:
+```bash
+grep -cF "$ANCHOR" "./docs/archive/review/[plan-name]-plan.md"
+```
+MUST return exactly 1. Branch:
+- Exactly 1 → apply the INSERT via Edit tool with `old_string="$ANCHOR"`.
+- 0 → anchor hallucinated or paraphrased. Apply the intended insertion manually by locating the relevant plan section. Record the mismatch and manual-apply decision in the deviation log.
+- ≥2 → anchor ambiguous. Pick the correct occurrence by context, apply manually, record the reason in the deviation log.
+
+The grep-verify is NOT optional.
 
 **Anti-Deferral enforcement (mandatory)**: Any finding marked Skipped / Accepted / Out of scope / Pre-existing MUST be recorded using the mandatory format defined in "Anti-Deferral Rules" below. Entries missing the Anti-Deferral check are invalid — fix the entry before proceeding to the next round.
 
@@ -369,31 +400,36 @@ Recording rules during implementation:
 
 **Timing**: Run deviation check after each commit, not just at the end of implementation. If a commit message describes changes that differ from the plan, update the deviation log immediately. This prevents accumulation of unrecorded deviations that are harder to trace later.
 
-After each commit (and at implementation end), delegate deviation log creation/update to a Sonnet sub-agent:
-- Provide the plan and `git diff main...HEAD` to Sonnet
-- Sonnet compares the diff against the plan and generates the deviation log
-- Review Sonnet's output for accuracy
+After each commit (and at implementation end), generate a deviation log delta via local LLM:
 
-If sub-agents are unavailable, record deviations directly.
-
-Save to `./docs/archive/review/[plan-name]-deviation.md`.
-
-```markdown
-# Coding Deviation Log: [plan-name]
-Created: [ISO 8601 format]
-
-## Deviations from Plan
-
-### [Deviation ID]: [Deviation summary]
-- **Plan description**: [Original plan]
-- **Actual implementation**: [What was actually done]
-- **Reason**: [Why it was changed]
-- **Impact scope**: [Areas affected by this change]
-
----
+```bash
+# Three-section input: plan + existing deviation log + current diff.
+# Create an empty existing-log placeholder on first run.
+DEV_LOG="./docs/archive/review/[plan-name]-deviation.md"
+[ -f "$DEV_LOG" ] || echo '# Coding Deviation Log: [plan-name]' > "$DEV_LOG"
+{ cat "./docs/archive/review/[plan-name]-plan.md"; \
+  echo "=== OLLAMA-INPUT-SEPARATOR ==="; \
+  cat "$DEV_LOG"; \
+  echo "=== OLLAMA-INPUT-SEPARATOR ==="; \
+  git diff main...HEAD; } \
+  | bash ~/.claude/hooks/ollama-utils.sh generate-deviation-log \
+  > "${DEV_LOG}.append"
 ```
 
-If there are no deviations, create the file with "No deviations".
+REVIEW GATE (do NOT delete the .append file before orchestrator reviews):
+- Read `${DEV_LOG}.append`.
+- If it contains exactly `No new deviations` (or is empty), discard.
+- Otherwise APPEND (not replace) to `$DEV_LOG`:
+  ```bash
+  cat "${DEV_LOG}.append" >> "$DEV_LOG"
+  ```
+  IMPORTANT: never overwrite the full `$DEV_LOG` with Ollama output — the command emits ONLY delta entries; prior entries MUST be preserved.
+- Only after the append (or decision to discard), remove the temp file:
+  ```bash
+  rm -f "${DEV_LOG}.append"
+  ```
+
+If Ollama is unavailable, record deviations directly.
 
 ### Step 2-4: Implementation Completion Check
 
@@ -423,6 +459,9 @@ bash ~/.claude/hooks/check-migrations.sh
 
 # 3. Production build
 [build command]
+
+# Optional: draft the commit body via Ollama (subject line still hand-written).
+# git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
 
 ##### MANUAL CHECKS (not runnable commands — review obligations) #####
 
@@ -779,6 +818,17 @@ Review round: [nth]
 [Updated after fixes]
 ```
 
+Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollama:
+
+```bash
+{ git log <prev-round-commit>..HEAD --oneline
+  echo '=== OLLAMA-INPUT-SEPARATOR ==='
+  cat "$MARV_DIR"/*-findings.txt  # or equivalent new-findings aggregate
+} | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
+```
+
+The orchestrator reviews the 1-3 sentence output and places it under the `## Changes from Previous Round` heading.
+
 ### Step 3-5: Fix the Code
 
 **Quality gate check (mandatory)**: Before fixing findings, check the `## Quality Warnings` section. For each flagged finding (`[VAGUE]`, `[NO-EVIDENCE]`, `[UNTESTED-CLAIM]`), return it to the originating expert with the specific flag and request revision. Do not fix findings that lack evidence or specificity — send them back first.
@@ -815,6 +865,8 @@ bash ~/.claude/hooks/check-migrations.sh
 
 # Commit only if ALL three pass
 git add -A
+# Optional: draft the commit body via Ollama (subject line still hand-written).
+# git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
 git commit -m "review([n]): [summary of fixes]"
 ```
 
@@ -832,6 +884,17 @@ Append to the "Resolution Status" section of `./docs/archive/review/[plan-name]-
 - Action: [Fix performed]
 - Modified file: [filename:line number]
 ```
+
+Optional: draft each entry via Ollama:
+
+```bash
+{ echo "$FINDING_BLOCK"
+  echo '=== OLLAMA-INPUT-SEPARATOR ==='
+  git show <fix-commit>
+} | bash ~/.claude/hooks/ollama-utils.sh generate-resolution-entry
+```
+
+The orchestrator reviews and applies the drafted entry via the Edit tool. Set `$FINDING_BLOCK` to the finding text beforehand (e.g., via heredoc).
 
 ### Step 3-8: Termination Check
 
