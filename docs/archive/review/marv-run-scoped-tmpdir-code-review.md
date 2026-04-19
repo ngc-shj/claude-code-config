@@ -24,7 +24,7 @@ Initial Phase 3 code review.
 ### T-1 [Minor] — Bare `#4` in `marv-run-scoped-tmpdir-review.md:16` auto-links on GitHub (R30)
 - **File**: `docs/archive/review/marv-run-scoped-tmpdir-review.md:16`
 - **Evidence**: `| T1 | Minor | No smoke-test step for the abort-orphan scenario (plan's user-operation scenario #4). | ...`
-- **Problem**: The bare `#4` in `scenario #4` renders as an auto-link to issue/PR #4 on GitHub-flavored Markdown surfaces. GitHub-hosted repos notify watchers of the referenced issue when a new link appears.
+- **Problem**: The bare `#4` in `scenario #4` renders as an auto-link to issue/PR `#4` on GitHub-flavored Markdown surfaces. GitHub-hosted repos notify watchers of the referenced issue when a new link appears.
 - **Impact**: Information-disclosure to watchers of the linked issue; backlinks clutter the referenced issue.
 - **Fix**: Wrap in backticks: `` scenario `#4` `` (preserves original phrasing).
 
@@ -54,3 +54,50 @@ R1-R30 + RT1-RT3 all N/A or Pass, EXCEPT R30 which flagged T-1 above. RT2 self-a
 ### T-1 [Minor] Bare `#4` in review.md — Resolved
 - Action: wrapped `#4` in backticks → `` `#4` ``.
 - Modified file: `docs/archive/review/marv-run-scoped-tmpdir-review.md:16`
+
+---
+
+# Code Review: marv-run-scoped-tmpdir — Round 2
+Date: 2026-04-19
+Review round: 2
+
+## Changes from Previous Round
+Round 1 T-1 (R30 bare `#4`) committed in `a7f9d75`.
+
+## Round 2 Findings
+
+| # | Severity | Status | Detail |
+|---|---|---|---|
+| T-1 | Minor | Resolved | Functionality/Security confirmed no regression. Testing confirmed the `#4` in review.md:16 is correctly wrapped. |
+| T-2 | Minor (new) | Resolved | Testing expert's R30 sweep across all plan docs found a second bare `#4` in `code-review.md:27` ("issue/PR #4 on"), inside the Problem prose of T-1 itself. Meta-irony: the finding that documents the autolink hazard was itself vulnerable to it. Fixed in this round. |
+
+## Adjacent Findings
+None.
+
+## Quality Warnings
+None.
+
+## Recurring Issue Check (Round 2)
+
+### Functionality expert
+R1-R30 all Pass/N/A. Commit is documentation-only; no behavior change, no regression.
+
+### Security expert
+R1-R30 + RS1-RS3 all Pass/N/A. No new executable surface.
+
+### Testing expert
+R30 is now clean across all plan docs (verified with `grep -nE '(^|[^a-zA-Z0-9\`])#[0-9]+([^\`]|$)'`). RT2 self-applied.
+
+## Round 2 Termination
+All findings resolved (T-1 from Round 1, T-2 discovered and fixed in Round 2). No new findings from Functionality or Security. Proceeding to Phase 3 Step 3-9 final commit.
+
+## Resolution Status (consolidated)
+
+### T-1 [Minor] Bare `#4` in review.md:16 — Resolved (Round 1)
+- Action: wrapped `#4` in backticks.
+- Modified file: `docs/archive/review/marv-run-scoped-tmpdir-review.md:16`
+
+### T-2 [Minor, Round 2] Bare `#4` in code-review.md:27 Problem prose — Resolved
+- Action: wrapped the remaining bare `#4` (in the phrase "issue/PR #4 on") in backticks.
+- Modified file: `docs/archive/review/marv-run-scoped-tmpdir-code-review.md:27`
+- Meta-note: T-1's Fix line demonstrates proper backtick wrapping; T-2's Problem line failed to apply it consistently to its own prose describing the same pattern. Recording this meta-observation for future reviewers: when a finding describes an autolink trigger, grep the Finding's own Evidence/Problem/Fix prose for the same trigger before committing.
