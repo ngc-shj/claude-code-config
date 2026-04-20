@@ -31,8 +31,10 @@ claude-code-config/
 │   │   └── SKILL.md              # Pull request creation with auto-description
 │   ├── explore/
 │   │   └── SKILL.md              # Deep codebase exploration and Q&A
-│   └── context-budget/
-│       └── SKILL.md              # Audit context window consumption and surface savings
+│   ├── context-budget/
+│   │   └── SKILL.md              # Audit context window consumption and surface savings
+│   └── security-scan/
+│       └── SKILL.md              # Audit Claude Code config for secrets, injection, MCP risks
 └── rules/
     ├── common/                   # Language-agnostic baseline (always applied)
     │   ├── coding-style.md
@@ -277,6 +279,14 @@ Audits token overhead across agents, skills, rules, CLAUDE.md, and MCP servers, 
 - Claude classifies components as always/sometimes/rarely needed and ranks optimizations
 - Flags bloated descriptions, heavy files, MCP oversubscription, CLAUDE.md creep
 - Adapted from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (`skills/context-budget/`)
+
+### security-scan
+
+Audits Claude Code configuration for common security misconfigurations — zero external dependencies:
+- Deterministic pattern checks (grep + jq) for secrets, `Bash(*)` wildcards, hook injection, MCP supply chain, prompt-injection surface in CLAUDE.md
+- Optional deep analysis via `gpt-oss:120b` through `ollama-utils.sh analyze-security` (zero Claude tokens)
+- Graded A/F report with severity-classified findings
+- Concept borrowed from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (`skills/security-scan/`, which wraps the AgentShield npm package); reimplemented here as a self-contained shell + Ollama workflow
 
 ## Rules
 
