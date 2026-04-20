@@ -55,4 +55,22 @@ if [ -d "$SCRIPT_DIR/skills" ]; then
   done
 fi
 
+# Install rules
+# Layered: common/ baseline + language-specific overlays. Claude references
+# these via CLAUDE.md when editing matching files.
+if [ -d "$SCRIPT_DIR/rules" ]; then
+  for rule_dir in "$SCRIPT_DIR"/rules/*/; do
+    rule_name="$(basename "$rule_dir")"
+    dest="$CLAUDE_DIR/rules/$rule_name"
+    if [ -d "$dest" ]; then
+      echo "  ~/.claude/rules/$rule_name already exists. Backing up to ${rule_name}.bak"
+      rm -rf "$dest.bak"
+      cp -r "$dest" "$dest.bak"
+    fi
+    mkdir -p "$dest"
+    cp "$rule_dir"*.md "$dest/"
+    echo "  Installed rules: $rule_name"
+  done
+fi
+
 echo "Done."

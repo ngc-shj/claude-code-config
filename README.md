@@ -20,17 +20,27 @@ claude-code-config/
 │   ├── ollama-utils.sh           # Shared Ollama utility commands for skills
 │   ├── notify.sh                 # Desktop notifications (macOS)
 │   └── stop-notify.sh            # Task completion notifications
-└── skills/
-    ├── multi-agent-review/
-    │   └── SKILL.md              # Multi-agent review workflow
-    ├── simplify/
-    │   └── SKILL.md              # Code simplification and cleanup
-    ├── test-gen/
-    │   └── SKILL.md              # Automatic test generation
-    ├── pr-create/
-    │   └── SKILL.md              # Pull request creation with auto-description
-    └── explore/
-        └── SKILL.md              # Deep codebase exploration and Q&A
+├── skills/
+│   ├── multi-agent-review/
+│   │   └── SKILL.md              # Multi-agent review workflow
+│   ├── simplify/
+│   │   └── SKILL.md              # Code simplification and cleanup
+│   ├── test-gen/
+│   │   └── SKILL.md              # Automatic test generation
+│   ├── pr-create/
+│   │   └── SKILL.md              # Pull request creation with auto-description
+│   ├── explore/
+│   │   └── SKILL.md              # Deep codebase exploration and Q&A
+│   └── context-budget/
+│       └── SKILL.md              # Audit context window consumption and surface savings
+└── rules/
+    ├── common/                   # Language-agnostic baseline (always applied)
+    │   ├── coding-style.md
+    │   ├── testing.md
+    │   └── security.md
+    ├── typescript/               # Overlays common/ for *.ts, *.tsx, *.js, *.jsx
+    ├── python/                   # Overlays common/ for *.py
+    └── golang/                   # Overlays common/ for *.go
 ```
 
 ## Agentic architecture
@@ -260,6 +270,25 @@ Deep codebase exploration and Q&A:
 - Sonnet sub-agent traces code paths and builds structured answers
 - Supports: explanation, usage search, architecture, location, data flow queries
 
+### context-budget
+
+Audits token overhead across agents, skills, rules, CLAUDE.md, and MCP servers, then surfaces prioritized savings:
+- Inventory phase is pure shell (word count, line count) — zero Claude tokens
+- Claude classifies components as always/sometimes/rarely needed and ranks optimizations
+- Flags bloated descriptions, heavy files, MCP oversubscription, CLAUDE.md creep
+- Adapted from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (`skills/context-budget/`)
+
+## Rules
+
+Layered coding-style / testing / security guidance, consulted when editing matching files.
+
+- `rules/common/` — language-agnostic baseline (KISS/DRY/YAGNI, test minimums, secrets handling). Always applied.
+- `rules/{lang}/` — language overlays that extend the baseline and override where the language idiom differs (e.g. Go mutability). Each file declares `paths:` in YAML frontmatter.
+
+Currently shipped: `typescript/`, `python/`, `golang/`. Extend by dropping a new `rules/{lang}/` directory with at least `coding-style.md` and a `paths:` frontmatter.
+
+Rules are referenced, not auto-injected — Claude reads them via the directive in `CLAUDE.md` when the file type matches.
+
 ## Installation
 
 ### Prerequisites
@@ -292,6 +321,7 @@ ollama pull gpt-oss:120b
 | `CLAUDE.md`         | `~/.claude/CLAUDE.md`         |
 | `hooks/*.sh`        | `~/.claude/hooks/`            |
 | `skills/*/SKILL.md` | `~/.claude/skills/*/SKILL.md` |
+| `rules/*/*.md`      | `~/.claude/rules/*/*.md`      |
 
 ## Customization
 
@@ -299,6 +329,7 @@ ollama pull gpt-oss:120b
 - Edit `CLAUDE.md` to change global behavior rules and model routing
 - Add/remove hook scripts in `hooks/`
 - Add/remove skills in `skills/`
+- Add language-specific rules in `rules/{lang}/` — each file carries a `paths:` frontmatter indicating which file globs it applies to
 - For project-specific rules, create a `CLAUDE.md` in the project root
 
 ## License

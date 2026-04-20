@@ -28,6 +28,15 @@
 - Read files before editing them
 - Prefer editing existing files over creating new ones
 
+## Rules Layer
+
+Detailed coding-style, testing, and security guidance lives under `~/.claude/rules/`:
+
+- `~/.claude/rules/common/` — language-agnostic baseline (always applicable)
+- `~/.claude/rules/{lang}/` — language overlays (`typescript/`, `python/`, `golang/`, ...) that extend the baseline; each file declares matching globs in `paths:` frontmatter
+
+When editing or reviewing a source file, consult `common/` plus the overlay whose `paths:` matches the file. Language overlays override common rules where idioms differ (e.g. Go mutability). These rules extend the Coding Style / Git Workflow / Safety sections above — they do not replace them.
+
 ## Model Routing Strategy
 
 Use the appropriate model for each task based on complexity, cost, and latency:
