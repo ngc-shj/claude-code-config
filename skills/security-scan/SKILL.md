@@ -25,6 +25,8 @@ Inventory and pattern matching are pure shell (zero Claude tokens). Ollama (`gpt
 
 Run each check; collect findings into `$FINDINGS` for the report. A finding is `[SEVERITY] path:line — problem`.
 
+**Step 2 is tuned for high recall, not precision.** False positives are expected — most get filtered when Step 3 runs the findings past `gpt-oss:120b` for contextual triage, or when Claude synthesizes the final report. Do not suppress findings at this stage. The danger is missing a real issue, not over-reporting.
+
 ### 2a. Hardcoded secrets
 
 ```bash
@@ -43,39 +45,68 @@ Severity: **CRITICAL**. Any match — rotate the secret, do not just remove the 
 
 ### 2b. Overly permissive allow list in settings.json
 
+Classify wildcard entries by the command they authorize, not by the mere presence of `*`. `Bash(git commit *)` is scoped (fixed command, variable args); `Bash(rm *)` is dangerous (destructive command, any target).
+
 ```bash
-for f in ~/.claude/settings.json ./.claude/settings.json; do
+# Tunable danger list — destructive or privilege-escalating commands.
+DANGEROUS_CMDS='^Bash\((sudo|rm|rmdir|dd|chmod|chown|mkfs|mount|umount|kill|pkill|shutdown|reboot|eval|source|exec)( |\*|:)'
+# Tunable network/exfiltration list — narrow wildcards acceptable, but worth visibility.
+NETWORK_CMDS='^Bash\((curl|wget|ssh|scp|rsync|nc|ncat|socat)( |\*|:)'
+
+for f in ~/.claude/settings.json ~/.claude/settings.local.json ./.claude/settings.json ./.claude/settings.local.json; do
   [ -f "$f" ] || continue
-  # Wildcard Bash
-  jq -r '.permissions.allow // [] | .[] | select(test("^Bash\\(\\*\\)$|^Bash\\(.*:\\*\\)$"))' "$f"
-  # Any .* wildcard in allow
-  jq -r '.permissions.allow // [] | .[] | select(test("\\*"))' "$f"
-  # Missing deny list entirely
-  jq -e '.permissions.deny' "$f" >/dev/null 2>&1 || echo "$f: no deny list defined"
-  # --dangerously-skip-permissions or similar escape hatches in env
-  jq -r '.env // {} | to_entries[] | select(.value | tostring | test("dangerous|skip-permissions|bypass"))' "$f"
+  command -v jq >/dev/null || continue
+
+  # CRITICAL — Bash(*) or Bash(*:*) grants effectively unrestricted shell.
+  jq -r --arg f "$f" '.permissions.allow // [] | .[] | select(test("^Bash\\(\\*\\)$|^Bash\\([^)]*:\\*\\)$")) | "[CRITICAL] \($f) — unrestricted: \(.)"' "$f"
+
+  # HIGH — wildcards on destructive commands.
+  jq -r --arg f "$f" --arg re "$DANGEROUS_CMDS" '.permissions.allow // [] | .[] | select(test($re)) | "[HIGH] \($f) — dangerous command with wildcard: \(.)"' "$f"
+
+  # MEDIUM — wildcards on network / exfiltration-capable commands.
+  jq -r --arg f "$f" --arg re "$NETWORK_CMDS" '.permissions.allow // [] | .[] | select(test($re)) | "[MEDIUM] \($f) — network command with wildcard: \(.)"' "$f"
+
+  # HIGH — deny list missing entirely.
+  jq -e '.permissions.deny' "$f" >/dev/null 2>&1 || echo "[HIGH] $f — no permissions.deny list defined"
+
+  # CRITICAL — dangerous env escape hatches.
+  jq -r --arg f "$f" '.env // {} | to_entries[] | select(.value | tostring | test("dangerous|skip-permissions|bypass"; "i")) | "[CRITICAL] \($f) — env bypass: \(.key)=\(.value)"' "$f"
 done
 ```
 
-Severity: **HIGH** for `Bash(*)` or missing deny list, **MEDIUM** for narrower wildcards.
+Narrow wildcards on common dev tooling (`Bash(git commit *)`, `Bash(gh pr *)`, `Bash(npm run *)`, `Bash(docker compose *)`, `Bash(python *)`) intentionally produce **no finding** — they are the expected shape of a working dev config.
 
 ### 2c. Hook injection risks
 
+Uses `find` rather than glob expansion so the check works under both bash and zsh without relying on `shopt`/`setopt`.
+
 ```bash
-for f in ~/.claude/hooks/*.sh ./.claude/hooks/*.sh 2>/dev/null; do
-  [ -f "$f" ] || continue
-  # Unquoted variable expansion in command context (most common injection vector)
-  grep -nE '(bash|sh|eval|exec|system)\s+[^"\x27]*\$[A-Za-z_][A-Za-z0-9_]*' "$f"
-  # Silent error suppression
-  grep -nE '2>/dev/null|\|\| true|\|\| :' "$f"
-  # curl piped to shell (supply chain)
-  grep -nE 'curl.*\|\s*(bash|sh)' "$f"
-  # Writes to ~/.ssh or /etc
-  grep -nE '>\s*~/.ssh|>\s*/etc/' "$f"
+find ~/.claude/hooks ./.claude/hooks -maxdepth 1 -name '*.sh' -type f 2>/dev/null | while IFS= read -r f; do
+  # CRITICAL — curl piped to shell (supply-chain vector).
+  grep -nE 'curl[^|]*\|\s*(bash|sh|zsh)' "$f" \
+    | sed "s|^|[CRITICAL] $f — curl-to-shell: |"
+
+  # CRITICAL — redirect into ssh config or system dirs.
+  grep -nE '>\s*(~/\.ssh|/etc/|/usr/|/bin/|/sbin/)' "$f" \
+    | sed "s|^|[CRITICAL] $f — sensitive-path write: |"
+
+  # HIGH — unquoted variable expansion where the value becomes argv to a shell.
+  grep -nE '(eval|bash -c|sh -c)\s+[^"\x27]*\$[A-Za-z_]' "$f" \
+    | sed "s|^|[HIGH] $f — unquoted eval/bash -c arg: |"
+
+  # MEDIUM — error suppression AFTER a destructive command.
+  # Generic `cmd 2>/dev/null` is usually defensive (file-existence probe, graceful
+  # Ollama-unavailable fallback). Only flag suppression paired with rm/mv/chmod etc.
+  grep -nE '\b(rm|rmdir|mv|chmod|chown|dd|kill)\b[^|&;]*\s+(2>/dev/null|\|\|\s*(true|:))' "$f" \
+    | sed "s|^|[MEDIUM] $f — suppression after destructive cmd: |"
+
+  # INFO — generic silent-suppression count. Not listed per-line; likely benign defense.
+  count=$(grep -cE '2>/dev/null|\|\|\s*(true|:)' "$f" 2>/dev/null); count=${count:-0}
+  [ "$count" -gt 5 ] 2>/dev/null && echo "[INFO] $f — $count silent-suppression hits (most are usually defensive; review if unexpected)"
 done
 ```
 
-Severity: CRITICAL for curl-to-shell or ssh write; HIGH for unquoted expansion; MEDIUM for silent suppression.
+Rationale for the split: running the original rule against a mature hook collection produces dozens of hits on `[ -f "$f" ] 2>/dev/null` and `|| true` used for graceful fallback — none of which are security issues. The narrowed rule only flags suppression paired with a command that can destroy state, while the generic count is demoted to INFO.
 
 ### 2d. MCP server supply chain
 
@@ -110,15 +141,16 @@ Severity: HIGH for auto-run instructions (LLM can be tricked into invoking them 
 ### 2f. Skill / agent tool over-reach
 
 ```bash
-# Agents or skills declaring unrestricted tool access
-for f in ~/.claude/agents/*.md ~/.claude/skills/*/SKILL.md ./.claude/skills/*/SKILL.md 2>/dev/null; do
-  [ -f "$f" ] || continue
-  # tools field with Bash and no restriction, or missing entirely
+{
+  find ~/.claude/agents ./.claude/agents -maxdepth 1 -name '*.md' -type f 2>/dev/null
+  find ~/.claude/skills ./.claude/skills -mindepth 2 -maxdepth 2 -name 'SKILL.md' -type f 2>/dev/null
+} | while IFS= read -r f; do
+  # Extract tools line from frontmatter only.
   awk '/^---$/{fm=!fm; next} fm && /^tools:/ {print FILENAME":"NR": "$0}' "$f"
 done
 ```
 
-Severity: MEDIUM. Review whether the agent / skill actually needs Bash or Edit/Write.
+Severity: MEDIUM. Review whether the agent / skill actually needs Bash or Edit/Write. No output means no agent/skill restricts its tools via frontmatter — this is not inherently a problem (the default tool set is what Claude Code supplies), just something to be aware of.
 
 ## Step 3: Optional Ollama Deep Analysis
 
