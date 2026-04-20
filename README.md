@@ -304,7 +304,9 @@ cd claude-code-config
 bash install.sh
 ```
 
-Existing files are backed up with `.bak` extension before overwriting.
+The installer overwrites existing files. This repo is the source of truth — `git` history is the rollback mechanism, so no `.bak` files are kept. Any stale `.bak` under `~/.claude/{hooks,skills,rules}/` from earlier installs is removed on the next run (stale skill backups otherwise load as shadow skills).
+
+For local customizations that should survive installs, use `~/.claude/settings.local.json` instead of editing `~/.claude/settings.json` directly.
 
 ### Install local models (optional)
 
