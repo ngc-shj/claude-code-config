@@ -41,34 +41,34 @@ if [ -d "$SCRIPT_DIR/hooks" ]; then
 fi
 
 # Install skills
+# Copy the entire skill directory so skills with supplemental files
+# (phases/, common-rules.md, etc.) install correctly. Back up to .bak
+# because users may customize SKILL.md.
 if [ -d "$SCRIPT_DIR/skills" ]; then
   for skill_dir in "$SCRIPT_DIR"/skills/*/; do
     skill_name="$(basename "$skill_dir")"
     dest="$CLAUDE_DIR/skills/$skill_name"
-    mkdir -p "$dest"
-    if [ -f "$dest/SKILL.md" ]; then
-      echo "  ~/.claude/skills/$skill_name/SKILL.md already exists. Backing up to SKILL.md.bak"
-      cp "$dest/SKILL.md" "$dest/SKILL.md.bak"
+    if [ -d "$dest" ]; then
+      echo "  ~/.claude/skills/$skill_name already exists. Backing up to ${skill_name}.bak"
+      rm -rf "$dest.bak"
+      cp -r "$dest" "$dest.bak"
+      rm -rf "$dest"
     fi
-    cp "$skill_dir/SKILL.md" "$dest/SKILL.md"
+    cp -r "${skill_dir%/}" "$CLAUDE_DIR/skills/"
     echo "  Installed skill: $skill_name"
   done
 fi
 
 # Install rules
 # Layered: common/ baseline + language-specific overlays. Claude references
-# these via CLAUDE.md when editing matching files.
+# these via CLAUDE.md when editing matching files. No .bak kept — rules are
+# owned by this repo and should not be manually edited under ~/.claude/rules.
 if [ -d "$SCRIPT_DIR/rules" ]; then
   for rule_dir in "$SCRIPT_DIR"/rules/*/; do
     rule_name="$(basename "$rule_dir")"
     dest="$CLAUDE_DIR/rules/$rule_name"
-    if [ -d "$dest" ]; then
-      echo "  ~/.claude/rules/$rule_name already exists. Backing up to ${rule_name}.bak"
-      rm -rf "$dest.bak"
-      cp -r "$dest" "$dest.bak"
-    fi
-    mkdir -p "$dest"
-    cp "$rule_dir"*.md "$dest/"
+    rm -rf "$dest" "$dest.bak"
+    cp -r "${rule_dir%/}" "$CLAUDE_DIR/rules/"
     echo "  Installed rules: $rule_name"
   done
 fi
