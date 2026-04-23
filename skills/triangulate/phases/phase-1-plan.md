@@ -161,23 +161,23 @@ For Security expert only — append to each Critical finding:
 First, save each agent's raw output to temporary files, then use local LLM for deduplication (zero Claude tokens):
 
 ```bash
-# Per-run temp directory so parallel /multi-agent-review sessions do not
-# collide. marv-tmpdir.sh create produces a mode-0700 dir under TMPDIR
+# Per-run temp directory so parallel /triangulate sessions do not
+# collide. tri-tmpdir.sh create produces a mode-0700 dir under TMPDIR
 # (falling back to /tmp); no umask modification is needed — other local
 # users cannot traverse the directory regardless of interior file modes.
-MARV_DIR=$(bash ~/.claude/hooks/marv-tmpdir.sh create)
-: "${MARV_DIR:?marv-tmpdir create failed; cannot continue plan-review merge}"
-echo "MARV_DIR=$MARV_DIR"
+TRI_DIR=$(bash ~/.claude/hooks/tri-tmpdir.sh create)
+: "${TRI_DIR:?tri-tmpdir create failed; cannot continue plan-review merge}"
+echo "TRI_DIR=$TRI_DIR"
 # ORCHESTRATOR OBLIGATION: after each expert sub-agent returns, save the
 # sub-agent's raw output to the corresponding file using the Write tool,
-# substituting the LITERAL absolute path captured from the MARV_DIR= value
-# (do NOT pass the string "$MARV_DIR" — Write tool does no shell expansion):
-#   Write "<literal MARV_DIR>/func-findings.txt" ← Functionality expert output
-#   Write "<literal MARV_DIR>/sec-findings.txt"  ← Security expert output
-#   Write "<literal MARV_DIR>/test-findings.txt" ← Testing expert output
-cat "$MARV_DIR/func-findings.txt" "$MARV_DIR/sec-findings.txt" "$MARV_DIR/test-findings.txt" \
+# substituting the LITERAL absolute path captured from the TRI_DIR= value
+# (do NOT pass the string "$TRI_DIR" — Write tool does no shell expansion):
+#   Write "<literal TRI_DIR>/func-findings.txt" ← Functionality expert output
+#   Write "<literal TRI_DIR>/sec-findings.txt"  ← Security expert output
+#   Write "<literal TRI_DIR>/test-findings.txt" ← Testing expert output
+cat "$TRI_DIR/func-findings.txt" "$TRI_DIR/sec-findings.txt" "$TRI_DIR/test-findings.txt" \
   | bash ~/.claude/hooks/ollama-utils.sh merge-findings
-bash ~/.claude/hooks/marv-tmpdir.sh cleanup "$MARV_DIR"
+bash ~/.claude/hooks/tri-tmpdir.sh cleanup "$TRI_DIR"
 ```
 
 If Ollama is unavailable, deduplicate manually as fallback:
@@ -237,7 +237,7 @@ Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollam
 ```bash
 { git log <prev-round-commit>..HEAD --oneline
   echo '=== OLLAMA-INPUT-SEPARATOR ==='
-  cat "$MARV_DIR"/*-findings.txt  # or equivalent new-findings aggregate
+  cat "$TRI_DIR"/*-findings.txt  # or equivalent new-findings aggregate
 } | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
 ```
 

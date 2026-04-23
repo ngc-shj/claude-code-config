@@ -36,23 +36,23 @@ Generate per-perspective seed findings so each Claude sub-agent can start from v
 ```bash
 # Per-run temp directory (mode 0700) shared across Step 3-2b, Step 3-3
 # template rendering, Step 3-4 merge, and Step 3-9 cleanup. The orchestrator
-# MUST capture the MARV_DIR value printed at the end of this block and
+# MUST capture the TRI_DIR value printed at the end of this block and
 # substitute the literal absolute path into subsequent tool invocations
 # (Bash, Write, Edit) — Claude's tool invocations do NOT share shell state,
 # and Write tool performs no shell expansion.
-MARV_DIR=$(bash ~/.claude/hooks/marv-tmpdir.sh create)
-: "${MARV_DIR:?marv-tmpdir create failed; cannot continue seed generation}"
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality > "$MARV_DIR/seed-func.txt"
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security      > "$MARV_DIR/seed-sec.txt"
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing       > "$MARV_DIR/seed-test.txt"
-echo "MARV_DIR=$MARV_DIR"
+TRI_DIR=$(bash ~/.claude/hooks/tri-tmpdir.sh create)
+: "${TRI_DIR:?tri-tmpdir create failed; cannot continue seed generation}"
+git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality > "$TRI_DIR/seed-func.txt"
+git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security      > "$TRI_DIR/seed-sec.txt"
+git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing       > "$TRI_DIR/seed-test.txt"
+echo "TRI_DIR=$TRI_DIR"
 ```
 
 **Truncation-detection check (mandatory)**: each seed file MUST end with the sentinel `## END-OF-ANALYSIS`. A seed file that is (a) empty or (b) non-empty-but-missing-sentinel is treated as "not usable as seed" and the corresponding sub-agent falls back to full-diff review.
 
 ```bash
-: "${MARV_DIR:?MARV_DIR not set — did Step 3-2b capture fail? Substitute the literal path from the MARV_DIR= line printed at the end of Step 3-2b.}"
-for seed in "$MARV_DIR"/seed-func.txt "$MARV_DIR"/seed-sec.txt "$MARV_DIR"/seed-test.txt; do
+: "${TRI_DIR:?TRI_DIR not set — did Step 3-2b capture fail? Substitute the literal path from the TRI_DIR= line printed at the end of Step 3-2b.}"
+for seed in "$TRI_DIR"/seed-func.txt "$TRI_DIR"/seed-sec.txt "$TRI_DIR"/seed-test.txt; do
   # Strip trailing empty lines before checking the last line, so a file
   # written as `...## END-OF-ANALYSIS\n\n` still matches the sentinel.
   if [ -s "$seed" ] && ! sed '/^[[:space:]]*$/d' "$seed" | tail -1 | grep -q '^## END-OF-ANALYSIS$'; then
@@ -95,7 +95,7 @@ Deviation log:
 Target code: use `git diff main...HEAD` as the source of truth. DO NOT load the full diff into your context at the start.
 
 Ollama seed findings (your perspective only — verify each, do not re-report as-is):
-[Orchestrator MUST select ONE of the three branches based on the seed file at $MARV_DIR/seed-<role>.txt — where $MARV_DIR is the literal absolute path captured from the `MARV_DIR=` line printed at the end of Step 3-2b. Substitute the literal path when rendering this prompt; the sub-agent sees the concrete path, never the `$MARV_DIR` placeholder. <role> ∈ {func, sec, test}:
+[Orchestrator MUST select ONE of the three branches based on the seed file at $TRI_DIR/seed-<role>.txt — where $TRI_DIR is the literal absolute path captured from the `TRI_DIR=` line printed at the end of Step 3-2b. Substitute the literal path when rendering this prompt; the sub-agent sees the concrete path, never the `$TRI_DIR` placeholder. <role> ∈ {func, sec, test}:
 
  (a) File is 0-byte OR does not end with `## END-OF-ANALYSIS` sentinel:
      Insert: "Seed unavailable or truncated — perform full-diff review. Read `git diff main...HEAD` directly for this perspective."
@@ -235,18 +235,18 @@ For Security expert only — append to each Critical finding:
 First, save each agent's raw output to temporary files, then use local LLM for deduplication (zero Claude tokens):
 
 ```bash
-# Reuses the $MARV_DIR created in Step 3-2b. Substitute the literal absolute
+# Reuses the $TRI_DIR created in Step 3-2b. Substitute the literal absolute
 # path when running this in a fresh Bash tool invocation — Claude's Bash
 # tool does NOT share shell state between calls.
-: "${MARV_DIR:?MARV_DIR not set — did Step 3-2b capture fail? Substitute the literal path from the MARV_DIR= line printed at the end of Step 3-2b.}"
+: "${TRI_DIR:?TRI_DIR not set — did Step 3-2b capture fail? Substitute the literal path from the TRI_DIR= line printed at the end of Step 3-2b.}"
 # ORCHESTRATOR OBLIGATION: after each expert sub-agent returns, save the
 # sub-agent's raw output to the corresponding file using the Write tool,
-# substituting the LITERAL absolute path (do NOT pass "$MARV_DIR" — Write
+# substituting the LITERAL absolute path (do NOT pass "$TRI_DIR" — Write
 # tool performs no shell expansion):
-#   Write "<literal MARV_DIR>/func-findings.txt" ← Functionality expert output
-#   Write "<literal MARV_DIR>/sec-findings.txt"  ← Security expert output
-#   Write "<literal MARV_DIR>/test-findings.txt" ← Testing expert output
-cat "$MARV_DIR/func-findings.txt" "$MARV_DIR/sec-findings.txt" "$MARV_DIR/test-findings.txt" \
+#   Write "<literal TRI_DIR>/func-findings.txt" ← Functionality expert output
+#   Write "<literal TRI_DIR>/sec-findings.txt"  ← Security expert output
+#   Write "<literal TRI_DIR>/test-findings.txt" ← Testing expert output
+cat "$TRI_DIR/func-findings.txt" "$TRI_DIR/sec-findings.txt" "$TRI_DIR/test-findings.txt" \
   | bash ~/.claude/hooks/ollama-utils.sh merge-findings
 ```
 
@@ -307,7 +307,7 @@ Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollam
 ```bash
 { git log <prev-round-commit>..HEAD --oneline
   echo '=== OLLAMA-INPUT-SEPARATOR ==='
-  cat "$MARV_DIR"/*-findings.txt  # or equivalent new-findings aggregate
+  cat "$TRI_DIR"/*-findings.txt  # or equivalent new-findings aggregate
 } | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
 ```
 
@@ -403,8 +403,8 @@ git commit -m "review: code review complete - all findings resolved"
 
 # Clean up the per-run temp directory from Step 3-2b. The cleanup helper
 # is a no-op on empty/unset paths (e.g., if Step 3-2b was skipped) and
-# refuses to remove anything outside the marv-* prefix under TMPDIR.
-bash ~/.claude/hooks/marv-tmpdir.sh cleanup "$MARV_DIR"
+# refuses to remove anything outside the tri-* prefix under TMPDIR.
+bash ~/.claude/hooks/tri-tmpdir.sh cleanup "$TRI_DIR"
 ```
 
 Final report:

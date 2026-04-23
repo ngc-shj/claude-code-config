@@ -1,12 +1,12 @@
 ---
-name: multi-agent-review
-description: "A skill that reviews plan files or codebases from three expert perspectives: functionality, security, and testing. Launches three sub-agents and repeats the review-and-fix loop until all issues are resolved. Always use this skill when: asked to review plans, code, or branches; asked to evaluate from functionality/security/testing perspectives; asked for PR or pre-implementation review; asked to implement or develop from a plan."
+name: triangulate
+description: "Triangulate plans and code from three expert viewpoints — functionality, security, and testing — across three phases (plan, implementation, review). Each iteration sharpens the position of remaining issues until all are resolved. Always use this skill when: asked to review plans, code, or branches; asked to evaluate from functionality/security/testing perspectives; asked for PR or pre-implementation review; asked to implement or develop from a plan."
 ---
 
-# Multi-Agent Review Skill
+# Triangulate Skill
 
 A skill that covers the entire development workflow from plan creation to coding to code review.
-Three expert agents (functionality, security, testing) repeat review and fix cycles at each phase until all issues are resolved.
+Three expert agents (functionality, security, testing) triangulate issues at each phase, repeating review and fix cycles until all findings are resolved.
 
 The skill is split across several files for context efficiency. Load only the files required for the current phase.
 

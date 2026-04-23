@@ -21,8 +21,8 @@ claude-code-config/
 │   ├── notify.sh                 # Desktop notifications (macOS)
 │   └── stop-notify.sh            # Task completion notifications
 ├── skills/
-│   ├── multi-agent-review/
-│   │   └── SKILL.md              # Multi-agent review workflow
+│   ├── triangulate/
+│   │   └── SKILL.md              # Triangulate: 3-phase × 3-expert review workflow
 │   ├── simplify/
 │   │   └── SKILL.md              # Code simplification and cleanup
 │   ├── test-gen/
@@ -164,7 +164,7 @@ git diff --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes
 echo "How does the request router work?" | bash ~/.claude/hooks/ollama-utils.sh classify-query
 
 # Analyze a diff from an expert perspective (functionality / security / testing)
-# Used by multi-agent-review Phase 3 to seed Claude sub-agents with findings
+# Used by triangulate Phase 3 to seed Claude sub-agents with findings
 # instead of each sub-agent reading the full diff — reduces Claude token usage.
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality
 git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security
@@ -234,7 +234,7 @@ Notifies when Claude finishes a response:
 
 ## Skills
 
-### multi-agent-review
+### triangulate
 
 A development workflow skill with three phases:
 
