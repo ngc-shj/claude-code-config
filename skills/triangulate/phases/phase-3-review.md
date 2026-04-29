@@ -101,7 +101,7 @@ Ollama seed findings (your perspective only — verify each, do not re-report as
      Insert: "Seed unavailable or truncated — perform full-diff review. Read `git diff main...HEAD` directly for this perspective."
 
  (b) File ends with sentinel AND contains exactly `No findings` followed by the sentinel:
-     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R30 Recurring Issue Check using targeted greps."
+     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R35 Recurring Issue Check using targeted greps."
 
  (c) File ends with sentinel AND contains finding entries:
      Insert the finding entries verbatim (stripping only the trailing `## END-OF-ANALYSIS` line).
@@ -114,7 +114,7 @@ Seed trust advisory (MANDATORY):
 Verification contract (MANDATORY):
 - For each seed finding, run targeted verification: `grep -n <symbol> <file>` or `Read <file>` with `offset`/`limit` scoped to the reported line range (±20 lines context). Do NOT read entire files.
 - Accept only seed findings you independently verify. Reject and note any seed finding that does not reproduce.
-- After processing seeds, perform your R1-R30 Recurring Issue Check using targeted greps (not full-file reads) to catch patterns the seed missed.
+- After processing seeds, perform your R1-R35 Recurring Issue Check using targeted greps (not full-file reads) to catch patterns the seed missed.
 - You MAY read a full file only when the seed is empty OR when targeted verification is inconclusive; record the file+reason in your output.
 
 Seed Finding Disposition section (MANDATORY — addresses audit gap):
@@ -282,18 +282,18 @@ Review round: [nth]
 ## Recurring Issue Check
 ### Functionality expert
 - R1: [status]
-- ... (R1-R30)
+- ... (R1-R35)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R30)
+- ... (R1-R35)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R30)
+- ... (R1-R35)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
