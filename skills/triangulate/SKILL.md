@@ -19,9 +19,9 @@ The skill is split across several files for context efficiency. Load only the fi
 | `phases/phase-1-plan.md` | Plan creation / plan review is the active phase |
 | `phases/phase-2-coding.md` | Implementation is the active phase |
 | `phases/phase-3-review.md` | Code review is the active phase |
-| `common-rules.md` | Any phase — contains severity classification, sub-agent launch patterns, codebase awareness obligations, anti-deferral rules, and the recurring issue check reference (R1-R30, RS*, RT*) |
+| `common-rules.md` | Any phase — contains severity classification, sub-agent launch patterns, codebase awareness obligations, anti-deferral rules, and the recurring issue check reference (R1-R35, RS*, RT*) |
 
-**Loading protocol** — when a phase file references a rule identifier (R1-R30, RSN, RTN), a "Common Rules" section, or an obligation defined elsewhere, Read `common-rules.md` before acting on that reference. Do not paraphrase from memory.
+**Loading protocol** — when a phase file references a rule identifier (R1-R35, RSN, RTN), a "Common Rules" section, or an obligation defined elsewhere, Read `common-rules.md` before acting on that reference. Do not paraphrase from memory.
 
 ---
 
