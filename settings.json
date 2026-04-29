@@ -186,6 +186,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash ~/.claude/hooks/block-destructive-docker.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/commit-msg-check.sh",
             "timeout": 15
           }
