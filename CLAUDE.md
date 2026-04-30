@@ -82,3 +82,14 @@ Prefer hooks over MCP when the task requires file access or runs automatically.
 3. **Escalation**: If local LLM confidence is low or the task is ambiguous, escalate to Claude
 4. **Privacy-sensitive tasks**: Use local LLM for tasks involving sensitive data that should not leave the machine
 5. **MCP fallback**: Use `mcp__ollama__ollama_chat` or `mcp__ollama__ollama_generate` only when passing short text that is already in context
+
+## Tool Output Compression (RTK)
+
+[RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) is a CLI proxy registered as the first `PreToolUse` Bash hook in `settings.json`. It transparently rewrites common dev commands (`git status` -> `rtk git status`, `pytest` -> `rtk pytest`, etc.) so Claude sees filtered/compressed output instead of raw stdout. Reported savings: 60-90% on git/test/log-heavy operations.
+
+Notes specific to this repo:
+- The rewrite happens BEFORE the `block-*` deny hooks run, so Claude sees `rtk <verb>...` in `tool_input.command`. The R31 destructive-op regexes match against the substring (`git push --force`, `docker volume rm`, etc.), which is preserved across the rewrite — destructive blocks still fire correctly.
+- `commit-msg-check.sh` was updated to accept the `rtk ` prefix on `git commit ...` so Ollama-based commit message review still runs after the rewrite.
+- Override the rewrite for a single command with `rtk proxy <cmd>` (raw passthrough), or disable globally by removing the hook entry from `~/.claude/settings.local.json`.
+
+@RTK.md
