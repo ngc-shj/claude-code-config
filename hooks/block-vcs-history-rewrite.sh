@@ -25,14 +25,18 @@ set -euo pipefail
 
 INPUT=$(cat)
 
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
+# Single jq call: emit tool_name + Unit Separator (U+001F) + command.
+# US survives jq -rj as a real 0x1F byte (unlike @tsv, which escapes
+# embedded TABs as literal "\t") and is virtually never present in
+# real shell commands, so the field-split is unambiguous.
+PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "\u001f", (.tool_input.command // "")')
+TOOL_NAME="${PARSED%%$'\x1f'*}"
+COMMAND="${PARSED#*$'\x1f'}"
 
 if [ "$TOOL_NAME" != "Bash" ]; then
   echo '{"decision": "approve"}'
   exit 0
 fi
-
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
 if [ -z "$COMMAND" ]; then
   echo '{"decision": "approve"}'

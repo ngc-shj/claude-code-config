@@ -129,5 +129,5 @@ printf '| Edit \\| Write \\| MultiEdit | %d | **%d ms** |\n' \
 
 printf '\nNotes:\n'
 printf -- '- The Bash matcher also runs `commit-msg-check.sh`, which is excluded from this benchmark because (a) it short-circuits on non-`git commit` commands and (b) on a real `git commit` it calls Ollama, dominating wall time. The numbers above are the always-paid block-* tripwire cost.\n'
-printf -- '- Per-iteration cost is dominated by `bash` process startup + two `jq` invocations (one for `tool_name`, one for `tool_input.command`). A future optimization could consolidate the `jq` calls if a TAB-safe variant is found (an earlier `@tsv` attempt was reverted because TAB inside the command value collided with the field separator).\n'
+printf -- '- Per-iteration cost is dominated by `bash` process startup + a single `jq` invocation. The hooks emit `tool_name` and `tool_input.command` in one jq call separated by U+001F (Unit Separator) and split via bash parameter expansion — earlier 2-jq-call versions paid roughly twice this; an even earlier `@tsv` attempt was reverted because TAB inside command values collided with the TSV field separator.\n'
 printf -- '- Numbers are wall time on a developer machine. Re-run on a quiescent system before drawing conclusions about per-call cost.\n'
