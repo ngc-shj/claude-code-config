@@ -11,6 +11,21 @@ CLAUDE_DIR="$HOME/.claude"
 
 echo "Installing Claude Code settings..."
 
+# Pre-flight: validate settings.json is well-formed before touching anything.
+# A malformed settings.json silently breaks the harness on next launch
+# (hooks stop firing, permissions revert to defaults). Catching this at
+# install time, before we overwrite the live ~/.claude/settings.json,
+# preserves the previous good copy.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ERROR: jq is required for install-time settings.json validation but is not on PATH." >&2
+  exit 1
+fi
+if ! jq empty "$SCRIPT_DIR/settings.json" 2>/dev/null; then
+  echo "ERROR: $SCRIPT_DIR/settings.json is not valid JSON. Refusing to install — fix the source file first." >&2
+  echo "Run: jq empty $SCRIPT_DIR/settings.json   # to see the parse error." >&2
+  exit 1
+fi
+
 mkdir -p "$CLAUDE_DIR"
 
 # Install settings.json
@@ -31,6 +46,13 @@ if [ -d "$SCRIPT_DIR/hooks" ]; then
     hook_name="$(basename "$hook_file")"
     cp "$hook_file" "$CLAUDE_DIR/hooks/$hook_name"
     chmod +x "$CLAUDE_DIR/hooks/$hook_name"
+    # Post-install verify: the hook is executable. A non-executable hook
+    # fails silently at PreToolUse time (Claude Code may either skip it or
+    # error inconsistently across versions); fail loudly here instead.
+    if [ ! -x "$CLAUDE_DIR/hooks/$hook_name" ]; then
+      echo "ERROR: $CLAUDE_DIR/hooks/$hook_name is not executable after chmod +x" >&2
+      exit 1
+    fi
     echo "  Installed hook: $hook_name"
   done
 fi
