@@ -366,7 +366,7 @@ Procedure:
 2. On match: pause, name the matched category and trigger token in plain text to the user, propose at least one targeted alternative if the user's underlying intent appears recoverable without the destructive op (e.g., for "stale dev volume" symptom — `docker compose rm -f -v <service>` instead of `docker compose down -v`), and wait for explicit confirmation that names the destructive operation.
 3. Confirmation is single-use; granting permission for one destructive op does not authorize subsequent destructive ops in the same session.
 
-This rule is reviewer-agent guidance executed by the orchestrator's own discipline before each tool call. A future plan may add a `PreToolUse` hook to enforce this at the harness level; that infrastructure is out of scope for this rule.
+This rule is reviewer-agent guidance executed by the orchestrator's own discipline before each tool call. **Category (a) data-volume destruction** is additionally enforced at the harness level via the `PreToolUse` hook `~/.claude/hooks/block-destructive-docker.sh` (deny-on-match for `docker compose down -v|--volumes`, `docker compose rm -v|--volumes`, `docker volume rm|prune`, `docker system prune -v|--volumes`, including bundled short flags and `bash -c` wrappers). The hook is a best-effort tripwire — bypasses exist (base64-decoded `eval`, alternate shells, Docker socket via `curl --unix-socket`). Categories (b)-(i) remain reviewer-text only at this time; orchestrator discipline before each tool call is the primary control for those categories. Adding runtime hooks for additional categories is a separate plan per category, since each category's verb-token surface and false-positive profile differ.
 
 **R32: Runtime-shape boot test for new long-running artifacts**
 
