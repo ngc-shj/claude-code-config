@@ -187,6 +187,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "rtk hook claude",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/block-destructive-docker.sh",
             "timeout": 5
           },

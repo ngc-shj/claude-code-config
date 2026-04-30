@@ -19,8 +19,12 @@ fi
 
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
-# Only check git commit commands
-if ! echo "$COMMAND" | grep -qE '^git commit'; then
+# Only check git commit commands. The optional `rtk ` prefix matches RTK's
+# (https://github.com/rtk-ai/rtk) auto-rewrite hook when it runs before
+# this one — RTK turns `git commit -m "msg"` into `rtk git commit -m "msg"`,
+# and without the prefix tolerance this hook would silently no-op on every
+# commit, defeating the Ollama message review.
+if ! echo "$COMMAND" | grep -qE '^(rtk[[:space:]]+)?git commit'; then
   echo '{"decision": "approve"}'
   exit 0
 fi
