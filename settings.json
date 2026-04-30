@@ -211,6 +211,11 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/hooks/block-authz-state-destruction.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/commit-msg-check.sh",
             "timeout": 15
           }
