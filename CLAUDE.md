@@ -92,4 +92,20 @@ Notes specific to this repo:
 - `commit-msg-check.sh` was updated to accept the `rtk ` prefix on `git commit ...` so Ollama-based commit message review still runs after the rewrite.
 - Override the rewrite for a single command with `rtk proxy <cmd>` (raw passthrough), or disable globally by removing the hook entry from `~/.claude/settings.local.json`.
 
+### Privacy posture
+
+Audited 2026-04-30 against rtk 0.38.0. Full report: [`docs/archive/audit/rtk-privacy-posture-2026-04-30.md`](./docs/archive/audit/rtk-privacy-posture-2026-04-30.md).
+
+Headline findings:
+- **Network exfiltration: NEGLIGIBLE.** Telemetry is OFF by default, and the v0.38.0 binary contains no collection endpoint (literal string in binary: `no telemetry endpoint configured`). Static-string scan turned up no posthog/sentry/datadog/amplitude markers — only docs URLs.
+- **Local plaintext command history**: every command's full text + arguments + absolute project path is logged to `~/.local/share/rtk/history.db` (SQLite). Default retention was 90 days; **this repo ships with retention shortened to 14 days**.
+- **Threat-model equivalent**: same shape as `~/.bash_history`. Disk encryption + non-shared user account remain the operative controls. Avoid passing secrets as CLI args (use env vars or `--from-file` instead).
+
+Re-audit triggers (run on every `brew upgrade rtk`):
+- `strings $(which rtk) | grep -E '^https?://' | grep -v 'github.com\|homebrew'` should remain empty.
+- `rtk telemetry status` should show `enabled: no` and `device hash: (no salt file)` unless intentionally enabled.
+- If a new endpoint URL or unfamiliar SaaS marker appears, evaluate before continuing use.
+
+Defense-in-depth: export `RTK_TELEMETRY_DISABLED=1` in `~/.bashrc` to override any accidental opt-in regardless of config. Periodic purge: `rtk telemetry forget`.
+
 @RTK.md
