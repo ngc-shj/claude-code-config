@@ -1,0 +1,3 @@
+- Reduced the number of `jq` calls from two to one per hook by using U+001F separator, cutting Bash chain latency by 45% (from ~77ms to ~42ms).  
+- This change avoids issues with embedded control characters like TABs, which were problematic with the earlier `@tsv` approach.  
+- Risk: While U+001F is uncommon in shell commands, its presence could theoretically cause parsing errors, but testing shows no regressions.

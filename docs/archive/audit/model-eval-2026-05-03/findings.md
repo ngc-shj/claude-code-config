@@ -1,24 +1,27 @@
-# Model evaluation — qwen3.6 vs current routing (2026-05-03)
+# Model evaluation — 7-model comparison vs current routing (2026-05-03)
 
 Bench harness: [`bench.sh`](./bench.sh) · Aggregator: [`aggregate.sh`](./aggregate.sh) · Ollama 0.22.0 on `gx10-a9c0`.
 
 ## TL;DR
 
-**Keep current routing (`gpt-oss:20b` for short-output tasks, `gpt-oss:120b` for analysis tasks). Do NOT promote any qwen3.6 variant to default for production hooks.**
+**Keep current routing (`gpt-oss:20b` for short-output tasks, `gpt-oss:120b` for analysis tasks). Of the seven models tested, none beats the current default on `analyze-functionality`.**
 
-Three rounds of measurement covered:
-1. Initial 3×3×3 matrix (samples × hooks × {gpt-oss:20b, gpt-oss:120b, qwen3.6:35b-a3b}).
-2. Targeted re-tests for cold-start and `think:false`.
-3. Addendum bench of `qwen3.6:27b` (dense Q4_K_M, 17 GB) — the dense sibling of the MoE 35b-a3b.
+Four rounds of measurement covered:
+1. Initial 3×3×3 matrix: `gpt-oss:20b` / `gpt-oss:120b` / `qwen3.6:35b-a3b`.
+2. Targeted re-tests on qwen3.6:35b-a3b: cold-start and `think:false`.
+3. Addendum: `qwen3.6:27b` (dense Q4_K_M) — strictly dominated by the MoE sibling.
+4. Coder/reasoning candidates: `qwen2.5-coder:32b` / `deepseek-coder-v2:16b` / `deepseek-r1:70b`.
 
-The MoE `qwen3.6:35b-a3b` (35B total / 3B active) suggested a sweet spot between 20b and 120b, but on this workload it is **slower than 120b** on heavy tasks and **breaks the output-format contract** on short-output tasks. The dense `qwen3.6:27b` is **strictly worse** — same quality issues at ~5× the latency, because every token activates all 27B params instead of MoE's 3B subset. Qwen3.6 (35b-a3b) is best slotted as a complementary "second opinion" model for analyze-* tasks; the dense 27b has no use case on this hardware.
+Round 4 hypothesis was that a coding-tuned model would beat `gpt-oss:120b` on `analyze-functionality` due to better code-review priors. **Refuted.** Both `qwen2.5-coder:32b` and `deepseek-r1:70b` produced "No findings" for all three samples — the same false-negative pattern that disqualified `gpt-oss:20b`. `deepseek-coder-v2:16b` flagged superficial issues (variable renaming, regex inconsistency without specifying which verb) and violated the format contract on one cell. Only `gpt-oss:120b` reliably surfaced the U+001F separator-collision risk; only `qwen3.6:35b-a3b` consistently surfaced an alternative real concern (DRY duplication).
+
+Bonus finding: `deepseek-coder-v2:16b` (MoE 16B/2.4B-active) is the **speed champion** for short-output tasks (`commit-msg-check` 0.4s, `summarize-diff` ~8s) — 3-4× faster than the current defaults. If output quality is acceptable on those tasks, it is a viable demotion target. Worth a wider A/B before changing.
 
 ## Background
 
 Following the local availability of `qwen3.6:35b-a3b` (23 GB, MoE 35B/3B-active), the question was whether to:
 
-- (A) repoint `pre-review.sh`'s `REVIEW_MODEL` from `gpt-oss:120b` to qwen3.6 for latency wins, or
-- (B) demote some `gpt-oss:120b` calls in `ollama-utils.sh` to qwen3.6, or
+- (A) repoint `pre-review.sh`'s `REVIEW_MODEL` from `gpt-oss:120b` to a faster model, or
+- (B) demote some `gpt-oss:120b` calls in `ollama-utils.sh`, or
 - (C) leave routing as-is.
 
 The empirical approach was to replay past commits from this repo through each model under the same prompts the production hooks use today.
@@ -43,102 +46,95 @@ The empirical approach was to replay past commits from this repo through each mo
 
 ### Models
 
-| model | architecture | size | added in |
-|---|---|---:|---|
-| `gpt-oss:20b`     | dense, thinking-enabled | 13 GB | round 1 |
-| `gpt-oss:120b`    | dense, thinking-enabled | 65 GB | round 1 |
-| `qwen3.6:35b-a3b` | MoE 35B / 3B active     | 23 GB | round 1 |
-| `qwen3.6:27b`     | dense, Q4_K_M           | 17 GB | round 3 (addendum) |
+| short | full tag | architecture | size | added |
+|---|---|---|---:|---|
+| `20b`     | `gpt-oss:20b`           | dense, thinking-on    | 13 GB | round 1 |
+| `120b`    | `gpt-oss:120b`          | dense, thinking-on    | 65 GB | round 1 |
+| `q3.6-35a3` | `qwen3.6:35b-a3b`     | MoE 35B / 3B active   | 23 GB | round 1 |
+| `q3.6-27` | `qwen3.6:27b`           | dense, thinking-on    | 17 GB | round 3 |
+| `q2.5c-32` | `qwen2.5-coder:32b`    | dense, **no thinking** (pre-Qwen3 era) | 19 GB | round 4 |
+| `dsc-v2-16` | `deepseek-coder-v2:16b` | MoE 16B / 2.4B active, no thinking | 8.9 GB | round 4 |
+| `dsr1-70` | `deepseek-r1:70b`       | dense, reasoning (thinking-on) | 42 GB | round 4 |
 
 ### Loop ordering
 
-Models OUTER → samples → hooks. Each model warms up once (1-token ping) before its block, then runs 9 cells while resident in VRAM. Round 3 added a `SKIP_EXISTING=1` guard so prior cells are reused — only the new model's 9 cells executed.
+Models OUTER → samples → hooks. Each model warms up once (1-token ping) before its block, then runs 9 cells while resident in VRAM. `bench.sh` has `SKIP_EXISTING=1` (default) so adding a new model is incremental — only the 9 new cells executed in rounds 3 and 4.
 
 ---
 
 ## Round 1 — initial matrix
 
-### 1.1 Wall-clock latency (seconds)
+### 1.1 Wall-clock latency (seconds, 7-model)
 
 #### commit-msg-check
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
-|---|---:|---:|---:|---:|
-| small  | 2.4 | 5.0 | 9.5 | 47.3 |
-| medium | 6.5 | 6.6 | 9.5 | 47.5 |
-| large  | 9.3 | 8.5 | 9.6 | 47.3 |
+| sample | 20b | 120b | q3.6-35a3 | q3.6-27 | q2.5c-32 | dsc-v2-16 | dsr1-70 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| small  | 2.4 | 5.0 | 9.5 | 47.3 | 1.1 | **0.8** | timeout 60 |
+| medium | 6.5 | 6.6 | 9.5 | 47.5 | 1.3 | **0.4** | timeout 60 |
+| large  | 9.3 | 8.5 | 9.6 | 47.3 | 1.2 | **0.4** | timeout 60 |
+
+`dsr1-70` (DeepSeek-R1, reasoning-thinking) cannot finish a 1-line commit-message judgment in 60s — same defect class as Qwen3.6's thinking-overrun, just slower. `dsc-v2-16` is **3-15× faster** than the current `20b` default.
 
 #### summarize-diff
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
-|---|---:|---:|---:|---:|
-| small  |  7.2 | 14.3 | 30.0 | 179.4 |
-| medium | 11.1 | 14.8 | 34.0 | 150.7 |
-| large  | 16.8 | 18.5 | 32.7 | 185.2 |
+| sample | 20b | 120b | q3.6-35a3 | q3.6-27 | q2.5c-32 | dsc-v2-16 | dsr1-70 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| small  |  7.2 | 14.3 | 30.0 | 179.4 | 20.5 | **5.3** | 111.8 |
+| medium | 11.1 | 14.8 | 34.0 | 150.7 | 19.4 | **8.2** | 127.0 |
+| large  | 16.8 | 18.5 | 32.7 | 185.2 | 31.2 | **10.1** | 153.9 |
 
 #### analyze-functionality
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
-|---|---:|---:|---:|---:|
-| small  |  4.1 |  5.3 |  18.0 |  93.6 |
-| medium | 38.8 | 46.4 | 171.7 | 574.5 |
-| large  | 79.8 | 87.4 | 152.7 | **timeout** (>600s) |
+| sample | 20b | 120b | q3.6-35a3 | q3.6-27 | q2.5c-32 | dsc-v2-16 | dsr1-70 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| small  |  4.1 |  5.3 |  18.0 |  93.6 | **6.9** |  3.1 |  68.9 |
+| medium | 38.8 | 46.4 | 171.7 | 574.5 | **7.6** |  9.7 |  93.4 |
+| large  | 79.8 | 87.4 | 152.7 | timeout |11.6 | 35.1 | 186.6 |
 
-### 1.2 Output volume and throughput
+Speed numbers in bold are the **best of any model**. But analyze-functionality speed wins are illusory — see §1.4.
 
-Format: `eval_count tokens / generation rate tok·s⁻¹`. The throughput numbers come from Ollama's `eval_duration` counter (excludes prompt eval and load time).
+### 1.2 Output volume (eval_count tokens) on `medium`
 
-#### commit-msg-check
+| model | commit-msg-check | summarize-diff | analyze-functionality |
+|---|---:|---:|---:|
+| 20b              |   352 |   544 | 2 085 |
+| 120b             |   214 |   445 | 1 690 |
+| q3.6-35a3        | 512† | 1 439 | 6 825 |
+| q3.6-27          | 512† | 1 581 | 6 169 |
+| q2.5c-32         |     2 |   127 |    12 |
+| dsc-v2-16        |     2 |   231 |   255 |
+| dsr1-70          | n/a (timeout) |   501 |   350 |
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
-|---|---:|---:|---:|---:|
-| small  | 120 / 57.9 | 157 / 37.8 | **512** / 59.0 | **512** / 11.2 |
-| medium | 352 / 58.6 | 214 / 37.7 | **512** / 59.1 | **512** / 11.2 |
-| large  | **512** / 58.6 | 286 / 37.7 | **512** / 59.2 | **512** / 11.2 |
+† `done_reason="length"` — thinking exhausted budget before answer.
 
-Bold = `done_reason="length"` (truncation). Both qwen variants consistently hit the 512-token cap because thinking never yields to the answer; gpt-oss:20b also tops out on `large`.
+The non-thinking models (`q2.5c-32`, `dsc-v2-16`) emit dramatically less output. For `analyze-functionality:medium`: `q2.5c-32` produced **12 tokens** (i.e. `No findings\n## END-OF-ANALYSIS`) where `120b` produced 1 690 tokens of structured findings. **This is the false-negative signature**, not "concise excellence."
 
-#### summarize-diff
+### 1.3 Format adherence (`## END-OF-ANALYSIS` final-line check)
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
-|---|---:|---:|---:|---:|
-| small  | 333 / 56.9 | 442 / 40.7 | 1 537 / 57.9 | 1 906 / 11.1 |
-| medium | 544 / 56.8 | 445 / 40.2 | 1 439 / 47.6 | 1 581 / 11.1 |
-| large  | 811 / 56.3 | 498 / 39.7 | 1 517 / 56.4 | 1 887 / 10.9 |
+| sample | 20b | 120b | q3.6-35a3 | q3.6-27 | q2.5c-32 | dsc-v2-16 | dsr1-70 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| small  | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| medium | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| large  | ✅ | ✅ | ✅ | ✕ (timeout) | ✅ | ✅ | ✅ |
 
-Both qwen variants generate 3-4× more tokens than 120b for the same task. The MoE 35b-a3b matches gpt-oss:20b throughput (~57 tok/s); the dense 27b drops to ~11 tok/s — the same architecture family, but every token forces a full 27B-param forward pass instead of MoE's 3B subset.
+`dsc-v2-16` violates the format contract on `medium` — emits a finding then trails off without the sentinel. `_ollama_analyze_normalize` would discard the output. (Format adherence collapses entirely for qwen3.6:35b-a3b with `think:false` — see §3.2.)
 
-#### analyze-functionality
+### 1.4 Per-task quality observations (consolidated across rounds)
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
-|---|---:|---:|---:|---:|
-| small  |   152 / 57.6 |    71 / 41.2 |   852 / 57.9 |   948 / 11.0 |
-| medium | 2 085 / 56.8 | 1 690 / 40.3 | 6 825 / 42.3 | 6 169 / 10.9 |
-| large  | 4 183 / 54.7 | 3 130 / 38.8 | 7 938 / 54.8 | n/a (timeout) |
+- **`commit-msg-check`**: All non-reasoning models emit `OK` / one-line suggestion as instructed and finish in seconds. `q3.6-35a3` and `q3.6-27` ignore the `"Reply with ONLY 'OK'"` instruction and emit a `"Here's a thinking process:"` preamble that overruns 512 tokens. `dsr1-70` cannot finish in the 60s timeout for any sample — reasoning models with default thinking are unsuitable for tight-budget classifiers.
+- **`summarize-diff`**: All models that finish produce factually-correct summaries. Token counts diverge widely: `q2.5c-32` (127-195 tok) and `dsc-v2-16` (151-231 tok) are terse; `q3.6-*` (1 439-1 887 tok) are verbose; `120b` and `20b` (445-811 tok) are middle-of-the-road. No quality-vs-volume correlation; verbose outputs don't add facts.
+- **`analyze-functionality`**: This is where models differentiate. **Only `gpt-oss:120b` reliably surfaces the U+001F separator-collision risk on `medium`**. `q3.6-35a3` and `q3.6-27` find a different real concern (DRY/duplication). All others — `20b`, `q2.5c-32`, `dsc-v2-16`, `dsr1-70` — produce false negatives or vague findings:
+  - `20b`: `No findings` for all three.
+  - `q2.5c-32`: `No findings` for all three (despite "coder" in the name).
+  - `dsc-v2-16`: variable-rename suggestion on `medium` (vague, format-violating); on `large` 5×"inconsistent regex" complaints with no specific verb plus 1 fabricated "inconsistent header" finding.
+  - `dsr1-70`: `No findings` for all three (despite reasoning + 70B params).
 
-Throughput ranking: gpt-oss:20b ≈ qwen3.6:35b-a3b (~55-58 tok/s) > gpt-oss:120b (~40 tok/s) >> qwen3.6:27b (~11 tok/s). Per-token, the dense qwen is ~5× slower than the MoE qwen of nominally larger total size.
+The "coder-tuned model = better reviewer" hypothesis is **refuted** on this benchmark. Coding fine-tunes optimize for *generating* code, not for finding bugs in code review.
 
-### 1.3 Format adherence
+Curated outputs in [§5 Appendix](#5-appendix-representative-outputs).
 
-`analyze-functionality` requires `## END-OF-ANALYSIS` as the literal final line. With thinking enabled (the default), all four models pass on the cells they completed:
-
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
-|---|---:|---:|---:|---:|
-| small  | ✅ | ✅ | ✅ | ✅ |
-| medium | ✅ | ✅ | ✅ | ✅ |
-| large  | ✅ | ✅ | ✅ | ✕ (timeout) |
-
-(Format adherence collapses for qwen with `think:false` — see Round 2.2.)
-
-### 1.4 Per-task quality observations
-
-- **`commit-msg-check`**: 20b and 120b emit `OK` / one-line suggestion as instructed. Both qwen3.6 variants ignore `"Reply with ONLY 'OK'"` and emit a `"Here's a thinking process:"` preamble; at `num_predict=512` they never reach the answer (`done_reason=length`). The reasoning lives in the `.thinking` field. Same defect, just slower on the dense 27b.
-- **`summarize-diff`**: All four models produce factually correct summaries. Both qwen variants generate 3-4× more tokens (~1500-1900 vs ~450 for 120b) without commensurate quality gain.
-- **`analyze-functionality`**: 20b consistently emits `No findings` for all three samples — **false negative on real bugs** that 120b correctly surfaces. 120b and qwen-MoE both find legitimate issues, sometimes different ones (medium: 120b flags U+001F separator collision, qwen flags duplicated parsing logic; large: 120b flags `set -u` unbound-variable risk, qwen flags `\b` regex hyphen-boundary risk). qwen-dense:27b reaches the same DRY finding as the MoE on `medium` — quality is preserved, but at ~3× the latency.
-
-Curated outputs in [§4 Appendix](#4-appendix-representative-outputs).
-
-### 1.5 Bench config bug uncovered mid-run
+### 1.5 Bench config bug uncovered mid-round-1
 
 The first pass set `num_predict=60` for `commit-msg-check`. With thinking models (gpt-oss is also thinking-enabled by default), the entire 60-token budget was consumed by `.thinking`, leaving `.response` empty (`done_reason=length`). The original jq filter `.response // .thinking // ""` did not fall through because empty-string is truthy in jq. Two fixes were applied:
 
@@ -155,35 +151,26 @@ end
 
 ---
 
-## Round 2 — targeted verification (qwen3.6:35b-a3b only)
+## Round 2 — qwen3.6:35b-a3b targeted verification
 
 Two hypotheses for qwen3.6:35b-a3b's poor showing on `analyze-functionality:medium` (171.7s):
 
-1. **Cold-start contamination** — round-1 warmup ("hi" × 1 token) was insufficient to actually load the MoE expert layers and KV cache.
-2. **`think=true` overhead** — qwen3.6 emits long chain-of-thought before answering. If Ollama 0.22's `think:false` toggle disables this cleanly, the 3B-active path may genuinely beat 120b.
+1. **Cold-start contamination** — round-1 warmup was insufficient to actually load the MoE expert layers and KV cache.
+2. **`think=true` overhead** — qwen3.6 emits long chain-of-thought before answering. If `think:false` disables this cleanly, the 3B-active path may genuinely beat 120b.
 
 ### 2.1 Cold-start re-test
 
-Method: deep warmup (full `analyze-functionality` on `small`), then run `medium` and `large` back-to-back twice each, capturing `load_duration`, `prompt_eval_duration`, `eval_duration`, and `eval_count`.
+| run | sample | total | load_ms | gen_ms | eval_count | tok/s |
+|---|---|---:|---:|---:|---:|---:|
+| warmup | small  | 23.8s  | **9 691** |  11 180 |   640 | 57 |
+| 1      | medium | 102.5s |       161 |  97 728 | 5 565 | 57 |
+| 2      | medium | 137.9s |       127 | 134 263 | 7 564 | 56 |
+| 1      | large  | 105.2s |       154 |  98 318 | 5 435 | 55 |
+| 2      | large  | 106.3s |       155 | 104 135 | 5 750 | 55 |
 
-| run | sample | total | load_ms | prompt_eval_ms | gen_ms | eval_count | tok/s |
-|---|---|---:|---:|---:|---:|---:|---:|
-| warmup | small  | 23.8s  | **9 691** | 2 729 |  11 180 |   640 | 57 |
-| 1      | medium | 102.5s |       161 | 3 070 |  97 728 | 5 565 | 57 |
-| 2      | medium | 137.9s |       127 | 1 265 | 134 263 | 7 564 | 56 |
-| 1      | large  | 105.2s |       154 | 5 070 |  98 318 | 5 435 | 55 |
-| 2      | large  | 106.3s |       155 |   311 | 104 135 | 5 750 | 55 |
-
-**Verdict: cold-start hypothesis mostly refuted.**
-
-- First call after `ollama serve` start: `load_duration=9.7s` is real, but absorbed by the round-1 per-block warmup. From the second call onward, `load_duration<200ms`.
-- Steady-state `medium` time is 102-138s, governed by `eval_count` (5 565-7 564, stochastic across runs). The round-1 outlier (171.7s, 6 825 tokens) sits inside this distribution's high tail.
-- Throughput is stable at ~55-57 tok/s. The 42 tok/s reported in round 1 for medium was likely transient resource contention, not cold-start.
-- Net effect: cold-start contributes ≤ 10s. The dominant cost is **generation volume × throughput**, not load.
+**Verdict: cold-start hypothesis mostly refuted.** First load is 9.7s but absorbed by the per-block warmup; from the second call onward, `load_duration<200ms`. Steady-state `medium` is 102-138s, governed by stochastic `eval_count` (5 565-7 564). The round-1 outlier (171.7s) is the high tail. Net effect: cold-start contributes ≤ 10s.
 
 ### 2.2 `think:false` experiment
-
-Method: same prompt, `think:false` vs `think:true`, all three sample sizes. Captures `.response` length, `.thinking` length, latency.
 
 | sample | think=true | think=false | speedup | response (B) | thinking (B) |
 |---|---:|---:|---:|---:|---:|
@@ -191,173 +178,101 @@ Method: same prompt, `think:false` vs `think:true`, all three sample sizes. Capt
 | medium |  70.1s |  7.1s |  9.9× | 30 / 861   | 13 931 / 0 |
 | large  | 144.2s | 11.4s | 12.7× | 1 321 / 1 465 | 26 337 / 0 |
 
-Speed numbers look excellent. Output quality does not.
+Speed numbers look excellent. Output quality does not:
 
-#### Quality issues with `think:false` outputs
+1. **Stream-of-consciousness leaks into `.response`**: *"Let's trace: PARSED = ..., No, %% is longest suffix..."*
+2. **Hallucinations**: on `medium` qwen-no-think repeatedly flagged a fabricated `jq , operator` bug — actual code uses `+` concatenation. The same fictional bug is restated 4-5 times with escalating severity.
+3. **Format-contract violations**: ends with `No findings` (no sentinel) or `## END-ANALYSIS` (typo). `_ollama_analyze_normalize` would discard the output.
 
-1. **Stream-of-consciousness leaks into `.response`.** With thinking suppressed the model still wants to reason, so monologue ends up inline:
-   > *"Let's trace: PARSED = "\x1f"cmd (if tool_name is empty). ${PARSED%%$'\x1f'*} removes the longest suffix starting with \x1f. The longest suffix... No, %% is longest suffix..."*
-
-2. **Hallucinations.** On the `medium` sample (`b2f907b`, the jq-consolidation perf commit) qwen-no-think repeatedly flagged a non-existent bug:
-   > *`[Critical] hooks/block-destructive-docker.sh:16 — jq Multiple Outputs Break Bash Splitting — The jq filter (.tool_name // ""), "", (.tool_input.command // "") uses the , operator…`*
-
-   But the actual diff uses `+` for string concatenation, not `,`. The same fictional bug is restated 4-5 times with escalating severity (Minor → Major → Critical) within a single response.
-
-3. **Format-contract violations.** The mandatory final line is `## END-OF-ANALYSIS`. With `think:false`, qwen ends with:
-   - `small`: `No findings` (no sentinel)
-   - `medium`: `## END-ANALYSIS` (typo)
-   - `large`: `No findings` (no sentinel)
-
-   `_ollama_analyze_normalize` would discard the entire output.
-
-**Verdict: `think:false` is not a viable knob for qwen3.6 on structured-output tasks.** The thinking is the load-bearing mechanism for output quality, not pure overhead. The original `think:true` measurements stand.
+**Verdict: `think:false` is not a viable knob.** Thinking is the load-bearing mechanism for output quality, not pure overhead.
 
 ---
 
-## Round 3 — qwen3.6:27b dense (addendum)
+## Round 3 — qwen3.6:27b dense addendum
 
-Triggered by the question: "is the smaller dense sibling faster, since it has fewer total params?" Answer: no. On this hardware, dense costs **all 27B params per token**, while MoE 35b-a3b costs **only 3B active** — a 9× compute-per-token gap that overwhelms the model-size delta.
+Question: is the smaller dense sibling faster, since it has fewer total params? **Answer: no.** On gx10 (Linux/CUDA), dense costs all 27B params per token while MoE 35b-a3b costs only 3B active — a 9× compute-per-token gap that wins out over the smaller total weight count.
 
-The 9 cells were run via `bench.sh` with `SKIP_EXISTING=1` (newly added) so prior cells were reused. `large × analyze-functionality` exceeded the 600s curl timeout (HTTP=000) — the model was generating but had not finished by the deadline.
+Result: ~11 tok/s on qwen3.6:27b vs ~57 tok/s on the MoE sibling, same defect surface. `large × analyze-functionality` timed out at 600s. On `medium` the dense model surfaced the same DRY finding as the MoE — quality preserved, latency dominated. `qwen3.6:27b` is **strictly dominated** by `qwen3.6:35b-a3b` on this hardware.
 
-### 3.1 Per-cell timing summary
+---
 
-| cell | latency | tokens | done_reason |
+## Round 4 — coder & reasoning candidates
+
+Originally tried `qwen3.6:27b-coding-nvfp4` — Ollama returns HTTP 412 *"this model requires macOS"*, so the NVFP4 variant is MLX-only despite being on the Ollama library page. Pulled three non-OS-gated alternatives:
+
+- **`qwen2.5-coder:32b`** — pre-Qwen3-era coder model, dense Q4_K_M, **no thinking** by default.
+- **`deepseek-coder-v2:16b`** — MoE 16B / 2.4B-active, coder-tuned, **no thinking**.
+- **`deepseek-r1:70b`** — reasoning model, dense 70B, thinking-on by default.
+
+### 4.1 Speed-quality matrix (analyze-functionality:medium)
+
+| model | latency | output tokens | finding quality |
 |---|---:|---:|---|
-| small  × commit-msg-check       |  47.3s |   512 | length |
-| medium × commit-msg-check       |  47.5s |   512 | length |
-| large  × commit-msg-check       |  47.3s |   512 | length |
-| small  × summarize-diff         | 179.4s | 1 906 | stop |
-| medium × summarize-diff         | 150.7s | 1 581 | stop |
-| large  × summarize-diff         | 185.2s | 1 887 | stop |
-| small  × analyze-functionality  |  93.6s |   948 | stop |
-| medium × analyze-functionality  | 574.5s | 6 169 | stop |
-| large  × analyze-functionality  | 600.0s |     0 | **timeout (curl 600s)** |
+| 20b              | 38.8s |  2 085 | ❌ False negative |
+| **120b**         | 46.4s | 1 690  | ✅ U+001F collision (Major) — **only model to find this** |
+| q3.6-35a3        | 171.7s | 6 825 | △ DRY duplication (Minor) — different valid concern |
+| q3.6-27          | 574.5s | 6 169 | △ Same as 35a3 |
+| q2.5c-32         | **7.6s** |    12 | ❌ False negative |
+| dsc-v2-16        | 9.7s  |   255 | △ Variable rename (vague + format violation) |
+| dsr1-70          | 93.4s |   350 | ❌ False negative |
 
-### 3.2 Quality observations
+**Coding-tuned models lose at code review on this benchmark.** `q2.5c-32` is fast because it produces 12 tokens of `No findings`; `dsc-v2-16` produces a vague style suggestion in 255 tokens; `dsr1-70` thinks for 93s and concludes `No findings`. None reaches the actionable depth of `120b`.
 
-- **Same defect surface as 35b-a3b.** Thinking-process preamble on `commit-msg-check` (all three samples hit `done_reason=length` at 512 tokens, never reach the answer). Verbose `summarize-diff` output (~1900 tokens vs 120b's ~450).
-- **Same finding-set on `analyze-functionality`.** On `medium` it surfaces the same DRY/duplication finding as the MoE 35b-a3b (extract `block-*` parsing into a shared helper). Output ends correctly with `## END-OF-ANALYSIS`. So the dense weights don't *help* find different bugs — at least not at this sample size.
-- **Latency dominated by ~11 tok/s throughput.** All cells generate at near-identical rate, regardless of task. With output volumes typical of a thinking model (1500-6000 tokens), wall-clock is uniformly bad.
+### 4.2 dsc-v2-16 (DeepSeek-Coder-V2:16b) — speed champion for short tasks
 
-### 3.3 Verdict
+For commit-msg-check and summarize-diff, where the task is genuinely simple, `dsc-v2-16` is dramatically faster than the current defaults:
 
-`qwen3.6:27b` (dense Q4_K_M) is **strictly dominated** by `qwen3.6:35b-a3b` (MoE) on this hardware:
+| hook | current default | dsc-v2-16 | speedup |
+|---|---|---|---:|
+| commit-msg-check (medium) | 20b: 6.5s | **0.4s** | 16× |
+| commit-msg-check (large)  | 20b: 9.3s | **0.4s** | 23× |
+| summarize-diff (small)    | 120b: 14.3s | **5.3s** | 2.7× |
+| summarize-diff (medium)   | 120b: 14.8s | **8.2s** | 1.8× |
+| summarize-diff (large)    | 120b: 18.5s | **10.1s** | 1.8× |
 
-- 5× slower (~11 vs ~57 tok/s)
-- Identical defect profile (thinking-overrun on terse outputs, verbosity on summaries)
-- Identical (or worse) finding quality on analyze-*
+Output quality on `summarize-diff` is comparable to 120b (all three models surface the same key facts; output verbosity differs by ~2×). Output quality on `commit-msg-check` is identical (both emit `OK` for valid messages).
 
-There is no production hook for which the dense 27b wins.
+**Caveats** before any production demotion:
+- One format-contract violation observed (`analyze-functionality:medium` — but that's the analyze hook, not the demotion target).
+- Sample size is 3 commits per task. A wider A/B (10+ commits, including non-trivial commit messages) is the gating step.
+- `dsc-v2-16` is a coder model, not a generic instruction-tuned model. Its priors are good for code-related summarization but unverified on prose-heavy commit messages.
 
----
+### 4.3 dsr1-70 (DeepSeek-R1:70b) — verdict: bad fit
 
-## 4. Why qwen3.6 underperformed (consolidated)
+- `commit-msg-check` × all 3 samples: 60s timeout. Reasoning models with thinking-on cannot serve tight-budget classifiers — same defect class as Qwen3.6, just bigger.
+- `analyze-functionality` × all 3 samples: `No findings`. 70B params + 60-180s of reasoning produce no actionable output.
+- Throughput ~4 tok/s (vs 120b's ~40). For any task, slower than 120b without quality compensation.
 
-| factor | qwen3.6:35b-a3b (MoE) | qwen3.6:27b (dense) |
-|---|---|---|
-| **Throughput**     | 54-58 tok/s — comparable to gpt-oss:20b | **~11 tok/s** — slowest of all four models |
-| **Output volume**  | 2-3× more tokens than 120b for the same task | 3-4× more tokens than 120b |
-| **Format adherence** | Weak on terse outputs ("Reply with ONLY 'OK'" → ignored). Strong on heavily-templated outputs (`## END-OF-ANALYSIS` → 100% with thinking on) | Same as 35b-a3b |
-| **Thinking dependency** | Reasoning quality depends on thinking-mode. `think:false` produces hallucinations and breaks format contracts | Not re-tested under `think:false` (would inherit same defect) |
-| **Cold-start**     | 9.7s on first load, then negligible | not separately characterized |
-| **Architecture cost** | 3B active params per token (MoE)  | 27B active params per token (dense) — 9× more compute per token |
+No production hook is a win-case.
+
+### 4.4 q2.5c-32 (qwen2.5-coder:32b) — verdict: niche at best
+
+- Format-perfect (100% sentinel adherence, 100% format compliance on commit-msg-check).
+- Content-empty on `analyze-functionality` (false-negative across the board).
+- `summarize-diff` outputs are terse (127-195 tok) but accurate — could be a candidate for `summarize-diff` if extreme conciseness is desired. But 19-31s wall-clock isn't faster than `120b` (14-18s), so no clear win.
+- `commit-msg-check` is fast (1.1-1.3s) and correct, but `dsc-v2-16` is faster (0.4-0.8s) and equally correct.
 
 ---
 
 ## 5. Appendix — representative outputs
 
-Curated to illustrate the quality patterns called out above. Full output text for all 36 cells lives in [`results/`](./results/); `think:false` re-test outputs in [`results-nothink/`](./results-nothink/).
+### 5.1 commit-msg-check (medium)
 
-### 5.1 commit-msg-check — qwen format failure (both variants)
+| model | output | latency |
+|---|---|---:|
+| 20b              | `OK` | 6.5s |
+| 120b             | `OK` | 6.6s |
+| q3.6-35a3        | (thinking-process preamble, never reaches answer) `done_reason=length` | 9.5s |
+| q3.6-27          | (same defect, slower preamble) | 47.5s |
+| **q2.5c-32**     | `OK` | **1.3s** |
+| **dsc-v2-16**    | `OK` | **0.4s** |
+| dsr1-70          | (timeout, no output) | 60.0s |
 
-Input: `medium` commit subject + body.
+### 5.2 analyze-functionality (medium) — finding contrast
 
-**gpt-oss:20b**
+The actual diff has at least one legitimate functional concern (U+001F separator collision: if a command itself contains the byte, the Bash split logic mis-parses).
 
-```
-OK
-```
-
-**gpt-oss:120b**
-
-```
-OK
-```
-
-**qwen3.6:35b-a3b** — emits a thinking-process preamble instead of "OK". `done_reason=length` at 512 tokens; the model never reaches the answer.
-
-```
-Here's a thinking process:
-
-1.  **Analyze User Input:**
-   - **Task:** Review a git commit message.
-   - **Condition 1:** Reply with ONLY 'OK' if it follows best practices ...
-   - **Condition 2:** Reply with a one-line suggestion if it needs improvement.
-   - **Input Commit Message:**
-     ...
-```
-
-**qwen3.6:27b** — same defect, with even more verbose preamble (still `done_reason=length` at 512 tokens, 47s).
-
-```
-Here's a thinking process:
-
-1.  **Analyze User Input:**
-   - **Input:** A git commit message.
-   - **Requirements:**
-     - Reply with ONLY 'OK' if it follows best practices.
-     - Best practices defined as: concise, English, explains why not what, ...
-   - **Commit Message Content:**
-     - Subject: `perf(hooks): consolidate per-hook jq calls (2 -> 1) via U+001F separator (#39)`
-     ...
-```
-
-### 5.2 summarize-diff — verbosity contrast
-
-Input: `medium` diff (`b2f907b`, jq consolidation).
-
-**gpt-oss:20b** (333 tokens)
-
-```
-- Consolidated the two `jq` calls in six block-hooks into a single invocation that emits `tool_name` and `tool_input.command` separated by a U+001F (Unit Separator), then splits via Bash parameter expansion.
-- Added a new benchmark file ... showing a 45 % drop in cumulative latency (≈ 77 ms → 42 ms).
-- Switched from a prior `@tsv` attempt — which escaped embedded TABs and broke parsing — to U+001F because it is a real byte that rarely appears in shell commands and preserves control characters.
-- Potential risks: if a command were to contain U+001F, the split would fail; ...
-```
-
-**gpt-oss:120b** (445 tokens) — same content, slightly more polished, includes the `341 Bats tests still pass` verifiable detail.
-
-```
-- **Merged two `jq` invocations into one** for each block-* Bash hook by emitting `tool_name` and `tool_input.command` together, separated with the Unicode Unit Separator (U+001F) ...
-- ... cutting the total Bash matcher chain from ~77 ms to ~42 ms (≈‑45 %).
-- **Switched away from `@tsv`** because it escapes embedded TAB characters ...
-- **No functional regression**: all 341 Bats tests still pass ...
-```
-
-**qwen3.6:35b-a3b** (1 439 tokens — 3× more) — same content in longer prose, no additional facts.
-
-```
-*   Refactored six `block-*` Bash hooks to replace two `jq` invocations per hook with a single `jq -rj` call emitting `tool_name` and `command` separated by the Unit Separator (U+001F), parsed via Bash parameter expansion.
-*   Delivers a 45% improvement in Bash chain latency (cumulative ~77ms → ~42ms) ...
-*   Resolves the previous failure of `@tsv` separators by using U+001F, which preserves embedded TABs in command values without escaping ...
-*   Verified for stability with 341/341 tests passing ...
-```
-
-**qwen3.6:27b** (1 581 tokens) — quality similar to MoE sibling; not shown in full (see [`results/medium/summarize-diff_qwen3-6-27b.out`](./results/medium/summarize-diff_qwen3-6-27b.out)).
-
-### 5.3 analyze-functionality — false-negative vs real-finding contrast
-
-Input: `medium` diff. The actual diff has at least one legitimate functional concern (U+001F separator collision: if a command itself contains the byte, the Bash split logic mis-parses).
-
-**gpt-oss:20b** — false negative, misses the bug entirely.
-
-```
-No findings
-## END-OF-ANALYSIS
-```
-
-**gpt-oss:120b** — surfaces the U+001F collision risk as Major.
+**`gpt-oss:120b`** — surfaces the U+001F collision as Major (only model to do so).
 
 ```
 [Major] hooks/block-audit-observability-destruction.sh:12 — The script splits the jq output on the Unit Separator (U+001F). If the incoming `tool_input.command` itself contains this byte, the split will truncate the command, causing the hook to treat an unsafe command as empty and incorrectly approve it. — Escape any occurrences of U+001F in the command before concatenation ...
@@ -367,17 +282,32 @@ No findings
 ## END-OF-ANALYSIS
 ```
 
-**qwen3.6:35b-a3b** — flags only the duplication, misses the U+001F collision; different angle, lower coverage on this sample.
+**`qwen3.6:35b-a3b`** — different valid concern (DRY duplication).
 
 ```
-[Minor] hooks/block-audit-observability-destruction.sh:44 — Parsing logic is duplicated verbatim across 6 hook scripts, violating DRY and increasing future maintenance burden. — Extract the jq invocation and bash parameter expansion into a shared utility script ...
+[Minor] hooks/block-audit-observability-destruction.sh:44 — Parsing logic is duplicated verbatim across 6 hook scripts, violating DRY ...
 ## END-OF-ANALYSIS
 ```
 
-**qwen3.6:27b** — same finding as the MoE sibling (the dense weights add latency, not coverage).
+**`qwen2.5-coder:32b`** — false negative.
 
 ```
-[Major] hooks/block-destructive-docker.sh:16 — Identical input-parsing logic is copy-pasted across six separate hook scripts, violating DRY and shared utility reuse principles. — Extract the `jq` concatenation and bash parameter expansion into a centralized helper function or sourced library script.
+No findings
+## END-OF-ANALYSIS
+```
+
+**`deepseek-coder-v2:16b`** — vague + format violation (no `## END-OF-ANALYSIS`).
+
+```
+[Minor] hooks/block-audit-observability-destruction.sh:39 — Consider improving readability by using more descriptive variable names for PARSED and TOOL_NAME.
+... (suggested PARSED→OUTPUT rename) ...
+This change would make the variable names more indicative of their role in the script, potentially improving overall readability and maintainability.
+```
+
+**`deepseek-r1:70b`** — false negative (despite 93s reasoning + 70B params).
+
+```
+No findings
 ## END-OF-ANALYSIS
 ```
 
@@ -385,26 +315,42 @@ No findings
 
 ## 6. Recommendations
 
-1. **No changes to default routing.** Keep `gpt-oss:20b` for `commit-msg-check`, `classify-*`, `generate-slug`, `generate-resolution-entry`, `generate-pr-title`. Keep `gpt-oss:120b` for the heavy `summarize-*` / `analyze-*` / `merge-findings` / `generate-pr-body` family.
-2. **Add `qwen3.6:35b-a3b` to the CLAUDE.md routing table as a "second opinion" model** (think=on only) for analyze-* tasks. It surfaces different findings than 120b on the medium and large samples (~30% non-overlap), at 2-3× wall-clock cost.
-3. **Do NOT use `qwen3.6:27b` for any production hook.** Strictly dominated by the MoE sibling (5× slower, no quality gain). Keep installed only as a reference for future MoE-vs-dense comparisons.
-4. **(Optional) Investigate `summarize-diff` demotion to 20b.** Round-1 data suggests 20b output quality is acceptable and saves ~7-13s per call. Run a wider A/B (5+ commits) before changing.
-5. **Do NOT use `think:false` on qwen3.6** for structured-output tasks. Speedup is real; quality collapse is not survivable.
-6. **Re-bench triggers.** Re-run [`bench.sh`](./bench.sh) on:
-   - New qwen point release (3.6.x → 3.7.x).
+1. **No changes to default routing for `analyze-*` hooks.** Keep `gpt-oss:120b`. It is the only model in this 7-model bench that reliably surfaces the actual structural risk (U+001F separator collision).
+2. **Keep `qwen3.6:35b-a3b` as a complementary "second opinion" model** for `analyze-*` tasks. It surfaces different valid findings than 120b at 2-3× wall-clock cost.
+3. **(Optional) Pilot `deepseek-coder-v2:16b` as a faster default for `commit-msg-check`.** 16-23× speedup over `gpt-oss:20b`; quality looks equivalent on 3 samples but needs a wider A/B (10+ commits, including non-trivial ones) before any production change.
+4. **(Optional) Pilot `deepseek-coder-v2:16b` for `summarize-diff`.** ~2× speedup over `gpt-oss:120b`; quality on the 3 samples looks comparable. Same A/B gating as #3. One observed format-contract violation on a *different* hook (`analyze-functionality:medium`) is a yellow flag; verify summarize-diff output cleanliness before any change.
+5. **Do NOT use any of these for production:**
+   - `qwen3.6:27b` — strictly dominated by the MoE sibling (5× slower, no quality gain).
+   - `qwen2.5-coder:32b` — false-negative on analyze-*; no clear niche given dsc-v2-16 is faster on every other task.
+   - `deepseek-r1:70b` — too slow for short tasks (60s timeout), false-negative on analyze-*. Reasoning model is the wrong tool for these prompts.
+6. **Do NOT use `think:false` on qwen3.6** for structured-output tasks. Speedup is real; quality collapse is not survivable.
+7. **Re-bench triggers.** Re-run [`bench.sh`](./bench.sh) on:
+   - New point release of any tested model.
    - Ollama point release that changes default thinking semantics.
-   - New gpt-oss release.
+   - New model with credible code-review priors (e.g. an Anthropic-tuned local model, a "reviewer" rather than "coder" fine-tune).
 
-   `SKIP_EXISTING=0 bash bench.sh` forces a full re-run; the default re-uses any cached `.out`/`.meta` pairs, so adding a single new model is incremental.
+   `SKIP_EXISTING=0 bash bench.sh` forces a full re-run; the default re-uses any cached `.out`/`.meta` pairs.
+
+## 7. Why coding-tuned models lose at code review (working theory)
+
+The benchmark's `analyze-functionality` prompt asks the model to act as a Senior Software Engineer doing functional code review. Three of the candidates (`q2.5c-32`, `dsc-v2-16`) are coder-tuned models — fine-tuned on code generation, completion, and chat about code. `dsr1-70` is reasoning-tuned. None of them found the U+001F collision risk that `gpt-oss:120b` did.
+
+Plausible reasons:
+- **Coder fine-tunes optimize for "what code would I write" not "what could go wrong with this code"**. Generation-mode priors weight plausibility of code, not hostile-input or boundary-condition reasoning.
+- **Reasoning fine-tunes optimize for math/logic chains**, not for the heterogeneous "trace through this Bash + jq + regex" reasoning needed for hook safety review.
+- **`gpt-oss:120b` is a generic instruction-tuned model** — its breadth of training (security write-ups, post-mortems, code review threads) plausibly gives it the bug-finding priors that the specialized models lack.
+
+Pragmatically: when picking a model for a code-review hook, **prefer generic instruction-tuned models with strong reasoning over coder-fine-tuned variants**. A coder fine-tune's terse "No findings" answer is the most expensive kind of false negative — it looks correct.
 
 ---
 
-## 7. Artifacts
+## 8. Artifacts
 
 - [`bench.sh`](./bench.sh) — matrix runner (samples × hooks × models, with warmup and `SKIP_EXISTING` cache)
 - [`aggregate.sh`](./aggregate.sh) — regenerates raw-data tables and previews into a separate dump (kept for re-bench convenience; not the canonical report)
 - [`bench.log`](./bench.log) — round-1 stdout
 - [`bench-qwen3.6-27b.log`](./bench-qwen3.6-27b.log) — round-3 stdout
+- [`bench-round4.log`](./bench-round4.log) — round-4 stdout (qwen2.5-coder, deepseek-coder-v2, deepseek-r1)
 - [`samples/`](./samples/) — committed `.diff` and `.subject` per sample (frozen so re-runs use identical inputs)
-- [`results/<sample>/<hook>_<model>.{out,meta}`](./results/) — round-1 + round-3 per-cell raw response + JSON metadata
+- [`results/<sample>/<hook>_<model>.{out,meta}`](./results/) — round-1 + round-3 + round-4 per-cell raw response + JSON metadata
 - [`results-nothink/qwen-nothink_<sample>.{out,meta}`](./results-nothink/) — round-2 `think:false` outputs

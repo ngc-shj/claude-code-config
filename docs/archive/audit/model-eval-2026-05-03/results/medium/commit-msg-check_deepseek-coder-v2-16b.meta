@@ -1,0 +1,1 @@
+{"sample":"medium","hook":"commit-msg-check","model":"deepseek-coder-v2:16b","elapsed_s":0.36,"http_code":"200","total_duration_ms":352,"prompt_eval_count":803,"prompt_eval_duration_ms":240,"eval_count":2,"eval_duration_ms":13,"done_reason":"stop"}

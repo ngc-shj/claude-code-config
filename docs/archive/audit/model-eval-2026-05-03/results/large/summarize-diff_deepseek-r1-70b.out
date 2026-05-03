@@ -1,0 +1,4 @@
+- Added a new hook script `block-authz-state-destruction.sh` that blocks commands attempting to delete authorization-related resources (roles, bindings, policies) across AWS IAM, GCP IAM, Azure, and Kubernetes.  
+- Updated settings and documentation to enforce R31 category (f) authorization-state destruction prevention, with tests covering 53 cases for major providers.  
+- Why it matters: Prevents accidental denial-of-service or auth failures by blocking unsafe deletions without proper replacements.  
+- Risks: Bypasses exist via alternate shells, direct API calls, or base64-encoded commands, though the hook provides best-effort protection.

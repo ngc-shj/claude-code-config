@@ -46,6 +46,9 @@ MODELS=(
   "gpt-oss:120b"
   "qwen3.6:35b-a3b"
   "qwen3.6:27b"
+  "qwen2.5-coder:32b"
+  "deepseek-coder-v2:16b"
+  "deepseek-r1:70b"
 )
 
 # Skip cells whose .out and .meta already exist. Lets re-runs add new

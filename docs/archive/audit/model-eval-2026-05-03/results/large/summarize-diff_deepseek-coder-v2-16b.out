@@ -1,0 +1,6 @@
+ - Added a new script to block authorization-state destruction across major cloud providers and Kubernetes.
+- Implemented deny logic for AWS IAM, GCP IAM, Azure RBAC, and Kubernetes RBAC related to deleting roles, role bindings, etc.
+- The hook triggers on Bash commands involving these actions and blocks them with a detailed reason explaining the risk of authorization state destruction.
+- Added new tests covering various scenarios including read/list operations, creating replacements before deletion, and unrelated CLI interactions.
+- Updated settings.json to include the new hook for approval or blocking based on the script's logic.
+- Modified common-rules.md to reflect that R31 (f) is now enforced via hooks, along with other categories.

@@ -1,0 +1,1 @@
+{"sample":"small","hook":"summarize-diff","model":"deepseek-coder-v2:16b","elapsed_s":5.28,"http_code":"200","total_duration_ms":5257,"prompt_eval_count":3798,"prompt_eval_duration_ms":1362,"eval_count":151,"eval_duration_ms":3522,"done_reason":"stop"}
