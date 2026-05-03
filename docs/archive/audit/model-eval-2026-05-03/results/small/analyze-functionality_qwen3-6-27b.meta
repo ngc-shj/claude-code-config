@@ -1,0 +1,1 @@
+{"sample":"small","hook":"analyze-functionality","model":"qwen3.6:27b","elapsed_s":93.60,"http_code":"200","total_duration_ms":93580,"prompt_eval_count":3982,"prompt_eval_duration_ms":6850,"eval_count":948,"eval_duration_ms":86310,"done_reason":"stop"}

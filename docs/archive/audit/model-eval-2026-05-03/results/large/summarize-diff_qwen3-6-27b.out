@@ -1,0 +1,4 @@
+- Introduces a new pre-execution hook that blocks destructive authorization commands (role/policy deletion, binding detachment, service account removal) across AWS, GCP, Azure, and Kubernetes, integrated into `settings.json` with updated documentation and comprehensive test coverage.
+- Prevents immediate denial-of-service and broken runtime authentication by stopping accidental or malicious removal of critical IAM/RBAC state, while embedding actionable guidance for safer alternatives like permission rotation or surgical policy edits.
+- Operates as a best-effort tripwire vulnerable to bypass via base64 encoding, alternate shells, or direct cloud APIs, and may inadvertently block legitimate cleanup/rotation workflows, though local overrides remain supported.
+- Expects trivial merge conflicts with concurrent PRs modifying the same configuration and documentation files, requiring careful preservation of all hook entries during conflict resolution.

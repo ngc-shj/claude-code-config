@@ -1,0 +1,49 @@
+=== Model eval matrix ===
+Output:    /home/noguchi/ghq/github.com/ngc-shj/claude-code-config/docs/archive/audit/model-eval-2026-05-03
+Ollama:    http://gx10-a9c0:11434
+Models:    gpt-oss:20b gpt-oss:120b qwen3.6:35b-a3b qwen3.6:27b
+Samples:   small medium large
+Hooks:     commit-msg-check summarize-diff analyze-functionality
+
+Warming up gpt-oss:20b ... ready
+  [19:15:52] small  × commit-msg-check       × gpt-oss:20b        SKIP (already cached)
+  [19:15:52] small  × summarize-diff         × gpt-oss:20b        SKIP (already cached)
+  [19:15:52] small  × analyze-functionality  × gpt-oss:20b        SKIP (already cached)
+  [19:15:52] medium × commit-msg-check       × gpt-oss:20b        SKIP (already cached)
+  [19:15:52] medium × summarize-diff         × gpt-oss:20b        SKIP (already cached)
+  [19:15:52] medium × analyze-functionality  × gpt-oss:20b        SKIP (already cached)
+  [19:15:52] large  × commit-msg-check       × gpt-oss:20b        SKIP (already cached)
+  [19:15:52] large  × summarize-diff         × gpt-oss:20b        SKIP (already cached)
+  [19:15:52] large  × analyze-functionality  × gpt-oss:20b        SKIP (already cached)
+Warming up gpt-oss:120b ... ready
+  [19:16:15] small  × commit-msg-check       × gpt-oss:120b       SKIP (already cached)
+  [19:16:15] small  × summarize-diff         × gpt-oss:120b       SKIP (already cached)
+  [19:16:15] small  × analyze-functionality  × gpt-oss:120b       SKIP (already cached)
+  [19:16:15] medium × commit-msg-check       × gpt-oss:120b       SKIP (already cached)
+  [19:16:15] medium × summarize-diff         × gpt-oss:120b       SKIP (already cached)
+  [19:16:15] medium × analyze-functionality  × gpt-oss:120b       SKIP (already cached)
+  [19:16:15] large  × commit-msg-check       × gpt-oss:120b       SKIP (already cached)
+  [19:16:15] large  × summarize-diff         × gpt-oss:120b       SKIP (already cached)
+  [19:16:15] large  × analyze-functionality  × gpt-oss:120b       SKIP (already cached)
+Warming up qwen3.6:35b-a3b ... ready
+  [19:16:27] small  × commit-msg-check       × qwen3.6:35b-a3b    SKIP (already cached)
+  [19:16:27] small  × summarize-diff         × qwen3.6:35b-a3b    SKIP (already cached)
+  [19:16:27] small  × analyze-functionality  × qwen3.6:35b-a3b    SKIP (already cached)
+  [19:16:27] medium × commit-msg-check       × qwen3.6:35b-a3b    SKIP (already cached)
+  [19:16:27] medium × summarize-diff         × qwen3.6:35b-a3b    SKIP (already cached)
+  [19:16:27] medium × analyze-functionality  × qwen3.6:35b-a3b    SKIP (already cached)
+  [19:16:27] large  × commit-msg-check       × qwen3.6:35b-a3b    SKIP (already cached)
+  [19:16:27] large  × summarize-diff         × qwen3.6:35b-a3b    SKIP (already cached)
+  [19:16:27] large  × analyze-functionality  × qwen3.6:35b-a3b    SKIP (already cached)
+Warming up qwen3.6:27b ... ready
+  [19:17:24] small  × commit-msg-check       × qwen3.6:27b         47.32s HTTP=200
+  [19:20:24] small  × summarize-diff         × qwen3.6:27b        179.40s HTTP=200
+  [19:21:57] small  × analyze-functionality  × qwen3.6:27b         93.60s HTTP=200
+  [19:22:45] medium × commit-msg-check       × qwen3.6:27b         47.46s HTTP=200
+  [19:25:15] medium × summarize-diff         × qwen3.6:27b        150.72s HTTP=200
+  [19:34:50] medium × analyze-functionality  × qwen3.6:27b        574.50s HTTP=200
+  [19:35:37] large  × commit-msg-check       × qwen3.6:27b         47.26s HTTP=200
+  [19:38:42] large  × summarize-diff         × qwen3.6:27b        185.17s HTTP=200
+  [19:48:43] large  × analyze-functionality  × qwen3.6:27b        600.03s HTTP=000
+
+Done. Results in /home/noguchi/ghq/github.com/ngc-shj/claude-code-config/docs/archive/audit/model-eval-2026-05-03/results

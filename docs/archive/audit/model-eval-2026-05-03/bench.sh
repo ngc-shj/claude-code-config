@@ -45,7 +45,12 @@ MODELS=(
   "gpt-oss:20b"
   "gpt-oss:120b"
   "qwen3.6:35b-a3b"
+  "qwen3.6:27b"
 )
+
+# Skip cells whose .out and .meta already exist. Lets re-runs add new
+# models incrementally without re-doing the existing matrix.
+: "${SKIP_EXISTING:=1}"
 
 # --- System prompts copied verbatim from production hooks ---
 
@@ -124,6 +129,12 @@ run_one() {
   local out_file="$out_dir/${hook}_${model_safe}.out"
   local meta_file="$out_dir/${hook}_${model_safe}.meta"
   mkdir -p "$out_dir"
+
+  if [ "$SKIP_EXISTING" = "1" ] && [ -f "$out_file" ] && [ -s "$meta_file" ]; then
+    printf '  [%s] %-6s × %-22s × %-18s SKIP (already cached)\n' \
+      "$(date +%H:%M:%S)" "$sample" "$hook" "$model" >&2
+    return
+  fi
 
   local sys="${!sys_var}"
   local tmpdir

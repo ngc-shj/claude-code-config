@@ -1,0 +1,2 @@
+[Major] hooks/block-destructive-docker.sh:16 — Identical input-parsing logic is copy-pasted across six separate hook scripts, violating DRY and shared utility reuse principles. — Extract the `jq` concatenation and bash parameter expansion into a centralized helper function or sourced library script.
+## END-OF-ANALYSIS

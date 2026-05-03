@@ -1,0 +1,3 @@
+- **What changed:** Consolidated two separate `jq` invocations per hook into a single call across six `block-*` scripts, using U+001F (Unit Separator) as a delimiter and bash parameter expansion for field splitting instead of `read`.
+- **Why it matters:** Reduces cumulative Bash hook chain latency by ~45% (77ms → 42ms) by halving process startup overhead, while safely preserving embedded tabs and control characters that previously broke `@tsv`-based parsing.
+- **Risks:** Theoretically breaks if a legitimate command contains a U+001F byte (virtually impossible in practice), and bash parameter expansion is slightly less idiomatic than `read`, though fully compatible and validated by 341 passing tests with zero regressions.

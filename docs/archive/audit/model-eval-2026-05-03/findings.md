@@ -1,12 +1,17 @@
-# Model evaluation — qwen3.6:35b-a3b vs current routing (2026-05-03)
+# Model evaluation — qwen3.6 vs current routing (2026-05-03)
 
 Bench harness: [`bench.sh`](./bench.sh) · Aggregator: [`aggregate.sh`](./aggregate.sh) · Ollama 0.22.0 on `gx10-a9c0`.
 
 ## TL;DR
 
-**Keep current routing (`gpt-oss:20b` for short-output tasks, `gpt-oss:120b` for analysis tasks). Do NOT promote `qwen3.6:35b-a3b` to default for any production hook.**
+**Keep current routing (`gpt-oss:20b` for short-output tasks, `gpt-oss:120b` for analysis tasks). Do NOT promote any qwen3.6 variant to default for production hooks.**
 
-The MoE structure (35B total / 3B active) suggested a sweet spot between 20b and 120b, but on this workload it is **slower than 120b** on heavy tasks and **breaks the output-format contract** on short-output tasks. After two rounds of measurement (initial matrix + targeted re-tests for cold-start and `think:false`), the data does not support a routing change. Qwen3.6 is best slotted as a complementary "second opinion" model for analyze-* tasks, not a replacement.
+Three rounds of measurement covered:
+1. Initial 3×3×3 matrix (samples × hooks × {gpt-oss:20b, gpt-oss:120b, qwen3.6:35b-a3b}).
+2. Targeted re-tests for cold-start and `think:false`.
+3. Addendum bench of `qwen3.6:27b` (dense Q4_K_M, 17 GB) — the dense sibling of the MoE 35b-a3b.
+
+The MoE `qwen3.6:35b-a3b` (35B total / 3B active) suggested a sweet spot between 20b and 120b, but on this workload it is **slower than 120b** on heavy tasks and **breaks the output-format contract** on short-output tasks. The dense `qwen3.6:27b` is **strictly worse** — same quality issues at ~5× the latency, because every token activates all 27B params instead of MoE's 3B subset. Qwen3.6 (35b-a3b) is best slotted as a complementary "second opinion" model for analyze-* tasks; the dense 27b has no use case on this hardware.
 
 ## Background
 
@@ -38,11 +43,16 @@ The empirical approach was to replay past commits from this repo through each mo
 
 ### Models
 
-`gpt-oss:20b` · `gpt-oss:120b` · `qwen3.6:35b-a3b`
+| model | architecture | size | added in |
+|---|---|---:|---|
+| `gpt-oss:20b`     | dense, thinking-enabled | 13 GB | round 1 |
+| `gpt-oss:120b`    | dense, thinking-enabled | 65 GB | round 1 |
+| `qwen3.6:35b-a3b` | MoE 35B / 3B active     | 23 GB | round 1 |
+| `qwen3.6:27b`     | dense, Q4_K_M           | 17 GB | round 3 (addendum) |
 
 ### Loop ordering
 
-Models OUTER → samples → hooks. Each model warms up once (1-token ping) before its block, then runs 9 cells while resident in VRAM. This avoids repeated load when models would otherwise be evicted between calls.
+Models OUTER → samples → hooks. Each model warms up once (1-token ping) before its block, then runs 9 cells while resident in VRAM. Round 3 added a `SKIP_EXISTING=1` guard so prior cells are reused — only the new model's 9 cells executed.
 
 ---
 
@@ -52,27 +62,27 @@ Models OUTER → samples → hooks. Each model warms up once (1-token ping) befo
 
 #### commit-msg-check
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b |
-|---|---:|---:|---:|
-| small  | 2.4 | 5.0 | 9.5 |
-| medium | 6.5 | 6.6 | 9.5 |
-| large  | 9.3 | 8.5 | 9.6 |
+| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
+|---|---:|---:|---:|---:|
+| small  | 2.4 | 5.0 | 9.5 | 47.3 |
+| medium | 6.5 | 6.6 | 9.5 | 47.5 |
+| large  | 9.3 | 8.5 | 9.6 | 47.3 |
 
 #### summarize-diff
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b |
-|---|---:|---:|---:|
-| small  |  7.2 | 14.3 | 30.0 |
-| medium | 11.1 | 14.8 | 34.0 |
-| large  | 16.8 | 18.5 | 32.7 |
+| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
+|---|---:|---:|---:|---:|
+| small  |  7.2 | 14.3 | 30.0 | 179.4 |
+| medium | 11.1 | 14.8 | 34.0 | 150.7 |
+| large  | 16.8 | 18.5 | 32.7 | 185.2 |
 
 #### analyze-functionality
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b |
-|---|---:|---:|---:|
-| small  |  4.1 |  5.3 |  18.0 |
-| medium | 38.8 | 46.4 | 171.7 |
-| large  | 79.8 | 87.4 | 152.7 |
+| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
+|---|---:|---:|---:|---:|
+| small  |  4.1 |  5.3 |  18.0 |  93.6 |
+| medium | 38.8 | 46.4 | 171.7 | 574.5 |
+| large  | 79.8 | 87.4 | 152.7 | **timeout** (>600s) |
 
 ### 1.2 Output volume and throughput
 
@@ -80,51 +90,51 @@ Format: `eval_count tokens / generation rate tok·s⁻¹`. The throughput number
 
 #### commit-msg-check
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b |
-|---|---:|---:|---:|
-| small  | 120 / 57.9 | 157 / 37.8 | **512** / 59.0 |
-| medium | 352 / 58.6 | 214 / 37.7 | **512** / 59.1 |
-| large  | **512** / 58.6 | 286 / 37.7 | **512** / 59.2 |
+| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
+|---|---:|---:|---:|---:|
+| small  | 120 / 57.9 | 157 / 37.8 | **512** / 59.0 | **512** / 11.2 |
+| medium | 352 / 58.6 | 214 / 37.7 | **512** / 59.1 | **512** / 11.2 |
+| large  | **512** / 58.6 | 286 / 37.7 | **512** / 59.2 | **512** / 11.2 |
 
-Bold = `done_reason="length"` (truncation). Qwen consistently hits the 512-token cap because thinking never yields to the answer; gpt-oss:20b also tops out on `large`.
+Bold = `done_reason="length"` (truncation). Both qwen variants consistently hit the 512-token cap because thinking never yields to the answer; gpt-oss:20b also tops out on `large`.
 
 #### summarize-diff
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b |
-|---|---:|---:|---:|
-| small  | 333 / 56.9 | 442 / 40.7 | **1 537** / 57.9 |
-| medium | 544 / 56.8 | 445 / 40.2 | **1 439** / 47.6 |
-| large  | 811 / 56.3 | 498 / 39.7 | **1 517** / 56.4 |
+| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
+|---|---:|---:|---:|---:|
+| small  | 333 / 56.9 | 442 / 40.7 | 1 537 / 57.9 | 1 906 / 11.1 |
+| medium | 544 / 56.8 | 445 / 40.2 | 1 439 / 47.6 | 1 581 / 11.1 |
+| large  | 811 / 56.3 | 498 / 39.7 | 1 517 / 56.4 | 1 887 / 10.9 |
 
-Qwen generates 3× more tokens than 120b for the same task — the dominant reason wall-clock is 2× worse despite faster per-token throughput.
+Both qwen variants generate 3-4× more tokens than 120b for the same task. The MoE 35b-a3b matches gpt-oss:20b throughput (~57 tok/s); the dense 27b drops to ~11 tok/s — the same architecture family, but every token forces a full 27B-param forward pass instead of MoE's 3B subset.
 
 #### analyze-functionality
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b |
-|---|---:|---:|---:|
-| small  |   152 / 57.6 |    71 / 41.2 |   852 / 57.9 |
-| medium | 2 085 / 56.8 | 1 690 / 40.3 | **6 825** / 42.3 |
-| large  | 4 183 / 54.7 | 3 130 / 38.8 | **7 938** / 54.8 |
+| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
+|---|---:|---:|---:|---:|
+| small  |   152 / 57.6 |    71 / 41.2 |   852 / 57.9 |   948 / 11.0 |
+| medium | 2 085 / 56.8 | 1 690 / 40.3 | 6 825 / 42.3 | 6 169 / 10.9 |
+| large  | 4 183 / 54.7 | 3 130 / 38.8 | 7 938 / 54.8 | n/a (timeout) |
 
-Throughput ranking is consistent: 20b ≈ qwen (~55-58 tok/s) > 120b (~40 tok/s). Qwen wins per-token but loses wall-clock by output volume.
+Throughput ranking: gpt-oss:20b ≈ qwen3.6:35b-a3b (~55-58 tok/s) > gpt-oss:120b (~40 tok/s) >> qwen3.6:27b (~11 tok/s). Per-token, the dense qwen is ~5× slower than the MoE qwen of nominally larger total size.
 
 ### 1.3 Format adherence
 
-`analyze-functionality` requires `## END-OF-ANALYSIS` as the literal final line. With thinking enabled (the default), all three models pass:
+`analyze-functionality` requires `## END-OF-ANALYSIS` as the literal final line. With thinking enabled (the default), all four models pass on the cells they completed:
 
-| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b |
-|---|---:|---:|---:|
-| small  | ✅ | ✅ | ✅ |
-| medium | ✅ | ✅ | ✅ |
-| large  | ✅ | ✅ | ✅ |
+| sample | gpt-oss:20b | gpt-oss:120b | qwen3.6:35b-a3b | qwen3.6:27b |
+|---|---:|---:|---:|---:|
+| small  | ✅ | ✅ | ✅ | ✅ |
+| medium | ✅ | ✅ | ✅ | ✅ |
+| large  | ✅ | ✅ | ✅ | ✕ (timeout) |
 
 (Format adherence collapses for qwen with `think:false` — see Round 2.2.)
 
 ### 1.4 Per-task quality observations
 
-- **`commit-msg-check`**: 20b and 120b emit `OK` / one-line suggestion as instructed. Qwen3.6 ignores `"Reply with ONLY 'OK'"` and emits a `"Here's a thinking process:"` preamble; at `num_predict=512` it never reaches the answer (`done_reason=length`). The reasoning lives in the `.thinking` field.
-- **`summarize-diff`**: All three models produce factually correct summaries. Qwen3.6 generates 3× more tokens (~1500 vs ~450 for 120b) without commensurate quality gain.
-- **`analyze-functionality`**: 20b consistently emits `No findings` for all three samples — **false negative on real bugs** that 120b correctly surfaces. 120b and qwen both find legitimate issues, sometimes different ones (medium: 120b flags U+001F separator collision, qwen flags duplicated parsing logic; large: 120b flags `set -u` unbound-variable risk, qwen flags `\b` regex hyphen-boundary risk).
+- **`commit-msg-check`**: 20b and 120b emit `OK` / one-line suggestion as instructed. Both qwen3.6 variants ignore `"Reply with ONLY 'OK'"` and emit a `"Here's a thinking process:"` preamble; at `num_predict=512` they never reach the answer (`done_reason=length`). The reasoning lives in the `.thinking` field. Same defect, just slower on the dense 27b.
+- **`summarize-diff`**: All four models produce factually correct summaries. Both qwen variants generate 3-4× more tokens (~1500-1900 vs ~450 for 120b) without commensurate quality gain.
+- **`analyze-functionality`**: 20b consistently emits `No findings` for all three samples — **false negative on real bugs** that 120b correctly surfaces. 120b and qwen-MoE both find legitimate issues, sometimes different ones (medium: 120b flags U+001F separator collision, qwen flags duplicated parsing logic; large: 120b flags `set -u` unbound-variable risk, qwen flags `\b` regex hyphen-boundary risk). qwen-dense:27b reaches the same DRY finding as the MoE on `medium` — quality is preserved, but at ~3× the latency.
 
 Curated outputs in [§4 Appendix](#4-appendix-representative-outputs).
 
@@ -145,9 +155,9 @@ end
 
 ---
 
-## Round 2 — targeted verification
+## Round 2 — targeted verification (qwen3.6:35b-a3b only)
 
-Two hypotheses for qwen3.6's poor showing on `analyze-functionality:medium` (171.7s):
+Two hypotheses for qwen3.6:35b-a3b's poor showing on `analyze-functionality:medium` (171.7s):
 
 1. **Cold-start contamination** — round-1 warmup ("hi" × 1 token) was insufficient to actually load the MoE expert layers and KV cache.
 2. **`think=true` overhead** — qwen3.6 emits long chain-of-thought before answering. If Ollama 0.22's `think:false` toggle disables this cleanly, the 3B-active path may genuinely beat 120b.
@@ -204,23 +214,62 @@ Speed numbers look excellent. Output quality does not.
 
 ---
 
-## 3. Why qwen3.6:35b-a3b underperformed (consolidated)
+## Round 3 — qwen3.6:27b dense (addendum)
 
-| factor | observation |
-|---|---|
-| **Throughput** | 54-58 tok/s — comparable to `gpt-oss:20b`, faster than `gpt-oss:120b` (~40 tok/s). Per-token, qwen wins. |
-| **Output volume** | 2-3× more tokens than `gpt-oss:120b` for the same task. Wall-clock loses despite higher throughput. |
-| **Format adherence** | Weak on terse outputs ("Reply with ONLY 'OK'" → ignored). Strong on heavily-templated outputs (`## END-OF-ANALYSIS` sentinel → 100% with thinking on). |
-| **Thinking dependency** | Reasoning quality depends on thinking-mode. `think:false` produces hallucinations and breaks format contracts. |
-| **Cold-start** | 9.7s on first load, then negligible. Not a routing factor in steady state. |
+Triggered by the question: "is the smaller dense sibling faster, since it has fewer total params?" Answer: no. On this hardware, dense costs **all 27B params per token**, while MoE 35b-a3b costs **only 3B active** — a 9× compute-per-token gap that overwhelms the model-size delta.
+
+The 9 cells were run via `bench.sh` with `SKIP_EXISTING=1` (newly added) so prior cells were reused. `large × analyze-functionality` exceeded the 600s curl timeout (HTTP=000) — the model was generating but had not finished by the deadline.
+
+### 3.1 Per-cell timing summary
+
+| cell | latency | tokens | done_reason |
+|---|---:|---:|---|
+| small  × commit-msg-check       |  47.3s |   512 | length |
+| medium × commit-msg-check       |  47.5s |   512 | length |
+| large  × commit-msg-check       |  47.3s |   512 | length |
+| small  × summarize-diff         | 179.4s | 1 906 | stop |
+| medium × summarize-diff         | 150.7s | 1 581 | stop |
+| large  × summarize-diff         | 185.2s | 1 887 | stop |
+| small  × analyze-functionality  |  93.6s |   948 | stop |
+| medium × analyze-functionality  | 574.5s | 6 169 | stop |
+| large  × analyze-functionality  | 600.0s |     0 | **timeout (curl 600s)** |
+
+### 3.2 Quality observations
+
+- **Same defect surface as 35b-a3b.** Thinking-process preamble on `commit-msg-check` (all three samples hit `done_reason=length` at 512 tokens, never reach the answer). Verbose `summarize-diff` output (~1900 tokens vs 120b's ~450).
+- **Same finding-set on `analyze-functionality`.** On `medium` it surfaces the same DRY/duplication finding as the MoE 35b-a3b (extract `block-*` parsing into a shared helper). Output ends correctly with `## END-OF-ANALYSIS`. So the dense weights don't *help* find different bugs — at least not at this sample size.
+- **Latency dominated by ~11 tok/s throughput.** All cells generate at near-identical rate, regardless of task. With output volumes typical of a thinking model (1500-6000 tokens), wall-clock is uniformly bad.
+
+### 3.3 Verdict
+
+`qwen3.6:27b` (dense Q4_K_M) is **strictly dominated** by `qwen3.6:35b-a3b` (MoE) on this hardware:
+
+- 5× slower (~11 vs ~57 tok/s)
+- Identical defect profile (thinking-overrun on terse outputs, verbosity on summaries)
+- Identical (or worse) finding quality on analyze-*
+
+There is no production hook for which the dense 27b wins.
 
 ---
 
-## 4. Appendix — representative outputs
+## 4. Why qwen3.6 underperformed (consolidated)
 
-Curated to illustrate the quality patterns called out above. Full output text for all 27 cells lives in [`results/`](./results/); `think:false` re-test outputs in [`results-nothink/`](./results-nothink/).
+| factor | qwen3.6:35b-a3b (MoE) | qwen3.6:27b (dense) |
+|---|---|---|
+| **Throughput**     | 54-58 tok/s — comparable to gpt-oss:20b | **~11 tok/s** — slowest of all four models |
+| **Output volume**  | 2-3× more tokens than 120b for the same task | 3-4× more tokens than 120b |
+| **Format adherence** | Weak on terse outputs ("Reply with ONLY 'OK'" → ignored). Strong on heavily-templated outputs (`## END-OF-ANALYSIS` → 100% with thinking on) | Same as 35b-a3b |
+| **Thinking dependency** | Reasoning quality depends on thinking-mode. `think:false` produces hallucinations and breaks format contracts | Not re-tested under `think:false` (would inherit same defect) |
+| **Cold-start**     | 9.7s on first load, then negligible | not separately characterized |
+| **Architecture cost** | 3B active params per token (MoE)  | 27B active params per token (dense) — 9× more compute per token |
 
-### 4.1 commit-msg-check — qwen format failure
+---
+
+## 5. Appendix — representative outputs
+
+Curated to illustrate the quality patterns called out above. Full output text for all 36 cells lives in [`results/`](./results/); `think:false` re-test outputs in [`results-nothink/`](./results-nothink/).
+
+### 5.1 commit-msg-check — qwen format failure (both variants)
 
 Input: `medium` commit subject + body.
 
@@ -249,7 +298,22 @@ Here's a thinking process:
      ...
 ```
 
-### 4.2 summarize-diff — verbosity contrast
+**qwen3.6:27b** — same defect, with even more verbose preamble (still `done_reason=length` at 512 tokens, 47s).
+
+```
+Here's a thinking process:
+
+1.  **Analyze User Input:**
+   - **Input:** A git commit message.
+   - **Requirements:**
+     - Reply with ONLY 'OK' if it follows best practices.
+     - Best practices defined as: concise, English, explains why not what, ...
+   - **Commit Message Content:**
+     - Subject: `perf(hooks): consolidate per-hook jq calls (2 -> 1) via U+001F separator (#39)`
+     ...
+```
+
+### 5.2 summarize-diff — verbosity contrast
 
 Input: `medium` diff (`b2f907b`, jq consolidation).
 
@@ -280,7 +344,9 @@ Input: `medium` diff (`b2f907b`, jq consolidation).
 *   Verified for stability with 341/341 tests passing ...
 ```
 
-### 4.3 analyze-functionality — false-negative vs real-finding contrast
+**qwen3.6:27b** (1 581 tokens) — quality similar to MoE sibling; not shown in full (see [`results/medium/summarize-diff_qwen3-6-27b.out`](./results/medium/summarize-diff_qwen3-6-27b.out)).
+
+### 5.3 analyze-functionality — false-negative vs real-finding contrast
 
 Input: `medium` diff. The actual diff has at least one legitimate functional concern (U+001F separator collision: if a command itself contains the byte, the Bash split logic mis-parses).
 
@@ -308,26 +374,37 @@ No findings
 ## END-OF-ANALYSIS
 ```
 
+**qwen3.6:27b** — same finding as the MoE sibling (the dense weights add latency, not coverage).
+
+```
+[Major] hooks/block-destructive-docker.sh:16 — Identical input-parsing logic is copy-pasted across six separate hook scripts, violating DRY and shared utility reuse principles. — Extract the `jq` concatenation and bash parameter expansion into a centralized helper function or sourced library script.
+## END-OF-ANALYSIS
+```
+
 ---
 
-## 5. Recommendations
+## 6. Recommendations
 
 1. **No changes to default routing.** Keep `gpt-oss:20b` for `commit-msg-check`, `classify-*`, `generate-slug`, `generate-resolution-entry`, `generate-pr-title`. Keep `gpt-oss:120b` for the heavy `summarize-*` / `analyze-*` / `merge-findings` / `generate-pr-body` family.
 2. **Add `qwen3.6:35b-a3b` to the CLAUDE.md routing table as a "second opinion" model** (think=on only) for analyze-* tasks. It surfaces different findings than 120b on the medium and large samples (~30% non-overlap), at 2-3× wall-clock cost.
-3. **(Optional) Investigate `summarize-diff` demotion to 20b.** Round-1 data suggests 20b output quality is acceptable and saves ~7-13s per call. Run a wider A/B (5+ commits) before changing.
-4. **Do NOT use `think:false` on qwen3.6** for structured-output tasks. Speedup is real; quality collapse is not survivable.
-5. **Re-bench triggers.** Re-run [`bench.sh`](./bench.sh) on:
+3. **Do NOT use `qwen3.6:27b` for any production hook.** Strictly dominated by the MoE sibling (5× slower, no quality gain). Keep installed only as a reference for future MoE-vs-dense comparisons.
+4. **(Optional) Investigate `summarize-diff` demotion to 20b.** Round-1 data suggests 20b output quality is acceptable and saves ~7-13s per call. Run a wider A/B (5+ commits) before changing.
+5. **Do NOT use `think:false` on qwen3.6** for structured-output tasks. Speedup is real; quality collapse is not survivable.
+6. **Re-bench triggers.** Re-run [`bench.sh`](./bench.sh) on:
    - New qwen point release (3.6.x → 3.7.x).
    - Ollama point release that changes default thinking semantics.
    - New gpt-oss release.
 
+   `SKIP_EXISTING=0 bash bench.sh` forces a full re-run; the default re-uses any cached `.out`/`.meta` pairs, so adding a single new model is incremental.
+
 ---
 
-## 6. Artifacts
+## 7. Artifacts
 
-- [`bench.sh`](./bench.sh) — matrix runner (samples × hooks × models, with warmup)
+- [`bench.sh`](./bench.sh) — matrix runner (samples × hooks × models, with warmup and `SKIP_EXISTING` cache)
 - [`aggregate.sh`](./aggregate.sh) — regenerates raw-data tables and previews into a separate dump (kept for re-bench convenience; not the canonical report)
 - [`bench.log`](./bench.log) — round-1 stdout
+- [`bench-qwen3.6-27b.log`](./bench-qwen3.6-27b.log) — round-3 stdout
 - [`samples/`](./samples/) — committed `.diff` and `.subject` per sample (frozen so re-runs use identical inputs)
-- [`results/<sample>/<hook>_<model>.{out,meta}`](./results/) — round-1 per-cell raw response + JSON metadata
+- [`results/<sample>/<hook>_<model>.{out,meta}`](./results/) — round-1 + round-3 per-cell raw response + JSON metadata
 - [`results-nothink/qwen-nothink_<sample>.{out,meta}`](./results-nothink/) — round-2 `think:false` outputs
