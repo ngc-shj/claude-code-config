@@ -1,0 +1,5 @@
+[Major] CLAUDE.md:101 — False claim that the repo "ships with" a 14-day retention period, whereas `~/.config/rtk/config.toml` is a local user-space file not tracked by the repository. Users cloning this repo will still have the default 90-day retention. — Change wording to "recommend" or "instruct users to set" instead of "ships with".
+
+[Major] docs/archive/audit/rtk-privacy-posture-2026-04-30.md:126 — Claims retention shortening was a mitigation "applied in this PR", but the git diff contains no changes to any configuration files or code that would implement this for other users. — Clarify that this was a local manual configuration change and not a repository-level mitigation.
+
+## END-OF-ANALYSIS

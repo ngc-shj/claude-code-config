@@ -1,0 +1,1 @@
+{"sample":"small","hook":"commit-msg-check","model":"mistral-small3.2:24b","elapsed_s":1.35,"http_code":"200","total_duration_ms":1325,"prompt_eval_count":575,"prompt_eval_duration_ms":603,"eval_count":9,"eval_duration_ms":586,"done_reason":"stop"}

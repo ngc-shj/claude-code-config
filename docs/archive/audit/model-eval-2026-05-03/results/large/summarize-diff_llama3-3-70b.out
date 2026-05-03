@@ -1,0 +1,3 @@
+* A new hook `block-authz-state-destruction.sh` has been added to block the destruction of authorization states, such as deleting roles, role bindings, IAM policies, group memberships, or service accounts, which can cause immediate denial-of-service and break runtime authentication.
+* This change matters because it helps prevent accidental or intentional removal of critical access controls, reducing the risk of lockouts and service disruptions, and is enforced across major cloud providers (AWS, GCP, Azure) and Kubernetes.
+* There are potential risks of bypassing this hook through direct API calls, base64-decoded eval, or alternate shells, but local overrides can be configured via `~/.claude/settings.local.json` to customize the behavior.

@@ -1,0 +1,5 @@
+- **What changed**: Reduced command history retention in RTK from 90 days to 14 days, added privacy audit documentation, and updated the CLAUDE.md with privacy posture information.
+- **Why it matters**: Minimizes the exposure window for sensitive command history data and provides clear documentation on RTK's privacy posture.
+- **Risks**: While the risk of network exfiltration is negligible, local plaintext command history remains a low risk, and secrets passed as CLI arguments are still captured.
+- **Additional changes**: Added re-audit triggers for future RTK upgrades and recommended ongoing hygiene practices for better privacy management.
+- **No code changes**: The changes are primarily documentation and configuration updates, with no alterations to the RTK codebase.

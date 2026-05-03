@@ -1,0 +1,4 @@
+* **What changed:** Implemented a new pre-tool-use hook (`block-authz-state-destruction.sh`) that uses regex to block CLI commands that delete IAM roles, bindings, policies, and service accounts across AWS, GCP, Azure, and Kubernetes.
+* **Why it matters:** Prevents critical "authorization-state destruction" (R31 category f), which could cause immediate denial-of-service by locking out legitimate operators or breaking runtime authentication for dependent services.
+* **Enforcement:** This upgrades a previously reviewer-only guideline to an automated harness-level block, supported by a new test suite of 53 cases and updates to `common-rules.md`.
+* **Risks:** The hook is a "best-effort tripwire" and can be bypassed via direct API calls, alternate shells, or encoded commands; legitimate administrative deletions must be performed via a local settings override.

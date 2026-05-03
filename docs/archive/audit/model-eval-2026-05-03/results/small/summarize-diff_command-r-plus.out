@@ -1,0 +1,3 @@
+- An audit of RTK 0.38.0's privacy revealed local plaintext command logging in history.db with a default retention period of 90 days and no network exfiltration due to telemetry being off by default.
+- Retention has been reduced from 90 to 14 days, documented across various files (CLAUDE.md section update, audit report addition), and edited locally outside the repo in ~/.config/rtk/config.toml for future awareness.
+- The CLAUDE.md file now includes a new "Privacy posture" sub-section with an audit summary, triggers to reaudit RTK regularly upon upgrade or concern via command outputs, defense practices (e.g., environment variables), and recommendations on data handling hygiene best practice in the event of sensitive workloads.

@@ -1,0 +1,22 @@
+[Major] hooks/block-authz-state-destruction.sh:35 — Problem — Fix
+The script checks if the tool name is "Bash" and exits if it's not, but it doesn't handle the case where `TOOL_NAME` is empty or null. This could lead to unintended approvals for non-Bash tools. Add a check for empty or null `TOOL_NAME` before the approval.
+
+[Major] hooks/block-authz-state-destruction.sh:42 — Problem — Fix
+The script checks if `COMMAND` is empty and approves if it is, but it doesn't validate the JSON structure of the input. This could lead to false approvals for malformed JSON inputs. Add JSON validation before processing the command.
+
+[Major] hooks/block-authz-state-destruction.sh:50 — Problem — Fix
+The `DENY_REGEX` is constructed using string concatenation, which can be error-prone and hard to maintain. Use a more robust approach, such as a single regex pattern or a function that builds the regex, to ensure correctness and readability.
+
+[Major] hooks/block-authz-state-destruction.sh:60 — Problem — Fix
+The script uses `grep -qE` to check if the command matches the deny regex, but it doesn't handle multi-line commands. This could lead to false negatives for commands that span multiple lines. Modify the script to handle multi-line commands.
+
+[Minor] hooks/block-authz-state-destruction.sh:62 — Problem — Fix
+The `REASON` string is very long and hard to read. Break it into smaller, more manageable parts using variables or multi-line strings to improve readability.
+
+[Minor] settings.json:210 — Problem — Fix
+The new hook entry in `settings.json` doesn't follow the same formatting style as the existing entries. Update the formatting to be consistent with the rest of the file.
+
+[Minor] skills/triangulate/common-rules.md:378 — Problem — Fix
+The description of category (f) in `common-rules.md` is not consistent with the hook's behavior. Update the description to accurately reflect the hook's functionality and the commands it blocks.
+
+## END-OF-ANALYSIS

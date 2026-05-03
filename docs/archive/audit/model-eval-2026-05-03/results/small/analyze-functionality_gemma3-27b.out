@@ -1,0 +1,8 @@
+[Minor] CLAUDE.md:99 — Repetitive phrase "same shape as" could be more concise — "similar to" or "equivalent to" would be clearer.
+[Minor] docs/archive/audit/rtk-privacy-posture-2026-04-30.md:32 — The table header "Size" uses mixed units (KB for all values). Be consistent by using bytes or rounding to the nearest whole number.
+[Major] docs/archive/audit/rtk-privacy-posture-2026-04-30.md:48 — The text states "Regex / search patterns leak content of interest". While true, this is a general statement applicable to any command history. It should be more specific to RTK's context and the potential exposure of project-specific data.
+[Minor] docs/archive/audit/rtk-privacy-posture-2026-04-30.md:82 — The statement about `brew uninstall` not removing config/share directories is useful but could be phrased more actively: “`brew uninstall rtk` does not remove…; manual cleanup is required.”
+[Minor] docs/archive/audit/rtk-privacy-posture-2026-04-30.md:113 — “Backup-exclude `~/.local/share/rtk/history.db` if using auto-backup tools that ship to off-machine destinations” is a good recommendation, but lacks context regarding the severity of this potential data leak. A higher-level explanation of why off-machine backups are risky would strengthen the advice.
+[Major] docs/archive/audit/rtk-privacy-posture-2026-04-30.md:133 — The final decision statement lacks explicit mention of ongoing monitoring. While re-auditing on upgrades is listed, there's no statement about periodic, independent reviews to ensure continued adherence to the documented posture.
+
+## END-OF-ANALYSIS

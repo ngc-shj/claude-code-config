@@ -1,0 +1,3 @@
+* The RTK tool's privacy posture was audited, finding negligible network exfiltration risk but a moderate risk of capturing secrets passed as CLI arguments in its local plaintext command history.
+* Retention for the local command history was shortened from 90 days to 14 days to mitigate this risk, and re-audit triggers were established to check for changes on future RTK upgrades.
+* The audit findings and mitigations were documented, and users are advised to avoid passing secrets as CLI arguments, exclude the history database from backups, and periodically purge the database to minimize exposure.

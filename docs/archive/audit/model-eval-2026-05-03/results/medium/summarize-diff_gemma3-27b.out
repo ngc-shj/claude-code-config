@@ -1,0 +1,5 @@
+*   **Performance Improvement:** The diff consolidates `jq` calls within each hook from two to one, reducing the Bash chain latency by 45% (from ~77ms to ~42ms) and per-hook average latency from ~12-14ms to ~7ms.
+*   **Robustness to Special Characters:** The change uses the Unit Separator (U+001F) instead of `@tsv` to avoid issues with embedded tabs in commands being misinterpreted after escaping during the `jq` transformation.
+*   **Implementation Detail:** It replaces `read -r` with Bash parameter expansion for splitting the combined `jq` output, maintaining the ability to handle newlines and special characters in values.
+*   **Verification & Monitoring:** New benchmark results are added to a markdown file, demonstrating the performance gains, and tests pass without regression.
+*   **Scope:** The changes apply to six hook files: `block-destructive-docker.sh`, `block-vcs-history-rewrite.sh`, `block-audit-observability-destruction.sh`, `block-recovery-path-destruction.sh`, `block-secret-key-destruction.sh`, and `block-authz-state-destruction.sh`.

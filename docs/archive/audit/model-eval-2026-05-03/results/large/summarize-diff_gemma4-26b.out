@@ -1,0 +1,4 @@
+* Implemented a new bash hook (`block-authz-state-destruction.sh`) to intercept and block destructive authorization commands across AWS, GCP, Azure, and Kubernetes.
+* Prevents accidental or malicious deletion of IAM roles, policies, and service accounts, which could cause immediate denial-of-service (DoS) by locking out legitimate operators and breaking service authentication.
+* Updated `settings.json` to enable the hook and updated `common-rules.md` to formalize "Category (f)" enforcement and provide guidance on safer alternatives, such as rotating credentials instead of revoking them.
+* The implementation is a "best-effort tripwire" that remains vulnerable to bypasses like base64 encoding, alternate shells, or direct cloud API calls.

@@ -1,0 +1,4 @@
+- **Performance optimization in hooks**: The code change consolidates jq calls from 2 to 1, reducing Bash chain latency by ~45%. This is achieved using the U+001F (Unit Separator) character.
+- **Separator choice**: Instead of `@tsv`, which caused issues with embedded TABs, they use `U+001F`. It emits a real byte and preserves control characters like tabs in field values without escaping them as `"\\t"`. 
+- **Bash parameter expansion:** Bash's native variable splitting (`${var%%pat*}` / `${var#\*\ pat}`) replaces the need for `read -r`, preserving newlines/special chars. 
+- **Updated files**: Six block-* hook scripts are modified, with comprehensive tests and benchmarks added to ensure correctness and performance gains (42ms cumulative latency post-change). The change also updates documentation in a test script's Notes section accordingly.

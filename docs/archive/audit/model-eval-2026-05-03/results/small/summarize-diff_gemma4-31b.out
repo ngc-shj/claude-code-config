@@ -1,0 +1,4 @@
+- Conducted a privacy audit of `rtk` v0.38.0, adding a comprehensive report and updating `CLAUDE.md` with a privacy posture summary and re-audit triggers.
+- Reduced local command history retention from 90 days to 14 days to minimize the window of data exposure.
+- Confirmed that network exfiltration risk is currently negligible, as telemetry is disabled by default and no collection endpoints were found in the binary.
+- Identified a risk where CLI arguments (including potential secrets) are stored in plaintext in a local SQLite database, similar to `~/.bash_history`.

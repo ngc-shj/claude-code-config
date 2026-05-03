@@ -1,0 +1,11 @@
+[Major] hooks/block-authz-state-destruction.sh:21 — The regex for GCP `set-iam-policy` is overly broad and could accidentally block legitimate operations. It currently matches any invocation of `gcloud projects set-iam-policy` or `gcloud organizations set-iam-policy` or `gcloud resource-manager folders set-iam-policy`, even if it is part of a safe operation. — Refine the regex to specifically target the command when it's used without any arguments or with arguments that imply a complete policy replacement.  Consider adding a check for the presence of a piped input or file argument, which are typical indicators of a policy replacement.
+
+[Minor] hooks/block-authz-state-destruction.sh:38 — The variable `TOOL_NAME` is used but not explicitly checked to ensure it is actually set before being used in the conditional.  Although subsequent checks likely handle this, it’s good practice to explicitly check. — Add a check to see if `$TOOL_NAME` is empty and exit gracefully if it is, preventing potential errors.
+
+[Minor] hooks/block-authz-state-destruction.sh:53 — The `DENY_REGEX` variable grows quite large and is repeated multiple times. This reduces readability and makes maintenance harder. — Refactor the `DENY_REGEX` construction.  Instead of string concatenation, use an array to store individual regex patterns and then join them. This enhances readability and simplifies adding or modifying patterns.
+
+[Major] tests/block-authz-state-destruction.bats:249 — The test for `gcloud projects add-iam-policy-binding` asserts the hook *approves* the operation, but the intent of the hook is to block destructive operations. Adding an IAM policy binding is *not* destructive. Therefore, this test should pass, but it is currently testing the wrong condition. — Change the assertion in the test to verify that the hook approves the operation, ensuring the test correctly validates the hook's intended behavior.
+
+[Minor] tests/block-authz-state-destruction.bats:293 — The test for `aws iam create-policy` is redundant. The hook should not block creating a policy, and the existing tests already cover this general behavior by verifying approval of creation commands. — Remove the redundant test case to simplify the test suite and reduce test execution time.
+
+## END-OF-ANALYSIS

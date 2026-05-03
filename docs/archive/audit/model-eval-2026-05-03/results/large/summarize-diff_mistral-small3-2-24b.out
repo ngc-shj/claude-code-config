@@ -1,0 +1,5 @@
+- **What changed**: Added a new pre-tool-use hook to block authorization-state destruction across major cloud providers (AWS, GCP, Azure) and Kubernetes. The hook denies commands that remove roles, role bindings, IAM policies, group memberships, or service accounts.
+- **Why it matters**: Prevents immediate denial-of-service and breaks in runtime authentication for legitimate operators and services. It guides users towards safer alternatives and highlights critical risks.
+- **Risks**: The hook is a best-effort tripwire with known bypasses (e.g., base64-decoded eval, direct API calls). Local overrides are possible via settings.local.json. False positives or negatives could occur if commands are not properly matched or if new destruction methods are introduced.
+- **Coverage**: The hook covers a wide range of destructive commands across AWS IAM, GCP IAM, Azure RBAC/AAD, and Kubernetes RBAC, with tests for 53 cases across these providers.
+- **Alternatives**: The hook suggests safer alternatives like identifying all dependent principals, verifying replacements, and using surgical changes for GCP set-iam-policy.
