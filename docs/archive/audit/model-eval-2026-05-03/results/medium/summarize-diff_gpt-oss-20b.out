@@ -1,0 +1,5 @@
+- Consolidated the two `jq` calls in six block‑hooks into a single invocation that emits `tool_name` and `tool_input.command` separated by a U+001F (Unit Separator), then splits via Bash parameter expansion.  
+- Added a new benchmark file (`hook‑latency-2026-04-30-after-jq-consolidation.md`) and updated `tests/bench-hooks.sh` to reflect the new single‑jq‑call logic, showing a 45 % drop in cumulative latency (≈ 77 ms → 42 ms).  
+- Switched from a prior `@tsv` attempt— which escaped embedded TABs and broke parsing—to U+001F because it is a real byte that rarely appears in shell commands and preserves control characters.  
+- The change reduces per‑hook overhead (now dominated by a single `jq` run), improving overall hook performance without altering functionality.  
+- Potential risks: if a command were to contain U+001F, the split would fail; benchmark numbers are machine‑specific and may vary on other systems, so regression tests must continue to cover all edge cases.

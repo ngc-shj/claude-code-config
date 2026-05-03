@@ -1,0 +1,37 @@
+Here's a thinking process:
+
+1.  **Analyze User Input:**
+   - **Task:** Review a git commit message.
+   - **Condition 1:** Reply with ONLY 'OK' if it follows best practices (concise, English, explains why not what, uses conventional prefix like feat/fix/refactor/docs/test/chore).
+   - **Condition 2:** Reply with a one-line suggestion if it needs improvement.
+   - **Input Commit Message:** 
+     ```
+     perf(hooks): consolidate per-hook jq calls (2 -> 1) via U+001F separator (#39)
+
+     Cut the Bash chain latency from ~77ms to ~42ms cumulative (-45%) by
+     emitting both `tool_name` and `tool_input.command` from a single jq
+     invocation per hook, separated by U+001F (Unit Separator), and
+     splitting via bash parameter expansion.
+
+     Each block-* hook on the Bash matcher previously did two `jq -r`
+     invocations (one for tool_name, one for command). Now:
+
+       PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "", (.tool_input.command // "")')
+       TOOL_NAME="${PARSED%%$'\x1f'*}"
+       COMMAND="${PARSED#*$'\x1f'}"
+
+     Why U+001F (Unit Separator) instead of `@tsv`:
+
+     The earlier `@tsv` attempt during PR #29 was reverted because jq's
+     @tsv format escapes embedded TABs in field values as the literal
+     two characters "\\t" (backslash + t), so a command like
+     `docker\tcompose down -v` (legitimate via $'docker\tcompose...')
+     arrived at the regex with `\\t` instead of an actual TAB, breaking
+     the `[[:space:]]+` match in the docker hook.
+
+     `jq -rj '..., "", ...'` emits a real 0x1F byte AND preserves
+     embedded control chars (including TAB) in the field values
+     verbatim. U+001F is virtually never present in real shell commands,
+     so the field-split is unambiguous.
+
+     Bash parameter expansion (`${var%%pat*}` / `${var#*pat}`) replaces

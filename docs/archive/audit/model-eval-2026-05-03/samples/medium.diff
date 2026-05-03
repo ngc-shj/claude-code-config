@@ -1,0 +1,266 @@
+commit b2f907bf8ccd82e7e56059da369605544aa26920
+Author: NOGUCHI Shoji <57870202+ngc-shj@users.noreply.github.com>
+Date:   Thu Apr 30 20:47:57 2026 +0900
+
+    perf(hooks): consolidate per-hook jq calls (2 -> 1) via U+001F separator (#39)
+    
+    Cut the Bash chain latency from ~77ms to ~42ms cumulative (-45%) by
+    emitting both `tool_name` and `tool_input.command` from a single jq
+    invocation per hook, separated by U+001F (Unit Separator), and
+    splitting via bash parameter expansion.
+    
+    Each block-* hook on the Bash matcher previously did two `jq -r`
+    invocations (one for tool_name, one for command). Now:
+    
+      PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "", (.tool_input.command // "")')
+      TOOL_NAME="${PARSED%%$'\x1f'*}"
+      COMMAND="${PARSED#*$'\x1f'}"
+    
+    Why U+001F (Unit Separator) instead of `@tsv`:
+    
+    The earlier `@tsv` attempt during PR #29 was reverted because jq's
+    @tsv format escapes embedded TABs in field values as the literal
+    two characters "\\t" (backslash + t), so a command like
+    `docker\tcompose down -v` (legitimate via $'docker\tcompose...')
+    arrived at the regex with `\\t` instead of an actual TAB, breaking
+    the `[[:space:]]+` match in the docker hook.
+    
+    `jq -rj '..., "", ...'` emits a real 0x1F byte AND preserves
+    embedded control chars (including TAB) in the field values
+    verbatim. U+001F is virtually never present in real shell commands,
+    so the field-split is unambiguous.
+    
+    Bash parameter expansion (`${var%%pat*}` / `${var#*pat}`) replaces
+    `read -r` for splitting — both are pure bash and preserve newlines
+    and special chars in the value half.
+    
+    Files changed:
+      hooks/block-destructive-docker.sh
+      hooks/block-vcs-history-rewrite.sh
+      hooks/block-audit-observability-destruction.sh
+      hooks/block-recovery-path-destruction.sh
+      hooks/block-secret-key-destruction.sh
+      hooks/block-authz-state-destruction.sh
+    
+    Verification:
+    - bats tests/ -> 341/341 pass (no regression). The block-destructive-
+      docker.bats `docker\tcompose down -v` (tab whitespace) case still
+      passes — the earlier reason for reverting @tsv does not apply here.
+    - New benchmark recorded at docs/archive/bench/hook-latency-2026-04-
+      30-after-jq-consolidation.md: per-hook avg dropped from ~12-14ms
+      to ~7ms, Bash chain cumulative 77ms -> 42ms (-45%).
+    - Updated tests/bench-hooks.sh script Notes section to reflect the
+      consolidation (replaces the "future optimization candidate" note
+      with the post-consolidation context).
+    
+    Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+diff --git a/docs/archive/bench/hook-latency-2026-04-30-after-jq-consolidation.md b/docs/archive/bench/hook-latency-2026-04-30-after-jq-consolidation.md
+new file mode 100644
+index 0000000..f6198d4
+--- /dev/null
++++ b/docs/archive/bench/hook-latency-2026-04-30-after-jq-consolidation.md
+@@ -0,0 +1,27 @@
++# Hook chain latency benchmark
++
++Date: 2026-04-30T20:45:37+09:00
++Iterations per hook: 100
++Input: approve-path JSON (`echo hello`)
++
++| Hook | Matcher | min | median | p95 | max | avg |
++| --- | --- | ---:| ---:| ---:| ---:| ---:|
++| block-audit-observability-destruction | Bash | 6 ms | 7 ms | 9 ms | 9 ms | 7 ms |
++| block-authz-state-destruction | Bash | 6 ms | 8 ms | 9 ms | 9 ms | 7 ms |
++| block-destructive-docker | Bash | 5 ms | 7 ms | 9 ms | 9 ms | 7 ms |
++| block-recovery-path-destruction | Bash | 6 ms | 8 ms | 9 ms | 10 ms | 7 ms |
++| block-secret-key-destruction | Bash | 6 ms | 8 ms | 9 ms | 10 ms | 7 ms |
++| block-sensitive-files | Edit|Write|MultiEdit | 4 ms | 6 ms | 7 ms | 7 ms | 5 ms |
++| block-vcs-history-rewrite | Bash | 5 ms | 7 ms | 9 ms | 9 ms | 7 ms |
++
++## Per-matcher chain estimates
++
++| Matcher | Hooks counted | Cumulative avg |
++| --- | ---:| ---:|
++| Bash (block-* hooks only) | 6 | **42 ms** |
++| Edit \| Write \| MultiEdit | 1 | **5 ms** |
++
++Notes:
++- The Bash matcher also runs `commit-msg-check.sh`, which is excluded from this benchmark because (a) it short-circuits on non-`git commit` commands and (b) on a real `git commit` it calls Ollama, dominating wall time. The numbers above are the always-paid block-* tripwire cost.
++- Per-iteration cost is dominated by `bash` process startup + a single `jq` invocation. The hooks emit `tool_name` and `tool_input.command` in one jq call separated by U+001F (Unit Separator) and split via bash parameter expansion — earlier 2-jq-call versions paid roughly twice this; an even earlier `@tsv` attempt was reverted because TAB inside command values collided with the TSV field separator.
++- Numbers are wall time on a developer machine. Re-run on a quiescent system before drawing conclusions about per-call cost.
+diff --git a/hooks/block-audit-observability-destruction.sh b/hooks/block-audit-observability-destruction.sh
+index 9a2c416..4edacef 100644
+--- a/hooks/block-audit-observability-destruction.sh
++++ b/hooks/block-audit-observability-destruction.sh
+@@ -39,15 +39,19 @@ set -euo pipefail
+ 
+ INPUT=$(cat)
+ 
+-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
++# Single jq call: emit tool_name + Unit Separator (U+001F) + command.
++# US survives jq -rj as a real 0x1F byte (unlike @tsv, which escapes
++# embedded TABs as literal "\t") and is virtually never present in
++# real shell commands, so the field-split is unambiguous.
++PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "\u001f", (.tool_input.command // "")')
++TOOL_NAME="${PARSED%%$'\x1f'*}"
++COMMAND="${PARSED#*$'\x1f'}"
+ 
+ if [ "$TOOL_NAME" != "Bash" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+ fi
+ 
+-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+-
+ if [ -z "$COMMAND" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+diff --git a/hooks/block-authz-state-destruction.sh b/hooks/block-authz-state-destruction.sh
+index 54b1ecb..df38806 100644
+--- a/hooks/block-authz-state-destruction.sh
++++ b/hooks/block-authz-state-destruction.sh
+@@ -40,15 +40,19 @@ set -euo pipefail
+ 
+ INPUT=$(cat)
+ 
+-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
++# Single jq call: emit tool_name + Unit Separator (U+001F) + command.
++# US survives jq -rj as a real 0x1F byte (unlike @tsv, which escapes
++# embedded TABs as literal "\t") and is virtually never present in
++# real shell commands, so the field-split is unambiguous.
++PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "\u001f", (.tool_input.command // "")')
++TOOL_NAME="${PARSED%%$'\x1f'*}"
++COMMAND="${PARSED#*$'\x1f'}"
+ 
+ if [ "$TOOL_NAME" != "Bash" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+ fi
+ 
+-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+-
+ if [ -z "$COMMAND" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+diff --git a/hooks/block-destructive-docker.sh b/hooks/block-destructive-docker.sh
+index 38faf07..bb117d8 100644
+--- a/hooks/block-destructive-docker.sh
++++ b/hooks/block-destructive-docker.sh
+@@ -10,17 +10,20 @@ set -euo pipefail
+ 
+ INPUT=$(cat)
+ 
+-# Two jq calls (instead of @tsv) so a TAB inside the COMMAND value cannot
+-# collide with the TSV field separator after `read -r`.
+-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
++# Single jq call: emit tool_name + Unit Separator (U+001F) + command.
++# US is chosen because (a) it survives jq -rj raw output as a real 0x1F
++# byte, unlike @tsv which escapes embedded TABs as the literal "\\t",
++# and (b) U+001F is virtually never present in real shell commands, so
++# the field-split is unambiguous.
++PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "\u001f", (.tool_input.command // "")')
++TOOL_NAME="${PARSED%%$'\x1f'*}"
++COMMAND="${PARSED#*$'\x1f'}"
+ 
+ if [ "$TOOL_NAME" != "Bash" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+ fi
+ 
+-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+-
+ if [ -z "$COMMAND" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+diff --git a/hooks/block-recovery-path-destruction.sh b/hooks/block-recovery-path-destruction.sh
+index 98a45e9..0fa0341 100644
+--- a/hooks/block-recovery-path-destruction.sh
++++ b/hooks/block-recovery-path-destruction.sh
+@@ -46,15 +46,19 @@ set -euo pipefail
+ 
+ INPUT=$(cat)
+ 
+-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
++# Single jq call: emit tool_name + Unit Separator (U+001F) + command.
++# US survives jq -rj as a real 0x1F byte (unlike @tsv, which escapes
++# embedded TABs as literal "\t") and is virtually never present in
++# real shell commands, so the field-split is unambiguous.
++PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "\u001f", (.tool_input.command // "")')
++TOOL_NAME="${PARSED%%$'\x1f'*}"
++COMMAND="${PARSED#*$'\x1f'}"
+ 
+ if [ "$TOOL_NAME" != "Bash" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+ fi
+ 
+-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+-
+ if [ -z "$COMMAND" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+diff --git a/hooks/block-secret-key-destruction.sh b/hooks/block-secret-key-destruction.sh
+index 9dc35fb..bc6ac3a 100644
+--- a/hooks/block-secret-key-destruction.sh
++++ b/hooks/block-secret-key-destruction.sh
+@@ -58,15 +58,19 @@ set -euo pipefail
+ 
+ INPUT=$(cat)
+ 
+-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
++# Single jq call: emit tool_name + Unit Separator (U+001F) + command.
++# US survives jq -rj as a real 0x1F byte (unlike @tsv, which escapes
++# embedded TABs as literal "\t") and is virtually never present in
++# real shell commands, so the field-split is unambiguous.
++PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "\u001f", (.tool_input.command // "")')
++TOOL_NAME="${PARSED%%$'\x1f'*}"
++COMMAND="${PARSED#*$'\x1f'}"
+ 
+ if [ "$TOOL_NAME" != "Bash" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+ fi
+ 
+-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+-
+ if [ -z "$COMMAND" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+diff --git a/hooks/block-vcs-history-rewrite.sh b/hooks/block-vcs-history-rewrite.sh
+index a829d5e..502a49e 100644
+--- a/hooks/block-vcs-history-rewrite.sh
++++ b/hooks/block-vcs-history-rewrite.sh
+@@ -25,15 +25,19 @@ set -euo pipefail
+ 
+ INPUT=$(cat)
+ 
+-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
++# Single jq call: emit tool_name + Unit Separator (U+001F) + command.
++# US survives jq -rj as a real 0x1F byte (unlike @tsv, which escapes
++# embedded TABs as literal "\t") and is virtually never present in
++# real shell commands, so the field-split is unambiguous.
++PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "\u001f", (.tool_input.command // "")')
++TOOL_NAME="${PARSED%%$'\x1f'*}"
++COMMAND="${PARSED#*$'\x1f'}"
+ 
+ if [ "$TOOL_NAME" != "Bash" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+ fi
+ 
+-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+-
+ if [ -z "$COMMAND" ]; then
+   echo '{"decision": "approve"}'
+   exit 0
+diff --git a/tests/bench-hooks.sh b/tests/bench-hooks.sh
+index 935c963..3a59ca5 100755
+--- a/tests/bench-hooks.sh
++++ b/tests/bench-hooks.sh
+@@ -129,5 +129,5 @@ printf '| Edit \\| Write \\| MultiEdit | %d | **%d ms** |\n' \
+ 
+ printf '\nNotes:\n'
+ printf -- '- The Bash matcher also runs `commit-msg-check.sh`, which is excluded from this benchmark because (a) it short-circuits on non-`git commit` commands and (b) on a real `git commit` it calls Ollama, dominating wall time. The numbers above are the always-paid block-* tripwire cost.\n'
+-printf -- '- Per-iteration cost is dominated by `bash` process startup + two `jq` invocations (one for `tool_name`, one for `tool_input.command`). A future optimization could consolidate the `jq` calls if a TAB-safe variant is found (an earlier `@tsv` attempt was reverted because TAB inside the command value collided with the field separator).\n'
++printf -- '- Per-iteration cost is dominated by `bash` process startup + a single `jq` invocation. The hooks emit `tool_name` and `tool_input.command` in one jq call separated by U+001F (Unit Separator) and split via bash parameter expansion — earlier 2-jq-call versions paid roughly twice this; an even earlier `@tsv` attempt was reverted because TAB inside command values collided with the TSV field separator.\n'
+ printf -- '- Numbers are wall time on a developer machine. Re-run on a quiescent system before drawing conclusions about per-call cost.\n'

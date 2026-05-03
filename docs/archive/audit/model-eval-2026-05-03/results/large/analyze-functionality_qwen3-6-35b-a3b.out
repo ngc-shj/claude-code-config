@@ -1,0 +1,7 @@
+[Major] hooks/block-authz-state-destruction.sh:58 — Unanchored regex matches provider CLI substrings anywhere in the command, risking false-positive blocks on unrelated scripts or file paths (e.g., `grep "aws iam" setup.sh`). — Prepend `(^|[[:space:]])` to each provider alternative in `DENY_REGEX` to enforce that `aws`, `gcloud`, `az`, or `kubectl` only match at the start of the string or immediately after whitespace.
+
+[Minor] hooks/block-authz-state-destruction.sh:48-53 — Regex constructed via iterative string concatenation across multiple lines is fragile, difficult to validate visually, and prone to silent syntax errors during future edits. — Consolidate `DENY_REGEX` into a single variable assignment or use a heredoc to improve readability and reduce maintenance risk.
+
+[Minor] hooks/block-authz-state-destruction.sh:30-37 — `jq` invocations run under `set -euo pipefail` without error trapping; if the harness sends malformed JSON or the input stream breaks, `jq` will exit non-zero and trigger a silent script termination with no stdout, potentially leaving the calling harness in an unresponsive state. — Wrap `jq` calls in `|| echo '{"decision":"approve"}'` or add a `trap` to guarantee valid JSON output regardless of parser failure.
+
+## END-OF-ANALYSIS

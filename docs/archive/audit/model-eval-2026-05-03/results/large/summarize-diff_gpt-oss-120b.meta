@@ -1,0 +1,1 @@
+{"sample":"large","hook":"summarize-diff","model":"gpt-oss:120b","elapsed_s":18.48,"http_code":"200","total_duration_ms":18450,"prompt_eval_count":6518,"prompt_eval_duration_ms":5567,"eval_count":498,"eval_duration_ms":12552,"done_reason":"stop"}

@@ -1,0 +1,5 @@
+- **Merged two `jq` invocations into one** for each block‑* Bash hook by emitting `tool_name` and `tool_input.command` together, separated with the Unicode Unit Separator (U+001F), and splitting the result with Bash parameter expansion.  
+- **Added a benchmark report** (`docs/archive/bench/...md`) and updated `tests/bench-hooks.sh` notes to document the latency drop—from ~12‑14 ms per hook to ~7 ms, cutting the total Bash matcher chain from ~77 ms to ~42 ms (≈‑45 %).  
+- **Switched away from `@tsv`** because it escapes embedded TAB characters, which broke commands containing real tabs; the U+001F separator safely preserves all control characters.  
+- **Potential risk**: the new parsing assumes the Unit Separator never appears in legitimate command strings—if a future command includes this byte, the split will fail. Also, reliance on `jq -rj` and Bash’s `${var%%...}` syntax requires compatible versions of both tools.  
+- **No functional regression**: all 341 Bats tests still pass, confirming that behavior remains unchanged aside from the performance improvement.

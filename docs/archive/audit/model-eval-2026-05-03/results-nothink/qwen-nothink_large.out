@@ -1,0 +1,349 @@
+[Major] hooks/block-authz-state-destruction.sh:55 — Problem — The regex `DENY_REGEX` relies on word boundaries (`\b`) which can be bypassed if an attacker uses Unicode characters or specific encoding tricks that `grep -E` handles differently than the intent, or if arguments contain newlines that break the single-line regex matching. More critically, the regex matches `delete-role` but also `delete-role-policy` due to the alternation order if not carefully grouped, though here it seems mostly okay. However, the primary issue is the lack of quoting around variables in the grep command, though `grep -qE "$DENY_REGEX"` is generally safe in bash if no word splitting is desired. The real Major issue is the `set -euo pipefail` combined with `echo "$COMMAND" | grep -qE`. If `$COMMAND` is empty or contains only whitespace, `echo` succeeds, but `grep` returns 1, which is caught by `if`. This is fine. The Major finding is actually in the GCP IAM coverage: `gcloud resource-manager folders` is a newer command structure, but the regex `resource-manager[[:space:]]+folders` assumes a space. If `folders` is a subcommand directly following `resource-manager` without space (unlikely but possible in some cli parsers) or if the path is different, it fails. A more concrete Major issue is the lack of coverage for `aws iam delete-access-key` and `aws iam delete-login-profile` which are also authorization state destructions that can lock out users immediately, listed in the comment but missing from the regex. The regex covers `delete-user` but not specific key deletion which is often the immediate action to lock someone out. The comment says "Coverage (non-exhaustive)" but implies these are critical. Wait, the prompt asks for functionality/correctness. Missing features are Minor.
+
+Let's look for actual bugs.
+Line 42: `TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')`
+Line 44: `if [ "$TOOL_NAME" != "Bash" ]; then`
+If `jq` fails or returns null (if `.tool_name` is missing), `$TOOL_NAME` might be empty string (due to `// empty`). The check `!= "Bash"` works for empty string. This is correct.
+
+Line 50: `COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')`
+Same logic.
+
+Line 55-60: The regex construction.
+`DENY_REGEX='(aws[[:space:]]+iam[[:space:]]+(delete-role...`
+The issue: `delete-role` is followed by `\b`. This prevents `delete-role-xxx` from matching if `xxx` is not in the list, which is good.
+However, `aws iam delete-role` matches.
+What about `aws iam` followed by other verbs? The regex is specific.
+
+Let's look at the `gcloud` part.
+`gcloud[[:space:]]+iam[[:space:]]+(roles|service-accounts)[[:space:]]+delete\b`
+This matches `gcloud iam roles delete`.
+Does it match `gcloud iam roles delete --project=...`? Yes.
+Does it match `gcloud iam roles delete-role`? No, `delete-role` is not `delete`.
+
+Azure part:
+`az[[:space:]]+ad[[:space:]]+(group[[:space:]]+(delete|member[[:space:]]+remove)|sp[[:space:]]+delete)\b`
+Matches `az ad group delete`.
+Matches `az ad sp delete`.
+
+Kubernetes part:
+`kubectl[[:space:]]+delete[[:space:]]+(role|roles|rolebinding|rolebindings|clusterrole|clusterroles|clusterrolebinding|clusterrolebindings|serviceaccount|serviceaccounts)\b`
+Matches `kubectl delete role`.
+Does it match `kubectl delete roles`? Yes.
+Does it match `kubectl delete rolebinding`? Yes.
+
+Potential Major Issue: False Positives / Negatives in `bash -c`.
+Line 64: `if echo "$COMMAND" | grep -qE "$DENY_REGEX"; then`
+If `$COMMAND` is `bash -c 'aws iam delete-role'`, the regex looks for `aws iam` anywhere in the string.
+The string `bash -c 'aws iam delete-role'` contains `aws iam`. It matches.
+This is intended behavior ("block authorization-state destruction").
+
+Potential Critical Issue: Input Injection?
+`INPUT` is read from stdin. `jq` parses it. This is safe from injection.
+
+Potential Major Issue: `set -euo pipefail` interaction with `grep`.
+`if echo "$COMMAND" | grep -qE "$DENY_REGEX"; then`
+If `grep` finds no match, it returns 1. The `if` statement handles this non-zero exit code, so `set -e` does not abort the script. This is correct.
+
+What about `echo "$INPUT"`? If `$INPUT` starts with `-n` or `-e`, `echo` might interpret it as an option.
+Use `printf '%s' "$INPUT"` instead of `echo "$INPUT"` for safety against strings like `-n` or `-e` being passed as JSON content that might be misinterpreted if `echo` behavior varies by shell, though in Bash `echo` usually doesn't expand `-n` unless `-e` is enabled or using `/bin/echo`. However, `printf` is safer.
+Specifically, if `INPUT` is `{"tool_name": "Bash", "tool_input": {"command": "-n"}}`, `echo "-n"` prints nothing in some shells. `jq` would still run, but the output is empty.
+Then `TOOL_NAME` becomes empty.
+Then `COMMAND` becomes empty.
+Then `echo "" | grep ...` runs.
+This is a Minor robustness issue.
+
+Let's look at the `gcloud` regex again.
+`gcloud[[:space:]]+(projects|organizations|resource-manager[[:space:]]+folders)[[:space:]]+(remove-iam-policy-binding|set-iam-policy)\b`
+`resource-manager[[:space:]]+folders`
+This requires `gcloud resource-manager folders ...`.
+The command is `gcloud resource-manager folders ...`.
+Is `resource-manager` a single word in the CLI? Yes.
+Does the regex allow `gcloud resource-manager folders`?
+`gcloud[[:space:]]+(projects|organizations|resource-manager[[:space:]]+folders)`
+This part `(projects|organizations|resource-manager[[:space:]]+folders)` is the problem.
+In an alternation group `|`, the scope is usually the immediate terms.
+`(projects|organizations|resource-manager[[:space:]]+folders)`
+This matches:
+1. `projects`
+2. `organizations`
+3. `resource-manager` followed by space(s) and `folders`.
+
+So `gcloud resource-manager folders ...` matches.
+What about `gcloud resource-manager folders`?
+Wait, `resource-manager` is one word. `folders` is the next.
+The regex `resource-manager[[:space:]]+folders` matches the substring `resource-manager folders`.
+So `gcloud resource-manager folders remove-iam-policy-binding` matches.
+This seems correct.
+
+However, look at the alternation grouping carefully.
+`gcloud[[:space:]]+(projects|organizations|resource-manager[[:space:]]+folders)`
+This parses as:
+`gcloud` + space + (`projects` OR `organizations` OR (`resource-manager` + space(s) + `folders`))
+Then `[[:space:]]+(remove-iam-policy-binding|set-iam-policy)\b`
+So it requires a space after `folders` before the command.
+`gcloud resource-manager folders remove-iam-policy-binding`
+Matches `resource-manager` + space + `folders` + space + `remove...`.
+Correct.
+
+Is there a finding regarding `set-iam-policy`?
+The hook blocks `set-iam-policy`. The comment says "R31... set-iam-policy REPLACES entire policy".
+This is a valid safety hook.
+
+Let's check `kubectl` plurals.
+`role|roles|...`
+Regex: `kubectl[[:space:]]+delete[[:space:]]+(role|roles|rolebinding|rolebindings|clusterrole|clusterroles|clusterrolebinding|clusterrolebindings|serviceaccount|serviceaccounts)\b`
+This covers the listed plurals.
+
+What about `kubectl delete rolebinding` vs `kubectl delete rolebindings`?
+Both are covered.
+
+One specific finding:
+The hook uses `echo "$INPUT"` to pipe to `jq`.
+If `INPUT` is very large, `echo` might hit argument limits (unlikely for JSON config) or `printf` is preferred.
+More importantly, `jq` is used twice.
+`TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')`
+`COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')`
+This parses the JSON twice. Minor performance issue, not correctness.
+
+Let's look at the `DENY_REGEX` for `aws iam`.
+`(aws[[:space:]]+iam[[:space:]]+(delete-role|...)\b)`
+The `\b` is at the end of the inner group.
+So `aws iam delete-role-xxx` will NOT match because `delete-role` is followed by `-`, which is a word character, so `\b` (word boundary) is not satisfied between `e` and `-`?
+Wait. `\b` matches between a word char (`[a-zA-Z0-9_]`) and a non-word char.
+In `delete-role`, the `-` is a non-word char.
+So `delete-role` ends with `e` (word).
+If the string is `delete-role`, `\b` matches after `e` if followed by space or end of string.
+If the string is `delete-role-xxx`, the `e` is followed by `-` (non-word). So `\b` does NOT match between `e` and `-`?
+No. `\b` matches at the end of a word if the next character is not a word character.
+In `delete-role`, the sequence is `...e`, `-`, `r...`.
+The `e` is a word char. `-` is non-word.
+So `\b` exists between `e` and `-`?
+No. `\b` is a zero-width assertion. It matches if the previous char was word and next is non-word (or vice versa).
+Between `e` and `-`: Previous is word, next is non-word. YES, `\b` matches here.
+So `delete-role` followed by `-` WILL trigger the `\b` after `e`.
+This means `aws iam delete-role-xxx` WILL match `aws iam delete-role\b`.
+This is a **Critical** finding. The regex `delete-role\b` matches `delete-role-xxx` because of the hyphen.
+It should use `[^a-zA-Z0-9_]` or `\b` carefully, or just ensure the term is followed by a space or end-of-string.
+The regex uses `[[:space:]]+` after the list of verbs for AWS?
+`aws[[:space:]]+iam[[:space:]]+(delete-role|...)\b`
+There is NO `[[:space:]]+` after the alternation group for AWS IAM.
+It just ends with `\b`.
+So `aws iam delete-role-policy` will match `aws iam delete-role` because `\b` triggers at the `-`.
+This results in a **False Positive** (blocking `delete-role-policy` which might be intended? No, `delete-role-policy` is in the list).
+Wait, `delete-role-policy` IS in the list.
+`(delete-role|delete-role-policy|...)`
+Since `delete-role` is listed, `aws iam delete-role-policy` matches `delete-role` first (if order matters? No, alternation matches the first option that works).
+Actually, regex engines try alternatives left to right.
+If the string is `aws iam delete-role-policy`, does it match `aws iam delete-role\b`?
+Yes, because `\b` matches between `e` and `-`.
+So it matches.
+But `delete-role-policy` is also in the list.
+What if the list had `delete-role` but NOT `delete-role-policy`? Then `delete-role-policy` would be blocked because it matches `delete-role`.
+Here, both are in the list.
+But what about `aws iam delete-role-policy-xxx`?
+It matches `delete-role` (via `\b`) and `delete-role-policy` (via `\b` after `y`? No, `policy` ends in `y`, next is `-`).
+It matches `delete-role-policy`.
+Is this a problem?
+The hook blocks these commands. False positives mean blocking valid commands.
+If a user runs `aws iam delete-role-policy` (valid command), it is blocked. This is **Desired**.
+The issue is if `aws iam delete-role-xyz` (invalid or different) is blocked.
+Is there a command `aws iam delete-role-xyz`? No.
+But what about `aws iam attach-role-policy`?
+Does it match?
+Regex: `aws iam ... (delete-role|...)`
+No, `attach` is not in the list.
+
+What about `aws iam get-role-policy`?
+Does `get-role-policy` contain `delete-role`? No.
+
+What about `aws iam` followed by a service name?
+`aws iam` is specific.
+
+Let's look at `kubectl`.
+`kubectl[[:space:]]+delete[[:space:]]+(role|...)`
+If I run `kubectl delete role-binding`, does it match `role`?
+`role` is followed by `-`. `\b` matches.
+So `kubectl delete role-binding` is blocked.
+`role-binding` is not `role`.
+This is a **False Positive**. It blocks a deletion of a resource named `role-binding` (if such exists) or just general `role` matches too broadly.
+Actually, `role` is a resource type. `role-binding` is a resource type.
+The regex `role\b` matches `role` in `role-binding`.
+This means `kubectl delete role-binding` is blocked.
+Is blocking `role-binding` desired?
+The list includes `rolebinding`.
+So `rolebinding` is explicitly listed.
+`role-binding` (with hyphen) is NOT listed.
+But `role\b` matches `role` in `role-binding`.
+So `kubectl delete role-binding` is blocked.
+This is likely a **False Positive** if the intent was only to block `role` and `rolebinding` (standard k8s resource types).
+Standard k8s resources are `role`, `rolebinding`, `clusterrole`, `clusterrolebinding`.
+They do not use hyphens in the resource name usually (`rolebinding`).
+But users might type `role-binding`? No, kubectl uses `rolebinding`.
+However, if a custom resource `role-binding` exists, it is blocked.
+More importantly, `kubectl delete role` is blocked.
+`kubectl delete roles` is blocked.
+This seems okay for the specific domain.
+
+Let's look at `gcloud`.
+`gcloud[[:space:]]+(projects|...)[[:space:]]+(remove-iam-policy-binding|set-iam-policy)\b`
+If I run `gcloud projects remove-iam-policy-binding` (exact), it matches.
+If I run `gcloud projects remove-iam-policy-binding-xxx` (invalid), it matches `remove-iam-policy-binding` via `\b`?
+`binding` ends in `g`. Next is `-`. `\b` matches.
+So `gcloud projects remove-iam-policy-binding-xxx` is blocked.
+This is likely fine as it's a destructive command structure.
+
+**True Critical Finding:**
+In `hooks/block-authz-state-destruction.sh`, the variable `DENY_REGEX` is constructed by concatenating strings.
+Line 44-60.
+If any of the variables or string literals contain regex metacharacters that are unintended, it breaks.
+They are hardcoded.
+
+**True Major Finding:**
+The regex for AWS IAM:
+`(aws[[:space:]]+iam[[:space:]]+(delete-role|...)\b)`
+As noted, `\b` allows matching `delete-role` inside `delete-role-policy` IF `delete-role-policy` was NOT in the list.
+But it IS in the list.
+However, the order of alternation matters.
+Regex: `(delete-role|delete-role-policy|...)`
+String: `delete-role-policy`
+Engine tries `delete-role`. Matches `delete-role`. Then checks `\b`.
+In `delete-role-policy`, after `delete-role`, the next char is `-`.
+Is there a word boundary between `e` and `-`? Yes.
+So `delete-role` matches.
+The regex engine stops at the first match for the group?
+No, `grep` looks for ANY match in the string.
+It finds `aws iam delete-role` inside `aws iam delete-role-policy`.
+It returns true.
+This is fine because `delete-role-policy` is ALSO blocked.
+
+But what about `aws iam` commands that should be allowed?
+`aws iam get-role-policy`?
+Does it contain `delete-role`? No.
+`aws iam list-policies`? No.
+
+**Finding: `gcloud` regex group scope.**
+Line 47: `DENY_REGEX="$DENY_REGEX"'|(gcloud[[:space:]]+(projects|organizations|resource-manager[[:space:]]+folders)[[:space:]]+(remove-iam-policy-binding|set-iam-policy)\b)'`
+The group `(projects|organizations|resource-manager[[:space:]]+folders)`
+If the input is `gcloud folders ...` (no `resource-manager`), it fails.
+If the input is `gcloud resource-manager folders ...`, it matches.
+This is correct.
+
+**Finding: `az` regex.**
+`(az[[:space:]]+ad[[:space:]]+(group[[:space:]]+(delete|member[[:space:]]+remove)|sp[[:space:]]+delete)\b)`
+Matches `az ad group delete`.
+Matches `az ad group member remove`.
+Matches `az ad sp delete`.
+Correct.
+
+**Finding: `kubectl` regex.**
+`(kubectl[[:space:]]+delete[[:space:]]+(role|roles|rolebinding|rolebindings|clusterrole|clusterroles|clusterrolebinding|clusterrolebindings|serviceaccount|serviceaccounts)\b)`
+Does not match `kubectl delete rolebinding`?
+Yes it does (`rolebinding` is in list).
+Does not match `kubectl delete role binding` (space)?
+Regex requires `role\b`.
+In `role binding`, `role` is followed by space. `\b` matches.
+So `kubectl delete role binding` (with space) is blocked.
+This is good, as `role` is a keyword.
+
+**Finding: `aws` regex scope.**
+The AWS regex is a single large alternation.
+If I run `aws iam` with a command not in the list, e.g., `aws iam list-roles`, it does not match.
+Correct.
+
+**Major Finding: `set-iam-policy` in GCP.**
+The hook blocks `gcloud projects set-iam-policy`.
+The comment says "REPLACES entire policy".
+This is a correct block for "authorization-state destruction" (destruction of the EXISTING policy state).
+
+**Minor Finding: Hardcoded paths in tests.**
+`tests/block-authz-state-destruction.bats` uses `SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/block-authz-state-destruction.sh"`.
+This is robust.
+
+**Major Finding: `jq` dependency.**
+The script requires `jq`. If `jq` is not installed, `set -e` will cause the script to fail (exit 127 or similar).
+The hook will likely fail silently or produce no output?
+`jq` command not found -> error to stderr. Script exits.
+The caller (Claude CLI) might not get a valid JSON response.
+This is a **Major** feasibility issue. `jq` is not always available in minimal containers.
+Should be noted as a dependency.
+
+**Major Finding: Regex Bypass via `--` or flags.**
+`aws iam --no-signature delete-role`?
+`aws iam` is followed by `iam`.
+If the user types `aws iam --help`, it doesn't match.
+If the user types `aws iam delete-role --role-name X`, it matches.
+
+**Finding: `kubectl delete clusterrolebinding system:*`**
+The comment mentions this, but the regex `clusterrolebinding` is listed.
+`kubectl delete clusterrolebinding system:*` matches `clusterrolebinding`.
+This is blocked.
+
+**One Critical Logic Error:**
+In `hooks/block-authz-state-destruction.sh`:
+`DENY_REGEX='(aws[[:space:]]+iam[[:space:]]+(delete-role|...)\b)'`
+`DENY_REGEX="$DENY_REGEX"'|(gcloud...`
+
+The regex is built by appending alternatives with `|`.
+The first part is `(aws...)`.
+Then `|(gcloud...)`.
+So the full regex is `(aws...)|(gcloud...)|(az...)|(kubectl...)`.
+This is correct.
+
+**However**, look at the AWS part again.
+`(aws[[:space:]]+iam[[:space:]]+(delete-role|delete-role-policy|...)\b)`
+The `\b` applies to the last item in the alternation group?
+No, `\b` is after the closing paren of the inner group?
+No. `(delete-role|...)\b`
+The `\b` is inside the group `(delete-role|...)\b`?
+Syntax: `(pattern1|pattern2)\b`
+This means `(pattern1|pattern2)` must be followed by a word boundary.
+So `delete-role` must be followed by `\b`.
+As established, `delete-role` followed by `-` has a `\b`.
+So `aws iam delete-role-policy` matches `delete-role\b`.
+This is fine.
+
+**But**, `aws iam` command line arguments can have `=` signs.
+`--role-name=MyRole`.
+The regex only checks the command token itself, not arguments.
+This is correct for the hook design (checking the verb).
+
+**Final Check on `set -euo pipefail`**
+Line 41: `set -euo pipefail`
+Line 43: `INPUT=$(cat)`
+If stdin is empty, `INPUT` is empty.
+Line 45: `TOOL_NAME=$(echo "" | jq -r '.tool_name // empty')`
+`jq` on `{}` or `""`?
+`echo ""` outputs a newline. `jq` parses it.
+If `INPUT` is empty string, `jq -n '.'` is `{}`.
+But here `echo "$INPUT"` is `echo ""` which is `\n`.
+`jq` consumes `\n`?
+`jq` usually expects a JSON document. An empty line is not valid JSON.
+`jq -r '.tool_name // empty'` on an empty string (no JSON) will error:
+`Parse error: Expected value before end of stream`
+This causes `jq` to exit with non-zero.
+`set -e` catches this.
+The script exits with error.
+The caller sees an error?
+The caller expects a JSON decision.
+If the script exits with 1, the CLI might treat it as a crash.
+This is a **Major** correctness issue. **Empty or malformed input causes the hook to crash.**
+
+Fix:
+Add `jq` error handling or input validation.
+`jq` should fail gracefully or the script should check if `INPUT` is valid JSON.
+Or simply `jq -r '.tool_name // empty' <<< "$INPUT"` might behave differently?
+No, `jq` still requires valid JSON.
+The test `tests/block-authz-state-destruction.bats` always provides valid JSON.
+But in production, if the tool call is malformed, the hook crashes.
+
+[Major] hooks/block-authz-state-destruction.sh:45 — Problem — If the input is not valid JSON (e.g., empty string or malformed), `jq` will error, causing the script to exit immediately due to `set -e`, preventing a valid `{\"decision\": \"approve\"}` response. This leads to hook failure/crash on malformed tool calls. — Fix: Wrap `jq` calls in a subshell with error handling or validate input structure before parsing, ensuring the hook always outputs a valid JSON decision.
+
+[Minor] hooks/block-authz-state-destruction.sh:43 — Problem — Uses `echo "$INPUT"` to pipe to `jq`. If `INPUT` starts with `-n` or `-e`, some `echo` implementations may suppress output or interpret flags. — Fix: Use `printf '%s\n' "$INPUT"` instead of `echo`.
+
+[Minor] hooks/block-authz-state-destruction.sh:40 — Problem — The script relies on `jq` being installed. In minimal environments or Docker containers, `jq` may not be present. — Fix: Check for `jq` existence at startup and fail gracefully with a clear error message, or rewrite the parser in pure Bash/`grep` (though `jq` is preferred for JSON).
+
+[Minor] settings.json:211 — Problem — The timeout is set to 5 seconds. Parsing JSON and running regex on large commands is fast, but if `jq` or `grep` hang (e.g., on malicious input), 5s is short. — Fix: Increase timeout slightly or ensure regexes are anchored/compiled efficiently. (Less critical).
+
+[Major] hooks/block-authz-state-destruction.sh:64 — Problem — The regex `\b` after AWS IAM verbs (e.g., `delete-role\b`) matches word boundaries including those followed by `-`. This means `aws iam delete-role-policy` matches `delete-role` because of the boundary between `e` and `-`. While `delete-role-policy` is also in the list, this reliance on `\b` interacting with hyphens can lead to unexpected matches with new AWS commands like `aws iam delete-role-configuration` (if it existed) which would be blocked by `delete-role`. — Fix: Ensure all specific sub-verbs are listed explicitly or use a more robust delimiter check (e.g., `[^a-zA-Z0-9_-]`) to ensure the verb is truly isolated.
+
+No findings

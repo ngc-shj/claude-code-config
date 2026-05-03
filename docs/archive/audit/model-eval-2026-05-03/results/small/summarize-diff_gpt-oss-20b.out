@@ -1,0 +1,5 @@
+- Added a comprehensive **privacy‑posture audit** to the project documentation: a new section in `CLAUDE.md` and a full audit report file in `docs/archive/audit/rtk-privacy-posture-2026-04-30.md`.  
+- Documented that **command history is now stored in `~/.local/share/rtk/history.db`**, with the default retention time shortened from 90 days to 14 days (explicit change noted in the audit report).  
+- Introduced **re‑audit triggers** (string checks, telemetry status, brew upgrade) and a **defense‑in‑depth export** (`RTK_TELEMETRY_DISABLED=1`) to guard against accidental telemetry enablement.  
+- Highlighted that the audit found no current telemetry endpoint (network exfiltration negligible), but flagged that any future endpoint addition would require a repeat of the audit.  
+- Risk points: plaintext command history (secrets can be captured via CLI args), cross‑project visibility in a single DB, 14‑day retention still exposes data to local disk access, and uninstall leaves config/history directories behind unless manually removed.

@@ -1,0 +1,5 @@
+[Major] hooks/block-audit-observability-destruction.sh:12 — The script splits the jq output on the Unit Separator (U+001F). If the incoming `tool_input.command` itself contains this byte, the split will truncate the command, causing the hook to treat an unsafe command as empty and incorrectly approve it. — Escape any occurrences of U+001F in the command before concatenation (e.g., replace with a placeholder) or use a delimiter that cannot appear in valid command strings, such as base64‑encoding each field before joining and decoding after the split.
+
+[Minor] hooks/block-audit-observability-destruction.sh:9 — The same parsing logic (jq call + separator split) is duplicated verbatim in every `block‑*` hook script, violating DRY principles and making future changes error‑prone. — Extract the parsing into a shared helper function (e.g., `parse_input`) placed in a common utility file sourced by all hooks, and replace the duplicated block with a single call to that function.
+
+## END-OF-ANALYSIS
