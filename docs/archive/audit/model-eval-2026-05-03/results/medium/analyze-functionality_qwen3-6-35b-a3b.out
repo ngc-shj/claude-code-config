@@ -1,0 +1,2 @@
+[Minor] hooks/block-audit-observability-destruction.sh:44 — Parsing logic is duplicated verbatim across 6 hook scripts, violating DRY and increasing future maintenance burden. — Extract the jq invocation and bash parameter expansion into a shared utility script (e.g., lib/parse_hook_input.sh) to consolidate updates.
+## END-OF-ANALYSIS

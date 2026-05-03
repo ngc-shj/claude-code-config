@@ -1,0 +1,4 @@
+*   Refactored six `block-*` Bash hooks to replace two `jq` invocations per hook with a single `jq -rj` call emitting `tool_name` and `command` separated by the Unit Separator (U+001F), parsed via Bash parameter expansion.
+*   Delivers a 45% improvement in Bash chain latency (cumulative ~77ms → ~42ms) and reduces per-hook overhead (~12-14ms → ~7ms) by minimizing process spawning and parsing steps.
+*   Resolves the previous failure of `@tsv` separators by using U+001F, which preserves embedded TABs in command values without escaping, ensuring robust parsing for commands like `docker\tcompose`.
+*   Verified for stability with 341/341 tests passing and updated benchmark documentation, confirming the optimization introduces no regressions.

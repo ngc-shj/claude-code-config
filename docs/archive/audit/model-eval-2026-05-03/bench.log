@@ -1,0 +1,39 @@
+=== Model eval matrix ===
+Output:    /home/noguchi/ghq/github.com/ngc-shj/claude-code-config/docs/archive/audit/model-eval-2026-05-03
+Ollama:    http://gx10-a9c0:11434
+Models:    gpt-oss:20b gpt-oss:120b qwen3.6:35b-a3b
+Samples:   small medium large
+Hooks:     commit-msg-check summarize-diff analyze-functionality
+
+Warming up gpt-oss:20b ... ready
+  [15:30:16] small  × commit-msg-check       × gpt-oss:20b          1.43s HTTP=200
+  [15:30:24] small  × summarize-diff         × gpt-oss:20b          7.22s HTTP=200
+  [15:30:28] small  × analyze-functionality  × gpt-oss:20b          4.09s HTTP=200
+  [15:30:29] medium × commit-msg-check       × gpt-oss:20b          1.45s HTTP=200
+  [15:30:40] medium × summarize-diff         × gpt-oss:20b         11.07s HTTP=200
+  [15:31:19] medium × analyze-functionality  × gpt-oss:20b         38.76s HTTP=200
+  [15:31:21] large  × commit-msg-check       × gpt-oss:20b          1.52s HTTP=200
+  [15:31:37] large  × summarize-diff         × gpt-oss:20b         16.78s HTTP=200
+  [15:32:57] large  × analyze-functionality  × gpt-oss:20b         79.76s HTTP=200
+Warming up gpt-oss:120b ... ready
+  [15:33:21] small  × commit-msg-check       × gpt-oss:120b         2.50s HTTP=200
+  [15:33:35] small  × summarize-diff         × gpt-oss:120b        14.28s HTTP=200
+  [15:33:40] small  × analyze-functionality  × gpt-oss:120b         5.34s HTTP=200
+  [15:33:43] medium × commit-msg-check       × gpt-oss:120b         2.40s HTTP=200
+  [15:33:58] medium × summarize-diff         × gpt-oss:120b        14.81s HTTP=200
+  [15:34:44] medium × analyze-functionality  × gpt-oss:120b        46.39s HTTP=200
+  [15:34:46] large  × commit-msg-check       × gpt-oss:120b         2.45s HTTP=200
+  [15:35:05] large  × summarize-diff         × gpt-oss:120b        18.48s HTTP=200
+  [15:36:32] large  × analyze-functionality  × gpt-oss:120b        87.43s HTTP=200
+Warming up qwen3.6:35b-a3b ... ready
+  [15:36:46] small  × commit-msg-check       × qwen3.6:35b-a3b      1.71s HTTP=200
+  [15:37:16] small  × summarize-diff         × qwen3.6:35b-a3b     29.95s HTTP=200
+  [15:37:34] small  × analyze-functionality  × qwen3.6:35b-a3b     18.00s HTTP=200
+  [15:37:36] medium × commit-msg-check       × qwen3.6:35b-a3b      1.78s HTTP=200
+  [15:38:10] medium × summarize-diff         × qwen3.6:35b-a3b     34.04s HTTP=200
+  [15:41:01] medium × analyze-functionality  × qwen3.6:35b-a3b    171.68s HTTP=200
+  [15:41:03] large  × commit-msg-check       × qwen3.6:35b-a3b      1.91s HTTP=200
+  [15:41:36] large  × summarize-diff         × qwen3.6:35b-a3b     32.65s HTTP=200
+  [15:44:09] large  × analyze-functionality  × qwen3.6:35b-a3b    152.65s HTTP=200
+
+Done. Results in /home/noguchi/ghq/github.com/ngc-shj/claude-code-config/docs/archive/audit/model-eval-2026-05-03/results

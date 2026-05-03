@@ -1,0 +1,3 @@
+[Minor] docs/archive/audit/rtk-privacy-posture-2026-04-30.md:142 — Incomplete uninstall guidance — The audit explicitly identifies uninstall residue (F6) as a persistence risk and recommends manual removal or `rtk telemetry forget`, but it fails to note that `rtk telemetry forget` specifically clears the history.db (as implied by context) but the text contradicts itself slightly by saying it "clears the DB but not the config dir". This is minor because it's documentation, but it could confuse users into thinking their configuration preferences are also purged when they are not. Fix: Clarify that `rtk telemetry forget` only wipes history/data, while `rm -rf ~/.config/rtk ~/.local/share/rtk` is required for a full reset of both state and config.
+
+No findings

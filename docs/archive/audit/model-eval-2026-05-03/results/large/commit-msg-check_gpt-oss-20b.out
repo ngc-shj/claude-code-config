@@ -1,0 +1,40 @@
+We need to check commit message. The instructions: "Review this git commit message. Reply with ONLY 'OK' if it follows best practices (concise, English, explains why not what, uses conventional prefix like feat/fix/refactor/docs/test/chore). Reply with a one-line suggestion if it needs improvement."
+
+So commit message is:
+
+"fix(hooks): block authorization-state destruction (R31 f) (#36)
+
+Implement R31 category (f) — authorization-state destruction — at the harness level. Removing roles, role bindings, IAM policies, group memberships, or service accounts can lock out legitimate operators (immediate denial-of-service) and break runtime auth for services that depend on the binding. Critical severity per R31 — over-privilege-revocation direction.
+
+Coverage (non-exhaustive — extensions via PR):
+  AWS IAM:    delete-role / delete-role-policy / detach-role-policy
+              delete-policy / delete-policy-version
+              delete-group / remove-user-from-group
+              delete-user-policy / detach-user-policy / delete-user
+              delete-instance-profile /
+              remove-role-from-instance-profile
+  GCP IAM:    iam roles delete | iam service-accounts delete
+              {projects,organizations,resource-manager folders}
+                {remove-iam-policy-binding, set-iam-policy}
+              (set-iam-policy REPLACES entire policy — risky)
+  Azure:      role {assignment,definition} delete
+              ad {group {delete,member remove}, sp delete}
+  Kubernetes: kubectl delete {role,rolebinding,clusterrole,
+              clusterrolebinding,serviceaccount} (and plurals)
+
+The block reason guides toward safer alternatives:
+- Identify ALL principals depending on the binding (transitive grants);
+- Verify a replacement is in place AND active before removing the
+  existing one (rotate, do not revoke);
+- For GCP set-iam-policy, prefer add/remove-iam-policy-binding for
+  surgical changes;
+- For kubectl delete clusterrolebinding system:*, do NOT proceed —
+  these often gate kube-controller-manager itself.
+
+Best-effort tripwire — bypasses exist via base64-decoded eval,
+alternate shells, or direct cloud-provider API calls. Override
+locally via ~/.claude/settings.local.json.
+
+Update common-rules.md R31 wording to note category (f) is now
+hook-enforced (alongside (a), (d), (g)). Categories (b), (c), (e),
+(h), (i) remain reviewer-text

@@ -1,0 +1,1 @@
+{"sample":"medium","hook":"analyze-functionality","model":"gpt-oss:120b","elapsed_s":46.39,"http_code":"200","total_duration_ms":46364,"prompt_eval_count":4174,"prompt_eval_duration_ms":3821,"eval_count":1690,"eval_duration_ms":41979,"done_reason":"stop"}

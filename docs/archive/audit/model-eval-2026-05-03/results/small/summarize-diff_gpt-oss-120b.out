@@ -1,0 +1,5 @@
+- **Added a “Privacy posture” section to CLAUDE.md** – documents the RTK audit findings, short‑ens retention to 14 days, lists re‑audit triggers, and provides defense‑in‑depth guidance (e.g., `RTK_TELEMETRY_DISABLED=1`).  
+- **Introduced a full audit report** (`docs/archive/audit/rtk-privacy-posture-2026-04-30.md`) that records the static analysis of RTK v0.38.0, its local command‑history storage, and the lack of telemetry endpoints.  
+- **No functional code changes** – the diff only updates documentation; the RTK binary, config files, and hook chain remain untouched.  
+- **Why it matters:** makes the repository’s privacy risk assessment transparent, informs operators about the shortened retention period, and establishes a repeatable check for future RTK upgrades.  
+- **Risks:** relies on users to apply the suggested config changes (retention, env var) outside the repo; if the documentation drifts from actual RTK behavior, operators may be misled about telemetry or secret‑leakage exposure.

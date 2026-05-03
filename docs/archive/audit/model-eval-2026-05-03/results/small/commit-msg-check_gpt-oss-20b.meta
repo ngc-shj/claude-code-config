@@ -1,0 +1,1 @@
+{"sample":"small","hook":"commit-msg-check","model":"gpt-oss:20b","elapsed_s":2.44,"http_code":"200","total_duration_ms":2417,"prompt_eval_count":620,"prompt_eval_duration_ms":158,"eval_count":120,"eval_duration_ms":2072,"done_reason":"stop"}

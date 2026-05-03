@@ -1,0 +1,484 @@
+commit 67bd037c7095d5a81b91fcebfd6d4f0da2f5f3b0
+Author: NOGUCHI Shoji <57870202+ngc-shj@users.noreply.github.com>
+Date:   Thu Apr 30 20:22:33 2026 +0900
+
+    fix(hooks): block authorization-state destruction (R31 f) (#36)
+    
+    Implement R31 category (f) — authorization-state destruction — at the
+    harness level. Removing roles, role bindings, IAM policies, group
+    memberships, or service accounts can lock out legitimate operators
+    (immediate denial-of-service) and break runtime auth for services
+    that depend on the binding. Critical severity per R31 — over-
+    privilege-revocation direction.
+    
+    Coverage (non-exhaustive — extensions via PR):
+      AWS IAM:    delete-role / delete-role-policy / detach-role-policy
+                  delete-policy / delete-policy-version
+                  delete-group / remove-user-from-group
+                  delete-user-policy / detach-user-policy / delete-user
+                  delete-instance-profile /
+                  remove-role-from-instance-profile
+      GCP IAM:    iam roles delete | iam service-accounts delete
+                  {projects,organizations,resource-manager folders}
+                    {remove-iam-policy-binding, set-iam-policy}
+                  (set-iam-policy REPLACES entire policy — risky)
+      Azure:      role {assignment,definition} delete
+                  ad {group {delete,member remove}, sp delete}
+      Kubernetes: kubectl delete {role,rolebinding,clusterrole,
+                  clusterrolebinding,serviceaccount} (and plurals)
+    
+    The block reason guides toward safer alternatives:
+    - Identify ALL principals depending on the binding (transitive grants);
+    - Verify a replacement is in place AND active before removing the
+      existing one (rotate, do not revoke);
+    - For GCP set-iam-policy, prefer add/remove-iam-policy-binding for
+      surgical changes;
+    - For kubectl delete clusterrolebinding system:*, do NOT proceed —
+      these often gate kube-controller-manager itself.
+    
+    Best-effort tripwire — bypasses exist via base64-decoded eval,
+    alternate shells, or direct cloud-provider API calls. Override
+    locally via ~/.claude/settings.local.json.
+    
+    Update common-rules.md R31 wording to note category (f) is now
+    hook-enforced (alongside (a), (d), (g)). Categories (b), (c), (e),
+    (h), (i) remain reviewer-text only.
+    
+    Note: this PR was developed in parallel with #34 (R31 h) and #35
+    (R31 e). All three touch settings.json hooks array and
+    common-rules.md. Trivial merge conflicts expected on whichever
+    lands second / third — keep all entries.
+    
+    tests/block-authz-state-destruction.bats (53 cases) covers all four
+    providers + k8s, the bash -c wrapper bypass, set-iam-policy reason
+    content, and verifies read/list/get/create/grant operations +
+    unrelated CLIs are approved.
+    
+    bats tests/ -> 238/238 pass on this branch (post-merge with #34 +
+    
+    Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+diff --git a/hooks/block-authz-state-destruction.sh b/hooks/block-authz-state-destruction.sh
+new file mode 100644
+index 0000000..54b1ecb
+--- /dev/null
++++ b/hooks/block-authz-state-destruction.sh
+@@ -0,0 +1,70 @@
++#!/bin/bash
++# PreToolUse hook: block authorization-state destruction
++# Implements R31 category (f) — authorization-state destruction — at
++# the harness level. Removing roles, role bindings, IAM policies,
++# group memberships, or service accounts can lock out legitimate
++# operators (immediate denial-of-service) and break runtime auth
++# (services that depend on the role/binding fail to authenticate).
++# Critical severity per R31.
++#
++# Coverage (non-exhaustive — extend per project context via PRs):
++#   AWS IAM:
++#     aws iam delete-role | delete-role-policy | detach-role-policy
++#     aws iam delete-policy | delete-policy-version
++#     aws iam delete-group | remove-user-from-group
++#     aws iam delete-user-policy | detach-user-policy
++#     aws iam delete-user
++#     aws iam delete-instance-profile |
++#         remove-role-from-instance-profile
++#   GCP IAM:
++#     gcloud iam roles delete
++#     gcloud iam service-accounts delete
++#     gcloud projects remove-iam-policy-binding
++#     gcloud projects set-iam-policy   (REPLACES entire policy — risky)
++#     gcloud organizations remove-iam-policy-binding
++#     gcloud resource-manager folders remove-iam-policy-binding
++#   Azure RBAC / AAD:
++#     az role assignment delete
++#     az role definition delete
++#     az ad group delete | az ad group member remove
++#     az ad sp delete   (service principal delete)
++#   Kubernetes RBAC:
++#     kubectl delete {role, rolebinding, clusterrole,
++#                     clusterrolebinding, serviceaccount} + plurals
++#
++# Best-effort tripwire — bypasses exist (base64-decoded eval, alternate
++# shells, direct cloud-provider API calls). Override locally via
++# ~/.claude/settings.local.json.
++
++set -euo pipefail
++
++INPUT=$(cat)
++
++TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
++
++if [ "$TOOL_NAME" != "Bash" ]; then
++  echo '{"decision": "approve"}'
++  exit 0
++fi
++
++COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
++
++if [ -z "$COMMAND" ]; then
++  echo '{"decision": "approve"}'
++  exit 0
++fi
++
++DENY_REGEX='(aws[[:space:]]+iam[[:space:]]+(delete-role|delete-role-policy|detach-role-policy|delete-policy|delete-policy-version|delete-group|remove-user-from-group|delete-user-policy|detach-user-policy|delete-user|delete-instance-profile|remove-role-from-instance-profile)\b)'
++DENY_REGEX="$DENY_REGEX"'|(gcloud[[:space:]]+iam[[:space:]]+(roles|service-accounts)[[:space:]]+delete\b)'
++DENY_REGEX="$DENY_REGEX"'|(gcloud[[:space:]]+(projects|organizations|resource-manager[[:space:]]+folders)[[:space:]]+(remove-iam-policy-binding|set-iam-policy)\b)'
++DENY_REGEX="$DENY_REGEX"'|(az[[:space:]]+role[[:space:]]+(assignment|definition)[[:space:]]+delete\b)'
++DENY_REGEX="$DENY_REGEX"'|(az[[:space:]]+ad[[:space:]]+(group[[:space:]]+(delete|member[[:space:]]+remove)|sp[[:space:]]+delete)\b)'
++DENY_REGEX="$DENY_REGEX"'|(kubectl[[:space:]]+delete[[:space:]]+(role|roles|rolebinding|rolebindings|clusterrole|clusterroles|clusterrolebinding|clusterrolebindings|serviceaccount|serviceaccounts)\b)'
++
++if echo "$COMMAND" | grep -qE "$DENY_REGEX"; then
++  REASON='Authorization-state destruction blocked (R31 category f). Removing a role, role binding, IAM policy attachment, group membership, or service account can immediately lock out legitimate operators and break runtime auth for services that depend on the binding. The over-privilege-revocation direction is Critical because it produces denial-of-service that surfaces only when the affected actor next tries to authenticate. Before proceeding: (1) identify ALL principals (users, services, CI runners, peer accounts) that depend on this binding — the binding may grant access transitively; (2) verify a replacement is in place AND active before removing the existing one (rotate, do not revoke); (3) for `gcloud projects set-iam-policy`, prefer `add-iam-policy-binding` / `remove-iam-policy-binding` for surgical changes — `set-iam-policy` REPLACES the entire policy and silently drops anything not in the new copy; (4) for `kubectl delete clusterrolebinding system:*` or similar built-in bindings, do NOT proceed without an offline confirmation — these often gate kube-controller-manager itself and removing one can render the cluster unrecoverable. To override this hook locally, edit ~/.claude/settings.local.json.'
++  printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
++  exit 0
++fi
++
++echo '{"decision": "approve"}'
+diff --git a/settings.json b/settings.json
+index fb7ece5..5b6f256 100644
+--- a/settings.json
++++ b/settings.json
+@@ -209,6 +209,11 @@
+             "command": "bash ~/.claude/hooks/block-secret-key-destruction.sh",
+             "timeout": 5
+           },
++          {
++            "type": "command",
++            "command": "bash ~/.claude/hooks/block-authz-state-destruction.sh",
++            "timeout": 5
++          },
+           {
+             "type": "command",
+             "command": "bash ~/.claude/hooks/commit-msg-check.sh",
+diff --git a/skills/triangulate/common-rules.md b/skills/triangulate/common-rules.md
+index 7b9b369..409d00e 100644
+--- a/skills/triangulate/common-rules.md
++++ b/skills/triangulate/common-rules.md
+@@ -373,8 +373,9 @@ This rule is reviewer-agent guidance executed by the orchestrator's own discipli
+ - **Category (g) audit/observability destruction** — `~/.claude/hooks/block-audit-observability-destruction.sh` (deny-on-match across major providers + Kubernetes: AWS `aws logs delete-log-group|delete-log-stream|put-retention-policy`, AWS `aws cloudwatch delete-alarms|delete-dashboards`, GCP `gcloud logging {logs,buckets,sinks} delete`, GCP `gcloud monitoring {alert-policies,dashboards,notification-channels} delete`, Azure `az monitor {diagnostic-settings,action-group,metrics alert} delete`, Kubernetes `kubectl delete {prometheusrule,servicemonitor,podmonitor,alertmanagerconfig}` and their plurals). Coverage is non-exhaustive — extend per project context via PR.
+ - **Category (h) recovery-path destruction** — `~/.claude/hooks/block-recovery-path-destruction.sh` (deny-on-match for AWS Backup `delete-recovery-point|delete-backup-plan|delete-backup-vault|delete-backup-selection`, AWS `aws ec2 delete-snapshot`, AWS `aws rds delete-db-snapshot|delete-db-cluster-snapshot`, AWS `aws rds modify-db-instance|modify-db-cluster --backup-retention-period`, GCP `gcloud compute snapshots delete`, GCP `gcloud sql backups delete`, GCP `gcloud sql instances patch --no-backup|--backup-start-time`, Azure `az snapshot delete`, Azure `az backup {vault,item,policy} delete`, Kubernetes `kubectl delete {volumesnapshot,pv,persistentvolume}` and their plurals). `terraform destroy` is intentionally NOT blocked — it is heavily used in dev/CI for ephemeral environments; reviewer-text obligation remains the primary control for production-state destroys.
+ - **Category (e) secret/key material destruction** — `~/.claude/hooks/block-secret-key-destruction.sh` (deny-on-match for AWS `aws kms schedule-key-deletion|disable-key|delete-alias`, AWS `aws secretsmanager delete-secret`, AWS `aws ssm delete-parameter[s]`, AWS `aws iam delete-access-key|delete-server-certificate|delete-signing-certificate|deactivate-mfa-device|delete-virtual-mfa-device`, AWS `aws acm delete-certificate`, GCP `gcloud kms keys versions destroy|disable`, GCP `gcloud secrets {delete,versions destroy}`, GCP `gcloud iam service-accounts keys delete`, Azure `az keyvault {key,secret,certificate} {delete,purge}` — `purge` bypasses soft-delete, HashiCorp `vault kv {delete,metadata delete}` and `vault delete`, GPG `gpg --delete-secret-keys|--delete-secret-and-public-key`, Kubernetes `kubectl delete secret(s)`).
++- **Category (f) authorization-state destruction** — `~/.claude/hooks/block-authz-state-destruction.sh` (deny-on-match for AWS IAM `delete-role|delete-role-policy|detach-role-policy|delete-policy|delete-policy-version|delete-group|remove-user-from-group|delete-user-policy|detach-user-policy|delete-user|delete-instance-profile|remove-role-from-instance-profile`, GCP IAM `gcloud iam {roles,service-accounts} delete`, GCP `gcloud {projects,organizations,resource-manager folders} {remove-iam-policy-binding,set-iam-policy}` — note: `set-iam-policy` REPLACES the entire policy and silently drops anything not in the new copy; prefer `add-iam-policy-binding` / `remove-iam-policy-binding` for surgical changes — Azure `az role {assignment,definition} delete`, Azure `az ad {group {delete, member remove}, sp delete}`, Kubernetes `kubectl delete {role,rolebinding,clusterrole,clusterrolebinding,serviceaccount}` and their plurals).
+ 
+-The hooks are best-effort tripwires — bypasses exist (base64-decoded `eval`, alternate shells, Docker socket via `curl --unix-socket`, direct `.git/` manipulation, direct cloud-provider API calls bypassing the CLI). Categories (b), (c), (f), (i) remain reviewer-text only at this time; orchestrator discipline before each tool call is the primary control for those categories. Adding runtime hooks for additional categories is a separate plan per category, since each category's verb-token surface and false-positive profile differ.
++The hooks are best-effort tripwires — bypasses exist (base64-decoded `eval`, alternate shells, Docker socket via `curl --unix-socket`, direct `.git/` manipulation, direct cloud-provider API calls bypassing the CLI). Categories (b), (c), (i) remain reviewer-text only at this time; orchestrator discipline before each tool call is the primary control for those categories. Adding runtime hooks for additional categories is a separate plan per category, since each category's verb-token surface and false-positive profile differ.
+ 
+ **R32: Runtime-shape boot test for new long-running artifacts**
+ 
+diff --git a/tests/block-authz-state-destruction.bats b/tests/block-authz-state-destruction.bats
+new file mode 100644
+index 0000000..212d058
+--- /dev/null
++++ b/tests/block-authz-state-destruction.bats
+@@ -0,0 +1,311 @@
++#!/usr/bin/env bats
++# Tests for hooks/block-authz-state-destruction.sh — R31 (f) verbs
++# that delete roles / role bindings / IAM policies / group memberships
++# / service accounts are denied across major providers + Kubernetes.
++
++bats_require_minimum_version 1.5.0
++
++SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/block-authz-state-destruction.sh"
++
++run_hook() {
++  local tool_name="$1"
++  local command="$2"
++  local input
++  input=$(jq -nc --arg n "$tool_name" --arg c "$command" \
++    '{tool_name:$n, tool_input:{command:$c}}')
++  printf '%s' "$input" | bash "$SCRIPT"
++}
++
++# ============================================================
++# DENY — AWS IAM
++# ============================================================
++
++@test "deny: aws iam delete-role" {
++  run run_hook Bash "aws iam delete-role --role-name MyRole"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: aws iam delete-role-policy (inline)" {
++  run run_hook Bash "aws iam delete-role-policy --role-name R --policy-name P"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: aws iam detach-role-policy (managed)" {
++  run run_hook Bash "aws iam detach-role-policy --role-name R --policy-arn arn:..."
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: aws iam delete-policy" {
++  run run_hook Bash "aws iam delete-policy --policy-arn arn:..."
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: aws iam delete-policy-version" {
++  run run_hook Bash "aws iam delete-policy-version --policy-arn arn:... --version-id v1"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: aws iam delete-group" {
++  run run_hook Bash "aws iam delete-group --group-name developers"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: aws iam remove-user-from-group" {
++  run run_hook Bash "aws iam remove-user-from-group --user-name alice --group-name developers"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: aws iam delete-user" {
++  run run_hook Bash "aws iam delete-user --user-name alice"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: aws iam delete-instance-profile" {
++  run run_hook Bash "aws iam delete-instance-profile --instance-profile-name p"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: aws iam remove-role-from-instance-profile" {
++  run run_hook Bash "aws iam remove-role-from-instance-profile --instance-profile-name p --role-name r"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++# ============================================================
++# DENY — GCP IAM
++# ============================================================
++
++@test "deny: gcloud iam roles delete" {
++  run run_hook Bash "gcloud iam roles delete my-role --project=p"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: gcloud iam service-accounts delete" {
++  run run_hook Bash "gcloud iam service-accounts delete sa@p.iam.gserviceaccount.com"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: gcloud projects remove-iam-policy-binding" {
++  run run_hook Bash "gcloud projects remove-iam-policy-binding p --member=user:a@x.com --role=roles/editor"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: gcloud projects set-iam-policy (replaces ENTIRE policy)" {
++  run run_hook Bash "gcloud projects set-iam-policy p policy.json"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: gcloud organizations remove-iam-policy-binding" {
++  run run_hook Bash "gcloud organizations remove-iam-policy-binding 12345 --member=user:a@x.com --role=r"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: gcloud resource-manager folders remove-iam-policy-binding" {
++  run run_hook Bash "gcloud resource-manager folders remove-iam-policy-binding 67890 --member=user:a@x.com --role=r"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++# ============================================================
++# DENY — Azure RBAC / AAD
++# ============================================================
++
++@test "deny: az role assignment delete" {
++  run run_hook Bash "az role assignment delete --assignee a@x.com --role Contributor"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: az role definition delete" {
++  run run_hook Bash "az role definition delete --name 'My Custom Role'"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: az ad group delete" {
++  run run_hook Bash "az ad group delete --group developers"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: az ad group member remove" {
++  run run_hook Bash "az ad group member remove --group developers --member-id ABC"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: az ad sp delete (service principal)" {
++  run run_hook Bash "az ad sp delete --id 12345-abc"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++# ============================================================
++# DENY — Kubernetes RBAC
++# ============================================================
++
++@test "deny: kubectl delete role" {
++  run run_hook Bash "kubectl delete role app-reader -n default"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: kubectl delete rolebinding" {
++  run run_hook Bash "kubectl delete rolebinding app-reader-binding -n default"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: kubectl delete clusterrole" {
++  run run_hook Bash "kubectl delete clusterrole my-clusterrole"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: kubectl delete clusterrolebinding" {
++  run run_hook Bash "kubectl delete clusterrolebinding my-binding"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: kubectl delete serviceaccount" {
++  run run_hook Bash "kubectl delete serviceaccount app-sa -n default"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny: kubectl delete serviceaccounts (plural)" {
++  run run_hook Bash "kubectl delete serviceaccounts --all -n staging"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++# ============================================================
++# DENY — bash -c wrapper + reason content
++# ============================================================
++
++@test "deny: bash -c 'aws iam delete-role ...' (wrapper)" {
++  run run_hook Bash "bash -c 'aws iam delete-role --role-name R'"
++  [[ "$output" == *'"decision":"block"'* ]]
++}
++
++@test "deny block reason mentions rotate-not-revoke + settings.local.json" {
++  run run_hook Bash "aws iam delete-role --role-name R"
++  [[ "$output" == *"rotate"* ]]
++  [[ "$output" == *"settings.local.json"* ]]
++}
++
++@test "deny block reason mentions set-iam-policy replacement risk" {
++  run run_hook Bash "gcloud projects set-iam-policy p policy.json"
++  [[ "$output" == *"REPLACES"* ]]
++}
++
++# ============================================================
++# APPROVE — read-only / list / describe / create operations
++# ============================================================
++
++@test "approve: aws iam list-roles" {
++  run run_hook Bash "aws iam list-roles"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: aws iam get-role" {
++  run run_hook Bash "aws iam get-role --role-name R"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: aws iam create-role" {
++  run run_hook Bash "aws iam create-role --role-name R --assume-role-policy-document file://trust.json"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: aws iam attach-role-policy (granting, not removing)" {
++  run run_hook Bash "aws iam attach-role-policy --role-name R --policy-arn arn:..."
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: aws iam add-user-to-group (granting)" {
++  run run_hook Bash "aws iam add-user-to-group --user-name alice --group-name dev"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: gcloud iam roles list" {
++  run run_hook Bash "gcloud iam roles list --project=p"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: gcloud projects add-iam-policy-binding (surgical add)" {
++  run run_hook Bash "gcloud projects add-iam-policy-binding p --member=user:a@x.com --role=roles/viewer"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: gcloud projects get-iam-policy" {
++  run run_hook Bash "gcloud projects get-iam-policy p"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: az role assignment list" {
++  run run_hook Bash "az role assignment list --assignee a@x.com"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: az role assignment create" {
++  run run_hook Bash "az role assignment create --assignee a@x.com --role Reader --resource-group rg"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: az ad group list" {
++  run run_hook Bash "az ad group list"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: az ad group member add (granting membership)" {
++  run run_hook Bash "az ad group member add --group developers --member-id ABC"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: kubectl get role" {
++  run run_hook Bash "kubectl get role -n default"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: kubectl describe rolebinding" {
++  run run_hook Bash "kubectl describe rolebinding app-reader -n default"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: kubectl create rolebinding" {
++  run run_hook Bash "kubectl create rolebinding app-reader-bind --role=app-reader --user=alice -n default"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: kubectl create serviceaccount" {
++  run run_hook Bash "kubectl create serviceaccount app-sa -n default"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++# ============================================================
++# APPROVE — unrelated commands that look superficially similar
++# ============================================================
++
++@test "approve: kubectl delete pod (not an authz resource)" {
++  run run_hook Bash "kubectl delete pod my-pod"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: kubectl delete namespace (not authz; dangerous but different category)" {
++  run run_hook Bash "kubectl delete namespace test"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: aws iam create-policy (creating, not deleting)" {
++  run run_hook Bash "aws iam create-policy --policy-name P --policy-document file://p.json"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: gcloud iam service-accounts create" {
++  run run_hook Bash "gcloud iam service-accounts create sa --display-name='Service Account'"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: regular shell commands" {
++  run run_hook Bash "ls -la"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: non-Bash tool" {
++  run run_hook Edit "/tmp/foo.txt"
++  [[ "$output" == *'"decision": "approve"'* ]]
++}
++
++@test "approve: empty command" {
++  run run_hook Bash ""
++  [[ "$output" == *'"decision": "approve"'* ]]
++}

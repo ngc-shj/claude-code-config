@@ -1,0 +1,52 @@
+perf(hooks): consolidate per-hook jq calls (2 -> 1) via U+001F separator (#39)
+
+Cut the Bash chain latency from ~77ms to ~42ms cumulative (-45%) by
+emitting both `tool_name` and `tool_input.command` from a single jq
+invocation per hook, separated by U+001F (Unit Separator), and
+splitting via bash parameter expansion.
+
+Each block-* hook on the Bash matcher previously did two `jq -r`
+invocations (one for tool_name, one for command). Now:
+
+  PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "", (.tool_input.command // "")')
+  TOOL_NAME="${PARSED%%$'\x1f'*}"
+  COMMAND="${PARSED#*$'\x1f'}"
+
+Why U+001F (Unit Separator) instead of `@tsv`:
+
+The earlier `@tsv` attempt during PR #29 was reverted because jq's
+@tsv format escapes embedded TABs in field values as the literal
+two characters "\\t" (backslash + t), so a command like
+`docker\tcompose down -v` (legitimate via $'docker\tcompose...')
+arrived at the regex with `\\t` instead of an actual TAB, breaking
+the `[[:space:]]+` match in the docker hook.
+
+`jq -rj '..., "", ...'` emits a real 0x1F byte AND preserves
+embedded control chars (including TAB) in the field values
+verbatim. U+001F is virtually never present in real shell commands,
+so the field-split is unambiguous.
+
+Bash parameter expansion (`${var%%pat*}` / `${var#*pat}`) replaces
+`read -r` for splitting — both are pure bash and preserve newlines
+and special chars in the value half.
+
+Files changed:
+  hooks/block-destructive-docker.sh
+  hooks/block-vcs-history-rewrite.sh
+  hooks/block-audit-observability-destruction.sh
+  hooks/block-recovery-path-destruction.sh
+  hooks/block-secret-key-destruction.sh
+  hooks/block-authz-state-destruction.sh
+
+Verification:
+- bats tests/ -> 341/341 pass (no regression). The block-destructive-
+  docker.bats `docker\tcompose down -v` (tab whitespace) case still
+  passes — the earlier reason for reverting @tsv does not apply here.
+- New benchmark recorded at docs/archive/bench/hook-latency-2026-04-
+  30-after-jq-consolidation.md: per-hook avg dropped from ~12-14ms
+  to ~7ms, Bash chain cumulative 77ms -> 42ms (-45%).
+- Updated tests/bench-hooks.sh script Notes section to reflect the
+  consolidation (replaces the "future optimization candidate" note
+  with the post-consolidation context).
+
+Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>

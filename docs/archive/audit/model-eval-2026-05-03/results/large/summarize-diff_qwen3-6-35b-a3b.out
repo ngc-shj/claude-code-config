@@ -1,0 +1,3 @@
+- Introduced a new pre-execution hook that automatically blocks destructive IAM/RBAC commands across AWS, GCP, Azure, and Kubernetes, alongside registration in `settings.json`, documentation updates, and a comprehensive 53-case BATS test suite.
+- Mitigates critical security incidents by preventing accidental authorization-state destruction (R31 category f), which can cause immediate denial-of-service or lock out operators, while guiding users toward safer permission-rotation and surgical-binding workflows.
+- Functions as a best-effort, client-side regex-based tripwire susceptible to bypasses (e.g., direct API calls, shell workarounds, or local overrides), meaning it serves as a supplementary safeguard rather than a definitive enforcement boundary.

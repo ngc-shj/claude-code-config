@@ -1,0 +1,12 @@
+- Added a **runtime pre‑tool hook** (`block-authz-state-destruction.sh`) that scans any Bash command for destructive authorization actions (role/delete‑policy, binding removal, service‑account deletion, group removal, etc.) across AWS, GCP, Azure, and Kubernetes.  If matched, the hook blocks execution and returns a detailed R31‑f rationale.
+
+- Hook is wired into the orchestrator via `settings.json` and documented in `common-rules.md` as a **hook‑enforced** rule for R31 category (f).  The rule text explains safe work‑arounds (identify all dependents, rotate before revoke, prefer binding edits over full policy replacement, etc.) and notes how to locally override via `~/.claude/settings.local.json`.
+
+- Introduced a **comprehensive BATS test suite** (53 cases) that verifies the hook blocks every listed destructive command, allows safe read/list/create commands, and correctly ignores unrelated or benign commands—including bash‑`-c` wrappers and non‑Bash tools.
+
+- The hook is a **best‑effort tripwire**: it only inspects Bash input, so non‑Bash tools or direct API calls can bypass it.  Bypass techniques such as `base64`‑decoded `eval`, alternate shells, or direct provider API calls are acknowledged, and a local override file is provided.
+
+- **Risks & considerations**:  
+  * False positives may block legitimate revocations or cleanup scripts, requiring careful maintenance of the regexes and provider‑specific extensions.  
+  * The override mechanism, while useful for dev environments, can be misused to disable protection.  
+  * Because only Bash is inspected, the protection can be circumvented by non‑Bash tooling or by directly calling provider APIs.
