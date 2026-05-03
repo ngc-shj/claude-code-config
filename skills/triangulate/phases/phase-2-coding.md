@@ -115,6 +115,7 @@ bash ~/.claude/hooks/check-migrations.sh
 # Run ALL three checks:
 # 1. Lint (in the same strict mode CI uses — e.g., zero-warning gate).
 # Pre-existing warnings on touched files count: they must also be cleared.
+# Suppression comments / underscore-prefix renames are NOT an acceptable resolution — see R36 (root cause must be fixed).
 [lint command]
 
 # 2. Tests
