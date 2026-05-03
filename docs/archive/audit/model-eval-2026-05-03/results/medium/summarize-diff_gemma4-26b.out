@@ -1,0 +1,4 @@
+* Consolidated two `jq` calls into a single invocation per hook by using the U+001F (Unit Separator) character to delimit `tool_name` and `command`.
+* Reduces cumulative latency for the Bash hook chain by approximately 45%, dropping from ~77ms to ~42ms.
+* Utilizes U+001F instead of `@tsv` to ensure embedded TAB characters in shell commands are preserved and do not break regex matching.
+* Minimal risk, as the separator is virtually non-existent in shell commands and changes were verified with all `bats` tests passing.

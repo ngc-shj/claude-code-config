@@ -1,0 +1,2 @@
+[Minor] CLAUDE.md:106 — Readability issue in list of Re-audit triggers — Add line breaks after each bullet point to improve readability and make it consistent with other lists in the document. For example, change from "- `strings $(which rtk) | grep -E '^https?://' ...` should remain empty." to two separate lines: "\n\n`- \`strings ..."
+## END-OF-ANALYSIS

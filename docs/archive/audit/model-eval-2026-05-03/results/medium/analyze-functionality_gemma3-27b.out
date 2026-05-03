@@ -1,0 +1,17 @@
+[Minor] docs/archive/bench/hook-latency-2026-04-30-after-jq-consolidation.md:5 — Inconsistent column alignment in the table — Ensure consistent spacing for improved readability.
+[Minor] docs/archive/bench/hook-latency-2026-04-30-after-jq-consolidation.md:23 — Redundant comment about TSV — Remove the explanation about the reverted `@tsv` attempt as it’s already covered in the hook files.
+[Minor] hooks/block-audit-observability-destruction.sh:39 — Redundant comment — The comment explaining the use of U+001F is repeated across all hook files; consider a central documentation location instead.
+[Minor] hooks/block-audit-observability-destruction.sh:42 — Inconsistent variable naming — Use consistent capitalization for variables (e.g., `tool_name` instead of `TOOL_NAME`).
+[Minor] hooks/block-authz-state-destruction.sh:39 — Redundant comment — The comment explaining the use of U+001F is repeated across all hook files; consider a central documentation location instead.
+[Minor] hooks/block-authz-state-destruction.sh:42 — Inconsistent variable naming — Use consistent capitalization for variables (e.g., `tool_name` instead of `TOOL_NAME`).
+[Minor] hooks/block-destructive-docker.sh:10 — Redundant comment — The comment explaining the use of U+001F is repeated across all hook files; consider a central documentation location instead.
+[Minor] hooks/block-destructive-docker.sh:13 — Inconsistent variable naming — Use consistent capitalization for variables (e.g., `tool_name` instead of `TOOL_NAME`).
+[Minor] hooks/block-recovery-path-destruction.sh:46 — Redundant comment — The comment explaining the use of U+001F is repeated across all hook files; consider a central documentation location instead.
+[Minor] hooks/block-recovery-path-destruction.sh:49 — Inconsistent variable naming — Use consistent capitalization for variables (e.g., `tool_name` instead of `TOOL_NAME`).
+[Minor] hooks/block-secret-key-destruction.sh:58 — Redundant comment — The comment explaining the use of U+001F is repeated across all hook files; consider a central documentation location instead.
+[Minor] hooks/block-secret-key-destruction.sh:61 — Inconsistent variable naming — Use consistent capitalization for variables (e.g., `tool_name` instead of `TOOL_NAME`).
+[Minor] hooks/block-vcs-history-rewrite.sh:25 — Redundant comment — The comment explaining the use of U+001F is repeated across all hook files; consider a central documentation location instead.
+[Minor] hooks/block-vcs-history-rewrite.sh:28 — Inconsistent variable naming — Use consistent capitalization for variables (e.g., `tool_name` instead of `TOOL_NAME`).
+[Minor] tests/bench-hooks.sh:132 — Redundant text — The text about the previous optimization opportunity is now outdated; remove the reference to the future optimization.
+
+## END-OF-ANALYSIS

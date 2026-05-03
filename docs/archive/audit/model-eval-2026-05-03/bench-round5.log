@@ -1,0 +1,140 @@
+=== Model eval matrix ===
+Output:    /home/noguchi/ghq/github.com/ngc-shj/claude-code-config/docs/archive/audit/model-eval-2026-05-03
+Ollama:    http://gx10-a9c0:11434
+Models:    gpt-oss:20b gpt-oss:120b qwen3.6:35b-a3b qwen3.6:27b qwen2.5-coder:32b deepseek-coder-v2:16b deepseek-r1:70b gemma3:27b mistral-small3.2:24b llama3.3:70b command-r-plus gemma4:26b gemma4:31b mistral-medium-3.5:128b
+Samples:   small medium large
+Hooks:     commit-msg-check summarize-diff analyze-functionality
+
+Warming up gpt-oss:20b ... ready
+  [01:23:07] small  × commit-msg-check       × gpt-oss:20b        SKIP (already cached)
+  [01:23:07] small  × summarize-diff         × gpt-oss:20b        SKIP (already cached)
+  [01:23:07] small  × analyze-functionality  × gpt-oss:20b        SKIP (already cached)
+  [01:23:07] medium × commit-msg-check       × gpt-oss:20b        SKIP (already cached)
+  [01:23:07] medium × summarize-diff         × gpt-oss:20b        SKIP (already cached)
+  [01:23:07] medium × analyze-functionality  × gpt-oss:20b        SKIP (already cached)
+  [01:23:07] large  × commit-msg-check       × gpt-oss:20b        SKIP (already cached)
+  [01:23:07] large  × summarize-diff         × gpt-oss:20b        SKIP (already cached)
+  [01:23:07] large  × analyze-functionality  × gpt-oss:20b        SKIP (already cached)
+Warming up gpt-oss:120b ... ready
+  [01:23:26] small  × commit-msg-check       × gpt-oss:120b       SKIP (already cached)
+  [01:23:26] small  × summarize-diff         × gpt-oss:120b       SKIP (already cached)
+  [01:23:26] small  × analyze-functionality  × gpt-oss:120b       SKIP (already cached)
+  [01:23:26] medium × commit-msg-check       × gpt-oss:120b       SKIP (already cached)
+  [01:23:26] medium × summarize-diff         × gpt-oss:120b       SKIP (already cached)
+  [01:23:26] medium × analyze-functionality  × gpt-oss:120b       SKIP (already cached)
+  [01:23:26] large  × commit-msg-check       × gpt-oss:120b       SKIP (already cached)
+  [01:23:26] large  × summarize-diff         × gpt-oss:120b       SKIP (already cached)
+  [01:23:26] large  × analyze-functionality  × gpt-oss:120b       SKIP (already cached)
+Warming up qwen3.6:35b-a3b ... ready
+  [01:23:37] small  × commit-msg-check       × qwen3.6:35b-a3b    SKIP (already cached)
+  [01:23:37] small  × summarize-diff         × qwen3.6:35b-a3b    SKIP (already cached)
+  [01:23:37] small  × analyze-functionality  × qwen3.6:35b-a3b    SKIP (already cached)
+  [01:23:37] medium × commit-msg-check       × qwen3.6:35b-a3b    SKIP (already cached)
+  [01:23:37] medium × summarize-diff         × qwen3.6:35b-a3b    SKIP (already cached)
+  [01:23:37] medium × analyze-functionality  × qwen3.6:35b-a3b    SKIP (already cached)
+  [01:23:37] large  × commit-msg-check       × qwen3.6:35b-a3b    SKIP (already cached)
+  [01:23:37] large  × summarize-diff         × qwen3.6:35b-a3b    SKIP (already cached)
+  [01:23:37] large  × analyze-functionality  × qwen3.6:35b-a3b    SKIP (already cached)
+Warming up qwen3.6:27b ... ready
+  [01:23:46] small  × commit-msg-check       × qwen3.6:27b        SKIP (already cached)
+  [01:23:46] small  × summarize-diff         × qwen3.6:27b        SKIP (already cached)
+  [01:23:46] small  × analyze-functionality  × qwen3.6:27b        SKIP (already cached)
+  [01:23:46] medium × commit-msg-check       × qwen3.6:27b        SKIP (already cached)
+  [01:23:46] medium × summarize-diff         × qwen3.6:27b        SKIP (already cached)
+  [01:23:46] medium × analyze-functionality  × qwen3.6:27b        SKIP (already cached)
+  [01:23:46] large  × commit-msg-check       × qwen3.6:27b        SKIP (already cached)
+  [01:23:46] large  × summarize-diff         × qwen3.6:27b        SKIP (already cached)
+  [01:23:46] large  × analyze-functionality  × qwen3.6:27b        SKIP (already cached)
+Warming up qwen2.5-coder:32b ... ready
+  [01:24:01] small  × commit-msg-check       × qwen2.5-coder:32b  SKIP (already cached)
+  [01:24:01] small  × summarize-diff         × qwen2.5-coder:32b  SKIP (already cached)
+  [01:24:01] small  × analyze-functionality  × qwen2.5-coder:32b  SKIP (already cached)
+  [01:24:01] medium × commit-msg-check       × qwen2.5-coder:32b  SKIP (already cached)
+  [01:24:01] medium × summarize-diff         × qwen2.5-coder:32b  SKIP (already cached)
+  [01:24:01] medium × analyze-functionality  × qwen2.5-coder:32b  SKIP (already cached)
+  [01:24:01] large  × commit-msg-check       × qwen2.5-coder:32b  SKIP (already cached)
+  [01:24:01] large  × summarize-diff         × qwen2.5-coder:32b  SKIP (already cached)
+  [01:24:01] large  × analyze-functionality  × qwen2.5-coder:32b  SKIP (already cached)
+Warming up deepseek-coder-v2:16b ... ready
+  [01:24:24] small  × commit-msg-check       × deepseek-coder-v2:16b SKIP (already cached)
+  [01:24:24] small  × summarize-diff         × deepseek-coder-v2:16b SKIP (already cached)
+  [01:24:24] small  × analyze-functionality  × deepseek-coder-v2:16b SKIP (already cached)
+  [01:24:24] medium × commit-msg-check       × deepseek-coder-v2:16b SKIP (already cached)
+  [01:24:24] medium × summarize-diff         × deepseek-coder-v2:16b SKIP (already cached)
+  [01:24:24] medium × analyze-functionality  × deepseek-coder-v2:16b SKIP (already cached)
+  [01:24:24] large  × commit-msg-check       × deepseek-coder-v2:16b SKIP (already cached)
+  [01:24:24] large  × summarize-diff         × deepseek-coder-v2:16b SKIP (already cached)
+  [01:24:24] large  × analyze-functionality  × deepseek-coder-v2:16b SKIP (already cached)
+Warming up deepseek-r1:70b ... ready
+  [01:25:23] small  × commit-msg-check       × deepseek-r1:70b    SKIP (already cached)
+  [01:25:23] small  × summarize-diff         × deepseek-r1:70b    SKIP (already cached)
+  [01:25:23] small  × analyze-functionality  × deepseek-r1:70b    SKIP (already cached)
+  [01:25:23] medium × commit-msg-check       × deepseek-r1:70b    SKIP (already cached)
+  [01:25:23] medium × summarize-diff         × deepseek-r1:70b    SKIP (already cached)
+  [01:25:23] medium × analyze-functionality  × deepseek-r1:70b    SKIP (already cached)
+  [01:25:23] large  × commit-msg-check       × deepseek-r1:70b    SKIP (already cached)
+  [01:25:23] large  × summarize-diff         × deepseek-r1:70b    SKIP (already cached)
+  [01:25:23] large  × analyze-functionality  × deepseek-r1:70b    SKIP (already cached)
+Warming up gemma3:27b ... ready
+  [01:25:37] small  × commit-msg-check       × gemma3:27b           2.68s HTTP=200
+  [01:26:06] small  × summarize-diff         × gemma3:27b          28.98s HTTP=200
+  [01:26:52] small  × analyze-functionality  × gemma3:27b          45.80s HTTP=200
+  [01:26:55] medium × commit-msg-check       × gemma3:27b           2.88s HTTP=200
+  [01:27:25] medium × summarize-diff         × gemma3:27b          29.65s HTTP=200
+  [01:28:39] medium × analyze-functionality  × gemma3:27b          73.79s HTTP=200
+  [01:28:42] large  × commit-msg-check       × gemma3:27b           3.33s HTTP=200
+  [01:29:15] large  × summarize-diff         × gemma3:27b          32.53s HTTP=200
+  [01:30:13] large  × analyze-functionality  × gemma3:27b          57.87s HTTP=200
+Warming up mistral-small3.2:24b ... ready
+  [01:30:25] small  × commit-msg-check       × mistral-small3.2:24b   1.35s HTTP=200
+  [01:30:40] small  × summarize-diff         × mistral-small3.2:24b  15.30s HTTP=200
+  [01:30:45] small  × analyze-functionality  × mistral-small3.2:24b   4.99s HTTP=200
+  [01:30:46] medium × commit-msg-check       × mistral-small3.2:24b   0.95s HTTP=200
+  [01:31:06] medium × summarize-diff         × mistral-small3.2:24b  19.09s HTTP=200
+  [01:32:06] medium × analyze-functionality  × mistral-small3.2:24b  60.39s HTTP=200
+  [01:32:07] large  × commit-msg-check       × mistral-small3.2:24b   0.94s HTTP=200
+  [01:32:32] large  × summarize-diff         × mistral-small3.2:24b  25.26s HTTP=200
+  [01:33:17] large  × analyze-functionality  × mistral-small3.2:24b  44.89s HTTP=200
+Warming up llama3.3:70b ... ready
+  [01:33:59] small  × commit-msg-check       × llama3.3:70b        10.11s HTTP=200
+  [01:34:36] small  × summarize-diff         × llama3.3:70b        37.34s HTTP=200
+  [01:35:24] small  × analyze-functionality  × llama3.3:70b        47.06s HTTP=200
+  [01:36:24] medium × commit-msg-check       × llama3.3:70b        60.03s HTTP=000
+  [01:38:44] medium × summarize-diff         × llama3.3:70b       140.21s HTTP=200
+  [01:41:40] medium × analyze-functionality  × llama3.3:70b       175.82s HTTP=200
+  [01:42:40] large  × commit-msg-check       × llama3.3:70b        60.03s HTTP=000
+  [01:45:16] large  × summarize-diff         × llama3.3:70b       156.26s HTTP=200
+  [01:46:25] large  × analyze-functionality  × llama3.3:70b        68.59s HTTP=200
+Warming up command-r-plus ... ready
+  [01:47:48] small  × commit-msg-check       × command-r-plus      17.35s HTTP=200
+  [01:49:02] small  × summarize-diff         × command-r-plus      74.19s HTTP=200
+  [01:49:55] small  × analyze-functionality  × command-r-plus      53.28s HTTP=200
+  [01:50:00] medium × commit-msg-check       × command-r-plus       4.78s HTTP=200
+  [01:51:29] medium × summarize-diff         × command-r-plus      88.25s HTTP=200
+  [01:51:56] medium × analyze-functionality  × command-r-plus      27.61s HTTP=200
+  [01:52:01] large  × commit-msg-check       × command-r-plus       4.47s HTTP=200
+  [01:53:37] large  × summarize-diff         × command-r-plus      96.39s HTTP=200
+  [01:54:52] large  × analyze-functionality  × command-r-plus      75.41s HTTP=200
+Warming up gemma4:26b ... ready
+  [01:55:27] small  × commit-msg-check       × gemma4:26b           9.26s HTTP=200
+  [01:55:52] small  × summarize-diff         × gemma4:26b          24.77s HTTP=200
+  [01:58:27] small  × analyze-functionality  × gemma4:26b         154.69s HTTP=200
+  [01:58:36] medium × commit-msg-check       × gemma4:26b           9.30s HTTP=200
+  [01:58:55] medium × summarize-diff         × gemma4:26b          18.59s HTTP=200
+  [02:01:30] medium × analyze-functionality  × gemma4:26b         155.76s HTTP=200
+  [02:01:40] large  × commit-msg-check       × gemma4:26b           9.33s HTTP=200
+  [02:02:02] large  × summarize-diff         × gemma4:26b          22.20s HTTP=200
+  [02:04:42] large  × analyze-functionality  × gemma4:26b         159.61s HTTP=200
+Warming up gemma4:31b ... ready
+  [02:05:43] small  × commit-msg-check       × gemma4:31b          52.47s HTTP=200
+  [02:07:39] small  × summarize-diff         × gemma4:31b         116.34s HTTP=200
+  [02:11:21] small  × analyze-functionality  × gemma4:31b         221.17s HTTP=200
+  [02:11:55] medium × commit-msg-check       × gemma4:31b          34.23s HTTP=200
+  [02:13:03] medium × summarize-diff         × gemma4:31b          68.40s HTTP=200
+  [02:18:00] medium × analyze-functionality  × gemma4:31b         296.25s HTTP=200
+  [02:18:52] large  × commit-msg-check       × gemma4:31b          52.89s HTTP=200
+  [02:20:17] large  × summarize-diff         × gemma4:31b          84.08s HTTP=200
+  [02:28:52] large  × analyze-functionality  × gemma4:31b         515.62s HTTP=200
+Warming up mistral-medium-3.5:128b ... ready
+  [02:35:24] small  × commit-msg-check       × mistral-medium-3.5:128b 108.92s HTTP=000
+  [02:45:24] small  × summarize-diff         × mistral-medium-3.5:128b 600.07s HTTP=000

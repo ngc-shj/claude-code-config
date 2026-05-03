@@ -1,0 +1,1 @@
+Avoid using the commit description for details; instead, keep it short and move this content to a separate section or file in your repository documentation. Then write just "Audit RTK privacy posture" as the message.

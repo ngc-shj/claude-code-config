@@ -1,0 +1,4 @@
+* Added a formal privacy audit report and updated `CLAUDE.md` with the tool's privacy posture, key findings, and manual re-audit triggers.
+* Documented a reduction in local command history retention from 90 to 14 days to minimize the window of data exposure.
+* Identified a medium risk where secrets passed as command-line arguments are captured in plaintext within a local SQLite database (`~/.local/share/rtk/history.db`).
+* Established monitoring requirements for future `rtk` upgrades (e.g., checking binary strings for new URLs) to ensure no unauthorized network telemetry is introduced.

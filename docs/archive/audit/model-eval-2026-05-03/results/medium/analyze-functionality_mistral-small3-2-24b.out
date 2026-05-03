@@ -1,0 +1,15 @@
+[Major] hooks/block-destructive-docker.sh:10 — The comment explaining the choice of U+001F as a separator is not consistent with the other files. It mentions that TAB inside the COMMAND value cannot collide with the TSV field separator after `read -r`, but the rest of the files do not mention `read -r` at all. — Update the comment to be consistent with the other files, removing the mention of `read -r` and focusing on the use of bash parameter expansion for splitting.
+
+[Minor] hooks/block-audit-observability-destruction.sh:42 — The comment explaining the use of U+001F as a separator is not consistent with the other files. It mentions that US survives jq -rj as a real 0x1F byte, but does not mention that it is virtually never present in real shell commands. — Update the comment to be consistent with the other files, mentioning that U+001F is virtually never present in real shell commands.
+
+[Minor] hooks/block-authz-state-destruction.sh:43 — The comment explaining the use of U+001F as a separator is not consistent with the other files. It mentions that US survives jq -rj as a real 0x1F byte, but does not mention that it is virtually never present in real shell commands. — Update the comment to be consistent with the other files, mentioning that U+001F is virtually never present in real shell commands.
+
+[Minor] hooks/block-recovery-path-destruction.sh:49 — The comment explaining the use of U+001F as a separator is not consistent with the other files. It mentions that US survives jq -rj as a real 0x1F byte, but does not mention that it is virtually never present in real shell commands. — Update the comment to be consistent with the other files, mentioning that U+001F is virtually never present in real shell commands.
+
+[Minor] hooks/block-secret-key-destruction.sh:61 — The comment explaining the use of U+001F as a separator is not consistent with the other files. It mentions that US survives jq -rj as a real 0x1F byte, but does not mention that it is virtually never present in real shell commands. — Update the comment to be consistent with the other files, mentioning that U+001F is virtually never present in real shell commands.
+
+[Minor] hooks/block-vcs-history-rewrite.sh:28 — The comment explaining the use of U+001F as a separator is not consistent with the other files. It mentions that US survives jq -rj as a real 0x1F byte, but does not mention that it is virtually never present in real shell commands. — Update the comment to be consistent with the other files, mentioning that U+001F is virtually never present in real shell commands.
+
+[Minor] tests/bench-hooks.sh:133 — The note about the future optimization of consolidating the `jq` calls is no longer relevant, as the optimization has already been implemented. — Update the note to reflect the current implementation, mentioning that the hooks emit `tool_name` and `tool_input.command` in one jq call separated by U+001F (Unit Separator) and split via bash parameter expansion.
+
+## END-OF-ANALYSIS

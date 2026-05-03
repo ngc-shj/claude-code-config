@@ -1,0 +1,3 @@
+- A new shell script (`block-authz-state-destruction.sh`) is introduced to prevent the destruction of authorization states, blocking critical commands for AWS IAM (e.g., `delete-role`, `detach-policy`), GCP IAM/Azure RBAC and AD roles or service accounts removal, Kubernetes role deletions etc.
+- The script enforces R31 category f) guidance by checking tool inputs against a regex pattern (`DENY_REGEX`) before approving the command's execution; if matched, it denies with an informative reason message detailing risks of immediate lockouts/DoS due to missing authorization. 
+- It allows read and list operations for all four providers plus Kubernetes and approves unrelated commands not affecting authentication resources (e.g., `kubectl delete pod`).

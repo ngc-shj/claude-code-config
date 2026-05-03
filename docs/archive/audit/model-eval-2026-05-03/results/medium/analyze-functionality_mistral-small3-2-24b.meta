@@ -1,0 +1,1 @@
+{"sample":"medium","hook":"analyze-functionality","model":"mistral-small3.2:24b","elapsed_s":60.39,"http_code":"200","total_duration_ms":60357,"prompt_eval_count":4577,"prompt_eval_duration_ms":4618,"eval_count":737,"eval_duration_ms":55509,"done_reason":"stop"}

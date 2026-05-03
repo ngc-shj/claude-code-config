@@ -1,0 +1,7 @@
+[Major] hooks/block-destructive-docker.sh:10 — The code assumes that the `tool_name` will never contain the Unit Separator (U+001F) character, which is used as a delimiter to split the output of the `jq` command. If `tool_name` can potentially contain this character, it may lead to incorrect splitting and potential security issues. — Add input validation or use a more robust delimiter that is guaranteed not to appear in the `tool_name`.
+
+[Minor] hooks/block-audit-observability-destruction.sh:39 — The comment explaining the reason for using the Unit Separator (U+001F) character as a delimiter is repeated across multiple files. Consider extracting this explanation into a shared documentation or a single comment that can be referenced from all relevant locations. — Extract the comment into a shared location to avoid duplication.
+
+[Minor] tests/bench-hooks.sh:129 — The printf statement for the 'Notes' section has inconsistent indentation, which may affect readability. — Standardize indentation in the 'Notes' section for better readability.
+
+## END-OF-ANALYSIS

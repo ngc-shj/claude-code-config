@@ -1,0 +1,3 @@
+* The code now consolidates two `jq` calls into one per hook, reducing Bash chain latency by 45% from ~77ms to ~42ms.
+* This change matters because it improves performance and reduces the overhead of running hooks, making the system more efficient.
+* There is a low risk associated with this change, as it has been thoroughly tested (341/341 bats tests pass) and benchmarked, and the use of the Unit Separator (U+001F) to split fields is unlikely to cause issues with real shell commands.

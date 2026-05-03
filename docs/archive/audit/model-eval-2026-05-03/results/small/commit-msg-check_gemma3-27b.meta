@@ -1,0 +1,1 @@
+{"sample":"small","hook":"commit-msg-check","model":"gemma3:27b","elapsed_s":2.68,"http_code":"200","total_duration_ms":2668,"prompt_eval_count":613,"prompt_eval_duration_ms":766,"eval_count":19,"eval_duration_ms":1611,"done_reason":"stop"}

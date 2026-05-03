@@ -1,0 +1,1 @@
+{"sample":"medium","hook":"summarize-diff","model":"gemma3:27b","elapsed_s":29.65,"http_code":"200","total_duration_ms":29618,"prompt_eval_count":4293,"prompt_eval_duration_ms":5152,"eval_count":264,"eval_duration_ms":24101,"done_reason":"stop"}

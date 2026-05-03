@@ -49,6 +49,12 @@ MODELS=(
   "qwen2.5-coder:32b"
   "deepseek-coder-v2:16b"
   "deepseek-r1:70b"
+  "gemma3:27b"
+  "mistral-small3.2:24b"
+  "llama3.3:70b"
+  "command-r-plus"
+  "gemma4:26b"
+  "gemma4:31b"
 )
 
 # Skip cells whose .out and .meta already exist. Lets re-runs add new

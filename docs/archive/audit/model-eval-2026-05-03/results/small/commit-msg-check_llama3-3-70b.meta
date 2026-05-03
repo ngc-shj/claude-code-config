@@ -1,0 +1,1 @@
+{"sample":"small","hook":"commit-msg-check","model":"llama3.3:70b","elapsed_s":10.11,"http_code":"200","total_duration_ms":10089,"prompt_eval_count":560,"prompt_eval_duration_ms":1988,"eval_count":37,"eval_duration_ms":7944,"done_reason":"stop"}
