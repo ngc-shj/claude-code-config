@@ -1,1 +1,1 @@
-{"sample":"large","hook":"commit-msg-check","model":"gemma4:26b","elapsed_s":9.33,"http_code":"200","total_duration_ms":9315,"prompt_eval_count":767,"prompt_eval_duration_ms":348,"eval_count":512,"eval_duration_ms":8578,"done_reason":"length"}
+{"sample":"large","hook":"commit-msg-check","model":"gemma4:26b","elapsed_s":9.70,"http_code":"200","total_duration_ms":9681,"prompt_eval_count":767,"prompt_eval_duration_ms":316,"eval_count":548,"eval_duration_ms":8993,"done_reason":"stop"}

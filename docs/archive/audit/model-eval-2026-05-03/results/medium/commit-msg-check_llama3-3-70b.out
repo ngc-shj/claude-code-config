@@ -1,0 +1,1 @@
+perf(hooks): consolidate jq calls would be better rephrased as perf(hooks): reduce latency by consolidating jq calls to improve performance

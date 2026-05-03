@@ -1,0 +1,3 @@
+[Major] CLAUDE.md:101 — The claim that the repo "ships with retention shortened to 14 days" is inaccurate and contradicts the commit message, which states that the retention change was only applied locally to the author's `~/.config/rtk/config.toml` and was "out of repo scope." Since no code changes were made, the shipped default remains 90 days. — Change the wording to clarify that 14-day retention is a recommended configuration or a mitigation applied during the audit, rather than a shipped default.
+
+## END-OF-ANALYSIS

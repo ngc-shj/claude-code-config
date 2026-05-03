@@ -4,14 +4,24 @@ Bench harness: [`bench.sh`](./bench.sh) · Aggregator: [`aggregate.sh`](./aggreg
 
 ## TL;DR
 
-**Keep current routing (`gpt-oss:20b` for short-output tasks, `gpt-oss:120b` for analysis tasks).** After 13 models tested across 5 rounds, only one challenger reproduces the bug-finding behavior of `gpt-oss:120b`: **`llama3.3:70b`** independently surfaces the U+001F separator-collision risk as a Major finding — the same key issue 120b finds. It is the first and only non-`gpt-oss` model in this bench to do so. However, llama3.3:70b is also slower on `commit-msg-check` (timeouts at 60s for medium/large) and `summarize-diff` (140-156s vs 120b's 14-19s), so it is not a clean replacement for any current routing slot.
+**Keep current routing (`gpt-oss:20b` for short-output tasks, `gpt-oss:120b` for analysis tasks).** After 13 models tested across 6 rounds, the bug-finding leaderboard reveals four orthogonal *classes* of concern, each surfaced by a different model:
 
-Five rounds of measurement covered:
+| model | concern surfaced | sample |
+|---|---|---|
+| `gpt-oss:120b`     | code-level: U+001F separator collision  | medium |
+| `llama3.3:70b`     | code-level: U+001F separator collision (same finding as 120b) | medium |
+| `qwen3.6:35b-a3b`  | code-quality: DRY duplication across hook files | medium |
+| `gemma4:26b`       | doc-vs-code: CLAUDE.md retention claim contradicts the diff | small |
+
+`gpt-oss:120b` remains the right primary because it finds the most *severe* concrete code bug. `llama3.3:70b` is a viable backup (same finding, different model class). `qwen3.6:35b-a3b` and `gemma4:26b` are complementary "second-opinion" models — they catch concerns 120b misses, in different categories. None is a clean replacement for 120b on its own.
+
+Six rounds of measurement covered:
 1. Initial 3×3×3 matrix: `gpt-oss:20b` / `gpt-oss:120b` / `qwen3.6:35b-a3b`.
 2. Targeted re-tests on qwen3.6:35b-a3b: cold-start and `think:false`.
 3. Addendum: `qwen3.6:27b` (dense Q4_K_M) — strictly dominated by the MoE sibling.
 4. Coder/reasoning candidates: `qwen2.5-coder:32b` / `deepseek-coder-v2:16b` / `deepseek-r1:70b`.
 5. Generic instruction-tuned candidates: `gemma3:27b` / `mistral-small3.2:24b` / `llama3.3:70b` / `command-r-plus` / `gemma4:26b` / `gemma4:31b`. (`mistral-medium-3.5:128b` was pulled but timed out on every cell — 80 GB dense exceeds usable VRAM/throughput on this hardware.)
+6. `num_predict` correction: prior `commit-msg-check=512` and `analyze-functionality=8192` caps were too tight for thinking-mode models. Raised to 4096 and 16384 respectively; 17 cells re-run. Several Round 5 conclusions revised — most importantly, the "gemma4:26b output extraction broken" claim was wrong (it was a budget cap), and gemma4:26b at adequate budget surfaces a documentation-accuracy finding no other model caught.
 
 Round 5 strengthens the round-4 lesson: **generic instruction-tuned > coder/reasoning specialist for code review.** All three "coding" specialists produced false negatives or vague style nits on the medium sample's real bug. Round 5 added 6 generic instruction-tuned candidates; only `llama3.3:70b` actually finds the U+001F bug. Two others (`gemma3:27b`, `mistral-small3.2:24b`) mention U+001F in their findings but only as comment-style nits, not as a correctness risk — surface engagement without depth.
 
@@ -328,7 +338,11 @@ The `medium` sample (`b2f907b`, the jq-consolidation perf commit) has at least o
 - **`gemma4:26b`** — Output extraction broken via `/api/generate` (see §5.4). **Test inconclusive** — would require switching `bench.sh` to `/api/chat` semantics to evaluate fairly. Deferred.
 - **`mistral-medium-3.5:128b`** (dropped) — Pulled (80 GB) but every cell timed out. The 128B dense exceeds usable inference throughput on this hardware. Removed from the matrix; not a routing target.
 
-### 5.4 Gemma4:26b output extraction issue
+### 5.4 Gemma4:26b output extraction issue (RETRACTED — see Round 6)
+
+Round 5 originally diagnosed an Ollama `/api/generate` extraction bug for gemma4:26b. **Round 6 found this was wrong**: the issue was `bench.sh`'s `num_predict` cap being too low (512 for commit-msg-check, 8192 for analyze-functionality). Gemma4 emits long thinking before answering; the cap exhausted the budget on thinking and forced `done_reason=length` with empty `.response`. Raising the caps (4096 / 16384) made gemma4:26b emit normal output via `/api/generate`. The `/api/chat` `.message.thinking` field is a separate, real feature, not a workaround.
+
+Original diagnostic kept below for context:
 
 Probe via `/api/generate` (what `bench.sh` uses):
 
@@ -358,6 +372,68 @@ Probe via `/api/generate` (what `bench.sh` uses):
 The thinking content surfaces under `.message.thinking` in `/api/chat`. Likely an Ollama 0.22 + Gemma4 MoE interaction where `/api/generate` does not forward the thinking-channel tokens. The dense Gemma4:31b (same family, no MoE) does not have the issue.
 
 This is a bench-infrastructure defect, not a model defect. Re-running gemma4:26b via `/api/chat` would require a `bench.sh` change; deferred since `gemma4:31b`'s false-negative result on the same prompt suggests `gemma4:26b` would also false-negative even if extracted correctly.
+
+---
+
+## Round 6 — `num_predict` fix corrects prior empty-response claims
+
+The prior rounds capped `commit-msg-check` at `num_predict=512` and `analyze-functionality` at `num_predict=8192`. Both caps were too tight for thinking-mode models — the entire budget burned on internal reasoning before the model could emit its answer, producing empty `.response` and `done_reason=length`. Models (and the routing decisions about them) were misjudged on that basis.
+
+### 6.1 Configuration change
+
+| hook | num_predict before | num_predict after |
+|---|---:|---:|
+| commit-msg-check      |  512 | **4 096** |
+| summarize-diff        | 2 048 | (unchanged) |
+| analyze-functionality | 8 192 | **16 384** |
+
+`bench.sh` updated. 17 cells with `done_reason=length` or HTTP=000 timeout on `commit-msg-check` were removed and re-run; gemma4:26b's three `analyze-functionality` cells were re-run.
+
+### 6.2 Models that started working
+
+| model x hook | before | after |
+|---|---|---|
+| `qwen3.6:35b-a3b` x commit-msg-check (x3) | empty (length, 9.5s, 512 tok) | clean one-line suggestion (21-34s, 1182-1865 tok) |
+| `llama3.3:70b` x commit-msg-check medium/large | timeout 60s | clean one-line suggestion (8.9-12.4s) |
+| `gemma4:26b` x commit-msg-check (x3) | empty (length, 9.3s) | `OK` (6-11s, 339-643 tok) |
+| `gemma4:26b` x analyze-functionality small | empty (length, 154s) | **Major finding on CLAUDE.md retention claim** (87s, 4 668 tok) |
+| `gemma4:26b` x analyze-functionality medium | empty (length, 156s) | `No findings` (183s, 9 660 tok) |
+| `gpt-oss:20b` x commit-msg-check large | length-truncated `OK` (9.3s) | substantive suggestion (23s, 142B) |
+
+### 6.3 Models that still cannot complete `commit-msg-check` (60s timeout)
+
+| model x sample | elapsed |
+|---|---:|
+| qwen3.6:27b x small/medium/large | 60s timeout (x3) |
+| deepseek-r1:70b x small/medium/large | 60s timeout (x3) |
+| gemma4:31b x large | 60s timeout |
+
+Conclusion: these aren't num_predict-bound — they are throughput-bound. Even with adequate budget, generation is too slow to complete a 1-line judgment in 60 seconds. Confirmed disqualification for `commit-msg-check` (and likely all tight-budget hooks). Production's 10s timeout on `commit-msg-check.sh` makes this a hard fail.
+
+### 6.4 New finding: gemma4:26b on `analyze-functionality:small` catches a doc-vs-code accuracy bug
+
+With the corrected num_predict, gemma4:26b on the `small` sample (`91ee395`, the RTK privacy audit docs commit) emits this finding:
+
+> **[Major]** `CLAUDE.md:101` — The claim that the repo "ships with retention shortened to 14 days" is inaccurate and contradicts the commit message, which states that the retention change was only applied locally to the author's `~/.config/rtk/config.toml` and was "out of repo scope." Since no code changes were made, the shipped default remains 90 days. — Change the wording to clarify that 14-day retention is a recommended configuration or a mitigation applied during the audit, rather than a shipped default.
+
+This is a **doc-vs-code accuracy concern that NO other model in the 13-model bench caught.** `gpt-oss:120b`, `qwen3.6:35b-a3b`, and all others produced `No findings` for the `small` sample. The concern is real: the diff modifies CLAUDE.md to assert a shipped default that the diff itself does not implement.
+
+This makes the **bug-finding leaderboard a 4-way set of orthogonal findings**:
+
+| model | finding kind | sample |
+|---|---|---|
+| `gpt-oss:120b` | Code-level: U+001F separator-collision risk | medium |
+| `llama3.3:70b` | Code-level: U+001F separator-collision risk (same as 120b) | medium |
+| `qwen3.6:35b-a3b` | Code-quality: DRY duplication across hook files | medium |
+| **`gemma4:26b`** | **Documentation-vs-code: inaccurate retention claim** | **small** |
+
+Each model surfaces a different *class* of concern. gemma4:26b's doc-accuracy finding is qualitatively the strongest — it requires cross-referencing the commit message body with the documentation change, a kind of reasoning that pure code-review training doesn't typically cover.
+
+gemma4:26b on `medium` still false-negatives on the U+001F bug, and on `large` exhausts even 16 384 tokens (`done_reason=length` again — verbose thinking that 16k still isn't enough). It is not a routing replacement for `gpt-oss:120b`, but it earns a place as a **third complementary "second-opinion" model** alongside `qwen3.6:35b-a3b`, specialized for documentation-accuracy review.
+
+### 6.5 Production hook implication (out of scope but noted)
+
+Production `commit-msg-check.sh` does not set `num_predict`, so it inherits Ollama's default (high). The bench's earlier `512` cap was bench-only — it understated thinking-model performance vs reality. Rounds 1-5 conclusions about routing changes (no demotion; pilot mistral-small3.2:24b for short hooks) remain unchanged because gpt-oss:20b is the production default for `commit-msg-check` and was not affected by the cap on small/medium.
 
 ---
 
@@ -424,7 +500,7 @@ No findings
 
 1. **No changes to default routing for `analyze-*` hooks.** Keep `gpt-oss:120b`. Of 13 models tested, only `gpt-oss:120b` and `llama3.3:70b` surface the U+001F collision risk; 120b is faster on `summarize-diff` and `commit-msg-check`, so no clean swap.
 2. **`llama3.3:70b` as a backup for `analyze-*`-only.** It is the second model in the bench to find the actual bug. Half the disk size of 120b (42 vs 65 GB). Latency is comparable on `analyze-functionality:small/large` (47/68s vs 5/87s) but slower on medium (175s vs 46s). Worth keeping as a fallback if `gpt-oss:120b` becomes unavailable.
-3. **Keep `qwen3.6:35b-a3b` as a complementary "second opinion" model** for `analyze-*` tasks. Surfaces a different real concern (DRY duplication) at 2-3× wall-clock cost. Use only with thinking-on.
+3. **Keep `qwen3.6:35b-a3b` and add `gemma4:26b` as complementary "second opinion" models** for `analyze-*` tasks. They catch concerns 120b misses, in different categories: qwen3.6:35b-a3b finds DRY/duplication; gemma4:26b finds doc-vs-code accuracy issues (the CLAUDE.md retention claim on the small sample is the only finding gpt-oss:120b missed across the 13-model bench). Use either only when the prior agent passed; do not rely on them as primary review (false-negative on the U+001F bug). gemma4:26b requires `num_predict>=16384` for analyze-* due to verbose thinking.
 4. **(Optional) Pilot `mistral-small3.2:24b` as the new fast-default for `commit-msg-check` and `summarize-diff`.** Speed champion overall: `commit-msg-check` 0.95s on medium/large (vs `gpt-oss:20b`'s 6.5-9.3s); `summarize-diff` 15-25s with comparable quality to `gpt-oss:120b`. Format adherence is solid (100% sentinel compliance on `analyze-functionality` even though analyze quality is poor). Wider A/B (>=10 commits) gates production change.
 5. **(Optional, alternative) `deepseek-coder-v2:16b` for `commit-msg-check`.** Slightly faster than `mistral-small3.2:24b` (0.4s vs 0.95s on medium/large). Less polished elsewhere (one format violation on `analyze:medium`). Pick whichever has cleaner outputs in the wider A/B.
 6. **Do NOT use any of these for production:**
@@ -434,7 +510,7 @@ No findings
    - `gemma3:27b` — high false-positive volume on analyze-* (15 style nits, missed the bug).
    - `command-r-plus` — bug-blind on analyze-*; no clear niche.
    - `gemma4:31b` — slow + false-negative on analyze-*.
-   - `gemma4:26b` — output extraction broken via `/api/generate`; deferred.
+   - `gemma4:26b` for primary `analyze-functionality` — false-negative on `medium`, exhausts even 16384 tokens on `large`. Useful only as a "second opinion" for documentation-accuracy concerns (see #3).
    - `mistral-medium-3.5:128b` — exceeds usable inference throughput on this hardware; every cell timed out.
 7. **Do NOT use `think:false` on qwen3.6** for structured-output tasks. Speedup is real; quality collapse is not survivable.
 8. **Re-bench triggers.** Re-run [`bench.sh`](./bench.sh) on:
@@ -471,6 +547,7 @@ Pragmatically: when picking a model for a code-review hook, **prefer large gener
 - [`bench-qwen3.6-27b.log`](./bench-qwen3.6-27b.log) — round-3 stdout
 - [`bench-round4.log`](./bench-round4.log) — round-4 stdout (qwen2.5-coder, deepseek-coder-v2, deepseek-r1)
 - [`bench-round5.log`](./bench-round5.log) — round-5 stdout (gemma3, mistral-small, llama3.3, command-r-plus, gemma4:26b/31b)
+- [`bench-round6-num-predict.log`](./bench-round6-num-predict.log) — round-6 stdout (re-run of length-truncated cells with bumped num_predict)
 - [`samples/`](./samples/) — committed `.diff` and `.subject` per sample (frozen so re-runs use identical inputs)
 - [`results/<sample>/<hook>_<model>.{out,meta}`](./results/) — round-1 + round-3 + round-4 + round-5 per-cell raw response + JSON metadata
 - [`results-nothink/qwen-nothink_<sample>.{out,meta}`](./results-nothink/) — round-2 `think:false` outputs
