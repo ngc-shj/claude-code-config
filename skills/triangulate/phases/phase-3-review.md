@@ -290,6 +290,7 @@ Review round: [nth]
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
+- RS4: [status]
 
 ### Testing expert
 - R1: [status]

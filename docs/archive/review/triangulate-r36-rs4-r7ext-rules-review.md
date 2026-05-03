@@ -152,7 +152,7 @@ Plan revised per Round-1 14 findings:
 ## Security Findings (Round 2)
 
 ### N1 [Minor] — Plan body contains identity-shaped email pattern
-- **Resolution**: `noguchi.shoji@example.co.jp` (Round-1 plan body line 238) replaced with `firstname.lastname@example.com` and prefixed with "(illustrative — the real PR would contain a real address that this rule prevents from leaking)".
+- **Resolution**: an identity-shaped illustrative address using a non-RFC-2606 domain (Round-1 plan body line 238) replaced with `firstname.lastname@example.com` and prefixed with "(illustrative — the real PR would contain a real address that this rule prevents from leaking)". Original verbatim string omitted from this resolution note to avoid self-violating RS4 (Phase 3 Round-1 finding S6).
 - **Status**: Resolved.
 
 ### N2 [Minor] — R36 security-category escalation list missing path-traversal / SSRF / crypto-API misuse
@@ -189,3 +189,53 @@ Plan revised per Round-1 14 findings:
 - Implementation steps: monotonic 1-8 with no duplicates. ✓
 
 All findings across Rounds 1, 2, and 3 are resolved. No outstanding issues. Proceeding to Step 1-7 (commit).
+
+---
+
+# Code Review (Phase 3): triangulate-r36-rs4-r7ext-rules — Round 1
+
+Date: 2026-05-03
+Review round: Phase 3 Round 1
+
+## Pre-screening (Ollama)
+
+2 Minor findings — both non-issues:
+- Claimed stale `R1-R35` references in phase files: false positive (`grep -rnE` returns empty, verified Phase 2 step 6).
+- Future-proofing advisory about pipes in table cells: not an actionable defect at the time of pre-screening (current rows all 5 pipes).
+
+## Functionality (F12)
+
+### F12 [Minor]: RS4 missing from per-expert RS-list in phase-1-plan.md and phase-3-review.md
+- **Evidence**: phase-1-plan.md:223-225 and phase-3-review.md:290-292 list RS1, RS2, RS3 but not RS4.
+- **Root cause**: plan's "Out of scope" claim that "RS rules are NOT in the template" was based on inspection of common-rules.md only; the per-expert templates in phase-1 and phase-3 files DO include RS rules.
+- **Fix**: appended `- RS4: [status]` after `- RS3: [status]` in both files.
+- **Status**: Resolved.
+
+## Security (S6)
+
+### S6 [Minor]: review.md self-violates RS4 with reproduced identity-shaped string
+- **Evidence**: triangulate-r36-rs4-r7ext-rules-review.md line 155 reproduced `noguchi.shoji@example.co.jp` in the N1 resolution text.
+- **Fix**: rephrased to describe the pattern shape ("an identity-shaped illustrative address using a non-RFC-2606 domain") without reproducing the address.
+- **Status**: Resolved.
+
+## Testing (T6, T7)
+
+### T6 [Minor]: RS4 used `--name-only HEAD` instead of `--name-only main...HEAD`
+- **Evidence**: RS4 row in common-rules.md (deployed) — single-commit scope under-detects multi-commit PR PII.
+- **Fix**: replaced both occurrences (`HEAD` → `main...HEAD`) — now consistent with R36 detection.
+- **Status**: Resolved.
+
+### T7 [Minor]: RS4 illustrative grep used unquoted `$(git diff ...)` — word-splits on filename-spaces
+- **Fix**: replaced with `git diff --name-only main...HEAD -z | xargs -0 grep -nE` pattern. Then, after this change introduced a stray `|` inside backticks (= 6th column), restructured the procedure as plain prose with separate backticked snippets so the table cell pipe count remains 5.
+- **Status**: Resolved.
+
+## Round-2 mechanical spot-verify (Phase 3)
+
+- F12: `- RS4: [status]` present in both per-expert templates ✓
+- S6: zero `noguchi.shoji` references in review.md ✓
+- T6: `git diff --name-only main...HEAD` appears twice in RS4 row body ✓
+- T7: `xargs -0 grep -nE` present, no `$(git diff ...)`, RS4 pipe count = 5 ✓
+- R7 / R36 pipe counts = 5 (regression check) ✓
+- `grep -rnE 'R1[ -]?(-|to|through)[ -]?R35\b' skills/triangulate/` empty ✓
+
+All Phase 3 Round-1 findings resolved by mechanical fixes; no second sub-agent round required (issues were narrow + verifiable mechanically). Proceeding to Phase 3 Step 3-7 (deploy + commit).
