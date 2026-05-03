@@ -1,0 +1,5 @@
+- **New Hook Added**: Implemented a new hook `block-authz-state-destruction.sh` to block commands that could lead to authorization state destruction, addressing R31 category (f).
+- **Purpose**: Prevents deletion of roles, role bindings, IAM policies, group memberships, and service accounts, which can cause immediate denial-of-service for legitimate operators and break runtime authentication.
+- **Risks**: While a best-effort tripwire, this hook can be bypassed through alternative means like base64-encoded `eval`, alternate shells, or direct API calls. Users can override the block locally via `~/.claude/settings.local.json`.
+- **Test Coverage**: Added tests (`block-authz-state-destruction.bats`) to ensure the hook correctly blocks and approves commands across AWS, GCP, Azure, Kubernetes, and other unrelated CLI operations.
+- **Settings Update**: Modified `settings.json` to include the new hook in the list of runtime checks.

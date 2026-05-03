@@ -1,0 +1,14 @@
+ [Minor] hooks/block-audit-observability-destruction.sh:39 — Consider improving readability by using more descriptive variable names for PARSED and TOOL_NAME.
+The current implementation uses `PARSED` and `TOOL_NAME`, which are not very descriptive of their purpose within the context of the code. A more meaningful name could help improve readability, especially for developers unfamiliar with the codebase.
+```bash
+# Before:
+PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "\u001f", (.tool_input.command // "")')
+TOOL_NAME="${PARSED%%$'\x1f'*}"
+COMMAND="${PARSED#*$'\x1f'}"
+
+# Suggested improvement:
+OUTPUT=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "\u001f", (.tool_input.command // "")')
+TOOL_NAME="${OUTPUT%%$'\x1f'*}"
+COMMAND="${OUTPUT#*$'\x1f'}"
+```
+This change would make the variable names more indicative of their role in the script, potentially improving overall readability and maintainability.

@@ -1,0 +1,22 @@
+ [Major] hooks/block-authz-state-destruction.sh:16 — Command Filtering - Inconsistent Regex Usage — The regex used to block AWS IAM delete commands is inconsistent with other provider commands and does not cover all relevant actions such as `delete-role`, `delete-role-policy`, etc., which can lead to false approvals for related but distinct commands.
+    Fix: Update the regex to consistently cover all deletion commands across providers or adjust the command filtering logic to handle each specific action appropriately.
+
+[Major] hooks/block-authz-state-destruction.sh:32 — Command Filtering - Inconsistent Regex Usage — Similar to the AWS IAM section, the regex for GCP IAM actions is not consistent and does not cover all deletion commands like `gcloud iam roles delete`, which can result in false approvals.
+    Fix: Update the regex to include all relevant GCP IAM deletion commands or adjust the command filtering logic accordingly.
+
+[Major] hooks/block-authz-state-destruction.sh:49 — Command Filtering - Inconsistent Regex Usage — The Azure section has a similar issue with inconsistent regex usage, not covering all Azure RBAC deletion commands which can lead to false approvals.
+    Fix: Update the regex to include all relevant Azure actions or adjust the command filtering logic accordingly.
+
+[Major] hooks/block-authz-state-destruction.sh:65 — Command Filtering - Inconsistent Regex Usage — The Kubernetes section also has a problem with inconsistent regex usage, not covering all Kubernetes RBAC deletion commands which can result in false approvals.
+    Fix: Update the regex to include all relevant Kubernetes actions or adjust the command filtering logic accordingly.
+
+[Major] settings.json:214 — Hook Configuration - Missing Timeout — The newly added hook for authorization-state destruction does not have a specified timeout, which can lead to unpredictable behavior in the execution of this hook.
+    Fix: Add a `timeout` field to the configuration under the new hook entry to ensure it respects time limits set by the system or users.
+
+[Minor] hooks/block-authz-state-destruction.sh:1 — Naming - Inconsistent Script Header — The script header uses inconsistent naming conventions (`#!/bin/bash` vs `#!/usr/bin/env bats`) which can lead to confusion and potential errors in execution environments that do not support Bats (a popular testing framework for Bash).
+    Fix: Choose a consistent convention (`#!/bin/bash` or `#!/usr/bin/env bats`) and apply it consistently throughout the script.
+
+[Minor] tests/block-authz-state-destruction.bats — Test Naming - Lack of Clarity in Test Names — Some test names are overly generic (e.g., "deny: aws iam delete-role") and do not provide clear information about what specific action is being tested, which can make the test suite less understandable and harder to debug.
+    Fix: Rename tests to be more descriptive; for example, rename "deny: aws iam delete-role" to something like "deny_aws_iam_delete_role" to indicate clearly that it's a specific action being tested against deletion.
+
+## END-OF-ANALYSIS

@@ -1,0 +1,4 @@
+- **Retention period reduced**: Command history retention decreased from 90 days to 14 days to minimize exposure of sensitive data.  
+- **Privacy audit documentation added**: Updated `CLAUDE.md` with privacy findings, mitigations, and re-audit triggers for transparency and future reference.  
+- **Local command history risk**: Plaintext logging of commands and arguments in `history.db` poses a medium-risk exposure of secrets or sensitive patterns, similar to `~/.bash_history`.  
+- **Defense-in-depth measures added**: Re-audit triggers and environment variable overrides ensure ongoing privacy and security monitoring.

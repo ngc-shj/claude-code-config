@@ -1,0 +1,6 @@
+ - The Bash chain latency has been significantly reduced from ~77ms to ~42ms (a 45% decrease) by consolidating the `jq` calls for extracting `tool_name` and `tool_input.command` into a single invocation per hook, separated by U+001F.
+- This change eliminates redundant `jq` invocations, improving performance and reducing latency.
+- The use of U+001F as a separator ensures that embedded control characters (including TAB) are preserved verbatim in the emitted JSON, maintaining compatibility with Bash parameter expansion for splitting the fields.
+- Risk: There is a potential risk if there are unforeseen edge cases where U+001F might interfere with command parsing or if there are performance implications when handling large datasets that could affect memory usage or execution time.
+- The benchmark and tests show no regressions, indicating successful implementation and stability of the new method.
+- Updated documentation reflects the changes in how `tool_name` and `tool_input.command` are processed, providing context for future optimizations related to jq call consolidation.

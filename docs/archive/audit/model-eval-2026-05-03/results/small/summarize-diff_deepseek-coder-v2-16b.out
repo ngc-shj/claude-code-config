@@ -1,0 +1,3 @@
+ - **What changed**: Updated privacy policy to reduce local command history retention from 90 days to 14 days and added a section in CLAUDE.md detailing audit findings, mitigation steps, and re-audit triggers.
+- **Why it matters**: This reduces the risk of sensitive information being stored locally on users' machines without their knowledge or consent, aligning with GDPR compliance requirements.
+- **Risks**: The primary risk is reducing retention to 14 days which might impact analytics completeness but mitigates exposure significantly compared to previous 90 days. However, manual removal of the history DB remains a potential issue for some users and could be addressed by enhancing uninstall procedures or adding an opt-out feature in future versions.

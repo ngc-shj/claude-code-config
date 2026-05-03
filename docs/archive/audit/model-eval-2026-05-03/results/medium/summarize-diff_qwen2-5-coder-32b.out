@@ -1,0 +1,5 @@
+- Consolidated `jq` calls in block hooks from two to one using U+001F (Unit Separator) for faster processing.
+- Reduced cumulative Bash chain latency by 45% from ~77ms to ~42ms, improving performance.
+- Used bash parameter expansion for splitting the parsed output instead of `read -r`, preserving special characters.
+- Reverted a previous attempt using `@tsv` due to issues with embedded tabs in command values; U+001F avoids this problem.
+- Updated benchmark documentation and test notes to reflect these changes, ensuring accuracy and future optimization clarity.

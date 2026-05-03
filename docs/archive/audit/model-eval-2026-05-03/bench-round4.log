@@ -1,0 +1,79 @@
+=== Model eval matrix ===
+Output:    /home/noguchi/ghq/github.com/ngc-shj/claude-code-config/docs/archive/audit/model-eval-2026-05-03
+Ollama:    http://gx10-a9c0:11434
+Models:    gpt-oss:20b gpt-oss:120b qwen3.6:35b-a3b qwen3.6:27b qwen2.5-coder:32b deepseek-coder-v2:16b deepseek-r1:70b
+Samples:   small medium large
+Hooks:     commit-msg-check summarize-diff analyze-functionality
+
+Warming up gpt-oss:20b ... ready
+  [21:20:19] small  × commit-msg-check       × gpt-oss:20b        SKIP (already cached)
+  [21:20:19] small  × summarize-diff         × gpt-oss:20b        SKIP (already cached)
+  [21:20:19] small  × analyze-functionality  × gpt-oss:20b        SKIP (already cached)
+  [21:20:19] medium × commit-msg-check       × gpt-oss:20b        SKIP (already cached)
+  [21:20:19] medium × summarize-diff         × gpt-oss:20b        SKIP (already cached)
+  [21:20:19] medium × analyze-functionality  × gpt-oss:20b        SKIP (already cached)
+  [21:20:19] large  × commit-msg-check       × gpt-oss:20b        SKIP (already cached)
+  [21:20:19] large  × summarize-diff         × gpt-oss:20b        SKIP (already cached)
+  [21:20:19] large  × analyze-functionality  × gpt-oss:20b        SKIP (already cached)
+Warming up gpt-oss:120b ... ready
+  [21:20:42] small  × commit-msg-check       × gpt-oss:120b       SKIP (already cached)
+  [21:20:42] small  × summarize-diff         × gpt-oss:120b       SKIP (already cached)
+  [21:20:42] small  × analyze-functionality  × gpt-oss:120b       SKIP (already cached)
+  [21:20:42] medium × commit-msg-check       × gpt-oss:120b       SKIP (already cached)
+  [21:20:42] medium × summarize-diff         × gpt-oss:120b       SKIP (already cached)
+  [21:20:42] medium × analyze-functionality  × gpt-oss:120b       SKIP (already cached)
+  [21:20:42] large  × commit-msg-check       × gpt-oss:120b       SKIP (already cached)
+  [21:20:42] large  × summarize-diff         × gpt-oss:120b       SKIP (already cached)
+  [21:20:42] large  × analyze-functionality  × gpt-oss:120b       SKIP (already cached)
+Warming up qwen3.6:35b-a3b ... ready
+  [21:20:43] small  × commit-msg-check       × qwen3.6:35b-a3b    SKIP (already cached)
+  [21:20:43] small  × summarize-diff         × qwen3.6:35b-a3b    SKIP (already cached)
+  [21:20:43] small  × analyze-functionality  × qwen3.6:35b-a3b    SKIP (already cached)
+  [21:20:43] medium × commit-msg-check       × qwen3.6:35b-a3b    SKIP (already cached)
+  [21:20:43] medium × summarize-diff         × qwen3.6:35b-a3b    SKIP (already cached)
+  [21:20:43] medium × analyze-functionality  × qwen3.6:35b-a3b    SKIP (already cached)
+  [21:20:43] large  × commit-msg-check       × qwen3.6:35b-a3b    SKIP (already cached)
+  [21:20:43] large  × summarize-diff         × qwen3.6:35b-a3b    SKIP (already cached)
+  [21:20:43] large  × analyze-functionality  × qwen3.6:35b-a3b    SKIP (already cached)
+Warming up qwen3.6:27b ... ready
+  [21:20:44] small  × commit-msg-check       × qwen3.6:27b        SKIP (already cached)
+  [21:20:44] small  × summarize-diff         × qwen3.6:27b        SKIP (already cached)
+  [21:20:44] small  × analyze-functionality  × qwen3.6:27b        SKIP (already cached)
+  [21:20:44] medium × commit-msg-check       × qwen3.6:27b        SKIP (already cached)
+  [21:20:44] medium × summarize-diff         × qwen3.6:27b        SKIP (already cached)
+  [21:20:44] medium × analyze-functionality  × qwen3.6:27b        SKIP (already cached)
+  [21:20:44] large  × commit-msg-check       × qwen3.6:27b        SKIP (already cached)
+  [21:20:44] large  × summarize-diff         × qwen3.6:27b        SKIP (already cached)
+  [21:20:44] large  × analyze-functionality  × qwen3.6:27b        SKIP (already cached)
+Warming up qwen2.5-coder:32b ... ready
+  [21:21:04] small  × commit-msg-check       × qwen2.5-coder:32b    1.06s HTTP=200
+  [21:21:25] small  × summarize-diff         × qwen2.5-coder:32b   20.47s HTTP=200
+  [21:21:32] small  × analyze-functionality  × qwen2.5-coder:32b    6.89s HTTP=200
+  [21:21:33] medium × commit-msg-check       × qwen2.5-coder:32b    1.28s HTTP=200
+  [21:21:52] medium × summarize-diff         × qwen2.5-coder:32b   19.35s HTTP=200
+  [21:22:00] medium × analyze-functionality  × qwen2.5-coder:32b    7.60s HTTP=200
+  [21:22:01] large  × commit-msg-check       × qwen2.5-coder:32b    1.22s HTTP=200
+  [21:22:32] large  × summarize-diff         × qwen2.5-coder:32b   31.24s HTTP=200
+  [21:22:44] large  × analyze-functionality  × qwen2.5-coder:32b   11.64s HTTP=200
+Warming up deepseek-coder-v2:16b ... ready
+  [21:23:20] small  × commit-msg-check       × deepseek-coder-v2:16b   0.79s HTTP=200
+  [21:23:25] small  × summarize-diff         × deepseek-coder-v2:16b   5.28s HTTP=200
+  [21:23:28] small  × analyze-functionality  × deepseek-coder-v2:16b   3.07s HTTP=200
+  [21:23:28] medium × commit-msg-check       × deepseek-coder-v2:16b   0.36s HTTP=200
+  [21:23:36] medium × summarize-diff         × deepseek-coder-v2:16b   8.16s HTTP=200
+  [21:23:46] medium × analyze-functionality  × deepseek-coder-v2:16b   9.67s HTTP=200
+  [21:23:46] large  × commit-msg-check       × deepseek-coder-v2:16b   0.36s HTTP=200
+  [21:23:57] large  × summarize-diff         × deepseek-coder-v2:16b  10.11s HTTP=200
+  [21:24:32] large  × analyze-functionality  × deepseek-coder-v2:16b  35.11s HTTP=200
+Warming up deepseek-r1:70b ... ready
+  [21:26:22] small  × commit-msg-check       × deepseek-r1:70b     60.02s HTTP=000
+  [21:28:13] small  × summarize-diff         × deepseek-r1:70b    111.75s HTTP=200
+  [21:29:22] small  × analyze-functionality  × deepseek-r1:70b     68.95s HTTP=200
+  [21:30:22] medium × commit-msg-check       × deepseek-r1:70b     60.02s HTTP=000
+  [21:32:30] medium × summarize-diff         × deepseek-r1:70b    127.03s HTTP=200
+  [21:34:03] medium × analyze-functionality  × deepseek-r1:70b     93.35s HTTP=200
+  [21:35:03] large  × commit-msg-check       × deepseek-r1:70b     60.02s HTTP=000
+  [21:37:37] large  × summarize-diff         × deepseek-r1:70b    153.85s HTTP=200
+  [21:40:43] large  × analyze-functionality  × deepseek-r1:70b    186.60s HTTP=200
+
+Done. Results in /home/noguchi/ghq/github.com/ngc-shj/claude-code-config/docs/archive/audit/model-eval-2026-05-03/results

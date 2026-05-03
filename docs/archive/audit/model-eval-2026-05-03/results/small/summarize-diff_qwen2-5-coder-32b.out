@@ -1,0 +1,5 @@
+- **Retained command history reduced from 90 to 14 days**: Enhances privacy by reducing exposure window but may limit long-term analytics accuracy.
+- **Updated CLAUDE.md with audit findings and re-audit triggers**: Provides clear guidelines for maintaining privacy compliance post-upgrades.
+- **Comprehensive audit report added**: Offers detailed analysis, including negligible network exfiltration risk and low local command history risk, with actionable recommendations.
+- **Risk of secret exposure via CLI arguments acknowledged**: Mitigated by advising against passing secrets in command line, emphasizing the same risks as `.bash_history`.
+- **Potential for future telemetry endpoints flagged**: Re-audit triggers ensure any new data collection points are promptly reviewed.
