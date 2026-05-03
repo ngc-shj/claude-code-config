@@ -1,1 +1,1 @@
-{"sample":"medium","hook":"analyze-functionality","model":"gemma4:26b","elapsed_s":155.76,"http_code":"200","total_duration_ms":155708,"prompt_eval_count":4652,"prompt_eval_duration_ms":1959,"eval_count":8192,"eval_duration_ms":151112,"done_reason":"length"}
+{"sample":"medium","hook":"analyze-functionality","model":"gemma4:26b","elapsed_s":182.75,"http_code":"200","total_duration_ms":182710,"prompt_eval_count":4652,"prompt_eval_duration_ms":1937,"eval_count":9660,"eval_duration_ms":177649,"done_reason":"stop"}

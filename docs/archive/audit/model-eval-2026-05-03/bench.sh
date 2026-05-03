@@ -114,13 +114,14 @@ EOF
 
 # hook_name | input_ext | timeout | num_predict | sys_var_name
 # Note: production commit-msg-check.sh sets no num_predict (Ollama default).
-# We use 512 here — enough for thinking models to reason AND emit the
-# 1-line answer. With 60 (initial choice) gpt-oss models exhausted budget
-# on .thinking and emitted empty .response (done_reason=length).
+# 4096 here gives thinking models room to reason AND emit the 1-line
+# answer. The earlier 512 cap had thinking models (qwen3.6, gemma4)
+# burning the whole budget on reasoning and producing empty .response
+# (done_reason=length).
 HOOKS=(
-  "commit-msg-check|subject|60|512|SYS_COMMIT_MSG"
+  "commit-msg-check|subject|60|4096|SYS_COMMIT_MSG"
   "summarize-diff|diff|600|2048|SYS_SUMMARIZE_DIFF"
-  "analyze-functionality|diff|600|8192|SYS_ANALYZE_FUNC"
+  "analyze-functionality|diff|600|16384|SYS_ANALYZE_FUNC"
 )
 
 warmup() {
