@@ -37,11 +37,25 @@ Ensure the following sections are included for review expert agents to evaluate.
 - **Requirements**: Functional and non-functional requirements
 - **Technical approach**: Technologies, architecture, and design decisions
 - **Contracts** (contract-first; replaces "implementation steps" by default):
+  - **Numbering**: every contract is assigned a stable ID — `C1`, `C2`, ..., `Cn` — at the time it is locked. IDs do not get reused if a contract is later removed; renumbering invalidates back-references in subsequent rounds and review artifacts. Findings, deviation log entries, manual-test references, and Phase 3 review comments cite contracts by ID, not by paraphrase.
   - **Function/module signatures**: name, parameter types, return type, error type — no body
   - **Invariants**: properties that must hold across the change (e.g., "every write to table X passes through helper Y", "no nested transaction on raw client", "rate-limit middleware applied to every new route")
   - **Forbidden patterns**: grep-able regex or literal strings that MUST NOT appear in the diff. Phase 2-4 contract conformance grep keys off this list. Format each entry as: `pattern: <regex or literal> — reason: <one-line>`
   - **Acceptance criteria**: observable post-conditions per contract
   - **(Opt-in) Implementation sketch**: pseudo-code is permitted ONLY for genuinely novel algorithms whose correctness depends on body-level reasoning. The default is no body. Reviewers MUST NOT review pseudo-code as if it were code — flag pseudo-code-driven review loops (the "untreatable plan loop" pattern) and pivot to contract review
+- **Go/No-Go Gate** (mandatory tail section of every plan):
+  - Lists every contract by ID with a binary status: `locked` or `pending`.
+  - The plan does NOT transition to Phase 2 until every contract reads `locked` and all plan-review rounds have closed. A contract flips back to `pending` if a later round materially changes its signature, invariants, forbidden-pattern list, or acceptance criteria.
+  - Format:
+    ```
+    ## Go/No-Go Gate
+    | ID  | Subject                                    | Status |
+    |-----|--------------------------------------------|--------|
+    | C1  | <one-line subject>                         | locked |
+    | C2  | <one-line subject>                         | locked |
+    | ... |                                            |        |
+    ```
+  - Rationale: when contracts are paraphrased across rounds, drift accumulates and the plan loops on its own pseudo-code instead of converging. The gate forces explicit acknowledgement that every contract is in its final form before implementation begins, and gives Phase 2 / Phase 3 a stable reference surface for cross-checks.
 - **Testing strategy**: How to test
 - **Considerations & constraints**: Known risks, constraints, and out-of-scope items
 - **User operation scenarios**: Concrete usage scenarios with specific sites/forms/workflows to surface edge cases (e.g., form structure variations, input field conflicts, fallback paths)
@@ -118,6 +132,7 @@ Plan-specific obligations:
   - Grants must cover all implicit operations the application code performs — e.g., conflict-resolution clauses on writes may require read permission in addition to write, foreign-key validation may require read permission on the referenced table, row-level-security modes may add further requirements beyond the explicit statement (R14)
 - When the plan involves database migrations, explicitly check:
   - Database names, role names, hostnames, and other environment-dependent values must use dynamic resolution (e.g., `current_database()`, environment variables, or templating) — not hardcoded values that will fail in CI or other environments (R15)
+- **ORM type-shape spot-check** (Functionality expert obligation): when a contract or pseudo-code sketch references an ORM/query-builder write operation, verify the input type used matches the operation. ORMs commonly expose multiple input shapes that LOOK interchangeable but are not — illustrative examples (not exhaustive, not language-specific): single-row vs. bulk write methods often require different input types (relation-form vs. unchecked-form); update vs. upsert vs. create may diverge on which fields are nullable; method overloads selected by argument count change which fields are required. A pseudo-code snippet that compiles in the author's head but type-fails on the actual ORM contract leaks into Phase 2 as a guaranteed deviation. When a contract crosses an ORM boundary, the contract MUST name the input type explicitly (not just the method), and the plan reviewer MUST verify the named type exists in the ORM's surface for the chosen method. Treat undocumented input types as a Major finding — pseudo-code that the ORM will not accept is not a contract.
 - When the plan or existing docs cite an external standard (RFC, NIST SP, OWASP ASVS, OWASP cheat sheet, IETF BCP, W3C, FIPS, ISO/IEC), apply R29 (External spec citation accuracy) — see the table-row procedure for the four-step verification. Hallucinated or wrong-section citations are Major findings regardless of whether they affect runtime behavior, and Critical when they drive a security decision. Specifically check:
   - Standards with known renumbering between revisions (e.g., NIST SP 800-63B Rev 3 vs Rev 4; OWASP ASVS 4.0.3 vs 5.0)
   - Quoted phrases in backticks or quotes — must appear verbatim in the source

@@ -399,6 +399,24 @@ The orchestrator reviews and applies the drafted entry via the Edit tool. Set `$
 
 End the loop when all agents return "No findings", or the maximum of **10 rounds** is reached.
 
+**Tightening-only skip** (between the natural "no findings" stop and the 10-round cap): the orchestrator MAY skip the next round when ALL of the following hold for every Round-n new finding:
+
+1. The finding's location is inside the **prior round's fix scope** — the file and line range are within or immediately adjacent to changes from Round n-1's commit.
+2. The severity is **inline minor** — typo, comment / docstring wording, formatting, variable rename, dead-code removal, log message text. Anything that affects observable behavior is NOT inline minor.
+3. The finding does NOT touch a **security boundary** — the closed list mirrors R35 Tier-2: auth flow, authorization decision, cryptographic-material handling, session lifecycle, identity-broker / federation trust, key custody, zero-trust / service-mesh policy, webhook signing-key rotation, secrets handling, audit logging, rate-limiting / authentication-failure paths, input validation. Any finding inside this list forces Round n+1 even if the change appears trivial — security-boundary edits compose unexpectedly and the next round must verify the composition.
+
+When all three conditions hold for every new finding, the orchestrator MAY apply the inline minors directly and proceed to Step 3-9. Record the skip decision in the Resolution Status section as:
+
+```
+## Tightening-only skip — Round n
+Findings applied directly (no Round n+1 review):
+- [F-XX] [Minor] [problem summary] — [file:line] — applied verbatim
+- ...
+Justification: every finding scoped within Round n-1 fix range, inline minor, no security-boundary touch.
+```
+
+If ANY condition fails for ANY finding, return to Step 3-3 for a normal Round n+1.
+
 If the loop limit is reached with unresolved findings:
 ```
 === Review Loop Limit Reached (10 rounds) ===
