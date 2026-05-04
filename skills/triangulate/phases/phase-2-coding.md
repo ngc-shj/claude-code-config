@@ -151,6 +151,40 @@ fi
 #     [ -z "$hits" ] || { echo "Contract violation: $pattern"; echo "$hits"; exit 1; }
 #   done
 
+# 6. User feedback memory cross-check.
+# Per-project feedback memories live at ~/.claude/projects/<slug>/memory/feedback_*.md
+# where <slug> is the absolute repo path with `/` replaced by `-`. Each feedback
+# memory captures a rule the user has previously corrected the orchestrator on;
+# silently reapplying that mistake is a process failure that wastes review
+# attention re-litigating a settled call. Enumerate the feedback memories,
+# extract the rule from each, and verify the staged diff does not regress.
+PROJ_SLUG=$(pwd | sed 's|/|-|g')
+MEM_DIR="$HOME/.claude/projects/$PROJ_SLUG/memory"
+if [ -d "$MEM_DIR" ]; then
+  for f in "$MEM_DIR"/feedback_*.md; do
+    [ -f "$f" ] || continue
+    echo "=== $(basename "$f") ==="
+    cat "$f"
+    echo
+  done
+fi
+# For each feedback rule:
+#  (a) Read the rule body, especially the "Why:" and "How to apply:" lines
+#  (b) Derive the smallest concrete pattern that detects a regression
+#      (literal string, regex, or AST-equivalent grep)
+#  (c) Run `git diff main...HEAD | grep -nE '<pattern>'`; non-empty match
+#      means the user-corrected mistake was reapplied — fix in Phase 2
+# Disposition rules:
+#  - Direct hit (rule explicitly forbids the pattern that appears in diff): MUST fix
+#    in Phase 2; do NOT defer to Phase 3. The user already paid the correction
+#    cost once; re-paying it is a process failure.
+#  - Adjacent hit (rule's spirit applies but the pattern shape differs): record
+#    in the deviation log with explicit reasoning for why the orchestrator
+#    judged the rule does not apply. Reviewer can then evaluate the call.
+#  - No hit: continue. (No N/A reporting needed — clean state is the default.)
+# When the rule is non-grep-able (e.g., "always confirm before destructive
+# action"), the cross-check is a manual review obligation, not a script step.
+
 # Optional: draft the commit body via Ollama (subject line still hand-written).
 # git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
 
@@ -276,6 +310,7 @@ Tests: [pass/fail]
 Build: [pass/fail]
 R35 gate: [N/A — no deployment-artifact change / pass — manual-test.md present]
 Contract conformance: [pass — all forbidden patterns absent / fail — see findings]
+Memory cross-check: [N feedback rules enumerated, no regressions / N enumerated, M direct hits resolved / no memory dir]
 Self-R-check: [N rules fired, all resolved / clean]
 Deviations from plan: [yes/no] (log: ./docs/archive/review/[plan-name]-deviation.md)
 Next step: Proceeding to Phase 3 (Code Review)
