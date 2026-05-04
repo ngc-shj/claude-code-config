@@ -36,7 +36,12 @@ Ensure the following sections are included for review expert agents to evaluate.
 - **Objective**: What to achieve
 - **Requirements**: Functional and non-functional requirements
 - **Technical approach**: Technologies, architecture, and design decisions
-- **Implementation steps**: Concrete implementation steps (numbered)
+- **Contracts** (contract-first; replaces "implementation steps" by default):
+  - **Function/module signatures**: name, parameter types, return type, error type — no body
+  - **Invariants**: properties that must hold across the change (e.g., "every write to table X passes through helper Y", "no nested transaction on raw client", "rate-limit middleware applied to every new route")
+  - **Forbidden patterns**: grep-able regex or literal strings that MUST NOT appear in the diff. Phase 2-4 contract conformance grep keys off this list. Format each entry as: `pattern: <regex or literal> — reason: <one-line>`
+  - **Acceptance criteria**: observable post-conditions per contract
+  - **(Opt-in) Implementation sketch**: pseudo-code is permitted ONLY for genuinely novel algorithms whose correctness depends on body-level reasoning. The default is no body. Reviewers MUST NOT review pseudo-code as if it were code — flag pseudo-code-driven review loops (the "untreatable plan loop" pattern) and pivot to contract review
 - **Testing strategy**: How to test
 - **Considerations & constraints**: Known risks, constraints, and out-of-scope items
 - **User operation scenarios**: Concrete usage scenarios with specific sites/forms/workflows to surface edge cases (e.g., form structure variations, input field conflicts, fallback paths)
@@ -176,11 +181,13 @@ echo "TRI_DIR=$TRI_DIR"
 #   Write "<literal TRI_DIR>/sec-findings.txt"  ← Security expert output
 #   Write "<literal TRI_DIR>/test-findings.txt" ← Testing expert output
 cat "$TRI_DIR/func-findings.txt" "$TRI_DIR/sec-findings.txt" "$TRI_DIR/test-findings.txt" \
-  | bash ~/.claude/hooks/ollama-utils.sh merge-findings
+  | timeout 60 bash ~/.claude/hooks/ollama-utils.sh merge-findings
 bash ~/.claude/hooks/tri-tmpdir.sh cleanup "$TRI_DIR"
 ```
 
-If Ollama is unavailable, deduplicate manually as fallback:
+**Timeout policy**: the `merge-findings` call is wrapped in `timeout 60`. Ollama is a soft
+dependency; the skill MUST remain executable when it hangs or is unavailable. If `timeout`
+fires (exit code 124) OR Ollama is unavailable, deduplicate manually as fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 

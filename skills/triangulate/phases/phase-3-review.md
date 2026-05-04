@@ -75,10 +75,20 @@ Launch the same three roles in parallel as the plan review.
 
 **[Adjacent] tag obligation**: When an expert encounters an issue outside their scope but with potential impact, they MUST flag it using the format: `[Adjacent] Severity: Problem — this may overlap with [other expert]'s scope`. This is mandatory, not optional.
 
-**Round 1 (full review):**
+**Round 1 (incremental verification on top of Phase 2 self-R-check baseline):**
+
+Note: Phase 2 Step 2-5 already ran a focused R1-R36 (+ RS*/RT*) self-check. Round 1 here
+is therefore incremental verification on top of that baseline — surface novel findings
+outside the Recurring Issue Checklist, cross-cutting issues, and any R-rule miss the
+self-check pass overlooked. Do NOT redo the rote R-check pass that Phase 2 already
+performed; instead, verify Phase 2's `self-rcheck-*.txt` outputs are complete and look
+for issues those outputs missed.
+
 ```
 You are a [role name].
 Review the code on the current branch from a [perspective] perspective.
+Phase 2 already ran a focused R1-R36 self-check; treat this round as incremental
+verification, surfacing novel issues and any R-rule miss the self-check overlooked.
 
 Scope: [In-scope items for this expert]
 Out of scope: [Out-of-scope items for this expert]
@@ -247,10 +257,13 @@ First, save each agent's raw output to temporary files, then use local LLM for d
 #   Write "<literal TRI_DIR>/sec-findings.txt"  ← Security expert output
 #   Write "<literal TRI_DIR>/test-findings.txt" ← Testing expert output
 cat "$TRI_DIR/func-findings.txt" "$TRI_DIR/sec-findings.txt" "$TRI_DIR/test-findings.txt" \
-  | bash ~/.claude/hooks/ollama-utils.sh merge-findings
+  | timeout 60 bash ~/.claude/hooks/ollama-utils.sh merge-findings
 ```
 
-If Ollama is unavailable, consolidate and deduplicate manually (merge same underlying issue flagged by multiple agents).
+**Timeout policy**: the `merge-findings` call is wrapped in `timeout 60`. Ollama is a soft
+dependency; the skill MUST remain executable when it hangs or is unavailable. If `timeout`
+fires (exit code 124) OR Ollama is unavailable, consolidate and deduplicate manually
+(merge same underlying issue flagged by multiple agents).
 
 **Preserve Recurring Issue Check sections (mandatory)**: Same rule as Step 1-5 — each expert's `## Recurring Issue Check` block must survive deduplication and appear verbatim in the merged file. Return any expert output missing this section for revision before saving.
 

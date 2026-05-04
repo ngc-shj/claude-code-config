@@ -124,6 +124,33 @@ bash ~/.claude/hooks/check-migrations.sh
 # 3. Production build
 [build command]
 
+# 4. R35 mechanical gate (manual-test artifact for production-deployed components).
+# This was previously a manual review obligation; it is now a runnable gate.
+# Match the diff's changed files against the R35 deployment-artifact list. If
+# any match, presence of [plan-name]-manual-test.md becomes a Phase 2 completion
+# gate. The pattern list mirrors common-rules.md "Mechanical fire trigger"
+# under R35 — keep them in lockstep.
+R35_HITS=$(git diff --name-only main...HEAD | grep -E '(^|/)(Dockerfile|.*-compose\.ya?ml|.*\.tf|Chart\.yaml|templates/|.*\.idp\.ya?ml)$|/(deployment|statefulset|daemonset|cronjob|job|pod)\.ya?ml$|kustomization\.ya?ml$|cloudformation/|cdk/' || true)
+if [ -n "$R35_HITS" ]; then
+  test -f "./docs/archive/review/[plan-name]-manual-test.md" \
+    || { echo "R35 gate: deployment-artifact diff detected but [plan-name]-manual-test.md missing"; exit 1; }
+fi
+# The grep above is a starting filter, not exhaustive. Cross-check the diff
+# against the full R35 Tier-1 / Tier-2 list in common-rules.md; auth/authz/
+# crypto/session/IdP/mesh/webhook-signing changes are Tier-2 and the artifact
+# MUST include the Adversarial scenarios section.
+
+# 5. Contract conformance grep (item 4 from PR-A).
+# For each forbidden-pattern declared in the plan's "Contracts → Forbidden
+# patterns" section, grep the staged diff. The match set MUST be empty.
+# "Existing code already does this" is NOT a valid justification — contract
+# violations introduced into new code are findings regardless of precedent
+# in the surrounding codebase.
+#   for pattern in <forbidden patterns from plan>; do
+#     hits=$(git diff main...HEAD | grep -nE "$pattern" || true)
+#     [ -z "$hits" ] || { echo "Contract violation: $pattern"; echo "$hits"; exit 1; }
+#   done
+
 # Optional: draft the commit body via Ollama (subject line still hand-written).
 # git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
 
@@ -165,6 +192,81 @@ When the implementation includes tests that require external services (database,
 - If the local service is not running, start it first (e.g., `docker compose up -d db`)
 - A CI failure that could have been caught locally is a **process failure**, not a code failure
 
+**Clean-state verification before re-run (mandatory after integration-test failure)**:
+A failed integration test can leave dirty state (rows, locks, queue messages) that
+cascades into unrelated tests on the next run, producing a flood of false failures
+that mask the original bug. Before re-running, verify the test environment is in
+a clean baseline:
+- For DB-backed tests: assert the affected tenant's primary tables are empty,
+  OR run the project's documented reset command (`make db-reset`,
+  `pnpm test:db-reset`, etc.). If the project has no reset command, document
+  the manual TRUNCATE / equivalent steps used.
+- For queue/cache-backed tests: drain or flush the affected namespace.
+- Re-running on dirty state is a **process failure** equivalent to skipping the
+  failure: it converts a single root-cause bug into N collateral failures and
+  consumes triage time that should be spent on the actual cause.
+
+### Step 2-5: Self-R-Check (Mini Sub-agent Pass)
+
+Before declaring Phase 2 complete, run a focused R-check pass with the same three sub-agents used in Phase 3, but with a narrowed prompt that targets ONLY the Recurring Issue Checklist (R1-R36 + RS*/RT*). Phase 3's Round 1 historically surfaces a large number of findings because Phase 2 has not yet run any R-check — pulling the first R-check into Phase 2 lets Phase 3 act as incremental verification rather than first-pass discovery.
+
+Setup (per-run temp dir, same pattern as Step 1-5 / Step 3-2b):
+
+```bash
+TRI_DIR=$(bash ~/.claude/hooks/tri-tmpdir.sh create)
+: "${TRI_DIR:?tri-tmpdir create failed; cannot continue self-R-check}"
+echo "TRI_DIR=$TRI_DIR"
+# ORCHESTRATOR OBLIGATION: after each mini sub-agent returns, save its raw
+# output to the corresponding file using the Write tool, substituting the
+# LITERAL absolute path captured from TRI_DIR= above:
+#   Write "<literal TRI_DIR>/self-rcheck-func.txt"
+#   Write "<literal TRI_DIR>/self-rcheck-sec.txt"
+#   Write "<literal TRI_DIR>/self-rcheck-test.txt"
+```
+
+Mini-prompt template (launch three sub-agents in parallel):
+
+```
+You are a [role name] performing a focused self-check of the Phase 2 implementation
+against the Recurring Issue Checklist ONLY.
+
+Scope (rules to check):
+- Functionality expert: R1-R36
+- Security expert: R1-R36 + RS1-RS4
+- Testing expert: R1-R36 + RT1-RT3 (plus RT4 if defined in common-rules.md)
+
+Out of scope: novel findings outside the Recurring Issue Checklist — those are Phase 3's
+responsibility, not this self-check.
+
+Inputs:
+- Diff: `git diff main...HEAD`
+- Plan contracts (verbatim from the plan's Contracts section, including Forbidden patterns):
+  [paste]
+
+Requirements:
+- For each rule, run the targeted grep / read pattern specified in common-rules.md
+  ("Known Recurring Issue Checklist" row + "Extended obligations" procedure where
+  one exists). Do NOT read full files unless the targeted check is inconclusive.
+- Report rules that fire with: rule ID, file:line, evidence (grep hit), severity.
+- Conclude with one line listing rule IDs that were checked-and-clean.
+- If nothing fires, output exactly: `No findings`.
+```
+
+Merge and act on findings:
+
+```bash
+cat "$TRI_DIR/self-rcheck-func.txt" "$TRI_DIR/self-rcheck-sec.txt" "$TRI_DIR/self-rcheck-test.txt" \
+  | timeout 60 bash ~/.claude/hooks/ollama-utils.sh merge-findings
+bash ~/.claude/hooks/tri-tmpdir.sh cleanup "$TRI_DIR"
+```
+
+If `timeout` fires (exit code 124) or Ollama is unavailable, deduplicate manually.
+
+Disposition rules:
+- **Critical / Major fires**: fix in Phase 2 before proceeding. Do not defer to Phase 3.
+- **Minor fires**: fix if straightforward; otherwise record an Anti-Deferral entry in the deviation log and carry to Phase 3.
+- **No findings across all three**: Phase 2 is complete. Phase 3 Round 1 will operate as incremental verification on top of this baseline.
+
 Report to user when implementation is done:
 ```
 === Phase 2 Complete ===
@@ -172,6 +274,9 @@ Files implemented: [n]
 Lint: [pass/fail]
 Tests: [pass/fail]
 Build: [pass/fail]
+R35 gate: [N/A — no deployment-artifact change / pass — manual-test.md present]
+Contract conformance: [pass — all forbidden patterns absent / fail — see findings]
+Self-R-check: [N rules fired, all resolved / clean]
 Deviations from plan: [yes/no] (log: ./docs/archive/review/[plan-name]-deviation.md)
 Next step: Proceeding to Phase 3 (Code Review)
 ```
