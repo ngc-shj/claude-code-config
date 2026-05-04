@@ -330,11 +330,14 @@ Merge and act on findings:
 
 ```bash
 cat "$TRI_DIR/self-rcheck-func.txt" "$TRI_DIR/self-rcheck-sec.txt" "$TRI_DIR/self-rcheck-test.txt" \
-  | timeout 60 bash ~/.claude/hooks/ollama-utils.sh merge-findings
+  | bash ~/.claude/hooks/ollama-utils.sh merge-findings
 bash ~/.claude/hooks/tri-tmpdir.sh cleanup "$TRI_DIR"
 ```
 
-If `timeout` fires (exit code 124) or Ollama is unavailable, deduplicate manually.
+`merge-findings` enforces a 600 s internal timeout (curl `--max-time`); if Ollama is
+unavailable or the call exceeds that budget, the helper returns empty stdout with a
+stderr warning and the orchestrator deduplicates manually as fallback. Do NOT wrap the
+call in an outer `timeout` shorter than 600 s.
 
 Disposition rules:
 - **Critical / Major fires**: fix in Phase 2 before proceeding. Do not defer to Phase 3.

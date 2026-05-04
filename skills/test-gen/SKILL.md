@@ -129,13 +129,13 @@ Review generated tests for completeness:
 
 If gaps are found, delegate additional test generation to Sonnet.
 
-Before reporting completion, check migrations and run ALL three verification steps:
+Before reporting completion, check migrations and run ALL three verification steps, plus three cross-skill checks adapted from the triangulate skill (lessons from prior runs that surfaced regressions test-gen alone did not catch):
 
 ```bash
 # Check for pending migrations
 bash ~/.claude/hooks/check-migrations.sh
 
-# Run ALL three checks:
+# Run ALL three project-defined checks:
 # 1. Lint
 [lint command]
 
@@ -144,6 +144,54 @@ bash ~/.claude/hooks/check-migrations.sh
 
 # 3. Production build
 [build command]
+
+# 4. Production-code-untouched grep (test-gen specific contract).
+# test-gen is supposed to ADD tests, not modify production code. If the diff
+# touches files outside the test surface, the sub-agent likely violated the
+# "do not modify production code to make it easier to test" rule (Step 3
+# obligation #9). Adapt the path globs for the project's test naming conventions.
+PROD_DIFF=$(git diff main...HEAD --name-only \
+  | grep -vE '(^|/)(__tests__|tests|test|spec|specs)/|\.test\.|\.spec\.|_test\.|test_' || true)
+if [ -n "$PROD_DIFF" ]; then
+  echo "Production-code modifications detected outside test files:"
+  echo "$PROD_DIFF"
+  echo "Test-gen must not modify production code. Review and either (a) revert"
+  echo "the production changes, OR (b) document why the change is mandatory and"
+  echo "escalate to the user — generated tests should adapt to existing API,"
+  echo "not the other way around."
+fi
+
+# 5. CI gate parity. The local lint/test/build set may be a subset of what CI
+# runs. Extract every lint/check/verify command from the project's CI
+# configuration and run each locally before declaring the skill complete.
+# Surfacing a CI-only failure here costs one iteration; surfacing it after
+# push costs one push round plus triage time.
+while read -r cmd; do
+  [ -z "$cmd" ] && continue
+  echo "Running CI gate locally: $cmd"
+  eval "$cmd" || { echo "CI gate failed locally: $cmd"; exit 1; }
+done < <(bash ~/.claude/hooks/extract-ci-checks.sh)
+
+# 6. User feedback memory cross-check (same mechanism as triangulate Phase 2).
+# Per-project feedback memories at ~/.claude/projects/<slug>/memory/feedback_*.md
+# capture rules the user has previously corrected the orchestrator on; reapplying
+# the corrected mistake in generated tests wastes review attention re-litigating
+# a settled call. Sub-agents in Step 3 cannot see these memories — the orchestrator
+# must enumerate them and cross-check the generated test files before commit.
+PROJ_SLUG=$(pwd | sed 's|/|-|g')
+MEM_DIR="$HOME/.claude/projects/$PROJ_SLUG/memory"
+if [ -d "$MEM_DIR" ]; then
+  for f in "$MEM_DIR"/feedback_*.md; do
+    [ -f "$f" ] || continue
+    echo "=== $(basename "$f") ==="
+    cat "$f"
+    echo
+  done
+fi
+# For each feedback rule with a grep-able pattern, run
+# `git diff main...HEAD | grep -nE '<pattern>'`. Direct hits MUST be fixed in
+# this skill's session; do not defer to a later review. Non-grep-able rules are
+# manual review obligations.
 ```
 
 All must pass. Fix any failures before proceeding.
@@ -163,5 +211,8 @@ Test cases: [total]
 Tests passing: [n/total]
 Lint: [pass/fail]
 Build: [pass/fail]
+Production-code untouched: [confirmed / N file(s) outside test surface — see findings]
+CI gate parity: [N gates extracted, all pass locally / N extracted, M failed and resolved / no CI config detected]
+Memory cross-check: [N feedback rules enumerated, no regressions / N enumerated, M direct hits resolved / no memory dir]
 Coverage: [if measurable]
 ```

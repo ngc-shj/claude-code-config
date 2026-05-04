@@ -196,13 +196,17 @@ echo "TRI_DIR=$TRI_DIR"
 #   Write "<literal TRI_DIR>/sec-findings.txt"  ← Security expert output
 #   Write "<literal TRI_DIR>/test-findings.txt" ← Testing expert output
 cat "$TRI_DIR/func-findings.txt" "$TRI_DIR/sec-findings.txt" "$TRI_DIR/test-findings.txt" \
-  | timeout 60 bash ~/.claude/hooks/ollama-utils.sh merge-findings
+  | bash ~/.claude/hooks/ollama-utils.sh merge-findings
 bash ~/.claude/hooks/tri-tmpdir.sh cleanup "$TRI_DIR"
 ```
 
-**Timeout policy**: the `merge-findings` call is wrapped in `timeout 60`. Ollama is a soft
-dependency; the skill MUST remain executable when it hangs or is unavailable. If `timeout`
-fires (exit code 124) OR Ollama is unavailable, deduplicate manually as fallback:
+**Failure handling**: `merge-findings` enforces an internal **600 s** timeout via curl
+`--max-time` (see `cmd_merge_findings` in `hooks/ollama-utils.sh`). Ollama is a soft
+dependency — when unavailable or when the call exceeds that budget, the helper returns
+empty stdout with a stderr warning, and the orchestrator MUST deduplicate manually as
+fallback. Do NOT wrap the call in an additional outer `timeout` shorter than 600 s; that
+would kill legitimately-long large-model runs (gpt-oss:120b on a 50-finding aggregate
+routinely sits in the 90-300 s range). Manual fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
