@@ -21,6 +21,29 @@ mkdir -p ./docs/archive/review
 Process the three perspectives sequentially inline.
 Explain to the user that evaluation objectivity may be reduced.
 
+### Mid-Conversation Checkpoint Obligation
+
+Once the cumulative conversation context exceeds **~100K tokens**, the orchestrator MUST write a single-page state summary before the next non-trivial action (sub-agent launch, multi-file edit, commit, or sending a Phase round into review), then proceed FROM that summary as if it were the working context. This is a manual `/compact`-equivalent that forces re-grounding before context decay produces low-level reading-comprehension errors.
+
+Required summary contents:
+- **Current decision / round**: what the orchestrator is about to do next
+- **Open issues**: unresolved findings from this round, blocked items, things requiring user input
+- **Diff scope**: which files have been touched in this round (`git diff --stat main...HEAD`)
+- **Verified vs. unverified**: which contracts / R-rules have been confirmed clean and which are still pending
+
+Rationale: post-100K conversations have produced the following classes of careless mistake — none of which are subtle bugs, all of which are reading-comprehension failures:
+- Singular vs. plural identifier confusion (table names, field names, variable names)
+- Wrong prefix on string IDs / wrong type assumption on a value
+- Property access on a primitive-typed value (e.g., `.id` on a string)
+- Reverting test-verified configurations on review findings without re-verification
+
+The summary itself does NOT need to be a committed file — a structured orchestrator message is sufficient. The point is the act of re-grounding, not the artifact.
+
+When NOT required:
+- Trivial single-tool actions (one Read, one targeted grep, one status query)
+- The user has explicitly asked the orchestrator to skip the checkpoint for a specific action
+- The conversation just received a `/compact` and the next action begins from a fresh summary
+
 ### No Commits to main
 
 All commits must be made on the `[branch-name]` branch.
@@ -285,6 +308,7 @@ See "Extended obligations" below for full procedures on R17-R22 and R31-R35. R23
 | RT1 | Mock-reality divergence | Mock return values must match actual API response shapes | Critical |
 | RT2 | Testability verification | Before recommending "add test for X", confirm X is testable with the project's test infrastructure | — (reject finding if untestable) |
 | RT3 | Shared constant in tests | Test assertions using hardcoded values that should import from shared constants | Major |
+| RT4 | Race-test vacuous-pass guard | Race-style tests with cardinality assertions (e.g., "no double-success", "exactly K winners", "at most N successes") MUST additionally assert that **both branches of the contested outcome occurred at least once** during the test run. A test asserting `bothSucceeded === 0` without asserting `successes > 0` is vacuously satisfiable: if a setup misconfiguration causes every iteration to short-circuit (e.g., RLS denies all rows, lock is never contended, the contested resource never exists), the cardinality assertion still passes and the race-condition bug ships to production. **Required pattern** (illustrative — adapt assertion library to project): `expect(successes + failures).toBe(N)` (cardinality, existing) PLUS `expect(successes).toBeGreaterThan(0)` (race window opened) PLUS `expect(failures).toBeGreaterThan(0)` (contention occurred). The "guard" assertions name the precondition the cardinality assertion silently depends on; without them, a green test cannot distinguish "race correctly serialized" from "race never happened". Apply to: optimistic-locking tests, idempotency-key tests, distributed-lock tests, queue dedup tests, exclusive-write tests, leader-election tests, any test whose intent is "exactly one of N concurrent attempts wins". | Critical |
 
 ### Extended obligations
 
