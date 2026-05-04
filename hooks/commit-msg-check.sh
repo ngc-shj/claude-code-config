@@ -54,5 +54,10 @@ fi
 if echo "$REVIEW" | grep -qi '^OK'; then
   echo '{"decision": "approve"}'
 else
-  echo "{\"decision\": \"approve\", \"reason\": \"Commit message suggestion from local LLM: $REVIEW\"}"
+  # Encode $REVIEW via jq so quotes/backslashes/newlines from Ollama output
+  # cannot produce malformed JSON. Even though the decision stays "approve"
+  # either way, a fail-open harness on parse errors would silently drop the
+  # suggestion message — defensible to keep the output well-formed.
+  jq -nc --arg review "$REVIEW" \
+    '{decision: "approve", reason: "Commit message suggestion from local LLM: \($review)"}'
 fi
