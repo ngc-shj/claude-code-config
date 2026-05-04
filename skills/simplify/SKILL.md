@@ -167,13 +167,13 @@ Neither applies to the vast majority of findings. Before writing "deferred for f
 
 **Security carve-out**: when the proposal touches auth, crypto, input validation, permission grants, or other security-sensitive surfaces, even sub-30-minute fixes require completing the R3 propagation check (trace all affected paths, confirm no propagation gap) before applying. The 30-minute threshold collapses fix cost into "just do it" reasoning, which is dangerous when a single small change can introduce a vulnerability — security-adjacent edits must clear the impact-analysis bar in the same session, but never get rushed past it. (This is the same obligation as the R21 security carve-out in the triangulate skill.)
 
-After applying accepted changes, check migrations and run ALL three verification steps:
+After applying accepted changes, check migrations and run ALL three verification steps, plus two cross-skill checks adapted from the triangulate skill (lessons from prior runs that surfaced regressions lint/test/build alone did not catch):
 
 ```bash
 # Check for pending migrations
 bash ~/.claude/hooks/check-migrations.sh
 
-# Run ALL three checks:
+# Run ALL three project-defined checks:
 # 1. Lint
 [lint command]
 
@@ -182,6 +182,39 @@ bash ~/.claude/hooks/check-migrations.sh
 
 # 3. Production build
 [build command]
+
+# 4. CI gate parity. The local lint/test/build set may be a subset of what CI
+# runs. Refactors in particular tend to trip CI-only gates (allowlists,
+# rename-only checks, bypass-rls validators) that the local set does not
+# exercise. Extract every lint/check/verify command from the project's CI
+# configuration and run each locally before declaring the skill complete.
+while read -r cmd; do
+  [ -z "$cmd" ] && continue
+  echo "Running CI gate locally: $cmd"
+  eval "$cmd" || { echo "CI gate failed locally: $cmd"; exit 1; }
+done < <(bash ~/.claude/hooks/extract-ci-checks.sh)
+
+# 5. User feedback memory cross-check (same mechanism as triangulate Phase 2).
+# Per-project feedback memories at ~/.claude/projects/<slug>/memory/feedback_*.md
+# capture rules the user has previously corrected the orchestrator on; a
+# refactor that silently reapplies a corrected mistake (e.g., extracting back
+# a literal that the user previously asked to be a const-object) wastes review
+# attention re-litigating a settled call. Sub-agents in Step 3 cannot see
+# these memories — the orchestrator enumerates and cross-checks the diff
+# before commit.
+PROJ_SLUG=$(pwd | sed 's|/|-|g')
+MEM_DIR="$HOME/.claude/projects/$PROJ_SLUG/memory"
+if [ -d "$MEM_DIR" ]; then
+  for f in "$MEM_DIR"/feedback_*.md; do
+    [ -f "$f" ] || continue
+    echo "=== $(basename "$f") ==="
+    cat "$f"
+    echo
+  done
+fi
+# For each feedback rule with a grep-able pattern, run
+# `git diff main...HEAD | grep -nE '<pattern>'`. Direct hits MUST be reverted
+# or fixed in this skill's session; do not defer to a later review.
 ```
 
 All must pass. Fix any failures before proceeding.
@@ -213,4 +246,6 @@ Skipped: [n]
 Lint: [pass/fail]
 Tests: [pass/fail]
 Build: [pass/fail]
+CI gate parity: [N gates extracted, all pass locally / N extracted, M failed and resolved / no CI config detected]
+Memory cross-check: [N feedback rules enumerated, no regressions / N enumerated, M direct hits resolved / no memory dir]
 ```
