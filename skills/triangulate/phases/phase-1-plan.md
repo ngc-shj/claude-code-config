@@ -42,6 +42,13 @@ Ensure the following sections are included for review expert agents to evaluate.
   - **Invariants**: properties that must hold across the change (e.g., "every write to table X passes through helper Y", "no nested transaction on raw client", "rate-limit middleware applied to every new route")
   - **Forbidden patterns**: grep-able regex or literal strings that MUST NOT appear in the diff. Phase 2-4 contract conformance grep keys off this list. Format each entry as: `pattern: <regex or literal> — reason: <one-line>`
   - **Acceptance criteria**: observable post-conditions per contract
+  - **Consumer-flow walkthrough** (mandatory before any contract that defines an API response shape, persisted-state shape, message payload, event payload, or any other shape consumed by code outside the producer transitions to `locked`): a contract that "looks complete" from the producer side can still be unconsumable — the producer-side shape is correct and the consumer-side cannot make use of it because a field the consumer needs is absent (e.g., the consumer needs `entryId` to construct downstream URLs or to compute associated data; the locked shape only carries `attachmentIds`). To prevent this class of mid-implementation shape change:
+    1. Identify every consumer call site for the contract — client component, sibling route handler, audit/event handler, integration test, retry queue, any code that READS the contract's output.
+    2. For each consumer, write a one- to two-sentence walkthrough naming exactly which fields the consumer reads and what operation it performs on each. Format: `Consumer X (path: <file/route/component>) reads { fieldA, fieldB, fieldC } and uses fieldB to <derive Y / construct Z URL / verify signature against W>.`
+    3. If any consumer needs a field NOT in the locked shape, the contract is incomplete — extend it BEFORE the contract transitions to `locked` in the Go/No-Go gate. Do not defer to Phase 2 with a "we'll see during implementation" note; mid-implementation shape changes cascade through every other contract that references the changed field.
+    4. Persist the walkthroughs in the plan's Acceptance section under the contract ID, so Phase 2 sub-agents can verify their implementation matches the locked consumer expectation, and so Phase 3 reviewers can cross-check the walkthrough against the actual consumer code.
+
+    Plan reviewers MUST refuse to lock such a contract until every consumer walkthrough is present. The walkthrough catches the class of bug where the producer-side spec is internally consistent but the consumer-side cannot make use of it — a class that field-presence and forbidden-pattern grep cannot catch because both sides individually look correct.
   - **(Opt-in) Implementation sketch**: pseudo-code is permitted ONLY for genuinely novel algorithms whose correctness depends on body-level reasoning. The default is no body. Reviewers MUST NOT review pseudo-code as if it were code — flag pseudo-code-driven review loops (the "untreatable plan loop" pattern) and pivot to contract review
 - **Go/No-Go Gate** (mandatory tail section of every plan):
   - Lists every contract by ID with a binary status: `locked` or `pending`.
@@ -132,6 +139,7 @@ Plan-specific obligations:
   - Grants must cover all implicit operations the application code performs — e.g., conflict-resolution clauses on writes may require read permission in addition to write, foreign-key validation may require read permission on the referenced table, row-level-security modes may add further requirements beyond the explicit statement (R14)
 - When the plan involves database migrations, explicitly check:
   - Database names, role names, hostnames, and other environment-dependent values must use dynamic resolution (e.g., `current_database()`, environment variables, or templating) — not hardcoded values that will fail in CI or other environments (R15)
+- **Consumer-flow walkthrough enforcement** (Functionality expert obligation): for every contract that defines an API response shape, persisted-state shape, message payload, event payload, or any other shape consumed by code outside the producer, verify the contract has a per-consumer walkthrough as defined in Step 1-2 (Contracts → Consumer-flow walkthrough). For each consumer named in the walkthrough, verify the listed fields actually appear in the locked shape AND that any operation the consumer performs (URL construction, AAD computation, signature verification, idempotency-key derivation, etc.) is satisfiable from those fields alone. Missing walkthrough OR a walkthrough whose required fields are absent from the locked shape → Major finding; refuse to lock the contract until corrected. A contract that "looks complete on the producer side" but cannot be consumed downstream is the class of bug this check exists to surface.
 - **ORM type-shape spot-check** (Functionality expert obligation): when a contract or pseudo-code sketch references an ORM/query-builder write operation, verify the input type used matches the operation. ORMs commonly expose multiple input shapes that LOOK interchangeable but are not — illustrative examples (not exhaustive, not language-specific): single-row vs. bulk write methods often require different input types (relation-form vs. unchecked-form); update vs. upsert vs. create may diverge on which fields are nullable; method overloads selected by argument count change which fields are required. A pseudo-code snippet that compiles in the author's head but type-fails on the actual ORM contract leaks into Phase 2 as a guaranteed deviation. When a contract crosses an ORM boundary, the contract MUST name the input type explicitly (not just the method), and the plan reviewer MUST verify the named type exists in the ORM's surface for the chosen method. Treat undocumented input types as a Major finding — pseudo-code that the ORM will not accept is not a contract.
 - When the plan or existing docs cite an external standard (RFC, NIST SP, OWASP ASVS, OWASP cheat sheet, IETF BCP, W3C, FIPS, ISO/IEC), apply R29 (External spec citation accuracy) — see the table-row procedure for the four-step verification. Hallucinated or wrong-section citations are Major findings regardless of whether they affect runtime behavior, and Critical when they drive a security decision. Specifically check:
   - Standards with known renumbering between revisions (e.g., NIST SP 800-63B Rev 3 vs Rev 4; OWASP ASVS 4.0.3 vs 5.0)
@@ -210,7 +218,7 @@ routinely sits in the 90-300 s range). Manual fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R36 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R37 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -241,11 +249,11 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R36)
+- ... (R1-R37)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R36)
+- ... (R1-R37)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
@@ -253,11 +261,12 @@ Review round: [nth]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R36)
+- ... (R1-R37)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
 - RT4: [status]
+- RT5: [status]
 ```
 
 Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollama:

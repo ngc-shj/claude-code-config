@@ -33,23 +33,34 @@ This step prevents: using wrong constant values, missing fallback code paths, le
    - **Do not rely on privileged-role side-effects** in test assertions. A privileged/admin role in local dev may implicitly hold permissions that a minimal CI role does not (e.g., implicit access to referenced tables through foreign-key checks). Test assertions must match migration-defined grants only.
    - **Async-I/O upstream observation** (when a write reaches its terminal table only via a queue, outbox, stream, or other drainer process): tests MUST assert on the **upstream intermediate state** (the queue / outbox / stream backing table), NOT the drained terminal state — unless the project's CI explicitly runs the drainer process during test execution and that fact is documented in the project's test infrastructure docs. A test polling the terminal table without a running drainer hangs forever in CI; switching to upstream observation is not just faster, it is the only correct contract when the drainer is not part of the test process. If the test legitimately needs the terminal state (e.g., asserting end-to-end fan-out semantics), the test setup MUST start the drainer explicitly and tear it down after the assertion. "The drainer probably runs in CI" is not a documented guarantee.
 
-7. **CI gate enumeration** (mandatory before implementation): the local lint/test/build set is a subset of what CI will run. Phase 2-4 verification will only catch failures the local commands cover; CI-only gates will surface as a failed push round, costing an iteration. Enumerate every CI gate this PR can fire:
-   ```bash
-   # List every workflow/check script the diff's changed-file pattern can trigger.
-   # The path globs below are illustrative; adapt to the project's CI directory layout
-   # (GitHub Actions: .github/workflows/; GitLab: .gitlab-ci.yml; CircleCI: .circleci/;
-   # other tooling: scripts/checks/, ci/, etc.).
-   git diff --name-only main...HEAD | while read -r f; do
-     find .github/workflows/ scripts/checks/ ci/ -type f 2>/dev/null \
-       | xargs -I {} grep -l "$(basename "$f" | sed 's/\.[^.]*$//')" {} 2>/dev/null
-   done | sort -u
-   ```
-   For each hit:
-   - Read what the gate enforces.
-   - Verify the diff already satisfies it OR record what change is still needed.
-   - Append to the Implementation Checklist (step 5 above) so Phase 2-4 can re-verify.
+7. **CI gate parity diff** (mandatory before implementation): the local pre-PR/lint/test/build set is a subset of what CI will run. Phase 2-4 verification will only catch failures the local commands cover; CI-only gates will surface as a failed push round, costing an iteration. The cheapest catch is to run a parity diff between CI gates and the project's local pre-PR script BEFORE writing code, so any gap is either filled in pre-PR (preferred) or recorded as an explicit deferred-parity entry in the deviation log (acceptable only with an Anti-Deferral cost-justification — never silent).
 
-   Record gates that fire on **new files specifically** — these are easy to miss because the gate's pattern is `<all .ts under src/>` and a newly-introduced file silently joins the gate's input set without showing up in any existing reference.
+   Procedure (`extract-ci-checks.sh` is the same hook Phase 2-4 uses; pulling it into Phase 2-1 surfaces the gap before code is written, not after):
+   ```bash
+   # Extract every CI gate (one shell command per line) from the project's CI config.
+   bash ~/.claude/hooks/extract-ci-checks.sh > /tmp/ci-gates.txt
+
+   # Extract the local pre-PR command set. The project-specific script name varies —
+   # common locations: scripts/pre-pr.sh, scripts/check.sh, Makefile target, package.json
+   # script. Substitute the project's actual local pre-PR script path / target name.
+   # The grep pattern below is illustrative; adapt to the project's invocation idiom
+   # (e.g., `pnpm ...`, `make ...`, `bash scripts/checks/...`).
+   grep -hE '^[[:space:]]*(bash|pnpm|npm|yarn|make|run_step|check-)[[:space:]]' \
+     scripts/pre-pr.sh 2>/dev/null > /tmp/local-gates.txt \
+     || echo "(no local pre-PR script detected)" > /tmp/local-gates.txt
+
+   # Diff the two sets. Anything CI runs but the local pre-PR script does NOT
+   # is a parity gap — fix in Phase 2 or record in the deviation log.
+   diff /tmp/ci-gates.txt /tmp/local-gates.txt
+   ```
+   For each gate present in CI but missing from the local pre-PR script:
+   - **Preferred**: extend the local pre-PR script to run the gate. This closes the loop for every future PR, not just this one.
+   - **Acceptable (with Anti-Deferral entry)**: record a `Deferred parity gap: <gate command> — reason: <why it cannot run locally>` line in the deviation log. The reason must be concrete (e.g., "requires CI-only secret", "cross-platform check that needs CI's matrix"), not "did not have time".
+   - **Not acceptable**: silently leaving a CI-only gate in place. The next round's CI failure is then a process failure, not a code failure.
+
+   Append the result (gap list + chosen disposition for each) to the Implementation Checklist (step 5 above) so Phase 2-4 can re-verify after coding.
+
+   Record gates that fire on **new files specifically** — these are easy to miss because the gate's pattern is `<all .ts under src/>` and a newly-introduced file silently joins the gate's input set without showing up in any existing reference. The most common class of CI-only gate is a regex grep over the diff that has no equivalent in the local pre-PR script — e.g., a forbidden-pattern check, a basePath/import-shape check, a license-header check. These are the exact gaps this parity diff exists to surface.
 
 ### Step 2-2: Implementation (Delegate to Sonnet Sub-agents)
 
@@ -61,6 +72,10 @@ Split the plan's "Implementation steps" into independent batches and delegate to
    - The specific steps to implement
    - Any outputs from previous batches (for dependencies)
    - **The shared utility inventory from Step 2-1** (list of existing helpers, constants, and patterns that MUST be reused — sub-agents are prohibited from reimplementing these)
+   - **Fix-location disclosure obligation** (added to the sub-agent's prompt verbatim): for every code change the sub-agent applies, its report MUST state, per file changed:
+     - `<file path>` — `<production code | test code | fixture/helper | config>` — `<originally-requested implementation | side-fix discovered during verification | refactor not in plan>`
+
+     "Side-fix discovered during verification" covers Node.js / runtime gotchas the sub-agent hit while running tests (e.g., a `Buffer.buffer` shared-pool issue patched inside a test helper). The orchestrator's R21 spot-check skips files marked `test code` / `fixture/helper` for production-behavior verification, but reads the actual edit when the file is marked `production code`. Without this disclosure, R21 spot-checks misallocate attention — a test-only fix can read like a production-code change in the report's prose, costing one verification round.
 3. **Review**: After each batch completes, verify the output before proceeding to the next batch. Specifically check:
    - Did the sub-agent reuse existing shared utilities, or did it create new ones?
    - Did the sub-agent follow existing patterns, or did it invent a parallel approach?
@@ -282,7 +297,7 @@ a clean baseline:
 
 ### Step 2-5: Self-R-Check (Mini Sub-agent Pass)
 
-Before declaring Phase 2 complete, run a focused R-check pass with the same three sub-agents used in Phase 3, but with a narrowed prompt that targets ONLY the Recurring Issue Checklist (R1-R36 + RS*/RT*). Phase 3's Round 1 historically surfaces a large number of findings because Phase 2 has not yet run any R-check — pulling the first R-check into Phase 2 lets Phase 3 act as incremental verification rather than first-pass discovery.
+Before declaring Phase 2 complete, run a focused R-check pass with the same three sub-agents used in Phase 3, but with a narrowed prompt that targets ONLY the Recurring Issue Checklist (R1-R37 + RS*/RT*). Phase 3's Round 1 historically surfaces a large number of findings because Phase 2 has not yet run any R-check — pulling the first R-check into Phase 2 lets Phase 3 act as incremental verification rather than first-pass discovery.
 
 Setup (per-run temp dir, same pattern as Step 1-5 / Step 3-2b):
 
@@ -305,9 +320,9 @@ You are a [role name] performing a focused self-check of the Phase 2 implementat
 against the Recurring Issue Checklist ONLY.
 
 Scope (rules to check):
-- Functionality expert: R1-R36
-- Security expert: R1-R36 + RS1-RS4
-- Testing expert: R1-R36 + RT1-RT3 (plus RT4 if defined in common-rules.md)
+- Functionality expert: R1-R37
+- Security expert: R1-R37 + RS1-RS4
+- Testing expert: R1-R37 + RT1-RT5
 
 Out of scope: novel findings outside the Recurring Issue Checklist — those are Phase 3's
 responsibility, not this self-check.

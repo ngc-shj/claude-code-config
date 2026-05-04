@@ -77,7 +77,7 @@ Launch the same three roles in parallel as the plan review.
 
 **Round 1 (incremental verification on top of Phase 2 self-R-check baseline):**
 
-Note: Phase 2 Step 2-5 already ran a focused R1-R36 (+ RS*/RT*) self-check. Round 1 here
+Note: Phase 2 Step 2-5 already ran a focused R1-R37 (+ RS*/RT*) self-check. Round 1 here
 is therefore incremental verification on top of that baseline — surface novel findings
 outside the Recurring Issue Checklist, cross-cutting issues, and any R-rule miss the
 self-check pass overlooked. Do NOT redo the rote R-check pass that Phase 2 already
@@ -87,7 +87,7 @@ for issues those outputs missed.
 ```
 You are a [role name].
 Review the code on the current branch from a [perspective] perspective.
-Phase 2 already ran a focused R1-R36 self-check; treat this round as incremental
+Phase 2 already ran a focused R1-R37 self-check; treat this round as incremental
 verification, surfacing novel issues and any R-rule miss the self-check overlooked.
 
 Scope: [In-scope items for this expert]
@@ -111,7 +111,7 @@ Ollama seed findings (your perspective only — verify each, do not re-report as
      Insert: "Seed unavailable or truncated — perform full-diff review. Read `git diff main...HEAD` directly for this perspective."
 
  (b) File ends with sentinel AND contains exactly `No findings` followed by the sentinel:
-     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R36 Recurring Issue Check using targeted greps."
+     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R37 Recurring Issue Check using targeted greps."
 
  (c) File ends with sentinel AND contains finding entries:
      Insert the finding entries verbatim (stripping only the trailing `## END-OF-ANALYSIS` line).
@@ -124,7 +124,7 @@ Seed trust advisory (MANDATORY):
 Verification contract (MANDATORY):
 - For each seed finding, run targeted verification: `grep -n <symbol> <file>` or `Read <file>` with `offset`/`limit` scoped to the reported line range (±20 lines context). Do NOT read entire files.
 - Accept only seed findings you independently verify. Reject and note any seed finding that does not reproduce.
-- After processing seeds, perform your R1-R36 Recurring Issue Check using targeted greps (not full-file reads) to catch patterns the seed missed.
+- After processing seeds, perform your R1-R37 Recurring Issue Check using targeted greps (not full-file reads) to catch patterns the seed missed.
 - You MAY read a full file only when the seed is empty OR when targeted verification is inconclusive; record the file+reason in your output.
 
 Seed Finding Disposition section (MANDATORY — addresses audit gap):
@@ -299,11 +299,11 @@ Review round: [nth]
 ## Recurring Issue Check
 ### Functionality expert
 - R1: [status]
-- ... (R1-R36)
+- ... (R1-R37)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R36)
+- ... (R1-R37)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
@@ -311,11 +311,12 @@ Review round: [nth]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R36)
+- ... (R1-R37)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
 - RT4: [status]
+- RT5: [status]
 
 ## Resolution Status
 [Updated after fixes]
