@@ -9,16 +9,31 @@ Before writing any code, perform the following impact analysis:
 1. **Enumerate all code paths**: grep for the target identifiers (e.g., function names, API endpoint paths, message types, and file name patterns) to identify every location that will need changes
 2. **Check for duplicate implementations**: Verify there are no parallel implementations of the same feature (e.g., `.js` and `.ts` versions, direct and message-based paths, primary and fallback paths)
 3. **Read related type definitions and constants**: Confirm actual enum values, type shapes, and constant definitions before using them in implementation
-4. **Inventory reusable code**: Run the shared utility scanner, then supplement with manual search:
+4. **Inventory reusable code**: Run two complementary scanners, then supplement with manual search.
+
+   **(a) Structural inventory** — every export from `lib/` `utils/` `shared/` etc., grouped by module. Broad, not frequency-ranked.
+
    ```bash
    INVENTORY=$(mktemp /tmp/shared-utils-inventory.XXXXXX)
    bash ~/.claude/hooks/scan-shared-utils.sh > "$INVENTORY"
    ```
-   Review the output and add any additional findings:
+
+   **(b) Usage-frequency fingerprint** — top-N high-frequency numeric literals, string literals, and import-counted exports across the whole codebase. Cached per project (cold ~10s, cache-hit ~0.2s). The fingerprint surfaces R1/R2 anchors mechanically: anything appearing here is *known* to be established as a shared asset, so reimplementing or hardcoding the same value duplicates a working pattern.
+
+   ```bash
+   FINGERPRINT=$(mktemp /tmp/codebase-fingerprint.XXXXXX)
+   bash ~/.claude/hooks/build-codebase-fingerprint.sh > "$FINGERPRINT"
+   ```
+
+   Review both outputs and add any additional findings:
    - Shared helper functions (e.g., rate limiters, encoders/decoders, URL builders)
    - Shared constants and validation schemas (e.g., constants modules, validation config)
    - Existing patterns for event dispatch, error handling, and DB transactions
+   - High-frequency literals (numeric / string) from the fingerprint that belong in a shared constant — flag as **R2 candidates** if the diff would add another duplicate site
+   - High-usage exported symbols from the fingerprint overlapping with code about to be written — flag as **R1 candidates** (reuse the existing helper rather than reimplementing)
    - Record each as: `[file:line] [function/constant name] — [what it does]`
+
+   **Fingerprint scope note**: the script currently covers TS/JS/TSX/JSX/MJS source files. For other languages the sections come back empty — fall back to scan-shared-utils.sh's structural inventory and manual search.
 5. **Append checklist to plan**: Record the results as a checklist in `./docs/archive/review/[plan-name]-plan.md` under a new "## Implementation Checklist" section, listing:
    - Every file and location that must be modified
    - Every shared utility that must be reused (from step 4)
