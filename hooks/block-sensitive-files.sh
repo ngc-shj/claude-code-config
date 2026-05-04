@@ -15,10 +15,20 @@ fi
 
 BASENAME=$(basename "$FILE_PATH")
 
+# Emit a block decision with the reason JSON-encoded by jq. Direct shell
+# interpolation of `$BASENAME` into the reason string is unsafe: a crafted
+# tool_input.file_path containing `"` characters produces malformed JSON,
+# and a fail-open harness would then bypass this hook entirely. Mirrors the
+# pattern used by the other block-*.sh hooks in this directory.
+emit_block() {
+  local reason="$1"
+  printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$reason" | jq -Rs .)"
+}
+
 # Block patterns
 case "$BASENAME" in
   .env|.env.local|.env.production|.env.staging)
-    echo '{"decision": "block", "reason": "Blocked: editing environment file '"$BASENAME"' which may contain secrets"}'
+    emit_block "Blocked: editing environment file ${BASENAME} which may contain secrets"
     exit 0
     ;;
   .env.*)
@@ -27,15 +37,15 @@ case "$BASENAME" in
       echo '{"decision": "approve"}'
       exit 0
     fi
-    echo '{"decision": "block", "reason": "Blocked: editing environment file '"$BASENAME"' which may contain secrets"}'
+    emit_block "Blocked: editing environment file ${BASENAME} which may contain secrets"
     exit 0
     ;;
   credentials.json|secrets.yaml|secrets.yml|*.pem|*.key|id_rsa|id_ed25519)
-    echo '{"decision": "block", "reason": "Blocked: editing credential/key file '"$BASENAME"'"}'
+    emit_block "Blocked: editing credential/key file ${BASENAME}"
     exit 0
     ;;
   package-lock.json|yarn.lock|pnpm-lock.yaml|Cargo.lock|poetry.lock|Pipfile.lock|bun.lock)
-    echo '{"decision": "block", "reason": "Blocked: lock files should only be modified by package managers, not edited directly"}'
+    emit_block "Blocked: lock files should only be modified by package managers, not edited directly"
     exit 0
     ;;
 esac
@@ -43,7 +53,7 @@ esac
 # Block .git internals
 case "$FILE_PATH" in
   */.git/*|.git/*)
-    echo '{"decision": "block", "reason": "Blocked: editing git internals is dangerous"}'
+    emit_block "Blocked: editing git internals is dangerous"
     exit 0
     ;;
 esac
@@ -62,11 +72,11 @@ esac
 # canonical override workflow.
 case "$FILE_PATH" in
   "$HOME/.claude/hooks/"*.sh|"$HOME/.claude/settings.json"|"$HOME/.claude/CLAUDE.md")
-    echo '{"decision": "block", "reason": "Blocked: editing harness config under ~/.claude/ directly. The repo claude-code-config is the source of truth — edit there and run `bash ./install.sh`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."}'
+    emit_block "Blocked: editing harness config under ~/.claude/ directly. The repo claude-code-config is the source of truth — edit there and run \`bash ./install.sh\`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."
     exit 0
     ;;
   "~/.claude/hooks/"*.sh|"~/.claude/settings.json"|"~/.claude/CLAUDE.md")
-    echo '{"decision": "block", "reason": "Blocked: editing harness config under ~/.claude/ directly. Edit the repo claude-code-config and run `bash ./install.sh`. Use ~/.claude/settings.local.json for local overrides."}'
+    emit_block "Blocked: editing harness config under ~/.claude/ directly. Edit the repo claude-code-config and run \`bash ./install.sh\`. Use ~/.claude/settings.local.json for local overrides."
     exit 0
     ;;
 esac
