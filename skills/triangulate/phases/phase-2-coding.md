@@ -31,6 +31,25 @@ This step prevents: using wrong constant values, missing fallback code paths, le
    - **Query the live storage engine** for the exact permission/privilege set before writing assertion tests, using whatever catalog/introspection mechanism the engine provides. The mechanism varies — SQL engines expose `information_schema` views or vendor commands like `SHOW GRANTS`; document/key-value stores expose connection-status or admin commands; cloud-managed storage exposes IAM-policy queries. The list is illustrative, not exhaustive — for any other engine, consult its documentation for the equivalent introspection surface. Do not infer from documentation alone — verify against the running instance.
    - **Verify every required column** for every write statement by reading the schema definition, not guessing. Conditional required-column constraints (e.g., a predicate constraint that requires column X only in certain states) are typically invisible to the ORM.
    - **Do not rely on privileged-role side-effects** in test assertions. A privileged/admin role in local dev may implicitly hold permissions that a minimal CI role does not (e.g., implicit access to referenced tables through foreign-key checks). Test assertions must match migration-defined grants only.
+   - **Async-I/O upstream observation** (when a write reaches its terminal table only via a queue, outbox, stream, or other drainer process): tests MUST assert on the **upstream intermediate state** (the queue / outbox / stream backing table), NOT the drained terminal state — unless the project's CI explicitly runs the drainer process during test execution and that fact is documented in the project's test infrastructure docs. A test polling the terminal table without a running drainer hangs forever in CI; switching to upstream observation is not just faster, it is the only correct contract when the drainer is not part of the test process. If the test legitimately needs the terminal state (e.g., asserting end-to-end fan-out semantics), the test setup MUST start the drainer explicitly and tear it down after the assertion. "The drainer probably runs in CI" is not a documented guarantee.
+
+7. **CI gate enumeration** (mandatory before implementation): the local lint/test/build set is a subset of what CI will run. Phase 2-4 verification will only catch failures the local commands cover; CI-only gates will surface as a failed push round, costing an iteration. Enumerate every CI gate this PR can fire:
+   ```bash
+   # List every workflow/check script the diff's changed-file pattern can trigger.
+   # The path globs below are illustrative; adapt to the project's CI directory layout
+   # (GitHub Actions: .github/workflows/; GitLab: .gitlab-ci.yml; CircleCI: .circleci/;
+   # other tooling: scripts/checks/, ci/, etc.).
+   git diff --name-only main...HEAD | while read -r f; do
+     find .github/workflows/ scripts/checks/ ci/ -type f 2>/dev/null \
+       | xargs -I {} grep -l "$(basename "$f" | sed 's/\.[^.]*$//')" {} 2>/dev/null
+   done | sort -u
+   ```
+   For each hit:
+   - Read what the gate enforces.
+   - Verify the diff already satisfies it OR record what change is still needed.
+   - Append to the Implementation Checklist (step 5 above) so Phase 2-4 can re-verify.
+
+   Record gates that fire on **new files specifically** — these are easy to miss because the gate's pattern is `<all .ts under src/>` and a newly-introduced file silently joins the gate's input set without showing up in any existing reference.
 
 ### Step 2-2: Implementation (Delegate to Sonnet Sub-agents)
 
@@ -151,7 +170,28 @@ fi
 #     [ -z "$hits" ] || { echo "Contract violation: $pattern"; echo "$hits"; exit 1; }
 #   done
 
-# 6. User feedback memory cross-check.
+# 6. CI gate parity check (closes the local-vs-CI gap).
+# The local lint/test/build above is a subset of what CI runs. Extract every
+# lint/check/verify command from the project's CI configuration and run each
+# locally before declaring Phase 2 complete. Surfacing a CI-only failure here
+# costs one iteration; surfacing it after push costs one push round plus the
+# triage time to reproduce.
+# Process substitution (not a pipe) so that `exit 1` propagates from the
+# orchestrator's surrounding script — `cmd | while ... done` runs the loop
+# in a subshell and `exit 1` exits only that subshell.
+while read -r cmd; do
+  [ -z "$cmd" ] && continue
+  echo "Running CI gate locally: $cmd"
+  eval "$cmd" || { echo "CI gate failed locally: $cmd"; exit 1; }
+done < <(bash ~/.claude/hooks/extract-ci-checks.sh)
+# The extractor ships with the skill; it parses GitHub Actions workflows
+# (.github/workflows/*.yml) using grep + sed (no yq / python-yaml dependency)
+# and emits one shell command per line. Adapt for non-GitHub CI by extending
+# the extractor — the helper is opinionated about GitHub Actions because that
+# is what most projects use, but the Phase 2-4 contract (every CI gate runs
+# locally before declaring done) is platform-agnostic.
+
+# 7. User feedback memory cross-check.
 # Per-project feedback memories live at ~/.claude/projects/<slug>/memory/feedback_*.md
 # where <slug> is the absolute repo path with `/` replaced by `-`. Each feedback
 # memory captures a rule the user has previously corrected the orchestrator on;
@@ -310,6 +350,7 @@ Tests: [pass/fail]
 Build: [pass/fail]
 R35 gate: [N/A — no deployment-artifact change / pass — manual-test.md present]
 Contract conformance: [pass — all forbidden patterns absent / fail — see findings]
+CI gate parity: [N gates extracted, all pass locally / N extracted, M failed and resolved / no CI config detected]
 Memory cross-check: [N feedback rules enumerated, no regressions / N enumerated, M direct hits resolved / no memory dir]
 Self-R-check: [N rules fired, all resolved / clean]
 Deviations from plan: [yes/no] (log: ./docs/archive/review/[plan-name]-deviation.md)
