@@ -238,6 +238,7 @@ Review round: [nth]
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
+- RT4: [status]
 ```
 
 Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollama:

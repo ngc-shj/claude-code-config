@@ -311,6 +311,7 @@ Review round: [nth]
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
+- RT4: [status]
 
 ## Resolution Status
 [Updated after fixes]
