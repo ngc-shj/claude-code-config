@@ -72,7 +72,8 @@ SUPPRESS_RE='(eslint-disable(-next-line)?|@ts-(ignore|expect-error|nocheck)|# *t
 JUST_RE='(https?://|github\.com|gitlab\.com|jira|#[0-9]+|fixed in|until v|because|due to|false positive|\bFP\b|upstream|intentional|workaround|TODO\([A-Za-z]+\)|see )'
 
 SOURCE_EXT_RE='\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|kts|scala|cs|fs|vb|swift|m|mm|c|h|hpp|hxx|cpp|cc|cxx|php|pl|pm|ex|exs|erl|hrl|elm|clj|cljs|cljc|edn|lua|sh|bash|zsh|fish|graphql|gql)$'
-EXCLUDE_PATH_RE='^(prisma/migrations/|migrations/|db/migrations/|vendor/|node_modules/|.+\.generated\.|.+_generated\.|.+\.gen\.)'
+EXCLUDE_PATH_RE='^(.+/)?(migrations?/|migrate/|versions/|vendor/|node_modules/)|.+\.generated\.|.+_generated\.|.+\.gen\.'
+[ -n "${EXTRA_EXCLUDE_PATH_RE:-}" ] && EXCLUDE_PATH_RE="${EXCLUDE_PATH_RE}|${EXTRA_EXCLUDE_PATH_RE}"
 
 ADDED="$_CSP_TMPDIR/added.tsv"
 git diff "$BASE_REF...HEAD" --unified=0 2>/dev/null \
