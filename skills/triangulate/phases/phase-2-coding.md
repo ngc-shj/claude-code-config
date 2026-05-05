@@ -320,6 +320,14 @@ Before declaring Phase 2 complete, run a focused R-check pass with the same thre
 
 **Pre-step: mechanical R2 / RT3 hardcoded-reuse check**. Run `bash ~/.claude/hooks/check-hardcoded-reuse.sh [base-ref]` alongside the propagation and deployment-artifact checks. The hook indexes module-level `const NAME = literal` declarations across unchanged source files and cross-references diff `+` lines for hardcoded values that match an existing constant. String matches surface as Major (precise), numeric matches as Minor (small numbers collide easily). When the hook flags a value, replace the hardcoded literal with an import of the named constant before the sub-agent pass — front-loads the easy R2 / RT3 wins so sub-agents focus on R2 cases the regex tool cannot detect (computed expressions, semantically-equivalent-but-syntactically-different values).
 
+**Pre-step: mechanical RS1 / R30 / R36 line-pattern checks**. Three additional hooks scan diff `+` lines for single-line anti-patterns that don't need codebase context:
+
+- `bash ~/.claude/hooks/check-timing-safe.sh [base-ref]` — RS1. Credential / token / hash compared with `===` / `!==` instead of `timingSafeEqual`. Critical severity.
+- `bash ~/.claude/hooks/check-markdown-autolinks.sh [base-ref]` — R30. Bare `#<num>` / `@<name>` / commit-SHA-shaped hex in markdown that GFM will autolink unintentionally. Minor severity.
+- `bash ~/.claude/hooks/check-suppression.sh [base-ref]` — R36. `eslint-disable` / `@ts-ignore` / `# noqa` / etc. without a written justification on the same line. Major severity.
+
+Each is a few seconds and runs independently. Address findings before the sub-agent pass so they don't surface as Round-1 review noise.
+
 Setup (per-run temp dir, same pattern as Step 1-5 / Step 3-2b):
 
 ```bash
