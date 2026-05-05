@@ -475,6 +475,111 @@ extract_imports() {
   done
 }
 
+# --- Signal helpers (path / git age / docstring / re-export depth) ---
+# These augment the symbol section's raw file-count with confidence-weighting
+# flags. None of them filter or re-rank — they surface as a `[signals]`
+# suffix so the user can audit why a symbol scored as it did.
+
+# Path category: HIGH-confidence shared dirs vs framework-route penalties.
+# Returns 'lib' | 'route' | '' on stdout.
+_signal_path_category() {
+  case "$1" in
+    */lib/*|*/utils/*|*/shared/*|*/common/*|*/helpers/*|*/core/*|*/internal/*|*/pkg/*) echo 'lib' ;;
+    */app/*|*/pages/*|*/routes/*) echo 'route' ;;
+  esac
+}
+
+# Git age and last-touched recency. Returns 'Nmo' (months since first commit
+# in this repo). 'stale' is appended when the file hasn't been modified in
+# over a year. We deliberately do NOT classify "new" / "stable" — any
+# absolute threshold misleads when the repo has been rebased or squashed
+# recently (every file looks young against the new root commit). The raw
+# month count lets the user compare files relative to each other.
+# When git is unavailable or the file is not tracked, returns empty.
+_signal_git_age() {
+  local file="$1"
+  local first last now diff_first diff_last age_mo
+  first=$(git log --reverse --format=%ct -- "$file" 2>/dev/null | head -1)
+  last=$(git log -1 --format=%ct -- "$file" 2>/dev/null)
+  [ -z "$first" ] || [ -z "$last" ] && return 0
+  now=$(date +%s)
+  diff_first=$(( (now - first) / 86400 ))     # days since first commit
+  diff_last=$(( (now - last) / 86400 ))       # days since last commit
+  age_mo=$(( diff_first / 30 ))
+  if [ "$diff_last" -gt 365 ]; then
+    echo "${age_mo}mo stale"
+  else
+    echo "${age_mo}mo"
+  fi
+}
+
+# Docstring/JSDoc presence in the 5 lines preceding the export line. Returns
+# 'doc' if any of these patterns appear: TS/JS JSDoc closer `*/`, Python
+# triple-quoted opener/closer `"""` or `'''`. The look-back window is small
+# enough that block-comments unrelated to the export rarely match.
+_signal_has_docstring() {
+  local file="$1" lineno="$2"
+  [ -z "$lineno" ] && return 0
+  local start=$(( lineno - 5 ))
+  [ "$start" -lt 1 ] && start=1
+  local end=$(( lineno - 1 ))
+  [ "$end" -lt "$start" ] && return 0
+  # Match TS/JS JSDoc closer `*/` or Python triple-double-quotes `"""`. We
+  # deliberately don't try to detect Python triple-single-quotes `'''` —
+  # they're rare in practice and the bash quoting cost is not worth the
+  # marginal coverage.
+  if sed -n "${start},${end}p" "$file" 2>/dev/null \
+      | grep -qE '\*/|"""'; then
+    echo 'doc'
+  fi
+}
+
+# Re-export depth: count distinct files that contain `export { NAME ... } from`.
+# A symbol re-exported through 3+ barrels is intentionally curated public API
+# — a stronger R1 anchor than direct usage alone. Output: NAME<TAB>count
+# rows (one per re-exported symbol). Sourced from the file list after the
+# files have already been filtered for tests/excludes — re-exports inside
+# test files would not count even if they existed.
+_compute_reexport_depths() {
+  local files_list="$1"
+  local tmp_filtered
+  tmp_filtered=$(mktemp)
+  _filter_files_by_ext "$files_list" ts tsx js jsx mjs > "$tmp_filtered"
+  if [ ! -s "$tmp_filtered" ]; then rm -f "$tmp_filtered"; return 0; fi
+  local sed_collapse=':a; /^[[:space:]]*export[[:space:]]+(type[[:space:]]+)?\{[^}]*$/{ N; ba; }; s/\n/ /g'
+  while IFS= read -r f; do
+    sed -E "$sed_collapse" "$f" 2>/dev/null \
+      | grep -E '^[[:space:]]*export[[:space:]]+(type[[:space:]]+)?\{[^}]+\}[[:space:]]+from' \
+      | sed "s|^|${f}:|"
+  done < "$tmp_filtered" \
+    | awk -F: '
+      {
+        idx = index($0, ":")
+        if (idx == 0) next
+        file = substr($0, 1, idx - 1)
+        content = substr($0, idx + 1)
+        sub(/^[[:space:]]*export[[:space:]]+/, "", content)
+        sub(/^type[[:space:]]+/, "", content)
+        if (match(content, /\{[^}]+\}/)) {
+          body = substr(content, RSTART + 1, RLENGTH - 2)
+          n = split(body, parts, /,/)
+          for (i = 1; i <= n; i++) {
+            s = parts[i]
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+            sub(/^type[[:space:]]+/, "", s)
+            sub(/[[:space:]]+as[[:space:]]+[A-Za-z_][A-Za-z0-9_]*$/, "", s)
+            if (s ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
+              key = s SUBSEP file
+              if (!(key in seen)) { seen[key] = 1; count[s]++ }
+            }
+          }
+        }
+      }
+      END { for (s in count) print s "\t" count[s] }
+    '
+  rm -f "$tmp_filtered"
+}
+
 count_symbol_usage() {
   local symbols_tsv="$1"
   local files_list="$2"
@@ -482,11 +587,14 @@ count_symbol_usage() {
   [ ! -s "$symbols_tsv" ] && { echo "(no exports found)"; return; }
 
   # Build (file, imported_name) pairs across the codebase, deduplicate.
-  local tmp_pairs
+  local tmp_pairs tmp_counts tmp_reexport
   tmp_pairs=$(mktemp)
+  tmp_counts=$(mktemp)
+  tmp_reexport=$(mktemp)
   extract_imports "$files_list" \
     | awk -F'\t' '!seen[$1 SUBSEP $2]++' > "$tmp_pairs"
 
+  # Aggregate raw counts per symbol.
   awk -F'\t' '
     NR == FNR { def_file[$1] = $2; next }
     {
@@ -501,17 +609,42 @@ count_symbol_usage() {
       for (s in count) print count[s] "\t" s "\t" def_file[s]
     }
   ' "$symbols_tsv" "$tmp_pairs" \
-    | sort -t$'\t' -k1,1 -rn \
-    | awk -F'\t' -v min="$SYMBOL_MIN_USAGE" -v top="$TOP_N" '
-        $1 >= min { n++; if (n > top) exit; printf "  %-7d  %-40s  %s\n", $1, $2, $3 }'
-  rm -f "$tmp_pairs"
+    | sort -t$'\t' -k1,1 -rn > "$tmp_counts"
+
+  # Pre-compute re-export depths once (codebase-wide grep).
+  _compute_reexport_depths "$files_list" > "$tmp_reexport"
+
+  # Enrich the top-N rows with signals. Non-top rows skip the per-symbol
+  # work entirely so signal computation cost scales with TOP_N, not with
+  # the full export universe.
+  awk -F'\t' -v min="$SYMBOL_MIN_USAGE" -v top="$TOP_N" '
+      $1 >= min { n++; if (n > top) exit; print }' "$tmp_counts" \
+    | while IFS=$'\t' read -r count name def_loc; do
+        local file_only="${def_loc%:*}"
+        local lineno="${def_loc##*:}"
+        local sig path_sig stab_sig doc_sig reexport_sig signals=""
+        path_sig=$(_signal_path_category "$file_only")
+        stab_sig=$(_signal_git_age "$file_only")
+        doc_sig=$(_signal_has_docstring "$file_only" "$lineno")
+        local reexport_count
+        reexport_count=$(awk -F'\t' -v n="$name" '$1 == n { print $2; exit }' "$tmp_reexport")
+        [ -n "$reexport_count" ] && [ "$reexport_count" -gt 0 ] && reexport_sig="R${reexport_count}"
+        for sig in "$path_sig" "$doc_sig" "$stab_sig" "${reexport_sig:-}"; do
+          [ -n "$sig" ] && signals="${signals:+${signals} }${sig}"
+        done
+        printf '  %-7d  %-40s  %-50s  [%s]\n' "$count" "$name" "$def_loc" "$signals"
+      done
+
+  rm -f "$tmp_pairs" "$tmp_counts" "$tmp_reexport"
 }
 
 emit_symbol_section() {
   echo "## Top exported symbols by file-usage (>=$SYMBOL_MIN_USAGE files)"
   echo ""
-  printf '  %-7s  %-40s  %s\n' "Files" "Symbol" "Defined at"
-  printf '  %-7s  %-40s  %s\n' "-----" "------" "----------"
+  echo "Signals: lib=under shared dir / route=under app|pages|routes / doc=has JSDoc or docstring / Nmo=age in months (relative; squash-merged repos compress) / stale=untouched >365d / Rn=re-exported by n barrel files"
+  echo ""
+  printf '  %-7s  %-40s  %-50s  %s\n' "Files" "Symbol" "Defined at" "Signals"
+  printf '  %-7s  %-40s  %-50s  %s\n' "-----" "------" "----------" "-------"
   local symbols_tsv files_list
   symbols_tsv=$(mktemp)
   files_list=$(mktemp)
