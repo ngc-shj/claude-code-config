@@ -5,12 +5,13 @@
 # Coverage:
 #   - Exports: module-level `def NAME` / `class NAME` / `UPPERCASE_CONST = ...`.
 #     Indented entries (methods, locals) are excluded by the leading-^ anchor.
-#   - Imports: single-line `from MODULE import NAME[, NAME [as ALIAS] ...]`.
+#   - Imports: `from MODULE import NAME[, NAME [as ALIAS] ...]` — single-line
+#     AND multi-line `from X import (\n a,\n b\n)` blocks. Sed pre-collapses
+#     multi-line parenthesized blocks before the bulk grep.
 #     Plain `import M` and `import M as N` are NOT counted: those import a
 #     module object, not a symbol from the exports table, and resolving
 #     `M.func` references back to the originally-defined function would
 #     require alias tracking beyond grep (category-3, not implemented).
-#   - Multi-line `from X import (\n a,\n b\n)` blocks are also skipped.
 #
 # Plugin contract: see top of build-codebase-fingerprint.sh.
 
@@ -54,13 +55,20 @@ fp_python_extract_imports() {
   tmp_filtered=$(mktemp)
   _filter_files_by_ext "$files_list" py > "$tmp_filtered"
   if [ ! -s "$tmp_filtered" ]; then rm -f "$tmp_filtered"; return 0; fi
-  if command -v rg >/dev/null 2>&1; then
-    xargs -d '\n' -a "$tmp_filtered" rg --no-heading -N --color=never \
-      '^\s*from\s+\S+\s+import\s+' 2>/dev/null
-  else
-    xargs -d '\n' -a "$tmp_filtered" grep -HnE \
-      '^[[:space:]]*from[[:space:]]+\S+[[:space:]]+import[[:space:]]+' 2>/dev/null
-  fi | awk -F: '
+
+  # Pre-collapse multi-line parenthesized imports — Python permits
+  # `from X import (\n a,\n b,\n)` blocks across lines. Sed loops while the
+  # buffer contains an opened-but-not-closed `from … import (`. After the
+  # closing `)` arrives, embedded newlines collapse to spaces; the existing
+  # awk parser strips the parens and splits by comma as before.
+  local sed_collapse=':a; /^[[:space:]]*from[[:space:]]+\S+[[:space:]]+import[[:space:]]*\([^)]*$/{ N; ba; }; s/\n/ /g'
+
+  while IFS= read -r f; do
+    sed -E "$sed_collapse" "$f" 2>/dev/null \
+      | grep -E '^[[:space:]]*from[[:space:]]+\S+[[:space:]]+import[[:space:]]+' \
+      | sed "s|^|${f}:|"
+  done < "$tmp_filtered" \
+    | awk -F: '
     {
       idx = index($0, ":")
       if (idx == 0) next
