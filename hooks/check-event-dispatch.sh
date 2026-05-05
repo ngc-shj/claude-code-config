@@ -1,57 +1,83 @@
 #!/bin/bash
-# Detect event/notification dispatch asymmetry in newly added mutations.
+# Detect event/notification dispatch asymmetry in newly added mutation sites.
 #
 # R4 (Event/notification dispatch gaps) fired 32 times in the passwd-sso
-# review survey — a new mutation function was added in a peer group where
-# sibling mutations dispatch a domain event, but the new one does not.
-# The signal is NOT "this mutation does not emit" (stateless mutations
-# would all false-positive); the signal IS "this mutation breaks an
-# established convention in its peer group."
+# review survey. The signal is NOT "this function does not emit" (stateless
+# functions would all false-positive); the signal IS "this mutation breaks
+# an established dispatch convention in its peer group."
 #
-# Detection
-#   1. Scan each changed source file at HEAD for mutation-shaped function
-#      definitions (verb-prefix names: create / update / delete / cancel /
-#      publish / archive / approve / ...). For each, capture: enclosing
-#      scope (class / Go-receiver / Python-class / file fallback), name,
-#      start line, body span, and whether the body contains a dispatch
-#      verb call (emit / publish / dispatch / notify / broadcast / fire /
-#      sendEvent / ...).
-#   2. Identify which mutations are NEW: their start_line falls on a `+`
-#      line in the diff.
-#   3. Group all mutations by (file, scope). For each new mutation that
-#      does NOT dispatch, if its peer group contains ≥1 sibling that DOES
-#      dispatch, emit Major finding — peer group has established the
-#      event convention; the new mutation breaks it.
+# Mutation-site classification (3-axis OR — any axis suffices)
+#   Axis 1 — Name proxy: function name has a mutation verb prefix
+#     (create / update / delete / cancel / approve / revoke / archive / ...).
+#   Axis 2 — HTTP semantics: function name is an HTTP mutation verb
+#     (POST / PUT / PATCH / DELETE) — catches NextJS / Hono / Express
+#     route handlers where the verb lives in the export name.
+#   Axis 3 — Behavior: function body contains a DB-write primitive call
+#     (`<obj>.create/update/delete/upsert/insert/destroy/save/remove/
+#     truncate(...)` patterns common to Prisma / Mongoose / Sequelize /
+#     TypeORM / Drizzle / Knex), or raw SQL `INSERT INTO` / `UPDATE...SET`
+#     / `DELETE FROM`. Catches functions whose names do not advertise
+#     mutation but whose behavior commits state.
 #
-# Output includes the dispatching siblings (file:line + the dispatch verb)
-# so the reviewer sees the asymmetry directly and can verify whether a
-# corresponding event is needed.
+# Detection pipeline
+#   1. For each changed source file at HEAD, walk every named function
+#      definition (any name that is not a private/internal helper) at a
+#      valid declaration depth: top-level for cfamily, class-body for
+#      class methods, function-level for Go (receiver / package), indent-
+#      relative for Python / Ruby.
+#   2. Classify each function: mutation site (3-axis OR) AND/OR dispatcher
+#      (body scans for emit / publish / dispatch / notify / broadcast /
+#      fire / sendEvent / ...). Drop records that are neither, retain
+#      mutation sites for analysis.
+#   3. Mark NEW mutation sites: start_line in diff `+` and name absent
+#      from diff `-` lines (the latter rules out body-edits to existing
+#      mutations).
+#   4. Group by (file, scope). For each NEW mutation site that is NOT a
+#      dispatcher, if its peer group contains ≥1 sibling that IS, emit
+#      Major — the peer group has established a dispatch convention and
+#      the new mutation breaks it. Output includes dispatching siblings
+#      (file:line + verb + event arg) as evidence.
+#
+# Anti-FP measures
+#   - Body-edit suppression: function names appearing on diff `-` lines
+#     are treated as existing, not new.
+#   - Transitive dispatch: a non-dispatching mutation that calls another
+#     same-file mutation that dispatches is auto-promoted to dispatcher
+#     (`revokeAll(...)` looping over `revokeOne(...)` where `revokeOne`
+#     emits per iteration).
+#   - DB-write skip list: JS standard methods (`Object.create`,
+#     `Set.delete`, `Map.delete`, etc.) are excluded by default.
+#   - Helper / private skip: names ending in `Internal` / `Helper` /
+#     `Utils` / `Impl` / `Private` or starting `_` are dropped.
+#   - Test exclusion: `__tests__/`, `*.test.*`, `*_test.*`, `*.spec.*`,
+#     `spec/` are out of scope.
 #
 # Severity
-#   - Major. Asymmetric dispatch is a high-confidence signal: a peer that
-#     emits proves the convention exists, a new sibling that does not
-#     emit is a candidate gap.
-#   - Reviewer escalates to Critical only if the missing event is in a
-#     security-relevant audit / authz / authn flow (manual call).
+#   - Major. Reviewer escalates to Critical only if the missing event is
+#     in a security-relevant audit / authz / authn flow (manual call).
 #
 # Out of scope
-#   - Cross-file peer groups. A mutation in service-a.ts and one in
+#   - Cross-file peer groups. Peer = same file (with same class within
+#     the file when detectable). A mutation in service-a.ts and one in
 #     service-b.ts are not compared even if they touch the same entity.
-#     Peer = same file (and same class within the file when detectable).
-#   - Event-bus call graphs (tx/outbox-pattern indirection). When a
-#     mutation calls a helper that dispatches, we see no dispatch verb
-#     on the line and may flag a false positive. Mitigation: helpers
-#     that wrap dispatch should be added to EXTRA_DISPATCH_VERBS.
-#   - Pure helper / private mutations (names ending in Internal / Helper /
-#     Utils, or starting with underscore) are skipped.
+#   - Indirect dispatch via cross-file helpers. Helpers that wrap
+#     dispatch should be added to EXTRA_DISPATCH_VERBS.
+#   - File-routing patterns where the export name does not include
+#     either a mutation verb prefix or an HTTP verb (e.g. `handler`,
+#     `default`). Behavior-axis catches these when the body has a
+#     DB-write primitive; otherwise manual review at the directory level.
 #
 # Usage: bash check-event-dispatch.sh [base-ref]
 #   base-ref defaults to 'main'. The diff is base-ref..HEAD.
 #
 # Env knobs:
-#   EXTRA_MUTATION_VERBS — pipe-separated additional verb prefixes
+#   EXTRA_MUTATION_VERBS — pipe-separated additional verb prefixes (axis 1)
 #   EXTRA_DISPATCH_VERBS — pipe-separated additional dispatch identifiers
 #                          (project-specific event-bus method names)
+#   EXTRA_MUTATION_PRIMITIVES — pipe-separated additional DB-write call
+#                          patterns (project-specific repository wrappers)
+#   EXTRA_NON_MUTATION_PRIMITIVES — pipe-separated patterns to skip from
+#                          axis 3 (project-specific false-positive helpers)
 #   EXTRA_EXCLUDE_PATH_RE — additional paths to drop from analysis
 #   BODY_LINE_CAP (default 120) — max lines scanned per function body
 #
@@ -96,9 +122,42 @@ DISPATCH_VERBS_RE='emit|publish|dispatch|notify|broadcast|trigger|fire|sendEvent
 # input may contain `auditLog\.create` style; rewrite to `[.]` to silence.
 DISPATCH_VERBS_RE="${DISPATCH_VERBS_RE//\\./[.]}"
 
-# Names we exclude from mutation classification — internal helpers and
-# private impl details that are not the author of the user-visible event.
+# Names we exclude from analysis entirely — internal helpers and private
+# impl details that are not the author of any user-visible event.
 SKIP_NAME_RE='([Ii]nternal|[Hh]elper|[Uu]tils?|Impl|[Pp]rivate)$|^_'
+
+# Axis 2 — HTTP mutation verbs as function names. Standard NextJS App
+# Router exports `POST` / `PUT` / `PATCH` / `DELETE` directly; many
+# codebases wrap with a `handle*` prefix (`handlePOST`) before delegating
+# to the export. Both forms are matched.
+HTTP_MUT_RE='^(handle)?(POST|PUT|PATCH|DELETE)$'
+
+# Axis 3 — DB-write primitive patterns. Default set covers common ORMs:
+# Prisma (`prisma.<m>.create/update/delete/upsert/*Many`), Mongoose
+# (`<Model>.create/save/findOneAndUpdate`), Sequelize (`<Model>.create/
+# update/destroy`), TypeORM (`repo.save/insert/update/delete/remove`),
+# Drizzle (`db.insert/update/delete().values()`), Knex (`knex(...).insert/
+# update/delete`), plus raw SQL. Match: dotted access ending in a write
+# verb followed by `(`, OR raw SQL keywords.
+# `update` is split out from the broad list because `.update(` collides
+# with Node crypto API (`createHash(...).update(bytes)`, `hmac.update(...)`).
+# The split form requires `{` after `.update(` — matches Prisma's
+# `{ where, data }` argument shape and reliably distinguishes ORM updates
+# from crypto chains. ORMs without object-literal arg shape (Drizzle,
+# Knex) lose recall on axis 3 but axis 1 (verb-prefix function names like
+# `updateX`) still catches them.
+DB_WRITE_PRIMITIVES_RE='[.](create|delete|upsert|insert|destroy|save|remove|truncate)(Many|One|All)?[[:space:]]*[(]|[.]update(Many|One|All)?[[:space:]]*[(][[:space:]]*[{]|\b(INSERT[[:space:]]+INTO|UPDATE[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+SET|DELETE[[:space:]]+FROM)\b'
+[ -n "${EXTRA_MUTATION_PRIMITIVES:-}" ] && DB_WRITE_PRIMITIVES_RE="${DB_WRITE_PRIMITIVES_RE}|${EXTRA_MUTATION_PRIMITIVES}"
+DB_WRITE_PRIMITIVES_RE="${DB_WRITE_PRIMITIVES_RE//\\./[.]}"
+DB_WRITE_PRIMITIVES_RE="${DB_WRITE_PRIMITIVES_RE//\\(/[(]}"
+
+# Axis 3 deny-list: JS / TS / Java standard-library methods that match
+# the DB-write shape but are not state mutations. `Object.create(proto)`
+# is the prototype builder; `Set.delete` / `Map.delete` are in-memory
+# collection mutations, not persistence.
+DB_WRITE_SKIP_RE='\b(Object|Set|Map|WeakMap|WeakSet|Reflect|Symbol|JSON|Buffer|Array|Promise|String|Number|Date|RegExp|Math|Error|Proxy)[.](create|delete|update|insert|save|remove)\b'
+[ -n "${EXTRA_NON_MUTATION_PRIMITIVES:-}" ] && DB_WRITE_SKIP_RE="${DB_WRITE_SKIP_RE}|${EXTRA_NON_MUTATION_PRIMITIVES}"
+DB_WRITE_SKIP_RE="${DB_WRITE_SKIP_RE//\\./[.]}"
 
 # Source-code whitelist. Tests are intentionally excluded — R4 is about
 # production mutation symmetry, not test-double coverage.
@@ -182,6 +241,9 @@ while IFS= read -r f; do
   awk -v file="$f" \
       -v lang="$lang" \
       -v mut_re="^(${MUTATION_VERBS_RE})([A-Z_]|$)" \
+      -v http_mut_re="$HTTP_MUT_RE" \
+      -v db_write_re="$DB_WRITE_PRIMITIVES_RE" \
+      -v db_write_skip_re="$DB_WRITE_SKIP_RE" \
       -v disp_inner="${DISPATCH_VERBS_RE}" \
       -v skip_re="$SKIP_NAME_RE" \
       -v body_cap="$BODY_LINE_CAP" \
@@ -210,7 +272,28 @@ while IFS= read -r f; do
       open_func = 0
     }
 
+    # 3-axis mutation-site classification. ANY axis suffices.
+    function is_mutation_site(name, body,    n, lines, i, line, lname) {
+      # Axis 1: name has mutation verb prefix. Lowercase the first letter
+      # so Go-style PascalCase (`ArchiveItem`) compares against the
+      # lowercase verb regex; JS/Python/Ruby names are already lowercase
+      # at position 1 so this is a no-op for them.
+      lname = tolower(substr(name, 1, 1)) substr(name, 2)
+      if (lname ~ mut_re) return 1
+      # Axis 2: name is HTTP mutation verb (route handler)
+      if (name ~ http_mut_re) return 1
+      # Axis 3: body contains DB-write primitive (and not a denied stdlib call)
+      n = split(body, lines, "\n")
+      for (i = 1; i <= n; i++) {
+        line = lines[i]
+        if (line ~ db_write_re && !(line ~ db_write_skip_re)) return 1
+      }
+      return 0
+    }
+
     function emit_record(rec_file, rec_scope, rec_name, rec_start, rec_end, rec_body,    n, lines, i, line, m, after, has_disp, disp_verb, disp_arg, is_new, saved_ic) {
+      # Drop non-mutation functions before any further work.
+      if (!is_mutation_site(rec_name, rec_body)) return
       has_disp = 0
       disp_verb = ""
       disp_arg = ""
@@ -338,11 +421,24 @@ while IFS= read -r f; do
         }
       }
 
-      if (func_name != "" && func_name ~ mut_re && func_name !~ skip_re) {
+      # Restrict function-def detection to valid declaration depths:
+      # top-level (brace_depth_before == 0) or directly inside a class
+      # body (brace_depth_before is a key in scope_stack). Method-body
+      # function-call lines like `someThing(x);` syntactically match
+      # the method-shorthand pattern but are deeper than any class
+      # scope; excluding them avoids false-positive function records.
+      if (func_name != "" && func_name !~ skip_re) {
+        valid_depth = (brace_depth_before == 0) || (brace_depth_before in scope_stack)
+        if (!valid_depth) func_name = ""
+      } else {
+        func_name = ""
+      }
+
+      if (func_name != "") {
         # Open a function-record window: collect the body until brace
         # depth returns to brace_depth_before (start-of-line depth).
         if (open_func) {
-          # Edge case: nested mutation function inside a body — close the
+          # Edge case: nested function inside a body — close the
           # outer first.
           emit_record(file, of_scope, of_name, of_start, lineno - 1, of_body)
           open_func = 0
@@ -383,14 +479,14 @@ while IFS= read -r f; do
     lang == "go" {
       lineno = NR
       raw = $0
-      # func (r *T) Name(...)
-      if (match(raw, /^func[[:space:]]*\([[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+\*?[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\)[[:space:]]+[A-Z][A-Za-z0-9_]*/)) {
+      # func (r *T) Name(...) — accept any name (exported or not); is_mutation_site
+      # at emit_record handles classification.
+      if (match(raw, /^func[[:space:]]*\([[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+\*?[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*/)) {
         seg = substr(raw, RSTART, RLENGTH)
         # Receiver: extract from "(...)" — last identifier (Type).
         recv = seg
         match(recv, /\([^)]*\)/)
-        recv_full = substr(recv, RSTART + 1, RLENGTH - 2)  # drop outer parens
-        # recv_full e.g. "s *InventoryService" → take last identifier.
+        recv_full = substr(recv, RSTART + 1, RLENGTH - 2)
         if (match(recv_full, /[A-Za-z_][A-Za-z0-9_]*[[:space:]]*$/)) {
           recv = substr(recv_full, RSTART, RLENGTH)
           gsub(/[[:space:]]/, "", recv)
@@ -398,9 +494,7 @@ while IFS= read -r f; do
           recv = ""
         }
         nm = seg; sub(/.*\)[[:space:]]+/, "", nm); sub(/[[:space:](].*/, "", nm)
-        # Lowercase first letter for mutation-verb match.
-        lname = tolower(substr(nm, 1, 1)) substr(nm, 2)
-        if (lname ~ mut_re && nm !~ skip_re) {
+        if (nm != "" && nm !~ skip_re) {
           if (open_func) {
             emit_record(file, of_scope, of_name, of_start, lineno - 1, of_body)
           }
@@ -421,12 +515,11 @@ while IFS= read -r f; do
         }
         next
       }
-      # func Name(...)  (package-level)
-      if (match(raw, /^func[[:space:]]+([A-Z][A-Za-z0-9_]*)/)) {
+      # func Name(...) (package-level) — accept any name; classify at emit.
+      if (match(raw, /^func[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)/)) {
         seg = substr(raw, RSTART, RLENGTH)
         nm = seg; sub(/^func[[:space:]]+/, "", nm); sub(/[[:space:]].*/, "", nm)
-        lname = tolower(substr(nm, 1, 1)) substr(nm, 2)
-        if (lname ~ mut_re && nm !~ skip_re) {
+        if (nm != "" && nm !~ skip_re) {
           if (open_func) {
             emit_record(file, of_scope, of_name, of_start, lineno - 1, of_body)
           }
@@ -476,12 +569,12 @@ while IFS= read -r f; do
         # Drop deeper class entries.
         for (k in py_class) if (k+0 > cls_ind) delete py_class[k]
       }
-      # def name(...) — possibly inside a class.
+      # def name(...) — possibly inside a class. Accept any name; classify at emit.
       if (match(raw, /^([[:space:]]*)((async[[:space:]]+)?def[[:space:]]+)([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*\(/)) {
         seg = substr(raw, RSTART, RLENGTH)
         ws = seg; sub(/[^[:space:]].*/, "", ws); fn_ind = length(ws)
         nm = seg; sub(/.*def[[:space:]]+/, "", nm); sub(/[[:space:]]*\(.*/, "", nm)
-        if (nm ~ mut_re && nm !~ skip_re) {
+        if (nm != "" && nm !~ skip_re) {
           if (open_func) {
             emit_record(file, of_scope, of_name, of_start, lineno - 1, of_body)
           }
@@ -532,7 +625,7 @@ while IFS= read -r f; do
       if (match(raw, /^([[:space:]]*)def[[:space:]]+(self\.)?([a-z_][A-Za-z0-9_]*[!?=]?)/)) {
         seg = substr(raw, RSTART, RLENGTH)
         nm = seg; sub(/^[[:space:]]*def[[:space:]]+(self\.)?/, "", nm); sub(/[[:space:](].*/, "", nm)
-        if (nm ~ mut_re && nm !~ skip_re) {
+        if (nm != "" && nm !~ skip_re) {
           if (open_func) {
             emit_record(file, of_scope, of_name, of_start, lineno - 1, of_body)
           }
