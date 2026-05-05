@@ -55,6 +55,22 @@ if [ -d "$SCRIPT_DIR/hooks" ]; then
     fi
     echo "  Installed hook: $hook_name"
   done
+  # Hook plugin subdirectories (e.g. fingerprint-langs/). Each subdir is
+  # mirrored as-is. Stale destination contents are wiped before copy so
+  # plugins removed upstream don't linger as shadow registrations.
+  for plugin_subdir in "$SCRIPT_DIR"/hooks/*/; do
+    [ -d "$plugin_subdir" ] || continue
+    subdir_name="$(basename "$plugin_subdir")"
+    rm -rf "$CLAUDE_DIR/hooks/$subdir_name"
+    mkdir -p "$CLAUDE_DIR/hooks/$subdir_name"
+    for plugin_file in "$plugin_subdir"*.sh; do
+      [ -e "$plugin_file" ] || continue
+      plugin_name="$(basename "$plugin_file")"
+      cp "$plugin_file" "$CLAUDE_DIR/hooks/$subdir_name/$plugin_name"
+      chmod +x "$CLAUDE_DIR/hooks/$subdir_name/$plugin_name"
+    done
+    echo "  Installed hook plugins: $subdir_name/"
+  done
 fi
 
 # Install skills
