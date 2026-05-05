@@ -328,6 +328,8 @@ Before declaring Phase 2 complete, run a focused R-check pass with the same thre
 
 Each is a few seconds and runs independently. Address findings before the sub-agent pass so they don't surface as Round-1 review noise.
 
+**Pre-step: mechanical R4 dispatch-symmetry check**. Run `bash ~/.claude/hooks/check-event-dispatch.sh [base-ref]` alongside the other Step 2-5 pre-steps. The hook detects mutation-shaped functions per file at their enclosing scope (class / Go-receiver / Python-class / file fallback), classifies each as dispatching an event or not, and flags Major when a NEW non-dispatching mutation shares a peer group with ≥1 dispatching sibling — the asymmetry signal R4 is built around. Transitive dispatch (new mutation calls another mutation in the same file that dispatches) is auto-suppressed. **Project-specific event helpers MUST be passed via `EXTRA_DISPATCH_VERBS` env var** (e.g. `EXTRA_DISPATCH_VERBS='logAuditAsync|recordAuditEvent|outboxAppend'`) — without them the hook stays silent for codebases that wrap audit/event emission in their own helpers instead of using the universal `emit`/`publish`/`dispatch` verbs. The hook does not see file-routing patterns where the function name carries no verb (e.g. NextJS `handlePOST` route handlers) — directory-level R4 review for those cases is still manual.
+
 Setup (per-run temp dir, same pattern as Step 1-5 / Step 3-2b):
 
 ```bash
