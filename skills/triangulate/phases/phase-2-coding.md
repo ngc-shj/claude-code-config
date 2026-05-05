@@ -318,6 +318,8 @@ Before declaring Phase 2 complete, run a focused R-check pass with the same thre
 
 **Pre-step: mechanical R35 deployment-artifact check**. Run `bash ~/.claude/hooks/check-deployment-artifact.sh [base-ref]` alongside the propagation check. The hook detects deployment artifacts (Dockerfile, K8s manifests, Helm charts, Terraform, CI/CD workflows, IAM/TLS material, IdP metadata, mesh policy CRDs, webhook signing-key config) in the diff, classifies severity Tier-1 (Major) vs Tier-2 (Critical) by path keyword, and warns when no `*-manual-test.md` is added. If the gate fires and no artifact is added, generate the manual-test.md with the required sections (Pre-conditions / Steps / Expected result / Rollback, plus Tier-2 Adversarial scenarios) before proceeding to the sub-agent pass.
 
+**Pre-step: mechanical R2 / RT3 hardcoded-reuse check**. Run `bash ~/.claude/hooks/check-hardcoded-reuse.sh [base-ref]` alongside the propagation and deployment-artifact checks. The hook indexes module-level `const NAME = literal` declarations across unchanged source files and cross-references diff `+` lines for hardcoded values that match an existing constant. String matches surface as Major (precise), numeric matches as Minor (small numbers collide easily). When the hook flags a value, replace the hardcoded literal with an import of the named constant before the sub-agent pass — front-loads the easy R2 / RT3 wins so sub-agents focus on R2 cases the regex tool cannot detect (computed expressions, semantically-equivalent-but-syntactically-different values).
+
 Setup (per-run temp dir, same pattern as Step 1-5 / Step 3-2b):
 
 ```bash
