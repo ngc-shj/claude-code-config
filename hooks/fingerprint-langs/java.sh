@@ -52,9 +52,9 @@ FP_EXPORTS_FN[java]='fp_java_extract_exports'
 fp_java_extract_imports() {
   local files_list="$1"
   local tmp_filtered
-  tmp_filtered=$(mktemp)
+  tmp_filtered=$(mktemp -p "$_FP_TMPDIR")
   _filter_files_by_ext "$files_list" java > "$tmp_filtered"
-  if [ ! -s "$tmp_filtered" ]; then rm -f "$tmp_filtered"; return 0; fi
+  [ -s "$tmp_filtered" ] || return 0
   if command -v rg >/dev/null 2>&1; then
     xargs -d '\n' -a "$tmp_filtered" rg --no-heading -N --color=never \
       '^\s*import\s+(static\s+)?[A-Za-z_][A-Za-z0-9_.]*\s*;' 2>/dev/null
@@ -79,6 +79,5 @@ fp_java_extract_imports() {
       if (sym == "*" || sym == "") next
       if (sym ~ /^[A-Za-z_][A-Za-z0-9_]*$/) print file "\t" sym
     }'
-  rm -f "$tmp_filtered"
 }
 FP_IMPORTS_FN[java]='fp_java_extract_imports'

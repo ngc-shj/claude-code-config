@@ -95,9 +95,9 @@ FP_EXPORTS_FN[ts_js]='fp_ts_js_extract_exports'
 fp_ts_js_extract_imports() {
   local files_list="$1"
   local tmp_filtered
-  tmp_filtered=$(mktemp)
+  tmp_filtered=$(mktemp -p "$_FP_TMPDIR")
   _filter_files_by_ext "$files_list" ts tsx js jsx mjs > "$tmp_filtered"
-  if [ ! -s "$tmp_filtered" ]; then rm -f "$tmp_filtered"; return 0; fi
+  [ -s "$tmp_filtered" ] || return 0
 
   # Pre-collapse multi-line `import {\n a,\n b\n} from` blocks via sed before
   # grep, so a single-line regex covers both shapes. The sed loop accumulates
@@ -159,6 +159,5 @@ fp_ts_js_extract_imports() {
         }
       }
     }'
-  rm -f "$tmp_filtered"
 }
 FP_IMPORTS_FN[ts_js]='fp_ts_js_extract_imports'

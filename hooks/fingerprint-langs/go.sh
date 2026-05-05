@@ -56,9 +56,9 @@ FP_EXPORTS_FN[go]='fp_go_extract_exports'
 fp_go_extract_imports() {
   local files_list="$1"
   local tmp_filtered
-  tmp_filtered=$(mktemp)
+  tmp_filtered=$(mktemp -p "$_FP_TMPDIR")
   _filter_files_by_ext "$files_list" go > "$tmp_filtered"
-  if [ ! -s "$tmp_filtered" ]; then rm -f "$tmp_filtered"; return 0; fi
+  [ -s "$tmp_filtered" ] || return 0
   if command -v rg >/dev/null 2>&1; then
     xargs -d '\n' -a "$tmp_filtered" rg --no-heading -N --color=never \
       -o '\b[a-z][a-zA-Z0-9_]*\.[A-Z][A-Za-z0-9_]*' 2>/dev/null
@@ -76,6 +76,5 @@ fp_go_extract_imports() {
       sym = substr(content, dot + 1)
       if (sym ~ /^[A-Z][A-Za-z0-9_]*$/) print file "\t" sym
     }'
-  rm -f "$tmp_filtered"
 }
 FP_IMPORTS_FN[go]='fp_go_extract_imports'

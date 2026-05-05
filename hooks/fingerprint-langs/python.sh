@@ -52,9 +52,9 @@ FP_EXPORTS_FN[python]='fp_python_extract_exports'
 fp_python_extract_imports() {
   local files_list="$1"
   local tmp_filtered
-  tmp_filtered=$(mktemp)
+  tmp_filtered=$(mktemp -p "$_FP_TMPDIR")
   _filter_files_by_ext "$files_list" py > "$tmp_filtered"
-  if [ ! -s "$tmp_filtered" ]; then rm -f "$tmp_filtered"; return 0; fi
+  [ -s "$tmp_filtered" ] || return 0
 
   # Pre-collapse multi-line parenthesized imports — Python permits
   # `from X import (\n a,\n b,\n)` blocks across lines. Sed loops while the
@@ -86,6 +86,5 @@ fp_python_extract_imports() {
         if (s ~ /^[A-Za-z_][A-Za-z0-9_]*$/) print file "\t" s
       }
     }'
-  rm -f "$tmp_filtered"
 }
 FP_IMPORTS_FN[python]='fp_python_extract_imports'
