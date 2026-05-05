@@ -316,6 +316,8 @@ Before declaring Phase 2 complete, run a focused R-check pass with the same thre
 
 **Pre-step: mechanical R3 propagation check**. Run `bash ~/.claude/hooks/check-propagation.sh [base-ref]` (default base: `main`) before launching the sub-agents. The hook surfaces three categories of unpropagated diff-wide changes — symbol renames (Minor, advisory), constant value changes (Major), and string literal changes (Major). Address its findings or annotate them as deliberate skips before the sub-agent pass; this front-loads the easy R3 wins so the sub-agents can focus on the AST-level R3 cases (signature changes, type renames) the regex tool cannot detect.
 
+**Pre-step: mechanical R35 deployment-artifact check**. Run `bash ~/.claude/hooks/check-deployment-artifact.sh [base-ref]` alongside the propagation check. The hook detects deployment artifacts (Dockerfile, K8s manifests, Helm charts, Terraform, CI/CD workflows, IAM/TLS material, IdP metadata, mesh policy CRDs, webhook signing-key config) in the diff, classifies severity Tier-1 (Major) vs Tier-2 (Critical) by path keyword, and warns when no `*-manual-test.md` is added. If the gate fires and no artifact is added, generate the manual-test.md with the required sections (Pre-conditions / Steps / Expected result / Rollback, plus Tier-2 Adversarial scenarios) before proceeding to the sub-agent pass.
+
 Setup (per-run temp dir, same pattern as Step 1-5 / Step 3-2b):
 
 ```bash
