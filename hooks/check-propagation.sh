@@ -81,7 +81,14 @@ SOURCE_EXT_RE='\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|kts|scala|cs|fs|vb|s
 # retroactively when production code names change, so any "stale reference"
 # in them is by definition not a propagation gap. Same for vendored deps
 # and codegen output that the project shouldn't hand-edit.
-EXCLUDE_PATH_RE='^(prisma/migrations/|migrations/|db/migrations/|vendor/|node_modules/|.+\.generated\.|.+_generated\.|.+\.gen\.)'
+# Migration histories are append-only by contract; codegen output is
+# regenerated. Patterns are framework-family generic (Prisma uses
+# `prisma/migrations/`, Alembic uses `alembic/versions/`, Rails uses
+# `db/migrate/`, etc. — all caught by the `*/(migrations?|migrate|versions)/`
+# pattern). Override or extend via `EXTRA_EXCLUDE_PATH_RE` env var if a
+# project uses a non-conventional path.
+EXCLUDE_PATH_RE='^(.+/)?(migrations?/|migrate/|versions/|vendor/|node_modules/)|.+\.generated\.|.+_generated\.|.+\.gen\.'
+[ -n "${EXTRA_EXCLUDE_PATH_RE:-}" ] && EXCLUDE_PATH_RE="${EXCLUDE_PATH_RE}|${EXTRA_EXCLUDE_PATH_RE}"
 git ls-files \
   | grep -vxFf "$CHANGED_FILES_LIST" \
   | grep -E "$SOURCE_EXT_RE" \
