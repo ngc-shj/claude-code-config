@@ -33,7 +33,7 @@ Before writing any code, perform the following impact analysis:
    - High-usage exported symbols from the fingerprint overlapping with code about to be written — flag as **R1 candidates** (reuse the existing helper rather than reimplementing)
    - Record each as: `[file:line] [function/constant name] — [what it does]`
 
-   **Fingerprint scope note**: the script currently covers TS/JS/TSX/JSX/MJS source files. For other languages the sections come back empty — fall back to scan-shared-utils.sh's structural inventory and manual search.
+   **Fingerprint scope note**: the script auto-detects project languages via root-level manifests (`package.json` / `tsconfig.json` / `pyproject.toml` / `setup.py` / `requirements.txt` / etc.) with file-extension fallback. TS/JS and Python have first-class support — all three sections (numeric / string / symbol with import-aware counts) populate, including hybrid TS+Python repos which produce a single combined ranking. Other languages (Go / Rust / Ruby / Java / PHP / Elixir) currently produce numeric and string sections only; for full symbol-usage analysis fall back to scan-shared-utils.sh's structural inventory + manual search until a per-language import-aware extractor lands.
 5. **Append checklist to plan**: Record the results as a checklist in `./docs/archive/review/[plan-name]-plan.md` under a new "## Implementation Checklist" section, listing:
    - Every file and location that must be modified
    - Every shared utility that must be reused (from step 4)
