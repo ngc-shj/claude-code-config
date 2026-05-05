@@ -82,11 +82,26 @@
 #   TOP_N (default: 30)              — max rows per section
 #   LITERAL_MIN_FILES (default: 3)   — literal must appear in >= N files
 #   SYMBOL_MIN_USAGE  (default: 3)   — symbol must be referenced from >= N files
+#   LLM_CLASSIFY (default: 1)        — call Ollama (gpt-oss:120b) to classify
+#                                      top-N symbols as shared / ambiguous /
+#                                      local. Set 0 to skip (faster, no
+#                                      Ollama dependency). LLM verdicts are
+#                                      cached with the rest of the output.
+#   NOCACHE (default: 0)             — set 1 to force fingerprint rebuild
 
 # -e and pipefail intentionally OFF: data-collection pipelines use grep
 # (returns 1 on no-match) and head (SIGPIPEs the producer); both are
 # expected and harmless. We use -u to catch unset-var bugs.
 set -u
+
+# Single per-script tempdir for every internal mktemp. EXIT-trap cleanup
+# runs even on errors, signals, or pipeline-mid failures — safer than
+# function-scoped `rm -f` at the end of each function, which only fires
+# on the success path. Plugin extractors source into the same shell so
+# they can mktemp -p "$_FP_TMPDIR" and rely on the same cleanup.
+_FP_TMPDIR=$(mktemp -d)
+# shellcheck disable=SC2064
+trap "rm -rf '$_FP_TMPDIR'" EXIT
 
 # --- Trusted root resolution (same pattern as scan-shared-utils.sh) ---
 TRUSTED_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
@@ -352,8 +367,8 @@ emit_string_section() {
   printf '  %-7s  %s\n' "-----" "-------"
 
   local tmp_per_file_strings tmp_counts
-  tmp_per_file_strings=$(mktemp)
-  tmp_counts=$(mktemp)
+  tmp_per_file_strings=$(mktemp -p "$_FP_TMPDIR")
+  tmp_counts=$(mktemp -p "$_FP_TMPDIR")
 
   # Extract candidate string literals per file. Per-file dedup happens here so
   # a single file repeating "/api/users" 50 times doesn't inflate its file
@@ -412,7 +427,6 @@ emit_string_section() {
         printf '  %-7d  %s\n' "$count" "$display"
       done | head -"$TOP_N"
 
-  rm -f "$tmp_per_file_strings" "$tmp_counts"
   echo ""
 }
 
@@ -422,7 +436,7 @@ emit_numeric_section() {
   printf '  %-7s  %s\n' "Files" "Literal"
   printf '  %-7s  %s\n' "-----" "-------"
   local tmp_pairs
-  tmp_pairs=$(mktemp)
+  tmp_pairs=$(mktemp -p "$_FP_TMPDIR")
   list_source_files | while IFS= read -r f; do
     # Strip dotted-decimal sequences (versions like 1.0.0, IPs like 127.0.0.1,
     # any X.Y[.Z…] form) before extracting integer tokens, so the constituent
@@ -438,7 +452,6 @@ emit_numeric_section() {
         [ "$count" -ge "$LITERAL_MIN_FILES" ] || continue
         printf '  %-7d  %s\n' "$count" "$value"
       done | head -"$TOP_N"
-  rm -f "$tmp_pairs"
   echo ""
 }
 
@@ -543,9 +556,9 @@ _signal_has_docstring() {
 _compute_reexport_depths() {
   local files_list="$1"
   local tmp_filtered
-  tmp_filtered=$(mktemp)
+  tmp_filtered=$(mktemp -p "$_FP_TMPDIR")
   _filter_files_by_ext "$files_list" ts tsx js jsx mjs > "$tmp_filtered"
-  if [ ! -s "$tmp_filtered" ]; then rm -f "$tmp_filtered"; return 0; fi
+  [ -s "$tmp_filtered" ] || return 0
   local sed_collapse=':a; /^[[:space:]]*export[[:space:]]+(type[[:space:]]+)?\{[^}]*$/{ N; ba; }; s/\n/ /g'
   while IFS= read -r f; do
     sed -E "$sed_collapse" "$f" 2>/dev/null \
@@ -577,7 +590,6 @@ _compute_reexport_depths() {
       }
       END { for (s in count) print s "\t" count[s] }
     '
-  rm -f "$tmp_filtered"
 }
 
 count_symbol_usage() {
@@ -586,11 +598,15 @@ count_symbol_usage() {
 
   [ ! -s "$symbols_tsv" ] && { echo "(no exports found)"; return; }
 
+  local tmp_pairs tmp_counts tmp_reexport tmp_top_n tmp_llm_in tmp_llm_out
+  tmp_pairs=$(mktemp -p "$_FP_TMPDIR")
+  tmp_counts=$(mktemp -p "$_FP_TMPDIR")
+  tmp_reexport=$(mktemp -p "$_FP_TMPDIR")
+  tmp_top_n=$(mktemp -p "$_FP_TMPDIR")
+  tmp_llm_in=$(mktemp -p "$_FP_TMPDIR")
+  tmp_llm_out=$(mktemp -p "$_FP_TMPDIR")
+
   # Build (file, imported_name) pairs across the codebase, deduplicate.
-  local tmp_pairs tmp_counts tmp_reexport
-  tmp_pairs=$(mktemp)
-  tmp_counts=$(mktemp)
-  tmp_reexport=$(mktemp)
   extract_imports "$files_list" \
     | awk -F'\t' '!seen[$1 SUBSEP $2]++' > "$tmp_pairs"
 
@@ -616,7 +632,9 @@ count_symbol_usage() {
 
   # Enrich the top-N rows with signals. Non-top rows skip the per-symbol
   # work entirely so signal computation cost scales with TOP_N, not with
-  # the full export universe.
+  # the full export universe. Signals are accumulated to a temp file so a
+  # single LLM classification pass (gpt-oss:120b) can run on the full
+  # top-N batch before any row is printed — see LLM_CLASSIFY block below.
   awk -F'\t' -v min="$SYMBOL_MIN_USAGE" -v top="$TOP_N" '
       $1 >= min { n++; if (n > top) exit; print }' "$tmp_counts" \
     | while IFS=$'\t' read -r count name def_loc; do
@@ -632,26 +650,65 @@ count_symbol_usage() {
         for sig in "$path_sig" "$doc_sig" "$stab_sig" "${reexport_sig:-}"; do
           [ -n "$sig" ] && signals="${signals:+${signals} }${sig}"
         done
-        printf '  %-7d  %-40s  %-50s  [%s]\n' "$count" "$name" "$def_loc" "$signals"
-      done
+        # Tab-separated row: count, name, def_loc, signals (without LLM flag yet)
+        printf '%d\t%s\t%s\t%s\n' "$count" "$name" "$def_loc" "$signals"
+      done > "$tmp_top_n"
 
-  rm -f "$tmp_pairs" "$tmp_counts" "$tmp_reexport"
+# Optional: LLM classification pass over the full top-N batch. Disambiguates
+  # cases where signals alone don't decide it — generic names like `today`,
+  # domain names under non-standard paths, etc. One Ollama call per cache
+  # invalidation; cached output already includes the classification flags.
+  # Set LLM_CLASSIFY=0 to skip (e.g. for fast iteration).
+  if [ "${LLM_CLASSIFY:-1}" = "1" ] && [ -s "$tmp_top_n" ]; then
+    # Pass each row's raw file count AND the project's total source file
+    # count to the LLM. "50 of 1000 files" and "5 of 100 files" both mean
+    # 5% reuse — decisive in either project. Hardcoding an absolute
+    # threshold like "N >= 50 → shared" miscalibrates on small repos
+    # (everything < 50, threshold never fires) and is too loose on huge
+    # ones (most exports clear it trivially).
+    local total_files
+    total_files=$(wc -l < "$files_list")
+    awk -F'\t' -v total="$total_files" \
+      '{ printf "%s | %s | %s of %s files | %s\n", $2, $3, $1, total, $4 }' \
+      "$tmp_top_n" > "$tmp_llm_in"
+    bash "${SCRIPT_DIR}/ollama-utils.sh" classify-symbols < "$tmp_llm_in" 2>/dev/null \
+      | awk -F'\t' '
+          $1 ~ /^[A-Za-z_][A-Za-z0-9_]*$/ && ($2 == "shared" || $2 == "ambiguous" || $2 == "local") {
+            print $1 "\t" $2
+          }
+        ' > "$tmp_llm_out"
+  fi
+
+  # Print enriched rows. Append the LLM verdict (★ shared / ? ambiguous /
+  # ✗ local) when present; absent rows just keep their existing signals.
+  while IFS=$'\t' read -r count name def_loc signals; do
+    local llm_verdict llm_flag=""
+    llm_verdict=$(awk -F'\t' -v n="$name" '$1 == n { print $2; exit }' "$tmp_llm_out")
+    case "$llm_verdict" in
+      shared)    llm_flag='★' ;;
+      ambiguous) llm_flag='?' ;;
+      local)     llm_flag='✗' ;;
+    esac
+    [ -n "$llm_flag" ] && signals="${signals:+${signals} }${llm_flag}"
+    printf '  %-7d  %-40s  %-50s  [%s]\n' "$count" "$name" "$def_loc" "$signals"
+  done < "$tmp_top_n"
+
+  # Temp dir cleanup happens via the RETURN trap above — no explicit rm here.
 }
 
 emit_symbol_section() {
   echo "## Top exported symbols by file-usage (>=$SYMBOL_MIN_USAGE files)"
   echo ""
-  echo "Signals: lib=under shared dir / route=under app|pages|routes / doc=has JSDoc or docstring / Nmo=age in months (relative; squash-merged repos compress) / stale=untouched >365d / Rn=re-exported by n barrel files"
+  echo "Signals: lib=under shared dir / route=under app|pages|routes / doc=has JSDoc or docstring / Nmo=age in months (relative; squash-merged repos compress) / stale=untouched >365d / Rn=re-exported by n barrel files / ★ ? ✗=LLM classification (shared / ambiguous / local — gpt-oss:120b verdict; absent when LLM_CLASSIFY=0 or Ollama unavailable)"
   echo ""
   printf '  %-7s  %-40s  %-50s  %s\n' "Files" "Symbol" "Defined at" "Signals"
   printf '  %-7s  %-40s  %-50s  %s\n' "-----" "------" "----------" "-------"
   local symbols_tsv files_list
-  symbols_tsv=$(mktemp)
-  files_list=$(mktemp)
+  symbols_tsv=$(mktemp -p "$_FP_TMPDIR")
+  files_list=$(mktemp -p "$_FP_TMPDIR")
   extract_exports > "$symbols_tsv"
   list_source_files > "$files_list"
   count_symbol_usage "$symbols_tsv" "$files_list"
-  rm -f "$symbols_tsv" "$files_list"
   echo ""
 }
 
@@ -664,7 +721,7 @@ emit_symbol_section() {
 cache_signature() {
   echo "$TRUSTED_ROOT"
   echo "LANGS=$LANGS"
-  echo "TOP_N=$TOP_N LITERAL_MIN_FILES=$LITERAL_MIN_FILES SYMBOL_MIN_USAGE=$SYMBOL_MIN_USAGE SYMBOL_MIN_LENGTH=$SYMBOL_MIN_LENGTH"
+  echo "TOP_N=$TOP_N LITERAL_MIN_FILES=$LITERAL_MIN_FILES SYMBOL_MIN_USAGE=$SYMBOL_MIN_USAGE SYMBOL_MIN_LENGTH=$SYMBOL_MIN_LENGTH LLM_CLASSIFY=${LLM_CLASSIFY:-1}"
   if [ -d "$PLUGIN_DIR" ]; then
     find "$PLUGIN_DIR" -name '*.sh' -type f 2>/dev/null \
       | sort | xargs -d '\n' stat -c '%Y %s %n' 2>/dev/null
