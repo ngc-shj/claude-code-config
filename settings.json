@@ -144,6 +144,8 @@
       "Bash(bash ~/.claude/hooks/scan-shared-utils.sh)",
       "Bash(bash ~/.claude/hooks/build-codebase-fingerprint.sh)",
       "Bash(bash ~/.claude/hooks/build-codebase-fingerprint.sh *)",
+      "Bash(bash ~/.claude/hooks/check-propagation.sh)",
+      "Bash(bash ~/.claude/hooks/check-propagation.sh *)",
       "Bash(bash ~/.claude/hooks/tri-tmpdir.sh create)",
       "Bash(bash ~/.claude/hooks/tri-tmpdir.sh cleanup *)",
       "Read(~/.claude/plans/*)",
