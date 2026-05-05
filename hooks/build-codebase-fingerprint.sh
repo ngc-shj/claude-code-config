@@ -8,7 +8,14 @@
 # which gives a structural inventory without frequency ranking.
 #
 # No LLM required — pure grep / awk / sort.
-# Prototype scope: TS/JS/TSX/JSX/MJS only. Extend per-language later.
+#
+# Language scope:
+#   - Numeric / string sections: language-agnostic, all source files contribute.
+#   - Symbol section (export extraction + import-aware usage count):
+#     first-class for TS/JS and Python. Other languages are scaffolded via
+#     dispatch tables; symbol section currently emits no entries for them
+#     because import-aware counting requires per-language qualifier/alias
+#     resolution that is not yet implemented (Go's `pkg.Foo`, Java FQDNs, etc.).
 #
 # Usage: bash build-codebase-fingerprint.sh [project-root]
 # Env knobs:
@@ -47,25 +54,101 @@ TOP_N="${TOP_N:-30}"
 LITERAL_MIN_FILES="${LITERAL_MIN_FILES:-3}"
 SYMBOL_MIN_USAGE="${SYMBOL_MIN_USAGE:-3}"
 
-EXCLUDE_DIRS_RE='(/node_modules/|/\.next/|/\.git/|/dist/|/build/|/target/|/__pycache__/|/\.tox/|/\.venv/|/venv/|/vendor/|/coverage/|/out/|/load-test/|/load-tests/|/perf-tests?/|/e2e/|/cypress/|/playwright/)'
-TEST_FILE_RE='(\.test\.|\.spec\.|/__tests__/|/test/|/tests/|/fixtures/|\.fixture\.|\.stories\.|\.e2e\.)'
+EXCLUDE_DIRS_RE='(/node_modules/|/\.next/|/\.git/|/dist/|/build/|/target/|/__pycache__/|/\.tox/|/\.venv/|/venv/|/vendor/|/coverage/|/out/|/load-test/|/load-tests/|/perf-tests?/|/e2e/|/cypress/|/playwright/|/\.pytest_cache/|/\.mypy_cache/|/\.ruff_cache/|/site-packages/)'
+TEST_FILE_RE='(\.test\.|\.spec\.|/__tests__/|/test/|/tests/|/fixtures/|\.fixture\.|\.stories\.|\.e2e\.|/test_[^/]*\.py$|/[^/]*_test\.py$|/conftest\.py$)'
 
 # Symbols that pattern-match as exports but should not be ranked as shared
 # helpers — typically framework-conventional per-file exports (e.g., Next.js
 # App Router HTTP method handlers in route.ts) or single-letter aliases.
-SYMBOL_DENYLIST_RE='^(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD|default|metadata|generateMetadata|generateStaticParams|loader|action|config|runtime|dynamic|revalidate|fetchCache|preferredRegion|maxDuration)$'
+SYMBOL_DENYLIST_RE_TS='^(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD|default|metadata|generateMetadata|generateStaticParams|loader|action|config|runtime|dynamic|revalidate|fetchCache|preferredRegion|maxDuration)$'
+# Python: dunders are method/attr conventions, not shared helpers; main /
+# setup are conventional entry points (CLI / packaging); test_* would only
+# appear if test-file exclusion missed something.
+SYMBOL_DENYLIST_RE_PY='^(__[A-Za-z0-9_]+__|main|setup|test_.*)$'
 SYMBOL_MIN_LENGTH=2
 
+# --- Language detection (mirrors scan-shared-utils.sh) ---
+detect_languages() {
+  local langs=""
+  [ -f "package.json" ] || [ -f "tsconfig.json" ] && langs="$langs ts_js"
+  [ -f "setup.py" ] || [ -f "pyproject.toml" ] || [ -f "requirements.txt" ] && langs="$langs python"
+  [ -f "go.mod" ] && langs="$langs go"
+  [ -f "Cargo.toml" ] && langs="$langs rust"
+  [ -f "Gemfile" ] && langs="$langs ruby"
+  [ -f "pom.xml" ] || [ -f "build.gradle" ] || [ -f "build.gradle.kts" ] && langs="$langs java"
+  [ -f "composer.json" ] && langs="$langs php"
+  [ -f "mix.exs" ] && langs="$langs elixir"
+  # Fallback: extension-based scan when no manifest matched.
+  if [ -z "$langs" ]; then
+    find . -maxdepth 3 -type f \( -name '*.ts' -o -name '*.js' \) -not -path '*/node_modules/*' 2>/dev/null | head -1 | grep -q . && langs="$langs ts_js"
+    find . -maxdepth 3 -type f -name '*.py' -not -path '*/.venv/*' 2>/dev/null | head -1 | grep -q . && langs="$langs python"
+    find . -maxdepth 3 -type f -name '*.go' 2>/dev/null | head -1 | grep -q . && langs="$langs go"
+    find . -maxdepth 3 -type f -name '*.rs' 2>/dev/null | head -1 | grep -q . && langs="$langs rust"
+    find . -maxdepth 3 -type f -name '*.rb' 2>/dev/null | head -1 | grep -q . && langs="$langs ruby"
+    find . -maxdepth 3 -type f -name '*.java' 2>/dev/null | head -1 | grep -q . && langs="$langs java"
+    find . -maxdepth 3 -type f -name '*.php' 2>/dev/null | head -1 | grep -q . && langs="$langs php"
+    find . -maxdepth 3 -type f \( -name '*.ex' -o -name '*.exs' \) 2>/dev/null | head -1 | grep -q . && langs="$langs elixir"
+  fi
+  # Trim leading whitespace; emit empty string if nothing detected.
+  echo "$langs" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+}
+
+lang_file_extensions() {
+  case "$1" in
+    ts_js)  echo 'ts tsx js jsx mjs' ;;
+    python) echo 'py' ;;
+    go)     echo 'go' ;;
+    rust)   echo 'rs' ;;
+    ruby)   echo 'rb' ;;
+    java)   echo 'java' ;;
+    php)    echo 'php' ;;
+    elixir) echo 'ex exs' ;;
+  esac
+}
+
+LANGS=$(detect_languages)
+
+list_source_files_for_lang() {
+  local lang="$1"
+  local exts find_args=()
+  exts=$(lang_file_extensions "$lang")
+  [ -z "$exts" ] && return 0
+  local first=true
+  for e in $exts; do
+    $first || find_args+=(-o)
+    find_args+=(-name "*.$e")
+    first=false
+  done
+  # Per-language post-filters:
+  # - ts_js: drop *.d.ts (type-declaration only — inflates symbol counts
+  #   with namespace declarations that have no runtime presence).
+  # - python: no extra post-filter beyond shared TEST_FILE_RE / EXCLUDE_DIRS_RE.
+  case "$lang" in
+    ts_js)
+      find . -type f \( "${find_args[@]}" \) 2>/dev/null \
+        | grep -vE "$EXCLUDE_DIRS_RE" \
+        | grep -vE "$TEST_FILE_RE" \
+        | grep -vE '\.d\.ts$' \
+        || true
+      ;;
+    *)
+      find . -type f \( "${find_args[@]}" \) 2>/dev/null \
+        | grep -vE "$EXCLUDE_DIRS_RE" \
+        | grep -vE "$TEST_FILE_RE" \
+        || true
+      ;;
+  esac
+}
+
 list_source_files() {
-  # Excludes test files, build/dep dirs, and *.d.ts type-declaration files
-  # (the latter only carry type exports, not real implementations — including
-  # them inflates "X is exported / shared" counts with namespace declarations
-  # that have no runtime presence).
-  find . -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' \) 2>/dev/null \
-    | grep -vE "$EXCLUDE_DIRS_RE" \
-    | grep -vE "$TEST_FILE_RE" \
-    | grep -vE '\.d\.ts$' \
-    || true
+  # Concatenates files from every detected language into a single list.
+  # Numeric / string sections consume this directly (language-agnostic); the
+  # symbol section dispatches per-language via extract_exports_for_lang and
+  # extract_imports_for_lang.
+  local lang
+  for lang in $LANGS; do
+    list_source_files_for_lang "$lang"
+  done
 }
 
 # --- 1. Numeric literal frequency ---
@@ -261,13 +344,11 @@ emit_numeric_section() {
 # then count how many other files reference each NAME (word-boundary match,
 # excluding the defining file). Approximate — comments / strings can hit.
 
-extract_exports() {
-  # Output: NAME<TAB>file:line  (one per export)
-  # Filtered: SYMBOL_DENYLIST_RE (framework-conventional names) and names
-  # shorter than SYMBOL_MIN_LENGTH.
-  list_source_files | while IFS= read -r f; do
+extract_exports_ts_js() {
+  # Output: NAME<TAB>file:line
+  list_source_files_for_lang ts_js | while IFS= read -r f; do
     grep -nE '^[[:space:]]*export[[:space:]]+(function|const|class|type|interface|enum)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' "$f" 2>/dev/null \
-      | awk -v file="$f" -v denylist="$SYMBOL_DENYLIST_RE" -v minlen="$SYMBOL_MIN_LENGTH" '
+      | awk -v file="$f" -v denylist="$SYMBOL_DENYLIST_RE_TS" -v minlen="$SYMBOL_MIN_LENGTH" '
           {
             line = $0
             sub(/:.*/, "", $1); lineno = $1
@@ -284,37 +365,83 @@ extract_exports() {
   done
 }
 
-extract_imports() {
-  # Output: file<TAB>imported_name  (one row per imported / re-exported name per file)
+extract_exports_python() {
+  # Python convention: module-level (no leading whitespace) `def NAME` /
+  # `class NAME` / `UPPERCASE_CONST = ...` are the public API surface.
+  # Indented entries are methods/locals — already excluded by the leading-^
+  # anchor on whitespace-free lines.
+  list_source_files_for_lang python | while IFS= read -r f; do
+    grep -nE '^(def[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|[A-Z_][A-Z0-9_]*[[:space:]]*=)' "$f" 2>/dev/null \
+      | awk -v file="$f" -v denylist="$SYMBOL_DENYLIST_RE_PY" -v minlen="$SYMBOL_MIN_LENGTH" '
+          {
+            line = $0
+            sub(/:.*/, "", $1); lineno = $1
+            sub(/^[0-9]+:[[:space:]]*/, "", line)
+            name = ""
+            if (match(line, /^(def|class)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*/)) {
+              tok = substr(line, RSTART, RLENGTH)
+              n = split(tok, parts, /[[:space:]]+/)
+              name = parts[n]
+            } else if (match(line, /^[A-Z_][A-Z0-9_]*/)) {
+              name = substr(line, RSTART, RLENGTH)
+            }
+            if (name == "") next
+            if (length(name) < minlen) next
+            if (name ~ denylist) next
+            print name "\t" file ":" lineno
+          }'
+  done
+}
+
+extract_exports() {
+  # Output: NAME<TAB>file:line  (concatenated across detected languages)
+  # Filtered: language-specific denylists + length floor SYMBOL_MIN_LENGTH.
+  # Languages without a per-language extractor (go / rust / ruby / java / php
+  # / elixir) are scaffolded but emit nothing — symbol section will be empty
+  # for them until import-aware counting is implemented.
+  local lang
+  for lang in $LANGS; do
+    case "$lang" in
+      ts_js)  extract_exports_ts_js ;;
+      python) extract_exports_python ;;
+      *) ;;  # scaffold only; no extractor yet
+    esac
+  done
+}
+
+_filter_files_by_ext() {
+  # Read the master files list and emit only paths whose extension matches
+  # any of the given extensions. Used to scope each per-language import
+  # extractor to its own files when the symbol section feeds the combined
+  # file list through.
+  local files_list="$1"; shift
+  local ext_re
+  ext_re=$(printf '%s|' "$@" | sed 's/|$//')
+  grep -E "\\.($ext_re)\$" "$files_list" || true
+}
+
+extract_imports_ts_js() {
   # Captures `import { X, Y as Z, type W } from '...'` and the equivalent
   # `export { X } from '...'` re-export form. Single-line only — multi-line
   # imports across `\n` are missed for now (covers ~5% of cases in typical TS
-  # projects; acceptable noise floor for v2).
-  # Counting via real import/re-export references avoids the word-boundary
-  # collision problem (a generic export name like `error` or `success` does
-  # NOT inflate when other files happen to use a local variable of the same
-  # name — they have to actually import it).
+  # projects; acceptable noise floor).
   local files_list="$1"
-  local engine
+  local tmp_filtered
+  tmp_filtered=$(mktemp)
+  _filter_files_by_ext "$files_list" ts tsx js jsx mjs > "$tmp_filtered"
+  if [ ! -s "$tmp_filtered" ]; then rm -f "$tmp_filtered"; return 0; fi
   if command -v rg >/dev/null 2>&1; then
-    engine=rg
-  else
-    engine=grep
-  fi
-  if [ "$engine" = "rg" ]; then
-    xargs -d '\n' -a "$files_list" rg --no-heading -N --color=never \
+    xargs -d '\n' -a "$tmp_filtered" rg --no-heading -N --color=never \
       '^\s*(?:import|export)\s+(?:type\s+)?\{[^}]+\}\s+from' 2>/dev/null
   else
-    xargs -d '\n' -a "$files_list" grep -HnE \
+    xargs -d '\n' -a "$tmp_filtered" grep -HnE \
       '^[[:space:]]*(import|export)[[:space:]]+(type[[:space:]]+)?\{[^}]+\}[[:space:]]+from' 2>/dev/null
   fi | awk -F: '
     {
-      # Reconstruct file from first colon (file paths in this scan rarely have :)
       idx = index($0, ":")
       if (idx == 0) next
       file = substr($0, 1, idx - 1)
       content = substr($0, idx + 1)
-      # Strip leading line-number column when grep emitted "file:lineno:..."
       if (match(content, /^[0-9]+:/)) content = substr(content, RLENGTH + 1)
       if (match(content, /\{[^}]+\}/)) {
         body = substr(content, RSTART + 1, RLENGTH - 2)
@@ -322,15 +449,70 @@ extract_imports() {
         for (i = 1; i <= n; i++) {
           s = parts[i]
           gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
-          # individual `type` / `typeof` qualifier
           sub(/^type[[:space:]]+/, "", s)
           sub(/^typeof[[:space:]]+/, "", s)
-          # rename `X as Y` — count the original imported name X
           sub(/[[:space:]]+as[[:space:]]+[A-Za-z_][A-Za-z0-9_]*$/, "", s)
           if (s ~ /^[A-Za-z_][A-Za-z0-9_]*$/) print file "\t" s
         }
       }
     }'
+  rm -f "$tmp_filtered"
+}
+
+extract_imports_python() {
+  # Captures `from MODULE import NAME[, NAME [as ALIAS] ...]` (single-line).
+  # Plain `import M` / `import M as N` are NOT counted: those import a module
+  # object, not a symbol from our exports table, and resolving `M.func`
+  # references back to the originally-defined function would require alias
+  # tracking beyond grep. Multi-line `from X import (\n a,\n b\n)` blocks are
+  # also skipped (rare; recorded as a known limitation).
+  local files_list="$1"
+  local tmp_filtered
+  tmp_filtered=$(mktemp)
+  _filter_files_by_ext "$files_list" py > "$tmp_filtered"
+  if [ ! -s "$tmp_filtered" ]; then rm -f "$tmp_filtered"; return 0; fi
+  if command -v rg >/dev/null 2>&1; then
+    xargs -d '\n' -a "$tmp_filtered" rg --no-heading -N --color=never \
+      '^\s*from\s+\S+\s+import\s+' 2>/dev/null
+  else
+    xargs -d '\n' -a "$tmp_filtered" grep -HnE \
+      '^[[:space:]]*from[[:space:]]+\S+[[:space:]]+import[[:space:]]+' 2>/dev/null
+  fi | awk -F: '
+    {
+      idx = index($0, ":")
+      if (idx == 0) next
+      file = substr($0, 1, idx - 1)
+      content = substr($0, idx + 1)
+      if (match(content, /^[0-9]+:/)) content = substr(content, RLENGTH + 1)
+      sub(/^[[:space:]]*from[[:space:]]+\S+[[:space:]]+import[[:space:]]+/, "", content)
+      gsub(/[()]/, "", content)
+      sub(/[[:space:]]*#.*$/, "", content)
+      n = split(content, parts, /,/)
+      for (i = 1; i <= n; i++) {
+        s = parts[i]
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+        sub(/[[:space:]]+as[[:space:]]+[A-Za-z_][A-Za-z0-9_]*$/, "", s)
+        if (s ~ /^[A-Za-z_][A-Za-z0-9_]*$/) print file "\t" s
+      }
+    }'
+  rm -f "$tmp_filtered"
+}
+
+extract_imports() {
+  # Output: file<TAB>imported_name  (concatenated across detected languages)
+  # Counting via real import/re-export references avoids the word-boundary
+  # collision problem (a generic export name like `error` or `success` does
+  # NOT inflate when other files happen to use a local variable of the same
+  # name — they have to actually import it).
+  local files_list="$1"
+  local lang
+  for lang in $LANGS; do
+    case "$lang" in
+      ts_js)  extract_imports_ts_js "$files_list" ;;
+      python) extract_imports_python "$files_list" ;;
+      *) ;;  # scaffold only; no extractor yet
+    esac
+  done
 }
 
 count_symbol_usage() {
@@ -381,10 +563,13 @@ emit_symbol_section() {
 }
 
 # --- Main with cache ---
-# Cache key: TRUSTED_ROOT + knob values + source-file mtimes/sizes/paths.
-# When any of those change the signature shifts and the fingerprint rebuilds.
+# Cache key: TRUSTED_ROOT + knob values + detected languages + source-file
+# mtimes/sizes/paths. A manifest change (e.g. adding pyproject.toml to a
+# previously-pure TS repo) shifts LANGS, which changes the signature and
+# forces a rebuild even if no source file changed.
 cache_signature() {
   echo "$TRUSTED_ROOT"
+  echo "LANGS=$LANGS"
   echo "TOP_N=$TOP_N LITERAL_MIN_FILES=$LITERAL_MIN_FILES SYMBOL_MIN_USAGE=$SYMBOL_MIN_USAGE SYMBOL_MIN_LENGTH=$SYMBOL_MIN_LENGTH"
   list_source_files | sort | xargs -d '\n' stat -c '%Y %s %n' 2>/dev/null
 }
@@ -411,6 +596,7 @@ build_fingerprint() {
   echo "Project: $ROOT"
   echo "Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "Source files scanned: $(list_source_files | wc -l)"
+  echo "Languages: ${LANGS:-(none detected)}"
   echo "Knobs: TOP_N=$TOP_N LITERAL_MIN_FILES=$LITERAL_MIN_FILES SYMBOL_MIN_USAGE=$SYMBOL_MIN_USAGE"
   echo "Engine: $(command -v rg >/dev/null 2>&1 && echo 'ripgrep' || echo 'grep')"
   echo ""
