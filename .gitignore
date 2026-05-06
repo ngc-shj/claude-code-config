@@ -2,3 +2,8 @@
 *.bak
 *.swp
 *~
+
+# Node deps for hooks/lib/ AST runner (provisioned by install.sh via npm).
+# Source of truth is package.json + package-lock.json — node_modules is
+# rebuilt host-side so it's never committed.
+node_modules/

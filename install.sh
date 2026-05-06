@@ -55,12 +55,50 @@ if [ -d "$SCRIPT_DIR/hooks" ]; then
     fi
     echo "  Installed hook: $hook_name"
   done
-  # Hook plugin subdirectories (e.g. fingerprint-langs/). Each subdir is
-  # mirrored as-is. Stale destination contents are wiped before copy so
-  # plugins removed upstream don't linger as shadow registrations.
+  # hooks/lib/ — shared library directory (AST runner + bash dispatch).
+  # Distinct from plugin subdirs because it carries non-shell content
+  # (.js + package.json) and a Node-managed node_modules/. Handled before
+  # the generic plugin-subdir loop so that loop can skip it.
+  if [ -d "$SCRIPT_DIR/hooks/lib" ]; then
+    rm -rf "$CLAUDE_DIR/hooks/lib"
+    mkdir -p "$CLAUDE_DIR/hooks/lib"
+    # Copy known artifact types only — never copy node_modules from
+    # source, npm install will rebuild it from package.json at install
+    # time so the host's binary architecture / Node version is honored.
+    for f in "$SCRIPT_DIR"/hooks/lib/*.sh "$SCRIPT_DIR"/hooks/lib/*.js "$SCRIPT_DIR"/hooks/lib/package.json; do
+      [ -f "$f" ] || continue
+      cp "$f" "$CLAUDE_DIR/hooks/lib/$(basename "$f")"
+    done
+    chmod +x "$CLAUDE_DIR/hooks/lib"/*.sh "$CLAUDE_DIR/hooks/lib"/*.js 2>/dev/null || true
+
+    # Provision Node deps. node + npm are OPTIONAL — if missing, the
+    # AST-based hook categories silently skip at runtime and the regex
+    # categories still run. We deliberately do NOT fail the install,
+    # because users who don't need AST features should still be able to
+    # install hooks/skills/rules.
+    if [ -f "$CLAUDE_DIR/hooks/lib/package.json" ]; then
+      if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+        echo "  Installing AST library deps (npm)..."
+        if ! (cd "$CLAUDE_DIR/hooks/lib" && npm install --silent --no-audit --no-fund --omit=dev >/dev/null 2>&1); then
+          echo "  WARN: npm install failed — AST-based hooks will be skipped at runtime"
+        fi
+      else
+        echo "  INFO: node/npm not on PATH — AST-based hooks will be skipped at runtime"
+      fi
+    fi
+    echo "  Installed hook lib: lib/"
+  fi
+
+  # Hook plugin subdirectories (e.g. fingerprint-langs/, ast-langs/). Each
+  # subdir is mirrored as-is. Stale destination contents are wiped before
+  # copy so plugins removed upstream don't linger as shadow registrations.
   for plugin_subdir in "$SCRIPT_DIR"/hooks/*/; do
     [ -d "$plugin_subdir" ] || continue
     subdir_name="$(basename "$plugin_subdir")"
+    # `lib/` is handled separately above (mixed-content directory + npm
+    # provisioning). Skip here to avoid the rm -rf clobbering its
+    # node_modules.
+    [ "$subdir_name" = "lib" ] && continue
     rm -rf "$CLAUDE_DIR/hooks/$subdir_name"
     mkdir -p "$CLAUDE_DIR/hooks/$subdir_name"
     for plugin_file in "$plugin_subdir"*.sh; do

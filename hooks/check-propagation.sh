@@ -21,11 +21,18 @@
 #                        verbatim in unchanged files (highest-confidence
 #                        category: string literals rarely collide with
 #                        unrelated content).
+#   C4 Signature change: function/method signature shape changed in diff
+#                        (param count, param type, optional/rest/default,
+#                        return type) — text-grep callers in unchanged
+#                        files for stale-call candidates. Powered by AST
+#                        (TypeScript Compiler API for TS/JS); silently
+#                        skipped when the AST runtime is unavailable so
+#                        C1-C3 still run.
 #
-# Out of scope (would need AST / TS compiler):
-#   - Function signature changes (caller-side update detection)
-#   - Type rename / shape change in TS
+# Still out of scope:
 #   - Regex / validation rule changes (context-dependent semantics)
+#   - Cross-file call-graph resolution (caller search is text-based; same
+#     FP surface as C1)
 #
 # Usage: bash check-propagation.sh [base-ref]
 #   base-ref defaults to 'main'. The diff is base-ref..HEAD.
@@ -45,6 +52,15 @@ set -u
 _CP_TMPDIR=$(mktemp -d)
 # shellcheck disable=SC2064
 trap "rm -rf '$_CP_TMPDIR'" EXIT
+
+# AST library — provides ast_diff_signatures for C4. Sourcing is idempotent
+# and registers all hooks/ast-langs/ plugins. Source path resolution mirrors
+# how this hook is laid out under ~/.claude/hooks/ after install.sh runs.
+_AST_SIG_LIB="$(dirname "${BASH_SOURCE[0]}")/lib/ast-signature.sh"
+if [ -f "$_AST_SIG_LIB" ]; then
+  # shellcheck disable=SC1090
+  source "$_AST_SIG_LIB"
+fi
 
 BASE_REF="${1:-main}"
 IDENT_MIN_LENGTH="${IDENT_MIN_LENGTH:-4}"
@@ -356,8 +372,132 @@ detect_string_literal_changes() {
   [ "$found" -eq 0 ] && { echo "  (removed strings detected but not present in unchanged files)"; echo ""; }
 }
 
+# --- C4: Function / method signature change candidates ---
+# AST-driven. For each TS/JS file in the diff, extract signatures at BASE
+# and HEAD; flag functions whose param count, param shape, or return type
+# changed. For each changed signature, text-grep callers in unchanged
+# files. Silently skipped if the AST runtime (Node + typescript module) is
+# not provisioned — the regex categories above still run.
+detect_signature_changes() {
+  echo "## C4 Signature change — function shape changed in diff, callers may be stale"
+  echo ""
+
+  if ! command -v ast_diff_signatures >/dev/null 2>&1; then
+    echo "  (AST library not loaded — install.sh did not provision hooks/lib/)"
+    echo ""
+    return
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  (jq not on PATH — required to parse AST diff output)"
+    echo ""
+    return
+  fi
+
+  # Filter changed files to those a plugin can handle. ast_lang_for_file
+  # echoes the lang key on stdout; we discard it and just check the exit
+  # status. ast_available additionally checks runtime provisioning.
+  local ts_changed_list="$_CP_TMPDIR/c4_changed_ts.txt"
+  : > "$ts_changed_list"
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    [ -f "$f" ] || continue
+    ast_lang_for_file "$f" >/dev/null 2>&1 || continue
+    ast_available "$f" >/dev/null 2>&1 || continue
+    echo "$f" >> "$ts_changed_list"
+  done < "$CHANGED_FILES_LIST"
+
+  if [ ! -s "$ts_changed_list" ]; then
+    echo "  (no AST-supported source files in diff)"
+    echo ""
+    return
+  fi
+
+  local found=0
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+
+    # Reconstruct BASE-version of the file via `git show`. If the file
+    # didn't exist at BASE (newly added), there's nothing to diff against
+    # and signature changes don't apply (no callers existed yet).
+    local base_tmp="$_CP_TMPDIR/c4_base_$(echo "$f" | tr '/' '_')"
+    if ! git show "$BASE_REF:$f" > "$base_tmp" 2>/dev/null; then
+      continue
+    fi
+
+    # Run AST diff. Failures (parse errors, runtime crashes) are non-fatal
+    # — they just skip this file silently.
+    local diff_json
+    diff_json=$(ast_diff_signatures "$base_tmp" "$f" 2>/dev/null) || continue
+    [ -z "$diff_json" ] && continue
+    [ "$diff_json" = "[]" ] && continue
+
+    # For each changed signature, extract (name, owner, kind, detail) and
+    # search unchanged files for callers. Caller match is text-grep on the
+    # method/function name as a word — same FP surface as C1 (cross-file
+    # call-graph would be the next investment).
+    local changed_count
+    changed_count=$(echo "$diff_json" | jq 'length')
+    [ "$changed_count" -eq 0 ] && continue
+
+    local i=0
+    while [ "$i" -lt "$changed_count" ]; do
+      local name owner kind detail changes_csv
+      name=$(echo "$diff_json" | jq -r ".[$i].name")
+      owner=$(echo "$diff_json" | jq -r ".[$i].owner // \"\"")
+      kind=$(echo "$diff_json" | jq -r ".[$i].kind")
+      detail=$(echo "$diff_json" | jq -r ".[$i].detail")
+      changes_csv=$(echo "$diff_json" | jq -r ".[$i].changes | join(\",\")")
+      i=$((i + 1))
+
+      # Skip very common short names. Single-letter or 2-3 char identifiers
+      # collide with everything in callers. Same threshold as C1's
+      # IDENT_MIN_LENGTH.
+      if [ "${#name}" -lt "$IDENT_MIN_LENGTH" ]; then
+        continue
+      fi
+
+      # Search callers in unchanged files. Word-boundary match on the
+      # name. For methods, we don't qualify by owner — the receiver is
+      # rarely visible textually at the call site (e.g. `repo.findById(...)`
+      # — `findById` alone is the searchable token). Owner is included
+      # in the human-readable label.
+      local label
+      if [ -n "$owner" ]; then
+        label="${owner}.${name}"
+      else
+        label="$name"
+      fi
+
+      local hits
+      hits=$(xargs -d '\n' -a "$UNCHANGED_FILES_LIST" \
+        grep -HnE "\\b${name}\\b" 2>/dev/null \
+        | head -"$MAX_HITS_PER_CANDIDATE")
+
+      if [ -n "$hits" ]; then
+        echo "  ${kind} ${label}: ${detail}  [changes: ${changes_csv}]"
+        # Severity: Minor for shape changes (callers may be silently broken
+        # by type widening or new optional params; reviewer judgment needed).
+        # Major for `removed` — a removed export with surviving callers is
+        # a hard breakage.
+        local sev="Minor"
+        case ",$changes_csv," in
+          *,removed,*) sev="Major" ;;
+        esac
+        echo "$hits" | while IFS=: read -r hf hl _rest; do
+          _emit_finding "$sev" "$hf:$hl" "calls '$name' — signature changed (${detail})"
+        done
+        echo ""
+        found=1
+      fi
+    done
+  done < "$ts_changed_list"
+
+  [ "$found" -eq 0 ] && { echo "  (no signature changes with surviving callers found)"; echo ""; }
+}
+
 detect_symbol_renames
 detect_constant_changes
 detect_string_literal_changes
+detect_signature_changes
 
 echo "=== End Propagation Check ==="
