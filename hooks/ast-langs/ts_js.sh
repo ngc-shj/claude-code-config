@@ -35,7 +35,7 @@ AST_LANG_EXTRACT_SIGNATURES_FN[ts_js]='ast_ts_js_extract_signatures'
 ast_ts_js_diff_signatures() {
   local base_file="$1"
   local head_file="$2"
-  NODE_PATH="$_AST_TS_NODE_MODULES" node "$_AST_TS_RUNNER" diff-signatures "$base_file" "$head_file"
+  ast_diff_signatures_via_extract ast_ts_js_extract_signatures "$base_file" "$head_file"
 }
 AST_LANG_DIFF_SIGNATURES_FN[ts_js]='ast_ts_js_diff_signatures'
 
@@ -48,7 +48,7 @@ AST_LANG_EXTRACT_ENUMS_FN[ts_js]='ast_ts_js_extract_enums'
 ast_ts_js_diff_enums() {
   local base_file="$1"
   local head_file="$2"
-  NODE_PATH="$_AST_TS_NODE_MODULES" node "$_AST_TS_RUNNER" diff-enums "$base_file" "$head_file"
+  ast_diff_enums_via_extract ast_ts_js_extract_enums "$base_file" "$head_file"
 }
 AST_LANG_DIFF_ENUMS_FN[ts_js]='ast_ts_js_diff_enums'
 
