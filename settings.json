@@ -160,6 +160,8 @@
       "Bash(bash ~/.claude/hooks/check-event-dispatch.sh *)",
       "Bash(bash ~/.claude/hooks/check-input-validation.sh)",
       "Bash(bash ~/.claude/hooks/check-input-validation.sh *)",
+      "Bash(bash ~/.claude/hooks/check-race-vacuous-guard.sh)",
+      "Bash(bash ~/.claude/hooks/check-race-vacuous-guard.sh *)",
       "Bash(bash ~/.claude/hooks/tri-tmpdir.sh create)",
       "Bash(bash ~/.claude/hooks/tri-tmpdir.sh cleanup *)",
       "Read(~/.claude/plans/*)",
