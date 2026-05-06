@@ -92,6 +92,20 @@ if [ -d "$SCRIPT_DIR/hooks" ]; then
       fi
     fi
 
+    # Provision a compiled Go helper when Go is available. Fallback stays
+    # `go run` so non-Go hosts still degrade gracefully.
+    if [ -f "$CLAUDE_DIR/hooks/lib/ast-go-runner.go" ]; then
+      if command -v go >/dev/null 2>&1; then
+        mkdir -p "$CLAUDE_DIR/hooks/lib/go-build"
+        echo "  Building Go AST helper..."
+        if ! go build -o "$CLAUDE_DIR/hooks/lib/go-build/ast-go-runner" "$CLAUDE_DIR/hooks/lib/ast-go-runner.go" >/dev/null 2>&1; then
+          echo "  WARN: go build failed — Go AST hooks will fall back to go run at runtime"
+        fi
+      else
+        echo "  INFO: go not on PATH — Go AST hooks will use go run when available"
+      fi
+    fi
+
     # Provision JavaParser support for Java AST extraction. Java is
     # OPTIONAL — compile only when java/javac/maven are all present.
     if [ -d "$CLAUDE_DIR/hooks/lib/java-src" ] && [ -f "$CLAUDE_DIR/hooks/lib/java-support/pom.xml" ]; then

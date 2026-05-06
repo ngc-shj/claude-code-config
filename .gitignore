@@ -7,3 +7,9 @@
 # Source of truth is package.json + package-lock.json — node_modules is
 # rebuilt host-side so it's never committed.
 node_modules/
+
+# AST helper build artifacts. Normally provisioned to ~/.claude/ at install;
+# smoke-tests or manual builds may produce them in the source tree.
+hooks/lib/go-build/
+hooks/lib/java-build/
+hooks/lib/java-lib/

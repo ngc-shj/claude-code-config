@@ -315,7 +315,9 @@ ast_diff_enums() {
 # references (schema: see ast-runner.js find-references-batch op). The
 # language is selected by the FIRST query's declFile extension; mixed-
 # language batches are not supported in v1 (queries should be grouped by
-# language at the call site). Returns 1 if the runtime is unavailable.
+# language at the call site). Non-TS plugins intentionally do not register
+# this handler yet — symbol resolution for Python / Go / Java is deferred to
+# follow-up work with language-specific tooling. Returns 1 if unavailable.
 ast_find_references_batch() {
   local input_json_file="$1"
   # Peek at the first query to determine language. Falls back to

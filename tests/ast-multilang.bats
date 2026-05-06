@@ -153,7 +153,7 @@ EOF
   [[ "$output" == *'"added":["ARCHIVED"]'* ]]
 }
 
-@test "java AST plugin: extract-signatures and diff-enums smoke" {
+@test "java AST plugin: extract-signatures plus diff-enums smoke" {
   run bash -lc "source '$AST_LIB'; ast_java_available"
   [ "$status" -eq 0 ] || skip "java AST runtime not provisioned"
 
