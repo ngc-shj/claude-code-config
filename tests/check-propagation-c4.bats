@@ -37,7 +37,7 @@ seed_repo() {
   (cd "$WORK" && git add -A && git commit -qm mutate)
 }
 
-@test "C4: param-count change with surviving caller is flagged Minor" {
+@test "C4: optional param-count addition is flagged Minor" {
   seed_repo \
     'export class Repo { findById(id: string): unknown { return null; } }' \
     'import { Repo } from "./repo"; const r = new Repo(); r.findById("abc");' \
@@ -47,6 +47,21 @@ seed_repo() {
   [[ "$output" == *"## C4 Signature change"* ]]
   [[ "$output" == *"params 1 → 2"* ]]
   [[ "$output" == *"[Minor]"* ]]
+  [[ "$output" == *"caller.ts"* ]]
+}
+
+@test "C4: required param-count addition is flagged Major" {
+  # Required-param addition is silent breakage in JS / `// @ts-ignore`
+  # and warrants Major over Minor — the runner emits severity based on
+  # the new param's optional/rest/hasDefault flags.
+  seed_repo \
+    'export function compute(a: number): number { return a; }' \
+    'import { compute } from "./repo"; compute(1);' \
+    'export function compute(a: number, b: number): number { return a + b; }'
+  run bash -c "cd '$WORK' && bash '$HOOK' HEAD~1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"params 1 → 2"* ]]
+  [[ "$output" == *"[Major]"* ]]
   [[ "$output" == *"caller.ts"* ]]
 }
 

@@ -28,6 +28,11 @@
 #                        (TypeScript Compiler API for TS/JS); silently
 #                        skipped when the AST runtime is unavailable so
 #                        C1-C3 still run.
+#   C5 Enum coverage:    enum member added in diff and at least one
+#                        unchanged file references the enum (qualified
+#                        `EnumName.X`) but not the new member. R12: switch
+#                        / match exhaustiveness gap. Same AST plumbing as
+#                        C4 — silently skipped when the runtime is gone.
 #
 # Still out of scope:
 #   - Regex / validation rule changes (context-dependent semantics)
@@ -475,14 +480,12 @@ detect_signature_changes() {
 
       if [ -n "$hits" ]; then
         echo "  ${kind} ${label}: ${detail}  [changes: ${changes_csv}]"
-        # Severity: Minor for shape changes (callers may be silently broken
-        # by type widening or new optional params; reviewer judgment needed).
-        # Major for `removed` — a removed export with surviving callers is
-        # a hard breakage.
-        local sev="Minor"
-        case ",$changes_csv," in
-          *,removed,*) sev="Major" ;;
-        esac
+        # Severity is emitted by the AST runner: Major when a function
+        # was removed OR a required parameter was added at the tail
+        # (silent breakage in JS / `// @ts-ignore`). Minor for shape /
+        # optional-param / return-type changes.
+        local sev
+        sev=$(echo "$diff_json" | jq -r ".[$((i - 1))].severity // \"Minor\"")
         echo "$hits" | while IFS=: read -r hf hl _rest; do
           _emit_finding "$sev" "$hf:$hl" "calls '$name' — signature changed (${detail})"
         done
@@ -495,9 +498,125 @@ detect_signature_changes() {
   [ "$found" -eq 0 ] && { echo "  (no signature changes with surviving callers found)"; echo ""; }
 }
 
+# --- C5: Enum coverage gap ---
+# AST-driven. For each TS/JS file in the diff, compare BASE/HEAD enum
+# member sets; for each newly-added member, find unchanged files that
+# reference the enum (qualified `EnumName.X`) but NOT the new member.
+# These are switch / match exhaustiveness candidates the reviewer should
+# extend. v1 scope: TypeScript `enum` declarations only — discriminated
+# unions / `as const` arrays are deferred. Silently skipped when the AST
+# runtime is unavailable.
+detect_enum_coverage_gaps() {
+  echo "## C5 Enum coverage — enum member added, callers may not handle new variant"
+  echo ""
+
+  if ! command -v ast_diff_enums >/dev/null 2>&1; then
+    echo "  (AST library not loaded — install.sh did not provision hooks/lib/)"
+    echo ""
+    return
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  (jq not on PATH — required to parse AST diff output)"
+    echo ""
+    return
+  fi
+
+  local ts_changed_list="$_CP_TMPDIR/c5_changed_ts.txt"
+  : > "$ts_changed_list"
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    [ -f "$f" ] || continue
+    ast_lang_for_file "$f" >/dev/null 2>&1 || continue
+    ast_available "$f" >/dev/null 2>&1 || continue
+    echo "$f" >> "$ts_changed_list"
+  done < "$CHANGED_FILES_LIST"
+
+  if [ ! -s "$ts_changed_list" ]; then
+    echo "  (no AST-supported source files in diff)"
+    echo ""
+    return
+  fi
+
+  local found=0
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+
+    local base_tmp="$_CP_TMPDIR/c5_base_$(echo "$f" | tr '/' '_')"
+    if ! git show "$BASE_REF:$f" > "$base_tmp" 2>/dev/null; then
+      continue
+    fi
+
+    local diff_json
+    diff_json=$(ast_diff_enums "$base_tmp" "$f" 2>/dev/null) || continue
+    [ -z "$diff_json" ] && continue
+    [ "$diff_json" = "[]" ] && continue
+
+    local enum_count
+    enum_count=$(echo "$diff_json" | jq 'length')
+    [ "$enum_count" -eq 0 ] && continue
+
+    local i=0
+    while [ "$i" -lt "$enum_count" ]; do
+      local enum_name added_count
+      enum_name=$(echo "$diff_json" | jq -r ".[$i].name")
+      added_count=$(echo "$diff_json" | jq ".[$i].added | length")
+      i=$((i + 1))
+
+      [ "$added_count" -eq 0 ] && continue
+
+      # Cheaper than per-member: compute "files referencing this enum" once,
+      # then per-member compute "files referencing the new member" and take
+      # the set difference.
+      local files_with_enum_refs="$_CP_TMPDIR/c5_refs_${enum_name}.txt"
+      xargs -d '\n' -a "$UNCHANGED_FILES_LIST" \
+        grep -lE "\\b${enum_name}\\.[A-Za-z_][A-Za-z0-9_]*" 2>/dev/null \
+        | sort -u > "$files_with_enum_refs"
+      [ ! -s "$files_with_enum_refs" ] && continue
+
+      local j=0
+      while [ "$j" -lt "$added_count" ]; do
+        local new_member
+        new_member=$(echo "$diff_json" | jq -r ".[$((i - 1))].added[$j]")
+        j=$((j + 1))
+
+        # Files that DO reference the new member already — they are
+        # presumed handled. Subtract them from the candidate set.
+        local files_with_new_member="$_CP_TMPDIR/c5_new_${enum_name}_${new_member}.txt"
+        xargs -d '\n' -a "$files_with_enum_refs" \
+          grep -lE "\\b${enum_name}\\.${new_member}\\b" 2>/dev/null \
+          | sort -u > "$files_with_new_member"
+
+        local missing="$_CP_TMPDIR/c5_miss_${enum_name}_${new_member}.txt"
+        comm -23 "$files_with_enum_refs" "$files_with_new_member" > "$missing"
+
+        [ ! -s "$missing" ] && continue
+
+        echo "  Enum ${enum_name}: new member ${new_member} added"
+        local hit_count=0
+        while IFS= read -r hf; do
+          [ -z "$hf" ] && continue
+          [ "$hit_count" -ge "$MAX_HITS_PER_CANDIDATE" ] && break
+          # Report the first qualified reference line as the navigation
+          # target — that's where the reviewer will start adding cases.
+          local example_line
+          example_line=$(grep -nE "\\b${enum_name}\\." "$hf" | head -1 | cut -d: -f1)
+          _emit_finding "Minor" "${hf}:${example_line:-1}" \
+            "references ${enum_name} but not new member ${enum_name}.${new_member}"
+          hit_count=$((hit_count + 1))
+          found=1
+        done < "$missing"
+        echo ""
+      done
+    done
+  done < "$ts_changed_list"
+
+  [ "$found" -eq 0 ] && { echo "  (no enum coverage gaps detected)"; echo ""; }
+}
+
 detect_symbol_renames
 detect_constant_changes
 detect_string_literal_changes
 detect_signature_changes
+detect_enum_coverage_gaps
 
 echo "=== End Propagation Check ==="

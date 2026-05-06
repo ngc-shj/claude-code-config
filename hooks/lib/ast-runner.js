@@ -13,13 +13,30 @@
 //     for top-level functions, exported const arrow functions, and class
 //     methods. `owner` is the class name for methods, null otherwise.
 //
+//   extract-enums <file>
+//     Emits JSON array of { name, line, members: [{name, value}] } for
+//     each `enum X { ... }` declaration. `value` is the textual
+//     initializer (or null for auto-numbered numeric enums). Used by R12
+//     (enum coverage gap detection).
+//
+//   extract-all <file>
+//     Single-pass parse returning { signatures, enums } in one call.
+//     Hooks consuming multiple kinds of AST data on the same file should
+//     prefer this over multiple ops to avoid re-parsing.
+//
 //   diff-signatures <baseFile> <headFile>
 //     Extracts signatures from both files and reports differences by
 //     (owner, name). Emits JSON array of { name, owner, kind, line,
-//     changes: [...], detail: string } where changes is a subset of
-//     ['param-count','param-shape','return-type','removed']. `line` refers
-//     to the head file (or base file when removed). Used by R3 C4
-//     (signature change → caller-side update detection).
+//     changes: [...], detail: string, severity }. `severity` is 'Major'
+//     when an existing function was removed OR a required parameter was
+//     added at the tail (silent breakage in JS / `// @ts-ignore`); 'Minor'
+//     otherwise. Used by R3 C4 (signature change → caller-side update).
+//
+//   diff-enums <baseFile> <headFile>
+//     Compares enum member sets by enum name. Emits JSON array of
+//     { name, line, added: [], removed: [] } where `added` / `removed`
+//     are member-name lists. Enums with no member changes are omitted.
+//     Used by R12 C5 (enum member added → switch coverage gap).
 //
 // Output: JSON to stdout. Errors → stderr + non-zero exit so the caller can
 // degrade gracefully (R3 regex categories continue to run).
@@ -84,10 +101,16 @@ function parseFile(file) {
   return sf;
 }
 
-function collectSignatures(sf) {
+// Single visitor that collects every supported AST shape in one pass.
+// Per-op `extract-*` wrappers filter the result; `extract-all` returns it
+// whole. Designed so adding a new collector (R12 enums today, R19 mocks
+// later) does not multiply parser invocations.
+function collectAll(sf) {
   const sigs = [];
+  const enums = [];
 
   function visit(node, owner) {
+    // --- signatures ---
     if (ts.isFunctionDeclaration(node) && node.name) {
       sigs.push(makeSig(node, sf, owner, "function", node.name));
     } else if (
@@ -122,16 +145,59 @@ function collectSignatures(sf) {
       for (const member of node.members) visit(member, ifaceName);
       return;
     }
+    // --- enums ---
+    else if (ts.isEnumDeclaration(node) && node.name) {
+      enums.push({
+        name: node.name.text,
+        line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
+        members: node.members.map((m) => ({
+          // Member identifier — for computed enum members
+          // (`[Symbol.iterator]` etc.) we fall back to the source text;
+          // those are vanishingly rare in real enums.
+          name:
+            m.name && ts.isIdentifier(m.name)
+              ? m.name.text
+              : m.name
+                ? m.name.getText(sf)
+                : "<unknown>",
+          // Initializer text (or null for auto-numbered numeric enums).
+          // Comparing values is out of v1 scope — added/removed by name
+          // is the C5 signal. Keeping the field for future use.
+          value: m.initializer ? m.initializer.getText(sf) : null,
+        })),
+      });
+      return;
+    }
     ts.forEachChild(node, (n) => visit(n, owner));
   }
 
   visit(sf, null);
-  return sigs;
+  return { signatures: sigs, enums };
+}
+
+// Backwards-compatible view over collectAll for the existing
+// extract-signatures / diff-signatures consumers.
+function collectSignatures(sf) {
+  return collectAll(sf).signatures;
+}
+
+function collectEnums(sf) {
+  return collectAll(sf).enums;
 }
 
 function extractSignatures(file) {
   const sf = parseFile(file);
   process.stdout.write(JSON.stringify(collectSignatures(sf)));
+}
+
+function extractEnums(file) {
+  const sf = parseFile(file);
+  process.stdout.write(JSON.stringify(collectEnums(sf)));
+}
+
+function extractAll(file) {
+  const sf = parseFile(file);
+  process.stdout.write(JSON.stringify(collectAll(sf)));
 }
 
 function diffSignatures(baseFile, headFile) {
@@ -162,16 +228,29 @@ function diffSignatures(baseFile, headFile) {
         line: base.line,
         changes: ["removed"],
         detail: `${formatLabel(base)} removed`,
+        severity: "Major",
       });
       continue;
     }
     const changes = [];
     const details = [];
+    let majorReason = null;
     if (base.params.length !== head.params.length) {
       changes.push("param-count");
       details.push(
         `params ${base.params.length} → ${head.params.length}`,
       );
+      // A required tail parameter added is a silent breakage in JS / when
+      // callers use `// @ts-ignore`. Optional / rest / default-valued
+      // additions are non-breaking. Param removal is also non-Major (TS
+      // catches extras at compile-time; runtime ignores them).
+      if (head.params.length > base.params.length) {
+        const newTail = head.params.slice(base.params.length);
+        const requiredAddition = newTail.some(
+          (p) => !p.optional && !p.hasDefault && !p.rest,
+        );
+        if (requiredAddition) majorReason = "required parameter added";
+      }
     } else {
       // Same arity — compare per-position shape. Name changes alone are
       // not flagged (callers don't see param names at call sites in
@@ -207,10 +286,31 @@ function diffSignatures(baseFile, headFile) {
         line: head.line,
         changes,
         detail: details.join("; "),
+        severity: majorReason ? "Major" : "Minor",
       });
     }
   }
 
+  process.stdout.write(JSON.stringify(out));
+}
+
+function diffEnums(baseFile, headFile) {
+  const baseEnums = collectEnums(parseFile(baseFile));
+  const headEnums = collectEnums(parseFile(headFile));
+  const baseByName = new Map(baseEnums.map((e) => [e.name, e]));
+  const headByName = new Map(headEnums.map((e) => [e.name, e]));
+
+  const out = [];
+  for (const [name, head] of headByName) {
+    const base = baseByName.get(name);
+    if (!base) continue; // brand-new enums have no callers to retrofit
+    const baseMembers = new Set(base.members.map((m) => m.name));
+    const headMembers = new Set(head.members.map((m) => m.name));
+    const added = [...headMembers].filter((m) => !baseMembers.has(m));
+    const removed = [...baseMembers].filter((m) => !headMembers.has(m));
+    if (added.length === 0 && removed.length === 0) continue;
+    out.push({ name, line: head.line, added, removed });
+  }
   process.stdout.write(JSON.stringify(out));
 }
 
@@ -226,12 +326,33 @@ switch (op) {
     }
     extractSignatures(args[0]);
     break;
+  case "extract-enums":
+    if (args.length !== 1) {
+      console.error("usage: ast-runner extract-enums <file>");
+      process.exit(1);
+    }
+    extractEnums(args[0]);
+    break;
+  case "extract-all":
+    if (args.length !== 1) {
+      console.error("usage: ast-runner extract-all <file>");
+      process.exit(1);
+    }
+    extractAll(args[0]);
+    break;
   case "diff-signatures":
     if (args.length !== 2) {
       console.error("usage: ast-runner diff-signatures <baseFile> <headFile>");
       process.exit(1);
     }
     diffSignatures(args[0], args[1]);
+    break;
+  case "diff-enums":
+    if (args.length !== 2) {
+      console.error("usage: ast-runner diff-enums <baseFile> <headFile>");
+      process.exit(1);
+    }
+    diffEnums(args[0], args[1]);
     break;
   default:
     console.error(`ast-runner: unknown op '${op}'`);
