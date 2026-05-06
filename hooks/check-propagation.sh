@@ -457,56 +457,90 @@ detect_signature_changes() {
   local shape_n
   shape_n=$(jq 'length' "$shape_set")
   if [ "$shape_n" -gt 0 ] && command -v ast_find_references_batch >/dev/null 2>&1; then
-    # Build the batch query: one entry per shape-change signature.
-    local batch_input="$_CP_TMPDIR/c4_batch_input.json"
-    jq '[.[] | {declFile, name, owner: (.owner // "")}]' "$shape_set" > "$batch_input"
+    local refs_output_all="$_CP_TMPDIR/c4_refs_output_all.json"
+    echo "[]" > "$refs_output_all"
 
-    local refs_output="$_CP_TMPDIR/c4_refs_output.json"
-    if ast_find_references_batch "$batch_input" > "$refs_output" 2>/dev/null && [ -s "$refs_output" ]; then
-      # shape_set[i] and refs_output[i] correspond — runner preserves input order.
-      local i=0
-      while [ "$i" -lt "$shape_n" ]; do
-        local name owner kind detail changes_csv sev
-        name=$(jq -r ".[$i].name" "$shape_set")
-        owner=$(jq -r ".[$i].owner // \"\"" "$shape_set")
-        kind=$(jq -r ".[$i].kind" "$shape_set")
-        detail=$(jq -r ".[$i].detail" "$shape_set")
-        changes_csv=$(jq -r ".[$i].changes | join(\",\")" "$shape_set")
-        sev=$(jq -r ".[$i].severity // \"Minor\"" "$shape_set")
+    local shape_langs="$_CP_TMPDIR/c4_shape_langs.txt"
+    : > "$shape_langs"
+    local i=0
+    while [ "$i" -lt "$shape_n" ]; do
+      local decl_file lang
+      decl_file=$(jq -r ".[$i].declFile" "$shape_set")
+      lang=$(ast_lang_for_file "$decl_file" 2>/dev/null || true)
+      [ -n "$lang" ] && echo "$lang" >> "$shape_langs"
+      i=$((i + 1))
+    done
 
-        # Filter refs: drop import / type-ref kinds (those don't break on
-        # signature change), keep only files that are in UNCHANGED_FILES_LIST
-        # (callers in changed files were already revised by the same diff).
-        local locs="$_CP_TMPDIR/c4_locs_${i}.txt"
-        jq -r ".[$i].references[] | select(.kind == \"ref\") | \"\(.file):\(.line)\"" \
-          "$refs_output" | sort -u > "$locs"
+    if [ -s "$shape_langs" ]; then
+      while IFS= read -r lang; do
+        [ -z "$lang" ] && continue
+        local batch_input="$_CP_TMPDIR/c4_batch_${lang}.json"
+        echo "[]" > "$batch_input"
 
-        local final_hits="$_CP_TMPDIR/c4_final_${i}.txt"
-        : > "$final_hits"
-        while IFS=: read -r hf hl; do
-          [ -z "$hf" ] && continue
-          if grep -Fxq "$hf" "$UNCHANGED_FILES_LIST"; then
-            echo "${hf}:${hl}" >> "$final_hits"
+        i=0
+        while [ "$i" -lt "$shape_n" ]; do
+          local decl_file entry_lang
+          decl_file=$(jq -r ".[$i].declFile" "$shape_set")
+          entry_lang=$(ast_lang_for_file "$decl_file" 2>/dev/null || true)
+          if [ "$entry_lang" = "$lang" ]; then
+            jq --argjson idx "$i" --slurpfile prev "$batch_input" \
+              '.[$idx] | {declFile, name, owner: (.owner // ""), _idx: $idx} | [$prev[0][], .]' \
+              "$shape_set" > "$batch_input.tmp"
+            mv "$batch_input.tmp" "$batch_input"
           fi
-        done < "$locs"
+          i=$((i + 1))
+        done
 
-        i=$((i + 1))
-
-        if [ -s "$final_hits" ]; then
-          local label
-          if [ -n "$owner" ]; then label="${owner}.${name}"; else label="${name}"; fi
-          echo "  ${kind} ${label}: ${detail}  [changes: ${changes_csv}]"
-          local hit_count=0
-          while IFS=: read -r hf hl; do
-            [ "$hit_count" -ge "$MAX_HITS_PER_CANDIDATE" ] && break
-            _emit_finding "$sev" "${hf}:${hl}" "calls '$name' — signature changed (${detail})"
-            hit_count=$((hit_count + 1))
-          done < "$final_hits"
-          echo ""
-          found=1
+        local refs_output_lang="$_CP_TMPDIR/c4_refs_output_${lang}.json"
+        if ast_find_references_batch "$batch_input" > "$refs_output_lang" 2>/dev/null && [ -s "$refs_output_lang" ]; then
+          jq --slurpfile prev "$refs_output_all" '$prev[0] + .' "$refs_output_lang" > "$refs_output_all.tmp"
+          mv "$refs_output_all.tmp" "$refs_output_all"
         fi
-      done
+      done < <(sort -u "$shape_langs")
     fi
+
+    i=0
+    while [ "$i" -lt "$shape_n" ]; do
+      local name owner kind detail changes_csv sev
+      name=$(jq -r ".[$i].name" "$shape_set")
+      owner=$(jq -r ".[$i].owner // \"\"" "$shape_set")
+      kind=$(jq -r ".[$i].kind" "$shape_set")
+      detail=$(jq -r ".[$i].detail" "$shape_set")
+      changes_csv=$(jq -r ".[$i].changes | join(\",\")" "$shape_set")
+      sev=$(jq -r ".[$i].severity // \"Minor\"" "$shape_set")
+
+      local locs="$_CP_TMPDIR/c4_locs_${i}.txt"
+      jq -r --argjson idx "$i" '
+          map(select(._idx == $idx))[0].references[]?
+          | select(.kind == "ref")
+          | "\(.file):\(.line)"
+        ' "$refs_output_all" | sort -u > "$locs"
+
+      local final_hits="$_CP_TMPDIR/c4_final_${i}.txt"
+      : > "$final_hits"
+      while IFS=: read -r hf hl; do
+        [ -z "$hf" ] && continue
+        if grep -Fxq "$hf" "$UNCHANGED_FILES_LIST"; then
+          echo "${hf}:${hl}" >> "$final_hits"
+        fi
+      done < "$locs"
+
+      i=$((i + 1))
+
+      if [ -s "$final_hits" ]; then
+        local label
+        if [ -n "$owner" ]; then label="${owner}.${name}"; else label="${name}"; fi
+        echo "  ${kind} ${label}: ${detail}  [changes: ${changes_csv}]"
+        local hit_count=0
+        while IFS=: read -r hf hl; do
+          [ "$hit_count" -ge "$MAX_HITS_PER_CANDIDATE" ] && break
+          _emit_finding "$sev" "${hf}:${hl}" "calls '$name' — signature changed (${detail})"
+          hit_count=$((hit_count + 1))
+        done < "$final_hits"
+        echo ""
+        found=1
+      fi
+    done
   fi
 
   # ---- removed exports: text-grep ----
