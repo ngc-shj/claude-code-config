@@ -22,6 +22,8 @@ if [ -z "${_AST_SIGNATURE_SOURCED:-}" ]; then
   declare -gA AST_LANG_AVAILABLE_FN
   declare -gA AST_LANG_EXTRACT_SIGNATURES_FN
   declare -gA AST_LANG_DIFF_SIGNATURES_FN
+  declare -gA AST_LANG_EXTRACT_ENUMS_FN
+  declare -gA AST_LANG_DIFF_ENUMS_FN
 
   _AST_LANGS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/ast-langs"
 
@@ -88,6 +90,33 @@ ast_diff_signatures() {
   local avail_fn="${AST_LANG_AVAILABLE_FN[$lang]:-}"
   [ -n "$avail_fn" ] && "$avail_fn" || return 1
   local fn="${AST_LANG_DIFF_SIGNATURES_FN[$lang]:-}"
+  [ -n "$fn" ] || return 1
+  "$fn" "$base_file" "$head_file"
+}
+
+# ast_extract_enums <file> → JSON array of enum declarations on stdout
+# (schema: see ast-runner.js extract-enums op). Returns 1 if unavailable.
+ast_extract_enums() {
+  local file="$1"
+  local lang
+  lang=$(ast_lang_for_file "$file") || return 1
+  local avail_fn="${AST_LANG_AVAILABLE_FN[$lang]:-}"
+  [ -n "$avail_fn" ] && "$avail_fn" || return 1
+  local fn="${AST_LANG_EXTRACT_ENUMS_FN[$lang]:-}"
+  [ -n "$fn" ] || return 1
+  "$fn" "$file"
+}
+
+# ast_diff_enums <baseFile> <headFile> → JSON array of enum member
+# changes (schema: see ast-runner.js diff-enums op). Used by R12 C5.
+ast_diff_enums() {
+  local base_file="$1"
+  local head_file="$2"
+  local lang
+  lang=$(ast_lang_for_file "$head_file") || return 1
+  local avail_fn="${AST_LANG_AVAILABLE_FN[$lang]:-}"
+  [ -n "$avail_fn" ] && "$avail_fn" || return 1
+  local fn="${AST_LANG_DIFF_ENUMS_FN[$lang]:-}"
   [ -n "$fn" ] || return 1
   "$fn" "$base_file" "$head_file"
 }
