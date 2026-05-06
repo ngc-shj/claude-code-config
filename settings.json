@@ -158,6 +158,8 @@
       "Bash(bash ~/.claude/hooks/check-suppression.sh *)",
       "Bash(bash ~/.claude/hooks/check-event-dispatch.sh)",
       "Bash(bash ~/.claude/hooks/check-event-dispatch.sh *)",
+      "Bash(bash ~/.claude/hooks/check-input-validation.sh)",
+      "Bash(bash ~/.claude/hooks/check-input-validation.sh *)",
       "Bash(bash ~/.claude/hooks/tri-tmpdir.sh create)",
       "Bash(bash ~/.claude/hooks/tri-tmpdir.sh cleanup *)",
       "Read(~/.claude/plans/*)",
