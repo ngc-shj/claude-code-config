@@ -85,7 +85,7 @@ public final class AstJavaRunner {
   }
 
   private static int lineOf(MethodDeclaration node) {
-    return node.getBegin().map(Position::line).orElse(1);
+    return node.getBegin().map(p -> p.line).orElse(1);
   }
 
   private static List<ParamShape> paramShapes(MethodDeclaration decl) {
@@ -146,7 +146,7 @@ public final class AstJavaRunner {
       }
       out.add(new EnumDecl(
           enumDecl.getNameAsString(),
-          enumDecl.getBegin().map(Position::line).orElse(1),
+          enumDecl.getBegin().map(p -> p.line).orElse(1),
           members));
     }
 
