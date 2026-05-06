@@ -183,6 +183,49 @@ EOF
   [[ "$output" == *"(no AST-supported source files in diff)"* ]]
 }
 
+@test "C4: mixed TS + Python + Go signature changes still report TS callers" {
+  command -v go >/dev/null 2>&1 || skip "go not on PATH"
+  command -v python3 >/dev/null 2>&1 || skip "python3 not on PATH"
+
+  cat > "$WORK/repo.ts" <<'EOF'
+export function compute(a: number): number { return a; }
+EOF
+  cat > "$WORK/caller.ts" <<'EOF'
+import { compute } from "./repo";
+compute(1);
+EOF
+  cat > "$WORK/service.py" <<'EOF'
+def compute(value: int) -> int:
+    return value
+EOF
+  cat > "$WORK/status.go" <<'EOF'
+package demo
+
+func Compute(value string) string { return value }
+EOF
+  (cd "$WORK" && git add -A && git commit -qm initial)
+
+  cat > "$WORK/repo.ts" <<'EOF'
+export function compute(a: number, b: number): number { return a + b; }
+EOF
+  cat > "$WORK/service.py" <<'EOF'
+def compute(value: int, suffix: str = "") -> int:
+    return value
+EOF
+  cat > "$WORK/status.go" <<'EOF'
+package demo
+
+func Compute(value string, verbose bool) string { return value }
+EOF
+  (cd "$WORK" && git add -A && git commit -qm mutate)
+
+  run bash -c "cd '$WORK' && bash '$HOOK' HEAD~1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"caller.ts"* ]]
+  [[ "$output" == *"compute"* ]]
+  [[ "$output" == *"[Major]"* ]]
+}
+
 @test "C4 graceful skip: no AST runtime → C1-C3 still run" {
   # Simulate runtime-missing by overriding PATH to hide node.
   printf 'export function gone(x: number): void {}\n' > "$WORK/repo.ts"

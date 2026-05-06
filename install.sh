@@ -62,14 +62,19 @@ if [ -d "$SCRIPT_DIR/hooks" ]; then
   if [ -d "$SCRIPT_DIR/hooks/lib" ]; then
     rm -rf "$CLAUDE_DIR/hooks/lib"
     mkdir -p "$CLAUDE_DIR/hooks/lib"
-    # Copy known artifact types only — never copy node_modules from
-    # source, npm install will rebuild it from package.json at install
-    # time so the host's binary architecture / Node version is honored.
-    for f in "$SCRIPT_DIR"/hooks/lib/*.sh "$SCRIPT_DIR"/hooks/lib/*.js "$SCRIPT_DIR"/hooks/lib/package.json; do
-      [ -f "$f" ] || continue
-      cp "$f" "$CLAUDE_DIR/hooks/lib/$(basename "$f")"
+    # Copy every helper except node_modules — runtimes may include JS,
+    # Python, Go, and Java helper sources. Dependencies are rebuilt on
+    # the target host so architecture/runtime versions stay aligned.
+    for f in "$SCRIPT_DIR"/hooks/lib/*; do
+      [ -e "$f" ] || continue
+      [ "$(basename "$f")" = "node_modules" ] && continue
+      if [ -d "$f" ]; then
+        cp -r "$f" "$CLAUDE_DIR/hooks/lib/"
+      else
+        cp "$f" "$CLAUDE_DIR/hooks/lib/$(basename "$f")"
+      fi
     done
-    chmod +x "$CLAUDE_DIR/hooks/lib"/*.sh "$CLAUDE_DIR/hooks/lib"/*.js 2>/dev/null || true
+    chmod +x "$CLAUDE_DIR/hooks/lib"/*.sh "$CLAUDE_DIR/hooks/lib"/*.js "$CLAUDE_DIR/hooks/lib"/*.py 2>/dev/null || true
 
     # Provision Node deps. node + npm are OPTIONAL — if missing, the
     # AST-based hook categories silently skip at runtime and the regex
@@ -84,6 +89,39 @@ if [ -d "$SCRIPT_DIR/hooks" ]; then
         fi
       else
         echo "  INFO: node/npm not on PATH — AST-based hooks will be skipped at runtime"
+      fi
+    fi
+
+    # Provision a compiled Go helper when Go is available. Fallback stays
+    # `go run` so non-Go hosts still degrade gracefully.
+    if [ -f "$CLAUDE_DIR/hooks/lib/ast-go-runner.go" ]; then
+      if command -v go >/dev/null 2>&1; then
+        mkdir -p "$CLAUDE_DIR/hooks/lib/go-build"
+        echo "  Building Go AST helper..."
+        if ! go build -o "$CLAUDE_DIR/hooks/lib/go-build/ast-go-runner" "$CLAUDE_DIR/hooks/lib/ast-go-runner.go" >/dev/null 2>&1; then
+          echo "  WARN: go build failed — Go AST hooks will fall back to go run at runtime"
+        fi
+      else
+        echo "  INFO: go not on PATH — Go AST hooks will use go run when available"
+      fi
+    fi
+
+    # Provision JavaParser support for Java AST extraction. Java is
+    # OPTIONAL — compile only when java/javac/maven are all present.
+    if [ -d "$CLAUDE_DIR/hooks/lib/java-src" ] && [ -f "$CLAUDE_DIR/hooks/lib/java-support/pom.xml" ]; then
+      if command -v java >/dev/null 2>&1 && command -v javac >/dev/null 2>&1 && command -v mvn >/dev/null 2>&1; then
+        mkdir -p "$CLAUDE_DIR/hooks/lib/java-lib" "$CLAUDE_DIR/hooks/lib/java-build"
+        echo "  Installing Java AST deps (maven)..."
+        echo "  INFO: first-time Maven download may take a moment"
+        if (cd "$CLAUDE_DIR/hooks/lib/java-support" \
+              && mvn -q dependency:copy-dependencies -DoutputDirectory="$CLAUDE_DIR/hooks/lib/java-lib" >/dev/null 2>&1 \
+              && javac -cp "$CLAUDE_DIR/hooks/lib/java-lib/*" -d "$CLAUDE_DIR/hooks/lib/java-build" "$CLAUDE_DIR/hooks/lib/java-src/AstJavaRunner.java" >/dev/null 2>&1); then
+          :
+        else
+          echo "  WARN: JavaParser provisioning failed — Java AST hooks will be skipped at runtime"
+        fi
+      else
+        echo "  INFO: java/javac/mvn not fully available — Java AST hooks will be skipped at runtime"
       fi
     fi
     echo "  Installed hook lib: lib/"
