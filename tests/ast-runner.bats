@@ -314,6 +314,145 @@ EOF
   [[ "$output" == *'"name":"f"'* ]]
 }
 
+@test "find-references-batch: resolves call site for top-level function" {
+  # find-references requires a project (cwd-rooted synthetic Program when
+  # no tsconfig.json is present), so cd into the work dir for the call.
+  cat > "$WORK/repo.ts" <<'EOF'
+export function helper(x: number): string { return String(x); }
+EOF
+  cat > "$WORK/caller.ts" <<'EOF'
+import { helper } from "./repo";
+const x = helper(1);
+EOF
+  cat > "$WORK/queries.json" <<'EOF'
+[{"declFile": "repo.ts", "name": "helper"}]
+EOF
+  run bash -c "cd '$WORK' && NODE_PATH='$NODE_MODULES' node '$RUNNER' find-references-batch queries.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"name":"helper"'* ]]
+  [[ "$output" == *'"file":"caller.ts"'* ]]
+  [[ "$output" == *'"kind":"ref"'* ]]
+  [[ "$output" == *'"kind":"import"'* ]]
+}
+
+@test "find-references-batch: kind classifies import vs ref vs type-ref" {
+  cat > "$WORK/repo.ts" <<'EOF'
+export function helper(x: number): string { return String(x); }
+export type HelperFn = typeof helper;
+EOF
+  cat > "$WORK/caller.ts" <<'EOF'
+import { helper, type HelperFn } from "./repo";
+const fn: HelperFn = helper;
+const x = helper(1);
+EOF
+  cat > "$WORK/queries.json" <<'EOF'
+[{"declFile": "repo.ts", "name": "helper"}]
+EOF
+  run bash -c "cd '$WORK' && NODE_PATH='$NODE_MODULES' node '$RUNNER' find-references-batch queries.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"kind":"import"'* ]]
+  [[ "$output" == *'"kind":"type-ref"'* ]]
+  [[ "$output" == *'"kind":"ref"'* ]]
+}
+
+@test "find-references-batch: method on class is resolved by owner" {
+  # Two classes can have a method with the same name; owner disambiguates.
+  cat > "$WORK/repo.ts" <<'EOF'
+export class Repo {
+  findById(id: string): void {}
+}
+export class Cache {
+  findById(id: number): void {}
+}
+EOF
+  cat > "$WORK/caller.ts" <<'EOF'
+import { Repo, Cache } from "./repo";
+const r = new Repo();
+const c = new Cache();
+r.findById("a");
+c.findById(1);
+EOF
+  cat > "$WORK/queries.json" <<'EOF'
+[{"declFile": "repo.ts", "name": "findById", "owner": "Repo"}]
+EOF
+  run bash -c "cd '$WORK' && NODE_PATH='$NODE_MODULES' node '$RUNNER' find-references-batch queries.json"
+  [ "$status" -eq 0 ]
+  # Result must include the Repo.findById call site and exclude
+  # Cache.findById's. We assert on the line numbers: r.findById is at
+  # line 4 of caller.ts, c.findById is at line 5.
+  [[ "$output" == *'"line":4'* ]]
+  [[ "$output" != *'"line":5'* ]]
+}
+
+@test "find-references-batch: arrow-function exported via const is resolved" {
+  cat > "$WORK/repo.ts" <<'EOF'
+export const handler = (x: number): string => String(x);
+EOF
+  cat > "$WORK/caller.ts" <<'EOF'
+import { handler } from "./repo";
+const y = handler(1);
+EOF
+  cat > "$WORK/queries.json" <<'EOF'
+[{"declFile": "repo.ts", "name": "handler"}]
+EOF
+  run bash -c "cd '$WORK' && NODE_PATH='$NODE_MODULES' node '$RUNNER' find-references-batch queries.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"file":"caller.ts"'* ]]
+  [[ "$output" == *'"kind":"ref"'* ]]
+}
+
+@test "find-references-batch: unknown name returns empty references" {
+  cat > "$WORK/repo.ts" <<'EOF'
+export function helper(x: number): string { return String(x); }
+EOF
+  cat > "$WORK/queries.json" <<'EOF'
+[{"declFile": "repo.ts", "name": "doesNotExist"}]
+EOF
+  run bash -c "cd '$WORK' && NODE_PATH='$NODE_MODULES' node '$RUNNER' find-references-batch queries.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"references":[]'* ]]
+}
+
+@test "find-references-batch: preserves input order in output" {
+  cat > "$WORK/repo.ts" <<'EOF'
+export function alpha(x: number): void {}
+export function beta(x: number): void {}
+export function gamma(x: number): void {}
+EOF
+  cat > "$WORK/caller.ts" <<'EOF'
+import { alpha, beta, gamma } from "./repo";
+gamma(3); alpha(1); beta(2);
+EOF
+  # Deliberately reverse-order the queries; output must keep the
+  # caller's order, not be re-shuffled by tsconfig grouping.
+  cat > "$WORK/queries.json" <<'EOF'
+[
+  {"declFile": "repo.ts", "name": "gamma"},
+  {"declFile": "repo.ts", "name": "alpha"},
+  {"declFile": "repo.ts", "name": "beta"}
+]
+EOF
+  run bash -c "cd '$WORK' && NODE_PATH='$NODE_MODULES' node '$RUNNER' find-references-batch queries.json"
+  [ "$status" -eq 0 ]
+  # Verify the output[].name list matches input order: gamma, alpha, beta.
+  local names
+  names=$(echo "$output" | python3 -c "import sys,json; print(','.join(e['name'] for e in json.load(sys.stdin)))")
+  [ "$names" = "gamma,alpha,beta" ]
+}
+
+@test "find-references-batch: empty input yields empty output" {
+  echo "[]" > "$WORK/queries.json"
+  run bash -c "cd '$WORK' && NODE_PATH='$NODE_MODULES' node '$RUNNER' find-references-batch queries.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "[]" ]
+}
+
+@test "find-references-batch: malformed input rejected" {
+  echo '{"not": "an array"}' > "$WORK/queries.json"
+  run bash -c "cd '$WORK' && NODE_PATH='$NODE_MODULES' node '$RUNNER' find-references-batch queries.json"
+  [ "$status" -ne 0 ]
+}
+
 @test "unknown op: exits non-zero" {
   run run_runner not-a-real-op
   [ "$status" -ne 0 ]

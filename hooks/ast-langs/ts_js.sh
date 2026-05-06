@@ -51,3 +51,9 @@ ast_ts_js_diff_enums() {
   NODE_PATH="$_AST_TS_NODE_MODULES" node "$_AST_TS_RUNNER" diff-enums "$base_file" "$head_file"
 }
 AST_LANG_DIFF_ENUMS_FN[ts_js]='ast_ts_js_diff_enums'
+
+ast_ts_js_find_references_batch() {
+  local input_json_file="$1"
+  NODE_PATH="$_AST_TS_NODE_MODULES" node "$_AST_TS_RUNNER" find-references-batch "$input_json_file"
+}
+AST_LANG_FIND_REFERENCES_BATCH_FN[ts_js]='ast_ts_js_find_references_batch'
