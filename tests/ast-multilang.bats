@@ -29,6 +29,24 @@ run_ast() {
   "
 }
 
+setup_java_runtime() {
+  command -v java >/dev/null 2>&1 || return 1
+  command -v javac >/dev/null 2>&1 || return 1
+  command -v mvn >/dev/null 2>&1 || return 1
+
+  local java_lib="$WORK/java-lib"
+  local java_build="$WORK/java-build"
+  mkdir -p "$java_lib" "$java_build"
+
+  (
+    cd "$REPO_ROOT/hooks/lib/java-support" &&
+    mvn -q dependency:copy-dependencies -DoutputDirectory="$java_lib" >/dev/null 2>&1 &&
+    javac -cp "$java_lib/*" -d "$java_build" ../java-src/AstJavaRunner.java >/dev/null 2>&1
+  ) || return 1
+
+  printf '%s\n%s\n' "$java_build" "$java_lib"
+}
+
 @test "go AST plugin: extract-signatures and diff-signatures smoke" {
   command -v go >/dev/null 2>&1 || skip "go not on PATH"
 
@@ -154,8 +172,11 @@ EOF
 }
 
 @test "java AST plugin: extract-signatures plus diff-enums smoke" {
-  run bash -lc "source '$AST_LIB'; ast_java_available"
-  [ "$status" -eq 0 ] || skip "java AST runtime not provisioned"
+  local java_runtime
+  java_runtime=$(setup_java_runtime) || skip "java AST runtime not provisioned"
+  local java_build java_lib
+  java_build=$(printf '%s\n' "$java_runtime" | sed -n '1p')
+  java_lib=$(printf '%s\n' "$java_runtime" | sed -n '2p')
 
   cat > "$WORK/Base.java" <<'EOF'
 enum Status { ACTIVE, INACTIVE }
@@ -170,12 +191,20 @@ class Repo {
 }
 EOF
 
-  run run_ast extract-signatures "$WORK/Base.java"
+  run env AST_JAVA_BUILD_DIR="$java_build" AST_JAVA_LIB_DIR="$java_lib" bash -lc "
+    set -euo pipefail
+    source '$AST_LIB'
+    ast_extract_signatures '$WORK/Base.java'
+  "
   [ "$status" -eq 0 ]
   [[ "$output" == *'"name":"find"'* ]]
   [[ "$output" == *'"owner":"Repo"'* ]]
 
-  run run_ast diff-enums "$WORK/Base.java" "$WORK/Head.java"
+  run env AST_JAVA_BUILD_DIR="$java_build" AST_JAVA_LIB_DIR="$java_lib" bash -lc "
+    set -euo pipefail
+    source '$AST_LIB'
+    ast_diff_enums '$WORK/Base.java' '$WORK/Head.java'
+  "
   [ "$status" -eq 0 ]
   [[ "$output" == *'"added":["ARCHIVED"]'* ]]
 }
