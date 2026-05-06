@@ -103,18 +103,72 @@ seed_repo() {
   [[ "$output" == *"(no signature changes with surviving callers found)"* ]]
 }
 
-@test "C4: short identifier names are skipped (collide too widely)" {
-  # Single-letter / 2-char names match every variable in the codebase. The
-  # hook's IDENT_MIN_LENGTH default (4) suppresses these.
+@test "C4: short identifier names ARE flagged on shape change (AST symbol resolution)" {
+  # Single-letter / short names used to be suppressed by IDENT_MIN_LENGTH
+  # because the text-grep caller search collided with everything. With
+  # AST symbol resolution, `f` resolves to its specific declaration and
+  # the call site is flagged correctly without FP from local variables
+  # named `a`. IDENT_MIN_LENGTH still applies on the `removed` path
+  # (text-grep fallback for base-only declarations).
   seed_repo \
     'export function f(a: number): void {}' \
     'import { f } from "./repo"; const a = 1; f(a);' \
     'export function f(a: number, b: number): void {}'
   run bash -c "cd '$WORK' && bash '$HOOK' HEAD~1"
   [ "$status" -eq 0 ]
-  # 'f' is below IDENT_MIN_LENGTH so even though its arity changed, no
-  # caller flagging happens (would be too noisy).
-  [[ "$output" != *"calls 'f'"* ]]
+  [[ "$output" == *"calls 'f'"* ]]
+  [[ "$output" == *"caller.ts"* ]]
+}
+
+@test "C4: AST resolution does not flag string-literal name collisions" {
+  # Pre-AST text-grep would flag `const helper = "..."` as a caller of
+  # `helper`. AST symbol resolution distinguishes the call site from
+  # the unrelated string-literal-named const.
+  cat > "$WORK/repo.ts" <<'EOF'
+export function helper(x: number): string { return String(x); }
+EOF
+  cat > "$WORK/caller.ts" <<'EOF'
+import { helper } from "./repo";
+const x = helper(1);
+EOF
+  cat > "$WORK/unrelated.ts" <<'EOF'
+export const helper = "string variable, not a call site";
+EOF
+  (cd "$WORK" && git add -A && git commit -qm initial)
+  cat > "$WORK/repo.ts" <<'EOF'
+export function helper(x: number, prefix: string): string { return prefix + String(x); }
+EOF
+  (cd "$WORK" && git add -A && git commit -qm "add required param")
+
+  run bash -c "cd '$WORK' && bash '$HOOK' HEAD~1"
+  [ "$status" -eq 0 ]
+  # Real call site is flagged.
+  [[ "$output" == *"caller.ts"*"helper"* ]]
+  # The string-literal-named const must NOT show as a caller.
+  [[ "$output" != *"unrelated.ts"*"helper"* ]]
+}
+
+@test "C4: import-only references are not flagged as callers" {
+  # An `import { foo }` line references the symbol but is not a call.
+  # With kind=import filtering, only the actual call site is flagged.
+  cat > "$WORK/repo.ts" <<'EOF'
+export function compute(x: number): number { return x; }
+EOF
+  cat > "$WORK/caller.ts" <<'EOF'
+import { compute } from "./repo";
+const y = compute(1);
+EOF
+  (cd "$WORK" && git add -A && git commit -qm initial)
+  cat > "$WORK/repo.ts" <<'EOF'
+export function compute(x: number, y: number): number { return x + y; }
+EOF
+  (cd "$WORK" && git add -A && git commit -qm "add required param")
+
+  run bash -c "cd '$WORK' && bash '$HOOK' HEAD~1"
+  [ "$status" -eq 0 ]
+  # Call site (line 2) is flagged; import line (line 1) is not.
+  [[ "$output" == *"caller.ts:2"* ]]
+  [[ "$output" != *"caller.ts:1"* ]]
 }
 
 @test "C4: non-TS files in diff don't break the hook" {

@@ -24,6 +24,7 @@ if [ -z "${_AST_SIGNATURE_SOURCED:-}" ]; then
   declare -gA AST_LANG_DIFF_SIGNATURES_FN
   declare -gA AST_LANG_EXTRACT_ENUMS_FN
   declare -gA AST_LANG_DIFF_ENUMS_FN
+  declare -gA AST_LANG_FIND_REFERENCES_BATCH_FN
 
   _AST_LANGS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/ast-langs"
 
@@ -119,4 +120,28 @@ ast_diff_enums() {
   local fn="${AST_LANG_DIFF_ENUMS_FN[$lang]:-}"
   [ -n "$fn" ] || return 1
   "$fn" "$base_file" "$head_file"
+}
+
+# ast_find_references_batch <inputJsonFile> → JSON array of resolved
+# references (schema: see ast-runner.js find-references-batch op). The
+# language is selected by the FIRST query's declFile extension; mixed-
+# language batches are not supported in v1 (queries should be grouped by
+# language at the call site). Returns 1 if the runtime is unavailable.
+ast_find_references_batch() {
+  local input_json_file="$1"
+  # Peek at the first query to determine language. Falls back to
+  # inspecting the file via jq if available; otherwise relies on the
+  # caller having already filtered by language.
+  local sample_decl=""
+  if command -v jq >/dev/null 2>&1; then
+    sample_decl=$(jq -r '.[0].declFile // empty' "$input_json_file" 2>/dev/null)
+  fi
+  [ -z "$sample_decl" ] && return 1
+  local lang
+  lang=$(ast_lang_for_file "$sample_decl") || return 1
+  local avail_fn="${AST_LANG_AVAILABLE_FN[$lang]:-}"
+  [ -n "$avail_fn" ] && "$avail_fn" || return 1
+  local fn="${AST_LANG_FIND_REFERENCES_BATCH_FN[$lang]:-}"
+  [ -n "$fn" ] || return 1
+  "$fn" "$input_json_file"
 }

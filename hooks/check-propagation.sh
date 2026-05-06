@@ -378,11 +378,15 @@ detect_string_literal_changes() {
 }
 
 # --- C4: Function / method signature change candidates ---
-# AST-driven. For each TS/JS file in the diff, extract signatures at BASE
-# and HEAD; flag functions whose param count, param shape, or return type
-# changed. For each changed signature, text-grep callers in unchanged
-# files. Silently skipped if the AST runtime (Node + typescript module) is
-# not provisioned — the regex categories above still run.
+# AST-driven. Two-phase:
+#   Phase 1: per-file diff_signatures collects all changed signatures.
+#   Phase 2a (shape changes): one ast_find_references_batch call resolves
+#     true callers via TS LanguageService — name-collision FP eliminated.
+#   Phase 2b (removed exports): text-grep, because findReferences cannot
+#     resolve a base-only declaration (the symbol no longer exists at
+#     head). Same heuristic as before; IDENT_MIN_LENGTH still applied.
+# Silently skipped if the AST runtime (Node + typescript module) is not
+# provisioned — the regex categories above still run.
 detect_signature_changes() {
   echo "## C4 Signature change — function shape changed in diff, callers may be stale"
   echo ""
@@ -398,9 +402,6 @@ detect_signature_changes() {
     return
   fi
 
-  # Filter changed files to those a plugin can handle. ast_lang_for_file
-  # echoes the lang key on stdout; we discard it and just check the exit
-  # status. ast_available additionally checks runtime provisioning.
   local ts_changed_list="$_CP_TMPDIR/c4_changed_ts.txt"
   : > "$ts_changed_list"
   while IFS= read -r f; do
@@ -417,60 +418,117 @@ detect_signature_changes() {
     return
   fi
 
-  local found=0
+  # Collect every changed signature across every changed file into one
+  # JSON array, annotating each entry with its declFile so the batch
+  # find-references call can be a single Node invocation.
+  local all_changes="$_CP_TMPDIR/c4_all_changes.json"
+  echo "[]" > "$all_changes"
   while IFS= read -r f; do
     [ -z "$f" ] && continue
-
-    # Reconstruct BASE-version of the file via `git show`. If the file
-    # didn't exist at BASE (newly added), there's nothing to diff against
-    # and signature changes don't apply (no callers existed yet).
     local base_tmp="$_CP_TMPDIR/c4_base_$(echo "$f" | tr '/' '_')"
-    if ! git show "$BASE_REF:$f" > "$base_tmp" 2>/dev/null; then
-      continue
-    fi
-
-    # Run AST diff. Failures (parse errors, runtime crashes) are non-fatal
-    # — they just skip this file silently.
+    if ! git show "$BASE_REF:$f" > "$base_tmp" 2>/dev/null; then continue; fi
     local diff_json
     diff_json=$(ast_diff_signatures "$base_tmp" "$f" 2>/dev/null) || continue
     [ -z "$diff_json" ] && continue
     [ "$diff_json" = "[]" ] && continue
+    jq --arg f "$f" --slurpfile prev "$all_changes" \
+      'map(. + {declFile: $f}) + $prev[0]' \
+      <(echo "$diff_json") > "$all_changes.tmp"
+    mv "$all_changes.tmp" "$all_changes"
+  done < "$ts_changed_list"
 
-    # For each changed signature, extract (name, owner, kind, detail) and
-    # search unchanged files for callers. Caller match is text-grep on the
-    # method/function name as a word — same FP surface as C1 (cross-file
-    # call-graph would be the next investment).
-    local changed_count
-    changed_count=$(echo "$diff_json" | jq 'length')
-    [ "$changed_count" -eq 0 ] && continue
+  local total_changes
+  total_changes=$(jq 'length' "$all_changes")
+  if [ "$total_changes" -eq 0 ]; then
+    echo "  (no signature changes with surviving callers found)"
+    echo ""
+    return
+  fi
 
+  # Split into AST-resolvable (shape changes) and text-grep-only (removed).
+  local shape_set="$_CP_TMPDIR/c4_shape.json"
+  local removed_set="$_CP_TMPDIR/c4_removed.json"
+  jq '[.[] | select(.changes | index("removed") | not)]' "$all_changes" > "$shape_set"
+  jq '[.[] | select(.changes | index("removed"))]' "$all_changes" > "$removed_set"
+
+  local found=0
+
+  # ---- shape changes: AST refs ----
+  local shape_n
+  shape_n=$(jq 'length' "$shape_set")
+  if [ "$shape_n" -gt 0 ] && command -v ast_find_references_batch >/dev/null 2>&1; then
+    # Build the batch query: one entry per shape-change signature.
+    local batch_input="$_CP_TMPDIR/c4_batch_input.json"
+    jq '[.[] | {declFile, name, owner: (.owner // "")}]' "$shape_set" > "$batch_input"
+
+    local refs_output="$_CP_TMPDIR/c4_refs_output.json"
+    if ast_find_references_batch "$batch_input" > "$refs_output" 2>/dev/null && [ -s "$refs_output" ]; then
+      # shape_set[i] and refs_output[i] correspond — runner preserves input order.
+      local i=0
+      while [ "$i" -lt "$shape_n" ]; do
+        local name owner kind detail changes_csv sev
+        name=$(jq -r ".[$i].name" "$shape_set")
+        owner=$(jq -r ".[$i].owner // \"\"" "$shape_set")
+        kind=$(jq -r ".[$i].kind" "$shape_set")
+        detail=$(jq -r ".[$i].detail" "$shape_set")
+        changes_csv=$(jq -r ".[$i].changes | join(\",\")" "$shape_set")
+        sev=$(jq -r ".[$i].severity // \"Minor\"" "$shape_set")
+
+        # Filter refs: drop import / type-ref kinds (those don't break on
+        # signature change), keep only files that are in UNCHANGED_FILES_LIST
+        # (callers in changed files were already revised by the same diff).
+        local locs="$_CP_TMPDIR/c4_locs_${i}.txt"
+        jq -r ".[$i].references[] | select(.kind == \"ref\") | \"\(.file):\(.line)\"" \
+          "$refs_output" | sort -u > "$locs"
+
+        local final_hits="$_CP_TMPDIR/c4_final_${i}.txt"
+        : > "$final_hits"
+        while IFS=: read -r hf hl; do
+          [ -z "$hf" ] && continue
+          if grep -Fxq "$hf" "$UNCHANGED_FILES_LIST"; then
+            echo "${hf}:${hl}" >> "$final_hits"
+          fi
+        done < "$locs"
+
+        i=$((i + 1))
+
+        if [ -s "$final_hits" ]; then
+          local label
+          if [ -n "$owner" ]; then label="${owner}.${name}"; else label="${name}"; fi
+          echo "  ${kind} ${label}: ${detail}  [changes: ${changes_csv}]"
+          local hit_count=0
+          while IFS=: read -r hf hl; do
+            [ "$hit_count" -ge "$MAX_HITS_PER_CANDIDATE" ] && break
+            _emit_finding "$sev" "${hf}:${hl}" "calls '$name' — signature changed (${detail})"
+            hit_count=$((hit_count + 1))
+          done < "$final_hits"
+          echo ""
+          found=1
+        fi
+      done
+    fi
+  fi
+
+  # ---- removed exports: text-grep ----
+  # The base-only declaration cannot be AST-resolved against the head
+  # program. IDENT_MIN_LENGTH still applies to suppress single-letter
+  # name collisions (text-grep FP surface).
+  local rem_n
+  rem_n=$(jq 'length' "$removed_set")
+  if [ "$rem_n" -gt 0 ]; then
     local i=0
-    while [ "$i" -lt "$changed_count" ]; do
-      local name owner kind detail changes_csv
-      name=$(echo "$diff_json" | jq -r ".[$i].name")
-      owner=$(echo "$diff_json" | jq -r ".[$i].owner // \"\"")
-      kind=$(echo "$diff_json" | jq -r ".[$i].kind")
-      detail=$(echo "$diff_json" | jq -r ".[$i].detail")
-      changes_csv=$(echo "$diff_json" | jq -r ".[$i].changes | join(\",\")")
+    while [ "$i" -lt "$rem_n" ]; do
+      local name owner kind detail changes_csv sev
+      name=$(jq -r ".[$i].name" "$removed_set")
+      owner=$(jq -r ".[$i].owner // \"\"" "$removed_set")
+      kind=$(jq -r ".[$i].kind" "$removed_set")
+      detail=$(jq -r ".[$i].detail" "$removed_set")
+      changes_csv=$(jq -r ".[$i].changes | join(\",\")" "$removed_set")
+      sev=$(jq -r ".[$i].severity // \"Major\"" "$removed_set")
       i=$((i + 1))
 
-      # Skip very common short names. Single-letter or 2-3 char identifiers
-      # collide with everything in callers. Same threshold as C1's
-      # IDENT_MIN_LENGTH.
       if [ "${#name}" -lt "$IDENT_MIN_LENGTH" ]; then
         continue
-      fi
-
-      # Search callers in unchanged files. Word-boundary match on the
-      # name. For methods, we don't qualify by owner — the receiver is
-      # rarely visible textually at the call site (e.g. `repo.findById(...)`
-      # — `findById` alone is the searchable token). Owner is included
-      # in the human-readable label.
-      local label
-      if [ -n "$owner" ]; then
-        label="${owner}.${name}"
-      else
-        label="$name"
       fi
 
       local hits
@@ -479,13 +537,9 @@ detect_signature_changes() {
         | head -"$MAX_HITS_PER_CANDIDATE")
 
       if [ -n "$hits" ]; then
+        local label
+        if [ -n "$owner" ]; then label="${owner}.${name}"; else label="${name}"; fi
         echo "  ${kind} ${label}: ${detail}  [changes: ${changes_csv}]"
-        # Severity is emitted by the AST runner: Major when a function
-        # was removed OR a required parameter was added at the tail
-        # (silent breakage in JS / `// @ts-ignore`). Minor for shape /
-        # optional-param / return-type changes.
-        local sev
-        sev=$(echo "$diff_json" | jq -r ".[$((i - 1))].severity // \"Minor\"")
         echo "$hits" | while IFS=: read -r hf hl _rest; do
           _emit_finding "$sev" "$hf:$hl" "calls '$name' — signature changed (${detail})"
         done
@@ -493,7 +547,7 @@ detect_signature_changes() {
         found=1
       fi
     done
-  done < "$ts_changed_list"
+  fi
 
   [ "$found" -eq 0 ] && { echo "  (no signature changes with surviving callers found)"; echo ""; }
 }

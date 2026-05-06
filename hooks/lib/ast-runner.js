@@ -38,6 +38,20 @@
 //     are member-name lists. Enums with no member changes are omitted.
 //     Used by R12 C5 (enum member added → switch coverage gap).
 //
+//   find-references-batch <inputJsonFile>
+//     Resolves cross-file references via TS LanguageService (true symbol
+//     resolution, not text-grep). Input is a JSON array of queries:
+//       [{declFile, name, owner?}, ...]
+//     Output mirrors input with a `references` field added per entry:
+//       [{declFile, name, owner, references: [{file, line, column, kind}]}, ...]
+//     `kind` is one of 'import' (in import/export specifier), 'type-ref'
+//     (in type position), or 'ref' (everything else — call sites,
+//     property access, assignments). Consumers filter by kind: C4 wants
+//     non-import to flag stale calls; R17 may want all references.
+//     One process amortizes LanguageService creation across all queries
+//     sharing a tsconfig.json. Discovery walks up from each declFile;
+//     synthetic project is built from cwd when no tsconfig found.
+//
 // Output: JSON to stdout. Errors → stderr + non-zero exit so the caller can
 // degrade gracefully (R3 regex categories continue to run).
 
@@ -294,6 +308,345 @@ function diffSignatures(baseFile, headFile) {
   process.stdout.write(JSON.stringify(out));
 }
 
+// ----- find-references-batch -----
+//
+// Different cost model from extract-* / diff-* ops: those parse one file
+// at a time via createSourceFile (cheap). LanguageService.findReferences
+// requires a Program covering all source files that might reference the
+// symbol. Program creation dominates wall time, so we batch queries
+// sharing a tsconfig and reuse one LanguageService per group.
+
+function findTsconfig(file) {
+  let dir = path.dirname(path.resolve(file));
+  // Bound the walk to filesystem root.
+  while (true) {
+    const candidate = path.join(dir, "tsconfig.json");
+    try {
+      if (fs.statSync(candidate).isFile()) return candidate;
+    } catch (_) {
+      /* not present */
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+function loadProjectFiles(tsconfigPath) {
+  // Returns { rootFiles, options } from tsconfig, or null if parse fails.
+  const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+  if (config.error) return null;
+  const parsed = ts.parseJsonConfigFileContent(
+    config.config,
+    ts.sys,
+    path.dirname(tsconfigPath),
+  );
+  // Project-side errors that are non-fatal for findReferences (missing
+  // referenced project, etc.) are tolerated — we just need the file list
+  // and compiler options.
+  return { rootFiles: parsed.fileNames, options: parsed.options };
+}
+
+function syntheticProjectFiles(rootDir) {
+  // Synthetic include: every TS/JS source file under rootDir, skipping
+  // node_modules and dotfiles. Same extension list as ast-langs/ts_js.sh
+  // so reachability matches what ast_lang_for_file would dispatch on.
+  const exts = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+  const out = [];
+  function walk(d) {
+    let entries;
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true });
+    } catch (_) {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile() && exts.has(path.extname(entry.name))) out.push(full);
+    }
+  }
+  walk(rootDir);
+  return {
+    rootFiles: out,
+    options: {
+      target: ts.ScriptTarget.Latest,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeJs,
+      allowJs: true,
+      jsx: ts.JsxEmit.Preserve,
+      // Disable lib loading to avoid false errors / slow startup; we
+      // only need cross-file symbol resolution within the project.
+      noLib: true,
+      skipLibCheck: true,
+    },
+  };
+}
+
+function createService(rootFiles, options) {
+  // Minimal LanguageServiceHost: read from disk, version=1 (no incremental).
+  const rootSet = new Set(rootFiles.map((f) => path.resolve(f)));
+  const host = {
+    getScriptFileNames: () => rootFiles,
+    getScriptVersion: () => "1",
+    getScriptSnapshot: (f) => {
+      try {
+        return ts.ScriptSnapshot.fromString(fs.readFileSync(f, "utf8"));
+      } catch (_) {
+        return undefined;
+      }
+    },
+    getCurrentDirectory: () => process.cwd(),
+    getCompilationSettings: () => options,
+    getDefaultLibFileName: (o) => ts.getDefaultLibFilePath(o),
+    fileExists: (f) => {
+      try {
+        return fs.statSync(f).isFile();
+      } catch (_) {
+        return false;
+      }
+    },
+    readFile: (f) => {
+      try {
+        return fs.readFileSync(f, "utf8");
+      } catch (_) {
+        return undefined;
+      }
+    },
+    readDirectory: ts.sys.readDirectory,
+    directoryExists: (d) => {
+      try {
+        return fs.statSync(d).isDirectory();
+      } catch (_) {
+        return false;
+      }
+    },
+    getDirectories: ts.sys.getDirectories,
+  };
+  return {
+    service: ts.createLanguageService(host, ts.createDocumentRegistry()),
+    rootSet,
+  };
+}
+
+// Walks the SourceFile to find the declaration of `name` (and `owner` when
+// given). Returns the position of the name identifier, or null. Uses the
+// same matching rules as collectAll so what we resolve matches what
+// extract-signatures would emit.
+function findDeclarationPosition(sf, name, owner) {
+  let pos = null;
+
+  function visit(node, currentOwner) {
+    if (pos !== null) return;
+    let nameNode = null;
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name &&
+      node.name.text === name &&
+      currentOwner === owner
+    ) {
+      nameNode = node.name;
+    } else if (
+      ts.isMethodDeclaration(node) &&
+      node.name &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name &&
+      currentOwner === owner
+    ) {
+      nameNode = node.name;
+    } else if (
+      ts.isMethodSignature(node) &&
+      node.name &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name &&
+      currentOwner === owner
+    ) {
+      nameNode = node.name;
+    } else if (ts.isVariableStatement(node) && currentOwner === owner) {
+      for (const decl of node.declarationList.declarations) {
+        if (
+          decl.initializer &&
+          (ts.isArrowFunction(decl.initializer) ||
+            ts.isFunctionExpression(decl.initializer)) &&
+          ts.isIdentifier(decl.name) &&
+          decl.name.text === name
+        ) {
+          nameNode = decl.name;
+          break;
+        }
+      }
+    } else if (ts.isClassDeclaration(node) && node.name) {
+      for (const m of node.members) visit(m, node.name.text);
+      return;
+    } else if (ts.isInterfaceDeclaration(node) && node.name) {
+      for (const m of node.members) visit(m, node.name.text);
+      return;
+    }
+    if (nameNode) {
+      pos = nameNode.getStart(sf);
+      return;
+    }
+    ts.forEachChild(node, (n) => visit(n, currentOwner));
+  }
+
+  // Owner is normalized: missing/null/'' all mean top-level.
+  const ownerKey = owner || null;
+  visit(sf, null);
+  // Re-walk with normalized comparison if owner-key form differs.
+  // (No-op when ownerKey is already null — covered by first walk.)
+  return pos;
+}
+
+function findReferencesBatch(inputFile) {
+  let queries;
+  try {
+    queries = JSON.parse(fs.readFileSync(inputFile, "utf8"));
+  } catch (e) {
+    console.error(`find-references-batch: cannot read input: ${e.message}`);
+    process.exit(3);
+  }
+  if (!Array.isArray(queries)) {
+    console.error("find-references-batch: input must be a JSON array");
+    process.exit(1);
+  }
+
+  // Tag each query with its input position so output preserves order even
+  // when groups are processed in tsconfig-discovery order (relevant when
+  // a batch spans multiple monorepo packages).
+  const indexed = queries.map((q, i) => ({ ...q, _seq: i }));
+
+  // Group queries by tsconfig path so each LanguageService is built once.
+  // null key = synthetic project rooted at cwd.
+  const byConfig = new Map();
+  for (const q of indexed) {
+    const tsconfig = q.declFile ? findTsconfig(q.declFile) : null;
+    const key = tsconfig || "<synthetic>";
+    if (!byConfig.has(key)) byConfig.set(key, { tsconfig, queries: [] });
+    byConfig.get(key).queries.push(q);
+  }
+
+  const out = [];
+  for (const [, group] of byConfig) {
+    const project = group.tsconfig
+      ? loadProjectFiles(group.tsconfig)
+      : syntheticProjectFiles(process.cwd());
+    if (!project) {
+      // tsconfig parse failed — skip this group with empty references.
+      for (const q of group.queries) {
+        out.push({ ...q, references: [] });
+      }
+      continue;
+    }
+
+    // Make sure each query's declFile is in the rootFiles set; if not,
+    // append it so the LanguageService can resolve from it.
+    for (const q of group.queries) {
+      const abs = path.resolve(q.declFile);
+      if (!project.rootFiles.includes(abs) && !project.rootFiles.includes(q.declFile)) {
+        project.rootFiles.push(q.declFile);
+      }
+    }
+
+    const { service } = createService(project.rootFiles, project.options);
+    const program = service.getProgram();
+    if (!program) {
+      for (const q of group.queries) out.push({ ...q, references: [] });
+      continue;
+    }
+
+    for (const q of group.queries) {
+      const refs = resolveOne(service, program, q);
+      out.push({ ...q, references: refs });
+    }
+  }
+
+  // Restore input order, then strip the internal index from emitted JSON.
+  out.sort((a, b) => a._seq - b._seq);
+  for (const o of out) delete o._seq;
+
+  process.stdout.write(JSON.stringify(out));
+}
+
+// Normalize file paths to be relative to cwd when they fall under it.
+// Bash callers use git-root-relative paths in CHANGED/UNCHANGED file
+// lists; matching absolute paths from path.resolve() against those would
+// fail. Falling back to absolute for paths outside cwd (e.g., when the
+// declFile is a sibling project file).
+function relativizeIfUnderCwd(p) {
+  const cwd = process.cwd();
+  const abs = path.resolve(p);
+  if (abs === cwd) return ".";
+  if (abs.startsWith(cwd + path.sep)) return path.relative(cwd, abs);
+  return abs;
+}
+
+function classifyRef(refSf, position) {
+  // Walk up from the token at `position` to determine whether the
+  // reference sits inside an import/export specifier (kind=import), a
+  // type position (kind=type-ref), or anywhere else (kind=ref). Walking
+  // is cheap — at most a handful of parent hops.
+  let token;
+  try {
+    token = ts.getTokenAtPosition(refSf, position);
+  } catch (_) {
+    return "ref";
+  }
+  let p = token && token.parent;
+  while (p) {
+    if (
+      ts.isImportDeclaration(p) ||
+      ts.isImportClause(p) ||
+      ts.isImportSpecifier(p) ||
+      ts.isNamedImports(p) ||
+      ts.isNamespaceImport(p) ||
+      ts.isExportDeclaration(p) ||
+      ts.isExportSpecifier(p)
+    ) {
+      return "import";
+    }
+    if (ts.isTypeReferenceNode(p) || ts.isTypeQueryNode(p)) {
+      return "type-ref";
+    }
+    p = p.parent;
+  }
+  return "ref";
+}
+
+function resolveOne(service, program, q) {
+  const sf =
+    program.getSourceFile(q.declFile) ||
+    program.getSourceFile(path.resolve(q.declFile));
+  if (!sf) return [];
+  const declPos = findDeclarationPosition(sf, q.name, q.owner || null);
+  if (declPos === null) return [];
+  const refGroups = service.findReferences(sf.fileName, declPos);
+  if (!refGroups) return [];
+  const out = [];
+  for (const group of refGroups) {
+    for (const ref of group.references) {
+      // Skip the declaration site itself.
+      if (
+        ref.fileName === sf.fileName &&
+        ref.textSpan.start === declPos
+      )
+        continue;
+      // Skip declaration files (.d.ts) — typically lib refs, not callers.
+      if (ref.fileName.endsWith(".d.ts")) continue;
+      const refSf = program.getSourceFile(ref.fileName);
+      if (!refSf) continue;
+      const lc = refSf.getLineAndCharacterOfPosition(ref.textSpan.start);
+      out.push({
+        file: relativizeIfUnderCwd(ref.fileName),
+        line: lc.line + 1,
+        column: lc.character + 1,
+        kind: classifyRef(refSf, ref.textSpan.start),
+      });
+    }
+  }
+  return out;
+}
+
 function diffEnums(baseFile, headFile) {
   const baseEnums = collectEnums(parseFile(baseFile));
   const headEnums = collectEnums(parseFile(headFile));
@@ -353,6 +706,13 @@ switch (op) {
       process.exit(1);
     }
     diffEnums(args[0], args[1]);
+    break;
+  case "find-references-batch":
+    if (args.length !== 1) {
+      console.error("usage: ast-runner find-references-batch <inputJsonFile>");
+      process.exit(1);
+    }
+    findReferencesBatch(args[0]);
     break;
   default:
     console.error(`ast-runner: unknown op '${op}'`);
