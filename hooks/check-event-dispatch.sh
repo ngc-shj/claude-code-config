@@ -697,6 +697,96 @@ awk -F'\t' -v OFS='\t' '
 ' "$INVENTORY" "$INVENTORY" > "$INVENTORY_AUG"
 mv "$INVENTORY_AUG" "$INVENTORY"
 
+# --- Directory-scope auto-promotion for leaf-verb route directories ---
+# Some codebases organize HTTP handlers as `<entity>/<verb>/route.<ext>`
+# (one operation per file). File-scope peer detection misses cross-file
+# peers in this layout. The entity grouping is structural — sibling
+# `<verb>/route.<ext>` files under the same parent operate on the same
+# entity.
+#
+# Promotion criteria (repo-agnostic; structural-only signals — no path-
+# component-count heuristic, which over-grouped distinct entities at the
+# router root in mixed layouts):
+#   (a) The mutation's file matches `*/route.<ts|tsx|js|jsx|mjs|cjs>$`.
+#   (b) The file's parent directory is a LEAF verb dir — i.e. it has no
+#       subdirectories AND no other source files apart from `route.<ext>`
+#       and `route.{test,spec}.<ext>`. Entity dirs that mix a top-level
+#       `route.<ext>` with nested resource subdirectories therefore are
+#       NOT promoted.
+#   (c) The file holds exactly ONE operation, where operation count uses
+#       canonical names (strip leading `handle` prefix) so the common
+#       `export async function handlePOST(...)` + thin `POST` delegation
+#       wrapper counts as one operation, not two. NextJS-native multi-
+#       verb files (`POST` + `DELETE` in one file) are NOT promoted —
+#       file-scope already applies.
+#
+# When all three hold, emit one synthetic row with scope re-keyed to
+# `<dir:dirname(parent_dir)>`. The synthetic row participates in
+# asymmetry analysis alongside the file-scope rows.
+PROMOTABLE="$_CED_TMPDIR/promotable.txt"
+: > "$PROMOTABLE"
+
+# Pass 1: list candidate files (route.<ext> appearing in inventory whose
+# parent dir is a leaf verb dir) and the per-file mutation count.
+PER_FILE_COUNTS="$_CED_TMPDIR/per_file_counts.txt"
+awk -F'\t' '
+  { ucount[$1]++ }
+  END { for (f in ucount) print ucount[f] "\t" f }
+' "$INVENTORY" > "$PER_FILE_COUNTS"
+
+# For files with mutation count == 1 AND a route filename, verify the
+# parent dir is a leaf verb dir via filesystem inspection. Cache per
+# parent_dir to avoid repeating find.
+declare -A _CED_LEAF_CACHE 2>/dev/null || true
+while IFS=$'\t' read -r ucount file; do
+  [ "$ucount" = "1" ] || continue
+  case "$file" in
+    */route.ts|*/route.tsx|*/route.js|*/route.jsx|*/route.mjs|*/route.cjs) ;;
+    *) continue ;;
+  esac
+  parent=$(dirname "$file")
+  [ -d "$parent" ] || continue
+  cached="${_CED_LEAF_CACHE[$parent]:-}"
+  if [ -z "$cached" ]; then
+    if [ -n "$(find "$parent" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -n 1)" ]; then
+      cached=0
+    elif [ -n "$(find "$parent" -mindepth 1 -maxdepth 1 -type f 2>/dev/null \
+                  | grep -vE '/route\.(ts|tsx|js|jsx|mjs|cjs)$' \
+                  | grep -vE '/route\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$' \
+                  | head -n 1)" ]; then
+      cached=0
+    else
+      cached=1
+    fi
+    _CED_LEAF_CACHE[$parent]="$cached"
+  fi
+  [ "$cached" = "1" ] || continue
+  echo "$file" >> "$PROMOTABLE"
+done < "$PER_FILE_COUNTS"
+
+# Pass 2: for each promotable file, append a synthetic row with the
+# directory-promoted scope key.
+INVENTORY_AUG2="$_CED_TMPDIR/inventory.dirpromoted.tsv"
+awk -F'\t' -v OFS='\t' -v promotable="$PROMOTABLE" '
+  BEGIN {
+    while ((getline ln < promotable) > 0) prom[ln] = 1
+    close(promotable)
+  }
+  {
+    print
+    if (($1 in prom)) {
+      n = split($1, parts, "/")
+      if (n >= 3) {
+        promoted = parts[1]
+        for (i = 2; i <= n - 2; i++) promoted = promoted "/" parts[i]
+        $2 = "<dir:" promoted ">"
+        print
+      }
+    }
+  }
+' "$INVENTORY" > "$INVENTORY_AUG2"
+mv "$INVENTORY_AUG2" "$INVENTORY"
+
 # --- Asymmetry analysis ---
 # For each (file, scope) peer group:
 #   - count dispatchers (dispatches=1) and non-dispatchers (dispatches=0)
@@ -709,14 +799,23 @@ echo ""
 awk -F'\t' '
   {
     # row: file, scope, name, start, end, dispatches, verb, arg, is_new
-    f = $1; s = $2; n = $3; sl = $4; el = $5; d = $6 + 0; v = $7; a = $8; nw = $9 + 0
-    key = f "\t" s
+    f = $1; s = $2; nm = $3; sl = $4; el = $5; d = $6 + 0; v = $7; a = $8; nw = $9 + 0
+    # When scope is a directory-promoted key (`<dir:...>`), members of the
+    # group span multiple files, so group by scope alone. Otherwise group
+    # by (file, scope) as in the file-scope mode.
+    is_dir = (s ~ /^<dir:/)
+    if (is_dir) key = s
+    else        key = f "\t" s
+    grp_is_dir[key] = is_dir
+    grp_scope[key] = s
+    if (!(key in grp_first_file)) grp_first_file[key] = f
     if (d) {
       grp_disp_count[key]++
       # Save up to 3 dispatcher exemplars per group.
       if (grp_disp_count[key] <= 3) {
         idx = grp_disp_count[key]
-        disp_n[key, idx] = n
+        disp_f[key, idx] = f
+        disp_n[key, idx] = nm
         disp_l[key, idx] = sl
         disp_v[key, idx] = v
         disp_a[key, idx] = a
@@ -726,7 +825,8 @@ awk -F'\t' '
       # Stash only NEW non-dispatchers — those are the candidates.
       if (nw) {
         ni = ++nondisp_new_count[key]
-        nd_n[key, ni] = n
+        nd_f[key, ni] = f
+        nd_n[key, ni] = nm
         nd_l[key, ni] = sl
       }
     }
@@ -734,38 +834,50 @@ awk -F'\t' '
   END {
     findings = 0
     # Sort keys for stable output.
-    n = 0
-    for (k in grp_disp_count) keys[n++] = k
+    nk = 0
+    for (k in grp_disp_count) keys[nk++] = k
     for (k in nondisp_new_count) {
-      if (!(k in grp_disp_count)) keys[n++] = k
+      if (!(k in grp_disp_count)) keys[nk++] = k
     }
-    # Output ordering: simple string sort over keys.
     asort(keys)
-    for (i = 1; i <= n; i++) {
+    for (i = 1; i <= nk; i++) {
       k = keys[i]
       if (!(k in grp_disp_count)) continue
       if (!(k in nondisp_new_count)) continue
-      # Found asymmetric group with new non-dispatchers.
-      split(k, kp, "\t")
-      file = kp[1]; scope = kp[2]
-      printf "  Group: %s :: %s (dispatchers=%d, non-dispatchers=%d)\n", \
-             file, scope, grp_disp_count[k], grp_nond_count[k]
+      is_dir = grp_is_dir[k]
+      scope = grp_scope[k]
+      if (is_dir) {
+        printf "  Group: %s [cross-file peer; dispatchers=%d, non-dispatchers=%d]\n", \
+               scope, grp_disp_count[k], grp_nond_count[k]
+      } else {
+        split(k, kp, "\t")
+        file = kp[1]
+        printf "  Group: %s :: %s (dispatchers=%d, non-dispatchers=%d)\n", \
+               file, scope, grp_disp_count[k], grp_nond_count[k]
+      }
       # New non-dispatcher findings.
       for (j = 1; j <= nondisp_new_count[k]; j++) {
-        nm  = nd_n[k, j]
+        f2 = nd_f[k, j]
+        nm2 = nd_n[k, j]
         ln  = nd_l[k, j]
-        printf "    [Major] %s:%d — new mutation %s::%s does not dispatch; peer group emits — verify event symmetry (R4)\n", \
-               file, ln, scope, nm
+        if (is_dir) {
+          printf "    [Major] %s:%d — new mutation %s does not dispatch; peer group emits — verify event symmetry (R4)\n", \
+                 f2, ln, nm2
+        } else {
+          printf "    [Major] %s:%d — new mutation %s::%s does not dispatch; peer group emits — verify event symmetry (R4)\n", \
+                 f2, ln, scope, nm2
+        }
         findings++
       }
       printf "    Peer evidence (dispatchers in same group):\n"
       cap = (grp_disp_count[k] < 3) ? grp_disp_count[k] : 3
       for (j = 1; j <= cap; j++) {
+        f2 = disp_f[k, j]
         v = disp_v[k, j]; a = disp_a[k, j]
         if (a != "") {
-          printf "      - %s at %s:%d → %s(%s)\n", disp_n[k, j], file, disp_l[k, j], v, a
+          printf "      - %s at %s:%d → %s(%s)\n", disp_n[k, j], f2, disp_l[k, j], v, a
         } else {
-          printf "      - %s at %s:%d → %s(...)\n", disp_n[k, j], file, disp_l[k, j], v
+          printf "      - %s at %s:%d → %s(...)\n", disp_n[k, j], f2, disp_l[k, j], v
         }
       }
       printf "\n"
