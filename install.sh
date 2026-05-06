@@ -108,18 +108,32 @@ if [ -d "$SCRIPT_DIR/hooks" ]; then
 
     # Provision JavaParser support for Java AST extraction. Java is
     # OPTIONAL — compile only when java/javac/maven are all present.
+    # Maven and javac stderr are captured to a log so failures can be
+    # diagnosed (silencing them previously hid environment-specific
+    # compile errors entirely).
     if [ -d "$CLAUDE_DIR/hooks/lib/java-src" ] && [ -f "$CLAUDE_DIR/hooks/lib/java-support/pom.xml" ]; then
       if command -v java >/dev/null 2>&1 && command -v javac >/dev/null 2>&1 && command -v mvn >/dev/null 2>&1; then
         mkdir -p "$CLAUDE_DIR/hooks/lib/java-lib" "$CLAUDE_DIR/hooks/lib/java-build"
         echo "  Installing Java AST deps (maven)..."
         echo "  INFO: first-time Maven download may take a moment"
-        if (cd "$CLAUDE_DIR/hooks/lib/java-support" \
-              && mvn -q dependency:copy-dependencies -DoutputDirectory="$CLAUDE_DIR/hooks/lib/java-lib" >/dev/null 2>&1 \
-              && javac -cp "$CLAUDE_DIR/hooks/lib/java-lib/*" -d "$CLAUDE_DIR/hooks/lib/java-build" "$CLAUDE_DIR/hooks/lib/java-src/AstJavaRunner.java" >/dev/null 2>&1); then
-          :
-        else
-          echo "  WARN: JavaParser provisioning failed — Java AST hooks will be skipped at runtime"
+        java_provision_log="$(mktemp)"
+        if ! (cd "$CLAUDE_DIR/hooks/lib/java-support" \
+              && mvn -q dependency:copy-dependencies -DoutputDirectory="$CLAUDE_DIR/hooks/lib/java-lib") \
+              >"$java_provision_log" 2>&1; then
+          echo "  WARN: Maven dependency download failed — Java AST hooks will be skipped at runtime"
+          echo "  ---- Maven output ----"
+          sed 's/^/    /' "$java_provision_log"
+          echo "  ----------------------"
+        elif ! javac -cp "$CLAUDE_DIR/hooks/lib/java-lib/*" \
+               -d "$CLAUDE_DIR/hooks/lib/java-build" \
+               "$CLAUDE_DIR/hooks/lib/java-src/AstJavaRunner.java" \
+               >"$java_provision_log" 2>&1; then
+          echo "  WARN: javac failed — Java AST hooks will be skipped at runtime"
+          echo "  ---- javac output ----"
+          sed 's/^/    /' "$java_provision_log"
+          echo "  ----------------------"
         fi
+        rm -f "$java_provision_log"
       else
         echo "  INFO: java/javac/mvn not fully available — Java AST hooks will be skipped at runtime"
       fi
