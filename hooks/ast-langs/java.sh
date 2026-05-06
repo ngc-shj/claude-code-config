@@ -2,8 +2,8 @@
 # AST plugin: Java via JavaParser-compiled helper.
 
 _AST_JAVA_PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_AST_JAVA_BUILD_DIR="$_AST_JAVA_PLUGIN_DIR/../lib/java-build"
-_AST_JAVA_LIB_DIR="$_AST_JAVA_PLUGIN_DIR/../lib/java-lib"
+_AST_JAVA_BUILD_DIR="${AST_JAVA_BUILD_DIR:-$_AST_JAVA_PLUGIN_DIR/../lib/java-build}"
+_AST_JAVA_LIB_DIR="${AST_JAVA_LIB_DIR:-$_AST_JAVA_PLUGIN_DIR/../lib/java-lib}"
 
 AST_LANG_EXTENSIONS[java]='java'
 
