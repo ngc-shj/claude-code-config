@@ -61,6 +61,23 @@ EOF
   export PATH="$BATS_TEST_TMPDIR:$PATH"
 }
 
+# ---------------------------------------------------------------------------
+# Helper: mock avahi-browse that emits hosts from AVAHI_DISCOVERED_HOSTS
+# (space-separated, e.g. "gx10-a9c0.local gx10-other.local"). Always installed
+# in setup() so real avahi-browse never runs from tests.
+# ---------------------------------------------------------------------------
+setup_avahi_mock() {
+  cat > "$BATS_TEST_TMPDIR/avahi-browse" <<'EOF'
+#!/bin/bash
+HOSTS="${AVAHI_DISCOVERED_HOSTS:-}"
+for h in $HOSTS; do
+  printf '=;eth0;IPv4;workstation;_workstation._tcp;local;%s;192.168.1.10;9;\n' "$h"
+done
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/avahi-browse"
+  export PATH="$BATS_TEST_TMPDIR:$PATH"
+}
+
 # Cross-platform: set file mtime to N seconds ago
 set_mtime_ago() {
   local file="$1" seconds_ago="$2"
@@ -82,6 +99,9 @@ setup() {
   export CURL_LOG_FILE="$BATS_TEST_TMPDIR/curl-calls.log"
   # Clear OLLAMA_HOST so auto-detection runs
   unset OLLAMA_HOST
+  # Default: no discovered hosts; individual tests set AVAHI_DISCOVERED_HOSTS
+  unset AVAHI_DISCOVERED_HOSTS
+  setup_avahi_mock
 }
 
 teardown() {
@@ -122,7 +142,7 @@ teardown() {
   set_mtime_ago "$_OLLAMA_HOST_CACHE" 600
   setup_curl_fail_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
-  [ "$result" = "http://gx10-a9c0:11434" ]
+  [ "$result" = "http://localhost:11434" ]
   [ -s "$CURL_LOG_FILE" ]
 }
 
@@ -131,14 +151,110 @@ teardown() {
   ln -s "$BATS_TEST_TMPDIR/real-cache" "$_OLLAMA_HOST_CACHE"
   setup_curl_fail_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
-  [ "$result" = "http://gx10-a9c0:11434" ]
+  [ "$result" = "http://localhost:11434" ]
+}
+
+# ===========================================================================
+# Discovery (avahi-browse)
+# ===========================================================================
+
+@test "discovery: command -v avahi-browse fails probes only localhost" {
+  # Deterministically shadow `command` so `command -v avahi-browse` returns
+  # non-zero regardless of whether avahi-browse exists on the host PATH. This
+  # exercises the missing-binary branch on every environment (the prior
+  # PATH-juggling approach silently skipped on systems with avahi-utils
+  # pre-installed in /usr/bin).
+  command() {
+    if [ "$1" = "-v" ] && [ "$2" = "avahi-browse" ]; then
+      return 1
+    fi
+    builtin command "$@"
+  }
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  run cat "$CURL_LOG_FILE"
+  [ "${#lines[@]}" -eq 1 ]
+  [ "${lines[0]}" = "http://localhost:11434/api/version" ]
+}
+
+@test "discovery: only gx10-* hosts are picked up" {
+  # avahi advertises a mix; only gx10-* should be probed
+  export AVAHI_DISCOVERED_HOSTS="other-machine.local gx10-foo.local some-printer.local"
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  run cat "$CURL_LOG_FILE"
+  [ "${#lines[@]}" -eq 3 ]
+  [ "${lines[0]}" = "http://gx10-foo:11434/api/version" ]
+  [ "${lines[1]}" = "http://gx10-foo.local:11434/api/version" ]
+  [ "${lines[2]}" = "http://localhost:11434/api/version" ]
+}
+
+@test "discovery: multiple gx10-* hosts are all probed" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-foo.local gx10-bar.local"
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  run cat "$CURL_LOG_FILE"
+  # 2 hosts × (bare + .local) + localhost = 5, in deterministic sort order
+  [ "${#lines[@]}" -eq 5 ]
+  [ "${lines[0]}" = "http://gx10-bar:11434/api/version" ]
+  [ "${lines[1]}" = "http://gx10-bar.local:11434/api/version" ]
+  [ "${lines[2]}" = "http://gx10-foo:11434/api/version" ]
+  [ "${lines[3]}" = "http://gx10-foo.local:11434/api/version" ]
+  [ "${lines[4]}" = "http://localhost:11434/api/version" ]
+}
+
+@test "discovery: second discovered host wins when first is unreachable" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-foo.local gx10-bar.local"
+  export CURL_SUCCEED_HOSTS="gx10-bar"
+  setup_curl_mock
+  result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
+  [ "$result" = "http://gx10-bar:11434" ]
+}
+
+@test "discovery: non-.local hostname emits a single bare candidate" {
+  # avahi field-7 normally carries an FQDN ending in .local, but the script
+  # should tolerate edge cases (mDNS misconfig) without doubling the probe.
+  export AVAHI_DISCOVERED_HOSTS="gx10-bare"
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  run cat "$CURL_LOG_FILE"
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "http://gx10-bare:11434/api/version" ]
+  [ "${lines[1]}" = "http://localhost:11434/api/version" ]
+}
+
+@test "discovery: avahi-browse unresolved (+) lines do not trigger probes" {
+  # '+' lines announce a service but field 7 (hostname) is absent; the awk
+  # filter requires field 1 == '=' to extract a hostname. Override the mock
+  # for this test to emit only a '+' line and verify no gx10-* probes occur.
+  cat > "$BATS_TEST_TMPDIR/avahi-browse" <<'EOF'
+#!/bin/bash
+# '+' = service announced but not yet resolved; no hostname field.
+echo "+;eth0;IPv4;gx10-ghost;_workstation._tcp;local"
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/avahi-browse"
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  run cat "$CURL_LOG_FILE"
+  [ "${#lines[@]}" -eq 1 ]
+  [ "${lines[0]}" = "http://localhost:11434/api/version" ]
+}
+
+@test "discovery: results are capped to 3 hosts (probe fan-out bound)" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-a.local gx10-b.local gx10-c.local gx10-d.local gx10-e.local"
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  call_count=$(wc -l < "$CURL_LOG_FILE")
+  # localhost + 3 capped hosts × (bare + .local) = 7
+  [ "$call_count" -eq 7 ]
 }
 
 # ===========================================================================
 # Probe order
 # ===========================================================================
 
-@test "probe: tries hosts in correct order (gx10-a9c0 -> gx10-a9c0.local -> localhost)" {
+@test "probe: tries hosts in correct order (bare -> .local -> localhost)" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   setup_curl_fail_mock
   source "$SCRIPT"
   run cat "$CURL_LOG_FILE"
@@ -148,20 +264,25 @@ teardown() {
 }
 
 @test "probe: stops at first reachable host" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0.local"
   setup_curl_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
   [ "$result" = "http://gx10-a9c0.local:11434" ]
   call_count=$(wc -l < "$CURL_LOG_FILE")
+  # gx10-a9c0 bare (fail — not a substring of "gx10-a9c0.local")
+  # + gx10-a9c0.local (success) = 2
   [ "$call_count" -eq 2 ]
 }
 
-@test "probe: returns first host when it is reachable" {
+@test "probe: bare gx10 host wins on first probe" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0"
   setup_curl_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
   [ "$result" = "http://gx10-a9c0:11434" ]
   call_count=$(wc -l < "$CURL_LOG_FILE")
+  # gx10-a9c0 (success) = 1
   [ "$call_count" -eq 1 ]
 }
 
@@ -169,12 +290,19 @@ teardown() {
 # Fallback
 # ===========================================================================
 
-@test "fallback: all hosts unreachable returns gx10-a9c0" {
+@test "fallback: all hosts unreachable returns localhost" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   setup_curl_fail_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
-  [ "$result" = "http://gx10-a9c0:11434" ]
+  [ "$result" = "http://localhost:11434" ]
   call_count=$(wc -l < "$CURL_LOG_FILE")
   [ "$call_count" -eq 3 ]
+}
+
+@test "fallback: no discovered hosts and curl fails returns localhost" {
+  setup_curl_fail_mock
+  result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
+  [ "$result" = "http://localhost:11434" ]
 }
 
 # ===========================================================================
@@ -183,6 +311,7 @@ teardown() {
 
 @test "export: OLLAMA_HOST is exported after sourcing" {
   # Do NOT pre-export — let the script resolve and export
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0"
   setup_curl_mock
   source "$SCRIPT"
@@ -196,6 +325,7 @@ teardown() {
 # ===========================================================================
 
 @test "idempotent: sourcing twice does not re-probe" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0"
   setup_curl_mock
   source "$SCRIPT"
@@ -203,6 +333,7 @@ teardown() {
   source "$SCRIPT"
   second="$OLLAMA_HOST"
   [ "$first" = "$second" ]
+  # First source: 1 probe to gx10-a9c0 (success, cached). Second source: cache hit, 0 probes.
   call_count=$(wc -l < "$CURL_LOG_FILE")
   [ "$call_count" -eq 1 ]
 }
