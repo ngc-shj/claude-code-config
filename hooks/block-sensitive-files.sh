@@ -61,9 +61,9 @@ esac
 # Block Claude Code harness configuration that is repo-managed. A session
 # that edits its own hook script can no-op a tripwire (e.g.,
 # block-destructive-docker.sh) and then issue the destructive operation
-# the hook was meant to catch. The repo at ~/ghq/github.com/ngc-shj/
-# claude-code-config/ is the source of truth — edits belong there, then
-# `bash ./install.sh` syncs into ~/.claude/.
+# the hook was meant to catch. The repo at ~/src/claude-code-config/ is the
+# source of truth — edits belong there, then `bash ./install.sh` syncs into
+# ~/.claude/.
 #
 # Intentionally NOT blocked: ~/.claude/settings.local.json — that is the
 # documented override path (it is NOT overwritten by install.sh) and is
@@ -72,11 +72,11 @@ esac
 # canonical override workflow.
 case "$FILE_PATH" in
   "$HOME/.claude/hooks/"*.sh|"$HOME/.claude/settings.json"|"$HOME/.claude/CLAUDE.md")
-    emit_block "Blocked: editing harness config under ~/.claude/ directly. The repo claude-code-config is the source of truth — edit there and run \`bash ./install.sh\`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."
+    emit_block "Blocked: editing harness config under ~/.claude/ directly. The repo at ~/src/claude-code-config/ is the source of truth — edit there and run \`bash ./install.sh\`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."
     exit 0
     ;;
   "~/.claude/hooks/"*.sh|"~/.claude/settings.json"|"~/.claude/CLAUDE.md")
-    emit_block "Blocked: editing harness config under ~/.claude/ directly. Edit the repo claude-code-config and run \`bash ./install.sh\`. Use ~/.claude/settings.local.json for local overrides."
+    emit_block "Blocked: editing harness config under ~/.claude/ directly. Edit the repo at ~/src/claude-code-config/ and run \`bash ./install.sh\`. Use ~/.claude/settings.local.json for local overrides."
     exit 0
     ;;
 esac

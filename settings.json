@@ -46,11 +46,7 @@
       "Bash(docker compose down -v*)",
       "Bash(npm publish*)",
       "Bash(npm unpublish*)",
-      "Bash(npx -y *)",
-      "Bash(eval *)",
-      "Bash(source *)",
-      "Bash(xargs *)",
-      ":(Skill*)"
+      "Bash(npx -y *)"
     ],
     "allow": [
       "mcp__ollama__ollama_generate",
@@ -205,11 +201,6 @@
       {
         "matcher": "Bash",
         "hooks": [
-          {
-            "type": "command",
-            "command": "rtk hook claude",
-            "timeout": 5
-          },
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/block-destructive-docker.sh",

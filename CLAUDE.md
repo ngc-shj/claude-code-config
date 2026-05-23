@@ -59,12 +59,10 @@ Use the appropriate model for each task based on complexity, cost, and latency:
 
 Available models and their use cases:
 
-| Model           | Use case                                                                           |
-| --------------- | ---------------------------------------------------------------------------------- |
-| gpt-oss:20b     | Quick checks: lint, format validation, commit message review, simple summarization |
-| gpt-oss:120b    | Code review pre-screening, security pattern detection, detailed analysis           |
-| deepseek-r1:70b | Complex reasoning tasks, mathematical/logical verification                         |
-| deepseek-r1:8b  | Fast classification, simple Q&A, tagging                                           |
+| Model        | Use case                                                                           |
+| ------------ | ---------------------------------------------------------------------------------- |
+| gpt-oss:20b  | Quick checks: lint, format validation, commit message review, simple summarization |
+| gpt-oss:120b | Code review pre-screening, security pattern detection, detailed analysis           |
 
 ### How to call local LLM
 
@@ -83,29 +81,3 @@ Prefer hooks over MCP when the task requires file access or runs automatically.
 4. **Privacy-sensitive tasks**: Use local LLM for tasks involving sensitive data that should not leave the machine
 5. **MCP fallback**: Use `mcp__ollama__ollama_chat` or `mcp__ollama__ollama_generate` only when passing short text that is already in context
 
-## Tool Output Compression (RTK)
-
-[RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) is a CLI proxy registered as the first `PreToolUse` Bash hook in `settings.json`. It transparently rewrites common dev commands (`git status` -> `rtk git status`, `pytest` -> `rtk pytest`, etc.) so Claude sees filtered/compressed output instead of raw stdout. Reported savings: 60-90% on git/test/log-heavy operations.
-
-Notes specific to this repo:
-- The rewrite happens BEFORE the `block-*` deny hooks run, so Claude sees `rtk <verb>...` in `tool_input.command`. The R31 destructive-op regexes match against the substring (`git push --force`, `docker volume rm`, etc.), which is preserved across the rewrite — destructive blocks still fire correctly.
-- `commit-msg-check.sh` was updated to accept the `rtk ` prefix on `git commit ...` so Ollama-based commit message review still runs after the rewrite.
-- Override the rewrite for a single command with `rtk proxy <cmd>` (raw passthrough), or disable globally by removing the hook entry from `~/.claude/settings.local.json`.
-
-### Privacy posture
-
-Audited 2026-04-30 against rtk 0.38.0. Full report: [`docs/archive/audit/rtk-privacy-posture-2026-04-30.md`](./docs/archive/audit/rtk-privacy-posture-2026-04-30.md).
-
-Headline findings:
-- **Network exfiltration: NEGLIGIBLE.** Telemetry is OFF by default, and the v0.38.0 binary contains no collection endpoint (literal string in binary: `no telemetry endpoint configured`). Static-string scan turned up no posthog/sentry/datadog/amplitude markers — only docs URLs.
-- **Local plaintext command history**: every command's full text + arguments + absolute project path is logged to `~/.local/share/rtk/history.db` (SQLite). Default retention was 90 days; **this repo ships with retention shortened to 14 days**.
-- **Threat-model equivalent**: same shape as `~/.bash_history`. Disk encryption + non-shared user account remain the operative controls. Avoid passing secrets as CLI args (use env vars or `--from-file` instead).
-
-Re-audit triggers (run on every `brew upgrade rtk`):
-- `strings $(which rtk) | grep -E '^https?://' | grep -v 'github.com\|homebrew'` should remain empty.
-- `rtk telemetry status` should show `enabled: no` and `device hash: (no salt file)` unless intentionally enabled.
-- If a new endpoint URL or unfamiliar SaaS marker appears, evaluate before continuing use.
-
-Defense-in-depth: export `RTK_TELEMETRY_DISABLED=1` in `~/.bashrc` to override any accidental opt-in regardless of config. Periodic purge: `rtk telemetry forget`.
-
-@RTK.md

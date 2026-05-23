@@ -1,4 +1,44 @@
-# claude-code-config
+# claude-code-config (Linux fork)
+
+> **Fork notice.** This is a Linux-adapted derivative of
+> [ngc-shj/claude-code-config](https://github.com/ngc-shj/claude-code-config)
+> (MIT). Upstream attribution preserved in `LICENSE`. The original README content
+> follows the "Changes from upstream" section below.
+
+## Changes from upstream
+
+| Area                       | Change                                                                                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `install.sh`               | **Merges** `settings.json` into `~/.claude/settings.json` instead of overwriting. User's `mcpServers` and other top-level keys are preserved. Backup written before merge. |
+| `settings.json`            | Removed `rtk hook claude` PreToolUse hook (upstream dependency not installed locally). Removed `:(Skill*)` deny rule that blocked all Claude Code built-in skills. Removed `Bash(eval *)` / `Bash(source *)` / `Bash(xargs *)` denies (too restrictive for normal dev workflow). |
+| `hooks/notify.sh`, `hooks/stop-notify.sh` | Rewritten for Linux: `afplay` → `paplay`/`aplay`, `osascript` → `notify-send`. Sound files resolved from freedesktop theme.       |
+| `hooks/resolve-ollama-host.sh` | Removed mDNS `gx10-*` host discovery (upstream-author-specific). Honors `OLLAMA_HOST` env var, defaults to `http://localhost:11434`.            |
+| `hooks/block-sensitive-files.sh` | Repo path in deny messages updated from `~/ghq/github.com/ngc-shj/claude-code-config` to `~/src/claude-code-config`.                          |
+| `CLAUDE.md`                | Removed RTK section (not used). Removed `deepseek-r1` rows from model table (not installed locally).                                                  |
+| `skills/`                  | Removed `simplify/`, `explore/`, `security-scan/` — these collide by name with Claude Code's built-in skills.                                         |
+
+Retained: `block-*.sh` security hooks, `check-*.sh` (referenced by `triangulate` skill), `commit-msg-check.sh`, `pre-review.sh`, `rules/`, and skills `triangulate` / `test-gen` / `pr-create` / `context-budget`.
+
+## Requirements
+
+- Linux with `bash`, `jq`, `curl`
+- Optional: `notify-send` + `paplay` for desktop notifications
+- Optional: `ollama` running locally (`http://localhost:11434`) with `gpt-oss:20b` (commit check) and `gpt-oss:120b` (pre-review)
+- Optional for AST hooks: `node`/`npm`, `go`, `java`+`mvn` (all degrade gracefully when absent)
+
+## Install
+
+```bash
+git clone <your fork URL> ~/src/claude-code-config
+cd ~/src/claude-code-config
+bash install.sh
+```
+
+The installer is idempotent. Re-run after `git pull` to sync changes.
+
+---
+
+## Upstream README
 
 Safe default settings for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with agentic multi-model architecture.
 
