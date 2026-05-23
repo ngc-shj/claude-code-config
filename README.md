@@ -1,32 +1,33 @@
-# claude-code-config (Linux fork)
+# claude-code-config (Linux 派生版)
 
-> **Fork notice.** This is a Linux-adapted derivative of
+> **Fork について。** これは
 > [ngc-shj/claude-code-config](https://github.com/ngc-shj/claude-code-config)
-> (MIT). Upstream attribution preserved in `LICENSE`. The original README content
-> follows the "Changes from upstream" section below.
+> (MIT) の Linux 適合派生版です。上流の著作権表示は `LICENSE` に保全しています。
 
-## Changes from upstream
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) の安全なデフォルト設定と、複数モデルを協調させるエージェント構成。
 
-| Area                       | Change                                                                                                                                                |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `install.sh`               | **Merges** `settings.json` into `~/.claude/settings.json` instead of overwriting. User's `mcpServers` and other top-level keys are preserved. Backup written before merge. |
-| `settings.json`            | Removed `rtk hook claude` PreToolUse hook (upstream dependency not installed locally). Removed `:(Skill*)` deny rule that blocked all Claude Code built-in skills. Removed `Bash(eval *)` / `Bash(source *)` / `Bash(xargs *)` denies (too restrictive for normal dev workflow). |
-| `hooks/notify.sh`, `hooks/stop-notify.sh` | Rewritten for Linux: `afplay` → `paplay`/`aplay`, `osascript` → `notify-send`. Sound files resolved from freedesktop theme.       |
-| `hooks/resolve-ollama-host.sh` | Removed mDNS `gx10-*` host discovery (upstream-author-specific). Honors `OLLAMA_HOST` env var, defaults to `http://localhost:11434`.            |
-| `hooks/block-sensitive-files.sh` | Repo path in deny messages updated from `~/ghq/github.com/ngc-shj/claude-code-config` to `~/src/claude-code-config`.                          |
-| `CLAUDE.md`                | Removed RTK section (not used). Removed `deepseek-r1` rows from model table (not installed locally).                                                  |
-| `skills/`                  | Removed `simplify/`, `explore/`, `security-scan/` — these collide by name with Claude Code's built-in skills.                                         |
+## 上流からの変更点
 
-Retained: `block-*.sh` security hooks, `check-*.sh` (referenced by `triangulate` skill), `commit-msg-check.sh`, `pre-review.sh`, `rules/`, and skills `triangulate` / `test-gen` / `pr-create` / `context-budget`.
+| 対象                       | 変更内容 |
+| -------------------------- | -------- |
+| `install.sh`               | `settings.json` を**上書きではなくマージ**するよう変更。ユーザの `mcpServers` 等の既存トップレベルキーを保全。マージ前にタイムスタンプ付きバックアップを作成。 |
+| `settings.json`            | `rtk hook claude` PreToolUse フックを削除 (上流が前提とする依存ツール `rtk` 未導入のため)。`:(Skill*)` deny を削除 (Claude Code 組み込み skill を全部ブロックしてしまうため)。`Bash(eval *)` / `Bash(source *)` / `Bash(xargs *)` deny を削除 (通常開発で過剰に制限的なため)。 |
+| `hooks/notify.sh`, `hooks/stop-notify.sh` | Linux 用に書き直し: `afplay` → `paplay`/`aplay`、`osascript` → `notify-send`。サウンドは freedesktop テーマから解決。 |
+| `hooks/resolve-ollama-host.sh` | mDNS による `gx10-*` ホスト自動検出を削除 (上流作者環境固有)。`OLLAMA_HOST` 環境変数を尊重、未設定時は `http://localhost:11434`。 |
+| `hooks/block-sensitive-files.sh` | deny メッセージ内のリポジトリパスを `~/ghq/github.com/ngc-shj/claude-code-config` から `~/src/claude-code-config` に変更。 |
+| `CLAUDE.md`                | RTK セクションを削除 (使用しないため)。モデル表から `deepseek-r1` 行を削除 (ローカル未導入)。 |
+| `skills/`                  | `simplify/`, `explore/`, `security-scan/` を削除 — いずれも Claude Code 組み込み skill と名前衝突するため。 |
 
-## Requirements
+**残したもの**: `block-*.sh` セキュリティフック、`check-*.sh` (`triangulate` skill から参照)、`commit-msg-check.sh`、`pre-review.sh`、`rules/`、skill 4種 (`triangulate` / `test-gen` / `pr-create` / `context-budget`)。
 
-- Linux with `bash`, `jq`, `curl`
-- Optional: `notify-send` + `paplay` for desktop notifications
-- Optional: `ollama` running locally (`http://localhost:11434`) with `gpt-oss:20b` (commit check) and `gpt-oss:120b` (pre-review)
-- Optional for AST hooks: `node`/`npm`, `go`, `java`+`mvn` (all degrade gracefully when absent)
+## 必要要件
 
-## Install
+- Linux 上の `bash`, `jq`, `curl`
+- (任意) デスクトップ通知用に `notify-send` + `paplay`
+- (任意) ローカル LLM 機能用に `ollama` (`http://localhost:11434`)。推奨モデル: `gpt-oss:20b` (コミットメッセージ検査) と `gpt-oss:120b` (コードレビュー事前スクリーニング)
+- (任意) AST ベースのフック用: `node`/`npm`, `go`, `java`+`mvn` (いずれも欠如時はランタイムで自動スキップ)
+
+## インストール
 
 ```bash
 git clone <your fork URL> ~/src/claude-code-config
@@ -34,356 +35,232 @@ cd ~/src/claude-code-config
 bash install.sh
 ```
 
-The installer is idempotent. Re-run after `git pull` to sync changes.
+インストーラは冪等。`git pull` 後に再実行すれば変更点だけ反映されます。
+既存 `~/.claude/settings.json` は自動でバックアップされた上でマージされます。
 
----
-
-## Upstream README
-
-Safe default settings for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with agentic multi-model architecture.
-
-## Repository structure
-
-```text
-claude-code-config/
-├── .editorconfig                  # Editor formatting rules
-├── .gitignore                     # Ignore .DS_Store, *.bak, etc.
-├── LICENSE                        # MIT License
-├── README.md                      # This file
-├── CLAUDE.md                      # Global behavior rules + model routing strategy
-├── settings.json                  # Permissions + hooks configuration
-├── install.sh                     # Installer script
-├── hooks/
-│   ├── block-sensitive-files.sh   # Block edits to secrets/lock files
-│   ├── commit-msg-check.sh       # Commit message validation via local LLM
-│   ├── pre-review.sh             # Code/plan pre-screening via local LLM
-│   ├── ollama-utils.sh           # Shared Ollama utility commands for skills
-│   ├── notify.sh                 # Desktop notifications (macOS)
-│   └── stop-notify.sh            # Task completion notifications
-├── skills/
-│   ├── triangulate/
-│   │   └── SKILL.md              # Triangulate: 3-phase × 3-expert review workflow
-│   ├── simplify/
-│   │   └── SKILL.md              # Code simplification and cleanup
-│   ├── test-gen/
-│   │   └── SKILL.md              # Automatic test generation
-│   ├── pr-create/
-│   │   └── SKILL.md              # Pull request creation with auto-description
-│   ├── explore/
-│   │   └── SKILL.md              # Deep codebase exploration and Q&A
-│   ├── context-budget/
-│   │   └── SKILL.md              # Audit context window consumption and surface savings
-│   └── security-scan/
-│       └── SKILL.md              # Audit Claude Code config for secrets, injection, MCP risks
-└── rules/
-    ├── common/                   # Language-agnostic baseline (always applied)
-    │   ├── coding-style.md
-    │   ├── testing.md
-    │   └── security.md
-    ├── typescript/               # Overlays common/ for *.ts, *.tsx, *.js, *.jsx
-    ├── python/                   # Overlays common/ for *.py
-    └── golang/                   # Overlays common/ for *.go
-```
-
-## Agentic architecture
-
-```text
-┌──────────────────────────────────────────────────┐
-│  Claude Opus 4.6 (Main Orchestrator)             │
-│  Complex design, planning, final decisions       │
-└──┬────────────────┬─────────────────┬────────────┘
-   │                │                 │
-   ▼                ▼                 ▼
-┌────────┐  ┌─────────────┐  ┌──────────────────┐
-│Sonnet  │  │gpt-oss:120b │  │gpt-oss:20b       │
-│4.6     │  │(Ollama)     │  │(Ollama)          │
-│        │  │             │  │                  │
-│Explore │  │Code review  │  │Commit msg check  │
-│Implement│ │pre-screening│  │Quick validation  │
-│Test    │  │Security scan│  │Summarization     │
-└────────┘  └─────────────┘  └──────────────────┘
-```
-
-### Model routing
-
-| Model | Role | Use case |
-| --- | --- | --- |
-| Claude Opus 4.6 | Main orchestrator | Architecture, planning, final decisions |
-| Claude Sonnet 4.6 | Sub-agent | Exploration, implementation, testing |
-| gpt-oss:120b | Local pre-screening | Code review, security analysis (before Claude) |
-| gpt-oss:20b | Local quick checks | Commit messages, lint, format, classification |
-| deepseek-r1:70b | Local reasoning | Complex logical verification |
-| deepseek-r1:8b | Local fast tasks | Simple Q&A, tagging |
-
-Local LLMs run via [Ollama](https://ollama.com/) — **no API cost, no data leaves your machine**.
-Called via hooks (shell + curl) for file-aware tasks, or MCP for ad-hoc text analysis.
-
-## Permission design
-
-Commands are categorized into three levels:
-
-- **deny** — Blocked unconditionally (destructive, exfiltration, irreversible)
-- **allow** — Auto-approved (read-only, local-only, safe for development)
-- **ask** — Requires user confirmation each time (side effects but needed for development)
-
-### deny (examples)
-
-- `rm -rf`, `sudo`, `chmod 777`, `dd`
-- `git push --force`, `git reset --hard`, `git clean -fd`
-- `curl -X POST/PUT/DELETE`, `curl --data`
-- `docker system prune`, `docker push`, `docker login`
-- `npm publish`, `eval`, `source`, `xargs`
-
-### allow (examples)
-
-- Read-only: `ls`, `cat`, `grep`, `find`, `head`, `tail`, `wc`, `diff`
-- Git (safe): `status`, `log`, `diff`, `add`, `commit`, `checkout`, `switch`, `fetch`, `pull`
-- Docker (safe): `ps`, `images`, `logs`, `inspect`, `build`, `compose up`, `exec`, `run`
-- npm: `list`, `run`, `test`, `install`, `ci`
-
-### ask (examples)
-
-- `git push`, `rm`, `mv`, `kill`
-- `docker stop`, `docker rm`, `docker rmi`, `docker compose down`
-- `gh pr merge`, `gh pr close`
-
-## Hooks
-
-### block-sensitive-files.sh (PreToolUse)
-
-Blocks Edit/Write/MultiEdit operations on:
-
-- Environment files: `.env`, `.env.local`, `.env.production`, etc.
-- Credential files: `credentials.json`, `secrets.yaml`, `*.pem`, `*.key`
-- Lock files: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, etc.
-- Git internals: `.git/*`
-
-### commit-msg-check.sh (PreToolUse)
-
-Validates commit messages using local LLM (`gpt-oss:20b` via Ollama):
-
-- Checks for conventional commit format (feat/fix/refactor/docs/test/chore)
-- Verifies the message is in English and concise
-- Provides improvement suggestions if needed
-- Gracefully skips if Ollama is unavailable
-
-### pre-review.sh (Utility — called by skills)
-
-Pre-screening for code review and plan review using local LLM (`gpt-oss:120b` via Ollama):
-
-```bash
-# Review plan
-PLAN_FILE=path/to/plan.md bash ~/.claude/hooks/pre-review.sh plan
-
-# Review code changes
-bash ~/.claude/hooks/pre-review.sh code
-```
-
-- Reads files directly via shell (git diff, cat) — no Claude tokens consumed
-- Configurable via `OLLAMA_HOST` and `REVIEW_MODEL` environment variables
-- Gracefully skips if Ollama is unavailable
-
-### ollama-utils.sh (Utility — called by skills)
-
-Shared Ollama utility commands for skills and hooks:
-
-```bash
-# Generate a kebab-case slug from task description
-echo "Add user authentication" | bash ~/.claude/hooks/ollama-utils.sh generate-slug
-
-# Summarize a git diff
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh summarize-diff
-
-# Merge and deduplicate review findings from multiple agents
-cat findings1.txt findings2.txt | bash ~/.claude/hooks/ollama-utils.sh merge-findings
-
-# Classify changed files (feature/fix/refactor/docs/test/chore)
-git diff --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes
-
-# Classify a user question into an explore query type (explanation / usage-search / architecture / location / data-flow)
-echo "How does the request router work?" | bash ~/.claude/hooks/ollama-utils.sh classify-query
-
-# Analyze a diff from an expert perspective (functionality / security / testing)
-# Used by triangulate Phase 3 to seed Claude sub-agents with findings
-# instead of each sub-agent reading the full diff — reduces Claude token usage.
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing
-
-# Pre-screen reuse candidates (shared-utils inventory + diff) for the simplify skill
-{ bash ~/.claude/hooks/scan-shared-utils.sh; echo '=== OLLAMA-INPUT-SEPARATOR ==='; \
-  git diff main...HEAD; } | bash ~/.claude/hooks/ollama-utils.sh score-utility-match
-
-# Audit mock return values in a test file against the real type definitions
-{ cat tests/foo.test.ts; echo '=== OLLAMA-INPUT-SEPARATOR ==='; \
-  cat src/types/foo.ts; } | bash ~/.claude/hooks/ollama-utils.sh verify-mock-shapes
-
-# Generate a PR title from classify-changes + summarize-diff output
-{ echo "$CATEGORY"; echo '=== OLLAMA-INPUT-SEPARATOR ==='; echo "$SUMMARY"; } \
-  | bash ~/.claude/hooks/ollama-utils.sh generate-pr-title
-
-# Generate a PR body from commits + diff stat + ALL review artifacts (mirrors the pr-create skill invocation)
-{ echo '=== COMMIT LOG ==='; git log main...HEAD --oneline; \
-  echo; echo '=== DIFF STAT ==='; git diff main...HEAD --stat; \
-  for f in ./docs/archive/review/*-plan.md ./docs/archive/review/*-review.md \
-           ./docs/archive/review/*-deviation.md ./docs/archive/review/*-code-review.md; do \
-    [ -f "$f" ] || continue; echo; echo "=== $f ==="; cat "$f"; done; } \
-  | bash ~/.claude/hooks/ollama-utils.sh generate-pr-body
-
-# Generate a deviation log delta from plan + existing log + diff (three sections)
-{ cat plan.md; echo '=== OLLAMA-INPUT-SEPARATOR ==='; \
-  cat existing-deviation.md 2>/dev/null || echo '# new'; \
-  echo '=== OLLAMA-INPUT-SEPARATOR ==='; git diff main...HEAD; } \
-  | bash ~/.claude/hooks/ollama-utils.sh generate-deviation-log  # output = delta entries; APPEND to existing log
-
-# Generate a commit body (subject line still hand-written)
-git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
-
-# Generate a resolution-status entry from finding + fix commit
-{ echo "$FINDING"; echo '=== OLLAMA-INPUT-SEPARATOR ==='; git show HEAD; } \
-  | bash ~/.claude/hooks/ollama-utils.sh generate-resolution-entry
-
-# Summarize a round-to-round change for review artifacts
-{ git log r1..HEAD --oneline; echo '=== OLLAMA-INPUT-SEPARATOR ==='; cat findings.txt; } \
-  | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
-
-# Propose plan edits for a finding (anchor + insertion pairs)
-{ cat plan.md; echo '=== OLLAMA-INPUT-SEPARATOR ==='; echo "$FINDING"; } \
-  | bash ~/.claude/hooks/ollama-utils.sh propose-plan-edits
-```
-
-- All commands read stdin, write stdout — composable with pipes
-- Gracefully returns empty output if Ollama is unavailable
-- Supports thinking models (`.response` → `.thinking` fallback)
-
-### notify.sh (Notification)
-
-macOS desktop notifications when:
-
-- **permission_prompt**: Claude needs permission approval — plays sound + notification
-- **idle_prompt**: Claude is waiting for input — plays sound + notification
-
-> Linux users: replace `afplay`/`osascript` with `paplay`/`notify-send`.
-
-### stop-notify.sh (Stop)
-
-Notifies when Claude finishes a response:
-
-- **end_turn**: Task complete — plays Glass sound + notification
-- **max_tokens**: Token limit reached — plays alert sound + warning notification
-
-## Skills
-
-### triangulate
-
-A development workflow skill with three phases:
-
-1. **Plan creation & review** — Local LLM pre-screening + 3 Claude expert agents
-2. **Coding** — Sonnet sub-agent implementation with deviation tracking
-3. **Code review** — Local LLM pre-screening + 3 Claude expert agents
-
-Each review phase uses local LLM (`gpt-oss:120b`) to catch obvious issues before launching Claude sub-agents. Implementation is delegated to Sonnet sub-agents while Opus orchestrates, reducing API cost while maintaining quality.
-
-### simplify
-
-Reviews changed code for reuse, quality, and efficiency improvements:
-- Local LLM pre-analysis for complexity hotspots and duplication (zero Claude tokens)
-- Sonnet sub-agent explores codebase for concrete before/after proposals
-- User selects which proposals to apply
-
-### test-gen
-
-Generates tests for specified or changed code:
-- Auto-detects test framework and conventions
-- Local LLM generates test case outlines (zero Claude tokens)
-- Sonnet sub-agent implements and verifies tests with fix loop (max 3 iterations)
-
-### pr-create
-
-Creates a pull request with auto-generated description:
-- Local LLM summarizes diff and classifies change type (zero Claude tokens)
-- Local LLM composes PR body with summary, motivation, and test plan (zero Claude tokens)
-- User reviews draft before `gh pr create`
-
-### explore
-
-Deep codebase exploration and Q&A:
-- Local LLM extracts search keywords and builds file relevance map (zero Claude tokens)
-- Sonnet sub-agent traces code paths and builds structured answers
-- Supports: explanation, usage search, architecture, location, data flow queries
-
-### context-budget
-
-Audits token overhead across agents, skills, rules, CLAUDE.md, and MCP servers, then surfaces prioritized savings:
-- Inventory phase is pure shell (word count, line count) — zero Claude tokens
-- Claude classifies components as always/sometimes/rarely needed and ranks optimizations
-- Flags bloated descriptions, heavy files, MCP oversubscription, CLAUDE.md creep
-- Adapted from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (`skills/context-budget/`)
-
-### security-scan
-
-Audits Claude Code configuration for common security misconfigurations — zero external dependencies:
-- Deterministic pattern checks (grep + jq) for secrets, `Bash(*)` wildcards, hook injection, MCP supply chain, prompt-injection surface in CLAUDE.md
-- Optional deep analysis via `gpt-oss:120b` through `ollama-utils.sh analyze-security` (zero Claude tokens)
-- Graded A/F report with severity-classified findings
-- Concept borrowed from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (`skills/security-scan/`, which wraps the AgentShield npm package); reimplemented here as a self-contained shell + Ollama workflow
-
-## Rules
-
-Layered coding-style / testing / security guidance, consulted when editing matching files.
-
-- `rules/common/` — language-agnostic baseline (KISS/DRY/YAGNI, test minimums, secrets handling). Always applied.
-- `rules/{lang}/` — language overlays that extend the baseline and override where the language idiom differs (e.g. Go mutability). Each file declares `paths:` in YAML frontmatter.
-
-Currently shipped: `typescript/`, `python/`, `golang/`. Extend by dropping a new `rules/{lang}/` directory with at least `coding-style.md` and a `paths:` frontmatter.
-
-Rules are referenced, not auto-injected — Claude reads them via the directive in `CLAUDE.md` when the file type matches.
-
-## Installation
-
-### Prerequisites
-
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
-- [Ollama](https://ollama.com/) installed (optional, for local LLM features)
-
-### Setup
-
-```bash
-git clone https://github.com/ngc-shj/claude-code-config.git
-cd claude-code-config
-bash install.sh
-```
-
-The installer overwrites existing files. This repo is the source of truth — `git` history is the rollback mechanism, so no `.bak` files are kept. Any stale `.bak` under `~/.claude/{hooks,skills,rules}/` from earlier installs is removed on the next run (stale skill backups otherwise load as shadow skills).
-
-For local customizations that should survive installs, use `~/.claude/settings.local.json` instead of editing `~/.claude/settings.json` directly.
-
-### Install local models (optional)
+### ローカルモデルの取得 (任意)
 
 ```bash
 ollama pull gpt-oss:20b
 ollama pull gpt-oss:120b
 ```
 
-### What gets installed
+## リポジトリ構成
 
-| Source              | Destination                   |
-| ------------------- | ----------------------------- |
-| `settings.json`     | `~/.claude/settings.json`     |
-| `CLAUDE.md`         | `~/.claude/CLAUDE.md`         |
-| `hooks/*.sh`        | `~/.claude/hooks/`            |
-| `skills/*/SKILL.md` | `~/.claude/skills/*/SKILL.md` |
-| `rules/*/*.md`      | `~/.claude/rules/*/*.md`      |
+```text
+claude-code-config/
+├── CLAUDE.md                       # グローバル動作ルール + モデル振り分け方針
+├── settings.json                   # 権限定義 + フック設定
+├── install.sh                      # マージ型インストーラ
+├── hooks/
+│   ├── block-sensitive-files.sh    # 秘密ファイル/ロックファイル編集ブロック
+│   ├── block-*.sh                  # 破壊的コマンドブロック群
+│   ├── commit-msg-check.sh         # ローカル LLM によるコミットメッセージ検査
+│   ├── pre-review.sh               # ローカル LLM による事前コード/プランレビュー
+│   ├── check-*.sh                  # triangulate skill から呼ばれる個別チェック
+│   ├── ollama-utils.sh             # skill 共通の Ollama ユーティリティ
+│   ├── resolve-ollama-host.sh      # OLLAMA_HOST 解決 (env or localhost)
+│   ├── notify.sh                   # デスクトップ通知 (Linux)
+│   └── stop-notify.sh              # 応答完了通知 (Linux)
+├── skills/
+│   ├── triangulate/                # 3 フェーズ × 3 観点レビューワークフロー
+│   ├── test-gen/                   # テスト自動生成
+│   ├── pr-create/                  # PR 自動作成
+│   └── context-budget/             # コンテキスト消費量の監査
+└── rules/
+    ├── common/                     # 言語非依存のベースライン (常時適用)
+    ├── typescript/                 # *.ts, *.tsx, *.js, *.jsx 用オーバーレイ
+    ├── python/                     # *.py 用オーバーレイ
+    └── golang/                     # *.go 用オーバーレイ
+```
 
-## Customization
+## アーキテクチャ
 
-- Edit `settings.json` to adjust permission rules and hooks
-- Edit `CLAUDE.md` to change global behavior rules and model routing
-- Add/remove hook scripts in `hooks/`
-- Add/remove skills in `skills/`
-- Add language-specific rules in `rules/{lang}/` — each file carries a `paths:` frontmatter indicating which file globs it applies to
-- For project-specific rules, create a `CLAUDE.md` in the project root
+```text
+┌──────────────────────────────────────────────────┐
+│  Claude Opus (主オーケストレータ)                 │
+│  アーキテクチャ設計・計画策定・最終判断           │
+└──┬────────────────┬─────────────────┬────────────┘
+   │                │                 │
+   ▼                ▼                 ▼
+┌────────┐  ┌─────────────┐  ┌──────────────────┐
+│Sonnet  │  │gpt-oss:120b │  │gpt-oss:20b       │
+│        │  │(Ollama)     │  │(Ollama)          │
+│探索    │  │コードレビュ │  │コミットメッセー  │
+│実装    │  │事前スクリー │  │ジ検査            │
+│テスト  │  │ニング       │  │簡易検証          │
+│        │  │セキュリティ │  │分類              │
+└────────┘  └─────────────┘  └──────────────────┘
+```
 
-## License
+### モデル振り分け
+
+| モデル | 役割 | 用途 |
+| --- | --- | --- |
+| Claude Opus | 主オーケストレータ | アーキテクチャ・計画・最終判断 |
+| Claude Sonnet | サブエージェント | 探索・実装・テスト |
+| gpt-oss:120b | ローカル事前スクリーニング | コードレビュー・セキュリティ解析 (Claude の前に実行) |
+| gpt-oss:20b | ローカル軽量チェック | コミットメッセージ・lint・整形・分類 |
+
+ローカル LLM は [Ollama](https://ollama.com/) 経由で動作 — **API コストゼロ、データは端末外に出ません**。
+ファイル参照が必要なタスクはフック (shell + curl) 経由、その場の短文分析は MCP 経由で呼び出します。
+
+## 権限設計
+
+コマンドは 3 段階に分類されます:
+
+- **deny** — 無条件ブロック (破壊的・流出・不可逆)
+- **allow** — 自動承認 (読み取り専用・ローカル限定・開発で安全)
+- **ask** — 毎回ユーザ確認 (副作用ありだが開発に必要)
+
+### deny の例
+
+- `rm -rf`, `sudo`, `chmod 777`, `dd`
+- `git push --force`, `git reset --hard`, `git clean -fd`
+- `curl -X POST/PUT/DELETE`, `curl --data`
+- `docker system prune`, `docker push`, `docker login`
+- `npm publish`, `npx -y`
+
+### allow の例
+
+- 読み取り系: `ls`, `cat`, `grep`, `find`, `head`, `tail`, `wc`, `diff`
+- Git (安全): `status`, `log`, `diff`, `add`, `commit`, `checkout`, `switch`, `fetch`, `pull`
+- Docker (安全): `ps`, `images`, `logs`, `inspect`, `build`, `compose up`, `exec`, `run`
+- npm: `list`, `run`, `test`, `install`, `ci`
+
+### ask の例
+
+- `git push`, `rm`, `mv`, `kill`
+- `docker stop`, `docker rm`, `docker rmi`, `docker compose down`
+- `gh pr merge`, `gh pr close`
+
+## フック
+
+### block-sensitive-files.sh (PreToolUse)
+
+以下への Edit/Write/MultiEdit をブロック:
+
+- 環境ファイル: `.env`, `.env.local`, `.env.production` 等
+- 認証情報: `credentials.json`, `secrets.yaml`, `*.pem`, `*.key`
+- ロックファイル: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock` 等
+- Git 内部: `.git/*`
+- Claude Code 自身の設定: `~/.claude/hooks/`, `settings.json`, `CLAUDE.md` (本リポジトリが唯一の真実の源)
+
+### commit-msg-check.sh (PreToolUse)
+
+ローカル LLM (`gpt-oss:20b` via Ollama) でコミットメッセージを検証:
+
+- Conventional Commits 形式 (feat/fix/refactor/docs/test/chore) のチェック
+- 英語・簡潔性の確認
+- 改善提案
+- Ollama 利用不可時は無音でスキップ
+
+### pre-review.sh (skill から呼ばれるユーティリティ)
+
+ローカル LLM (`gpt-oss:120b` via Ollama) でコード・計画を事前レビュー:
+
+```bash
+# 計画のレビュー
+PLAN_FILE=path/to/plan.md bash ~/.claude/hooks/pre-review.sh plan
+
+# コード変更のレビュー
+bash ~/.claude/hooks/pre-review.sh code
+```
+
+- ファイルは shell が直接読む (git diff, cat) — Claude トークン消費ゼロ
+- `OLLAMA_HOST` と `REVIEW_MODEL` 環境変数で挙動を調整可
+- Ollama 利用不可時は無音でスキップ
+
+### ollama-utils.sh (skill から呼ばれるユーティリティ)
+
+skill とフック共通の Ollama ユーティリティ群。例:
+
+```bash
+# タスク説明から kebab-case のスラッグを生成
+echo "Add user authentication" | bash ~/.claude/hooks/ollama-utils.sh generate-slug
+
+# git diff の要約
+git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh summarize-diff
+
+# 複数エージェントのレビュー結果をマージ・重複除去
+cat findings1.txt findings2.txt | bash ~/.claude/hooks/ollama-utils.sh merge-findings
+
+# 変更ファイルの分類 (feature/fix/refactor/docs/test/chore)
+git diff --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes
+```
+
+全コマンドは stdin から読み stdout へ書く構成でパイプ可能。Ollama 不調時は空出力で fail-open します。
+
+### notify.sh / stop-notify.sh (通知)
+
+`paplay` + `notify-send` を使った Linux 用デスクトップ通知:
+
+- **permission_prompt**: 権限承認待ち
+- **idle_prompt**: 入力待ち
+- **end_turn**: タスク完了
+- **max_tokens**: トークン上限到達 (応答が途切れている可能性)
+
+サウンドは `/usr/share/sounds/freedesktop/stereo/` から解決。
+`paplay` や `notify-send` が未インストールでも黙ってスキップします。
+
+## Skills
+
+### triangulate
+
+3 フェーズで構成されるレビューワークフロー:
+
+1. **計画作成・レビュー** — ローカル LLM 事前スクリーニング + Claude エキスパート 3 種
+2. **コーディング** — Sonnet サブエージェントが実装、計画からの逸脱を追跡
+3. **コードレビュー** — ローカル LLM 事前スクリーニング + Claude エキスパート 3 種
+
+各レビューフェーズでローカル LLM (`gpt-oss:120b`) が明らかな問題を先に拾い、Claude サブエージェントの起動を減らします。Opus がオーケストレート、Sonnet が実装、というモデル使い分けで API コストを抑えつつ品質を維持。
+
+### test-gen
+
+指定箇所または変更箇所のテストを自動生成:
+
+- テストフレームワークと既存規約を自動検出
+- ローカル LLM がテストケースの骨子を生成 (Claude トークン消費ゼロ)
+- Sonnet サブエージェントが実装・検証・修正ループ (最大 3 回)
+
+### pr-create
+
+説明文を自動生成して PR を作成:
+
+- ローカル LLM が差分要約と変更種別分類 (Claude トークン消費ゼロ)
+- ローカル LLM が要約・動機・テスト計画を含む PR 本文を作成
+- ユーザがドラフトを確認した上で `gh pr create`
+
+### context-budget
+
+エージェント・skill・rules・CLAUDE.md・MCP サーバのトークン消費量を監査し、削減候補を優先度付きで提示:
+
+- 棚卸し段階は純シェル (word count / line count) — Claude トークン消費ゼロ
+- Claude が各要素を「常時必要 / 時々必要 / ほぼ不要」に分類
+- 肥大化した description・重いファイル・MCP の過剰登録・CLAUDE.md の肥大などを検出
+
+## Rules
+
+レイヤー化された記法・テスト・セキュリティ規約。ファイルを編集するときに該当言語のオーバーレイが参照されます。
+
+- `rules/common/` — 言語非依存のベースライン (KISS/DRY/YAGNI、テスト最低限、機密の扱い)。常時適用。
+- `rules/{lang}/` — 言語固有のオーバーレイ。各ファイルは YAML フロントマターで `paths:` を宣言。Go の不変性のように言語慣習で差し替わる箇所をベースラインに上書き。
+
+同梱: `typescript/`, `python/`, `golang/`。`paths:` フロントマター付きで `rules/{lang}/coding-style.md` を置けば言語を追加可能。
+
+rules は自動注入ではなく**参照型**。Claude は `CLAUDE.md` の指示に従い、編集対象のファイル種別に該当する rule を読みに行きます。
+
+## カスタマイズ
+
+- `settings.json` を編集して権限ルールとフックを調整
+- `CLAUDE.md` を編集してグローバル動作ルールとモデル振り分けを変更
+- フックを追加・削除 (`hooks/`)
+- skill を追加・削除 (`skills/`)
+- 言語固有 rule を `rules/{lang}/` 配下に追加 (各ファイルの `paths:` フロントマターで適用範囲を宣言)
+- プロジェクト固有のルールはプロジェクトルートの `CLAUDE.md` で
+
+**インストールを跨いで残したいローカル変更は `~/.claude/settings.local.json` に置いてください**。`install.sh` はこのファイルを一切触りません。
+
+## ライセンス
 
 MIT
