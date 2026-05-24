@@ -244,6 +244,11 @@
             "type": "command",
             "command": "bash ~/.claude/hooks/commit-msg-check.sh",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/check-pre-pr.sh",
+            "timeout": 1800
           }
         ]
       }

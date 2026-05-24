@@ -173,6 +173,28 @@ bash ~/.claude/hooks/check-migrations.sh
 # 3. Production build
 [build command]
 
+# 3b. Project pre-PR aggregate script (if present).
+# Many projects ship a single canonical pre-PR script (commonly
+# scripts/pre-pr.sh) that bundles lint / test / build PLUS repo-specific
+# gates not covered by the individual commands above — forbidden-pattern
+# greps, count checks, license-header validation, generated-artifact
+# freshness, etc. The individual lint/test/build above is a subset.
+# Run the aggregate script explicitly and surface its output before
+# declaring Phase 2 complete. CI-only failures the script catches here
+# would otherwise leak through to a failed push round in Phase 3,
+# costing one iteration. The check-pre-pr.sh harness hook (PreToolUse,
+# Bash) is the safety net that gates push/PR-create on the same script,
+# but running it here surfaces failures earlier when fixes are still
+# cheap. No-op when the script is absent.
+#
+# Worktree-drift note: pre-pr.sh aggregate scripts commonly run
+# formatters / codegen / lockfile-regen that mutate the worktree as a
+# side effect. Re-inspect `git status` and `git diff` AFTER the run so
+# the next commit does not silently include unreviewed mutations.
+if [ -x scripts/pre-pr.sh ]; then
+  bash scripts/pre-pr.sh || { echo "scripts/pre-pr.sh failed — fix before proceeding"; exit 1; }
+fi
+
 # 4. R35 mechanical gate (manual-test artifact for production-deployed components).
 # This was previously a manual review obligation; it is now a runnable gate.
 # Match the diff's changed files against the R35 deployment-artifact list. If

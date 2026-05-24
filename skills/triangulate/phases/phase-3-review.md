@@ -367,6 +367,14 @@ bash ~/.claude/hooks/check-migrations.sh
 # Run production build to catch compilation/bundling/type errors not covered by tests
 [build command]
 
+# Project pre-PR aggregate script (if present) — same contract as Step 2-4 item 3b.
+# Catches repo-specific gates (forbidden-pattern greps, count checks,
+# license-header validation, etc.) that the individual lint/test/build
+# commands above do not cover. No-op when the script is absent.
+if [ -x scripts/pre-pr.sh ]; then
+  bash scripts/pre-pr.sh || { echo "scripts/pre-pr.sh failed — fix before commit"; exit 1; }
+fi
+
 # Commit only if ALL three pass
 git add -A
 # Optional: draft the commit body via Ollama (subject line still hand-written).
@@ -444,6 +452,15 @@ git commit -m "review: code review complete - all findings resolved"
 # refuses to remove anything outside the tri-* prefix under TMPDIR.
 bash ~/.claude/hooks/tri-tmpdir.sh cleanup "$TRI_DIR"
 ```
+
+**Push-time safety net**: the `check-pre-pr.sh` harness hook (registered
+in `settings.json` under `PreToolUse > Bash`) intercepts `git push` and
+`gh pr create` and re-runs `scripts/pre-pr.sh` when present. If Phase 2-4
+or Phase 3-6 missed a regression that the project's aggregate pre-PR
+script catches, the push is blocked at the harness layer with the
+script's output in the rejection reason. To bypass for one session
+(e.g., after manually verifying the script passes outside the hook),
+export `SKIP_PRE_PR_GATE=1`.
 
 Final report:
 ```
