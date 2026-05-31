@@ -29,6 +29,8 @@ claude-code-config/
 │   │   └── SKILL.md              # Automatic test generation
 │   ├── pr-create/
 │   │   └── SKILL.md              # Pull request creation with auto-description
+│   ├── codex-review/
+│   │   └── SKILL.md              # Codex diff review (second-opinion, zero Claude tokens)
 │   ├── explore/
 │   │   └── SKILL.md              # Deep codebase exploration and Q&A
 │   ├── context-budget/
@@ -264,6 +266,15 @@ Creates a pull request with auto-generated description:
 - Local LLM summarizes diff and classifies change type (zero Claude tokens)
 - Local LLM composes PR body with summary, motivation, and test plan (zero Claude tokens)
 - User reviews draft before `gh pr create`
+
+### codex-review
+
+Runs `codex review` over a chosen diff range for an independent second-opinion review:
+- Review scope: uncommitted changes, a base branch, or a specific commit
+- Review runs on Codex's own model and quota — zero Claude tokens
+- Optionally cross-checks findings against `triangulate` review artifacts
+- Complements triangulate (Claude experts) and `pre-review.sh` (Ollama) with a third model's perspective
+- Data flow: sends the selected diff to Codex's servers (your authenticated account) — do not run on a diff that stages secrets
 
 ### explore
 
