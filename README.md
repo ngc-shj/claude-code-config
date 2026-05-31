@@ -274,6 +274,7 @@ Runs `codex review` over a chosen diff range for an independent second-opinion r
 - Review runs on Codex's own model and quota — zero Claude tokens
 - Optionally cross-checks findings against `triangulate` review artifacts
 - Complements triangulate (Claude experts) and `pre-review.sh` (Ollama) with a third model's perspective
+- Data flow: sends the selected diff to Codex's servers (your authenticated account) — do not run on a diff that stages secrets
 
 ### explore
 

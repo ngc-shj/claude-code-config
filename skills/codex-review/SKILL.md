@@ -45,6 +45,9 @@ BASE=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | s
 BASE=${BASE:-main}
 ```
 
+If `origin/HEAD` is unset (common on shallow or CI checkouts), this falls back
+to `main`; pass `--base` explicitly to override.
+
 Confirm the scope with the user only if it is ambiguous (e.g. they say "review
 this" with both uncommitted changes and unpushed commits present). Otherwise
 proceed with the default.
@@ -66,6 +69,11 @@ codex review --uncommitted "Focus on input validation and auth checks."
 
 Do not pipe the command through `rtk` — `codex` is not a known rewrite target,
 and its findings should be read verbatim.
+
+> **Data flow**: `codex review` sends the selected diff to Codex's servers (the
+> user's own authenticated account; Codex's data policy applies). Do not run it
+> on a diff that stages secrets. This mirrors the external-data-flow notes the
+> repo keeps for RTK and Ollama.
 
 ## Step 3: Summarize and Present
 
