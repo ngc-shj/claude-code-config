@@ -3,6 +3,18 @@
 # perimeter (~/.claude/hooks/*.sh, settings.json, CLAUDE.md) is denied
 # while settings.local.json (the documented override path) remains
 # editable, plus the existing secret/lock/.git protections.
+#
+# JSON whitespace contract (asymmetric, shared by all 7 block-*.sh hooks):
+#   - approve decisions are emitted as `{"decision": "approve"}` (spaced)
+#   - block decisions are emitted as `{"decision":"block","reason":...}` (compact)
+# The asymmetry exists because block uses `printf` with a JSON template
+# while approve uses bare `echo` of a hand-written literal. All 7 block-*.bats
+# files (this one included) substring-match against this exact spacing.
+# A future refactor that unifies the emit format (e.g., pipes both through
+# jq) MUST update all 7 test files in the same diff — silently switching
+# either format breaks the assertions here. The cleaner long-term fix is
+# to parse `$output` via `jq -r '.decision'` in a helper, but that touches
+# 7 files and was scoped out of the original fix.
 
 bats_require_minimum_version 1.5.0
 
@@ -23,7 +35,7 @@ run_hook() {
 
 @test "deny: .env file edit" {
   run run_hook Edit "/repo/project/.env"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 @test "approve: .env.example (template)" {
@@ -33,22 +45,22 @@ run_hook() {
 
 @test "deny: credentials.json" {
   run run_hook Write "/repo/project/credentials.json"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 @test "deny: *.pem" {
   run run_hook Edit "/etc/ssl/server.pem"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 @test "deny: package-lock.json" {
   run run_hook Edit "/repo/project/package-lock.json"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 @test "deny: file inside .git/" {
   run run_hook Write "/repo/project/.git/config"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 # ============================================================
@@ -57,33 +69,33 @@ run_hook() {
 
 @test "deny: ~/.claude/hooks/<name>.sh (absolute HOME path)" {
   run run_hook Edit "$HOME/.claude/hooks/commit-msg-check.sh"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
   [[ "$output" == *"settings.local.json"* ]]
 }
 
 @test "deny: ~/.claude/hooks/block-destructive-docker.sh" {
   run run_hook Write "$HOME/.claude/hooks/block-destructive-docker.sh"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 @test "deny: ~/.claude/settings.json (absolute HOME path)" {
   run run_hook Edit "$HOME/.claude/settings.json"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 @test "deny: ~/.claude/CLAUDE.md (absolute HOME path)" {
   run run_hook Edit "$HOME/.claude/CLAUDE.md"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 @test "deny: literal ~/.claude/hooks/<name>.sh (un-expanded tilde)" {
   run run_hook Edit "~/.claude/hooks/commit-msg-check.sh"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 @test "deny: literal ~/.claude/settings.json (un-expanded tilde)" {
   run run_hook Edit "~/.claude/settings.json"
-  [[ "$output" == *'"decision": "block"'* ]]
+  [[ "$output" == *'"decision":"block"'* ]]
 }
 
 # ============================================================

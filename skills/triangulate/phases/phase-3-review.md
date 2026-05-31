@@ -317,6 +317,15 @@ Review round: [nth]
 - RT3: [status]
 - RT4: [status]
 - RT5: [status]
+- RT6: [status]
+
+## Environment Verification Report
+For every contract that declared `Verification environment constraints` entries in Phase 1, classify each manual-test / acceptance path as one of:
+- `verified-local` — executed on developer machine, passed (cite the command run)
+- `verified-CI` — executed in CI, passed (cite the workflow run / artifact URL)
+- `blocked-deferred` — the documented environment limit prevents verification this round; MUST link to the Phase 1 `Verification environment constraints` entry that predicted the limit AND to the Anti-Deferral cost-justification entry in the deviation log
+
+A `blocked-deferred` path with no link to a Phase 1 constraint entry is a process failure: either Phase 1 failed to predict the constraint (return to Phase 1 to record it before merging), or the reviewer is hiding an un-justified skip (treat as a Major Testing finding). When the contract did not declare any constraint entries in Phase 1, this section is `N/A — no environment constraints declared in Phase 1`.
 
 ## Resolution Status
 [Updated after fixes]

@@ -32,6 +32,7 @@ Ensure the following sections are included for review expert agents to evaluate.
 - **Project context**: Declare so experts can tailor recommendations:
   - Type: `config-only` / `library` / `CLI tool` / `web app` / `service` / `mixed`
   - Test infrastructure: `none` / `unit tests only` / `unit + integration` / `+E2E` / `+CI/CD`
+  - **Verification environment constraints**: enumerate runtime / manual-test environment limits that block end-to-end verification. Examples (illustrative, not exhaustive — declare any limit that prevents a contract's manual-test path from running): paid-tier-only platform APIs a free developer account cannot exercise, external services unavailable in local dev, hardware-attestation paths that require physical devices, cross-tenant isolation tests that require multiple billing accounts, region-pinned services that require a specific cloud region. Phase 1 reviewers MUST cross-reference each contract's manual-test plan against this list and explicitly classify each path as `verifiable-local` / `verifiable-CI` / `blocked-deferred`. A `blocked-deferred` path requires an Anti-Deferral cost-justification recorded against the constraint entry — silent omission is not acceptable. Phase 3 cites these entries by ID from its Environment Verification Report.
   - When type is `config-only` or test infrastructure is `none`, experts MUST NOT raise Major/Critical findings recommending the addition of automated tests — such recommendations are downgraded to Minor informational notes only. This prevents repeated friction from over-engineered test suggestions in repos that have no automated test framework.
 - **Objective**: What to achieve
 - **Requirements**: Functional and non-functional requirements
@@ -39,7 +40,7 @@ Ensure the following sections are included for review expert agents to evaluate.
 - **Contracts** (contract-first; replaces "implementation steps" by default):
   - **Numbering**: every contract is assigned a stable ID — `C1`, `C2`, ..., `Cn` — at the time it is locked. IDs do not get reused if a contract is later removed; renumbering invalidates back-references in subsequent rounds and review artifacts. Findings, deviation log entries, manual-test references, and Phase 3 review comments cite contracts by ID, not by paraphrase.
   - **Function/module signatures**: name, parameter types, return type, error type — no body
-  - **Invariants**: properties that must hold across the change (e.g., "every write to table X passes through helper Y", "no nested transaction on raw client", "rate-limit middleware applied to every new route")
+  - **Invariants**: properties that must hold across the change. Classify each invariant as **app-enforced** (a runtime check; absence = bug surfaces at request time, only when the offending code path executes) or **schema-enforced** (the storage engine / type system rejects violating writes regardless of which caller attempts them; absence = silent corruption possible from a forgotten code path, an ad-hoc admin query, or a future migration). Schema-enforced invariants are stronger because they survive new callers, late-arriving migrations, and out-of-band writes; prefer them when the storage layer can express the constraint (CHECK constraints, partial unique indexes, triggers, NOT NULL with default, sum types in the schema). App-enforced examples: "every write to table X passes through helper Y", "no nested transaction on raw client", "rate-limit middleware applied to every new route". Schema-enforced examples: "deleted rows cannot be re-inserted with the same primary key" (partial unique index over a tombstone column), "state transitions follow the documented graph" (CHECK constraint over the state column referencing the transition source). When an app-enforced invariant has a viable schema-enforced equivalent, the plan MUST state why the weaker form was chosen — otherwise reviewers should request the stronger form.
   - **Forbidden patterns**: grep-able regex or literal strings that MUST NOT appear in the diff. Phase 2-4 contract conformance grep keys off this list. Format each entry as: `pattern: <regex or literal> — reason: <one-line>`
   - **Acceptance criteria**: observable post-conditions per contract
   - **Consumer-flow walkthrough** (mandatory before any contract that defines an API response shape, persisted-state shape, message payload, event payload, or any other shape consumed by code outside the producer transitions to `locked`): a contract that "looks complete" from the producer side can still be unconsumable — the producer-side shape is correct and the consumer-side cannot make use of it because a field the consumer needs is absent (e.g., the consumer needs `entryId` to construct downstream URLs or to compute associated data; the locked shape only carries `attachmentIds`). To prevent this class of mid-implementation shape change:
@@ -64,7 +65,8 @@ Ensure the following sections are included for review expert agents to evaluate.
     ```
   - Rationale: when contracts are paraphrased across rounds, drift accumulates and the plan loops on its own pseudo-code instead of converging. The gate forces explicit acknowledgement that every contract is in its final form before implementation begins, and gives Phase 2 / Phase 3 a stable reference surface for cross-checks.
 - **Testing strategy**: How to test
-- **Considerations & constraints**: Known risks, constraints, and out-of-scope items
+- **Considerations & constraints**: Known risks, constraints, and out-of-scope items.
+  - **Scope contract** (mandatory when the work belongs to a larger ongoing initiative, shares code with adjacent in-flight PRs, or is a slice of a multi-PR plan): enumerate out-of-scope items as ID'd entries (`SC1`, `SC2`, ..., `SCn`) — same identifier style as Contracts. Each entry names what is deliberately deferred AND the contract / PR / future-issue that owns it. Deviation log entries and Phase 3 review comments cite scope-out items by ID rather than paraphrase. Rationale: a `Skipped — out of scope` deviation entry that cites `SC1` is auditable against the locked plan; one that says "this was out of scope" is unverifiable later. The Scope contract makes "what we are NOT doing in this PR" first-class evidence, on par with the Contracts list of what we ARE doing, and prevents the failure mode where scope-out is invented after the fact to justify a skip.
 - **User operation scenarios**: Concrete usage scenarios with specific sites/forms/workflows to surface edge cases (e.g., form structure variations, input field conflicts, fallback paths)
 
 ### Step 1-3: Local LLM Pre-screening (Optional)
@@ -267,6 +269,7 @@ Review round: [nth]
 - RT3: [status]
 - RT4: [status]
 - RT5: [status]
+- RT6: [status]
 ```
 
 Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollama:
