@@ -170,6 +170,48 @@ teardown() {
 }
 
 # ===========================================================================
+# Review passes: analyze-* and adversarial-review (sentinel is stripped by the
+# _ollama_analyze_normalize post-filter)
+# ===========================================================================
+
+@test "analyze-functionality: returns findings with sentinel emitted" {
+  setup_curl_mock "200" '{"response":"[Major] a.sh:10 — bug — fix it\n## END-OF-ANALYSIS","thinking":""}'
+  result=$(printf 'diff --git a/a.sh\n+bad' | bash "$SCRIPT" analyze-functionality)
+  [[ "$result" == *"[Major] a.sh:10 — bug — fix it"* ]]
+  [[ "$result" == *"## END-OF-ANALYSIS"* ]]
+}
+
+@test "analyze-security: returns findings from .response field" {
+  setup_curl_mock "200" '{"response":"[Critical] a.sh:1 — injection — sanitize\n## END-OF-ANALYSIS","thinking":""}'
+  result=$(printf 'diff\n+x' | bash "$SCRIPT" analyze-security)
+  [[ "$result" == *"[Critical] a.sh:1 — injection — sanitize"* ]]
+}
+
+@test "analyze-testing: returns findings from .response field" {
+  setup_curl_mock "200" '{"response":"[Minor] a.sh:5 — no test — add one\n## END-OF-ANALYSIS","thinking":""}'
+  result=$(printf 'diff\n+x' | bash "$SCRIPT" analyze-testing)
+  [[ "$result" == *"[Minor] a.sh:5 — no test — add one"* ]]
+}
+
+@test "adversarial-review: routes to cmd_adversarial_review and returns findings" {
+  setup_curl_mock "200" '{"response":"[Major] a.sh:2 — risky assumption — add a guard\n## END-OF-ANALYSIS","thinking":""}'
+  result=$(printf 'diff --git a/a.sh\n+risky' | bash "$SCRIPT" adversarial-review)
+  [[ "$result" == *"[Major] a.sh:2 — risky assumption — add a guard"* ]]
+}
+
+@test "adversarial-review: passes through 'No findings' sentinel" {
+  setup_curl_mock "200" '{"response":"No findings\n## END-OF-ANALYSIS","thinking":""}'
+  result=$(printf 'diff\n+x' | bash "$SCRIPT" adversarial-review)
+  [[ "$result" == *"No findings"* ]]
+}
+
+@test "adversarial_review (underscore typo) is an unknown command" {
+  run bash "$SCRIPT" adversarial_review
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unknown command"* ]]
+}
+
+# ===========================================================================
 # Error paths: missing/unknown command
 # ===========================================================================
 

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent-review findings",
+  "description": "Canonical shape the skill normalizes any backend's review into. Adapted from openai/codex-plugin-cc's review-output.schema.json to this repo's Critical/Major/Minor vocabulary; confidence and line_end are optional because the CLI backends (codex review, ollama analyze-*) do not always emit them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["backend", "verdict", "summary", "findings", "next_steps"],
+  "properties": {
+    "backend": {
+      "type": "string",
+      "enum": ["ollama", "codex", "claude"]
+    },
+    "adversarial": {
+      "type": "boolean",
+      "description": "true when the review challenged the approach rather than reviewing line-by-line"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["approve", "needs-attention"],
+      "description": "needs-attention if any Critical or Major finding exists; otherwise approve"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "title", "file", "recommendation"],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["Critical", "Major", "Minor"]
+          },
+          "title": { "type": "string", "minLength": 1 },
+          "file": { "type": "string", "minLength": 1 },
+          "line_start": { "type": "integer", "minimum": 1 },
+          "line_end": { "type": "integer", "minimum": 1 },
+          "recommendation": { "type": "string", "minLength": 1 },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "omit unless the backend reported a confidence; do not fabricate"
+          }
+        }
+      }
+    },
+    "next_steps": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
