@@ -29,8 +29,11 @@ claude-code-config/
 │   │   └── SKILL.md              # Automatic test generation
 │   ├── pr-create/
 │   │   └── SKILL.md              # Pull request creation with auto-description
-│   ├── codex-review/
-│   │   └── SKILL.md              # Codex diff review (second-opinion, zero Claude tokens)
+│   ├── agent-review/
+│   │   ├── SKILL.md              # Backend-agnostic diff review (ollama/codex/claude, local-first)
+│   │   ├── review-backend.sh     # Reviewer-backend contract: detect + run (+ --adversarial)
+│   │   └── schemas/
+│   │       └── review-output.schema.json  # Canonical structured findings shape
 │   ├── explore/
 │   │   └── SKILL.md              # Deep codebase exploration and Q&A
 │   ├── context-budget/
@@ -267,14 +270,17 @@ Creates a pull request with auto-generated description:
 - Local LLM composes PR body with summary, motivation, and test plan (zero Claude tokens)
 - User reviews draft before `gh pr create`
 
-### codex-review
+### agent-review
 
-Runs `codex review` over a chosen diff range for an independent second-opinion review:
-- Review scope: uncommitted changes, a base branch, or a specific commit
-- Review runs on Codex's own model and quota — zero Claude tokens
-- Optionally cross-checks findings against `triangulate` review artifacts
-- Complements triangulate (Claude experts) and `pre-review.sh` (Ollama) with a third model's perspective
-- Data flow: sends the selected diff to Codex's servers (your authenticated account) — do not run on a diff that stages secrets
+Backend-agnostic diff review: a *reviewer* is treated as any agent that takes a diff and returns findings headlessly, so the review path never depends on one CLI (this subsumes the former `codex-review` skill — Codex is now just one selectable backend):
+- Auto-detects available backends in preference order — `ollama` (local, free, private) → `codex` (external second opinion, `codex review`) → `claude` (fresh headless context, spends tokens)
+- Defaults to the free local backend, reusing `ollama-utils.sh` (functionality / security / testing) — zero Claude tokens when Ollama is reachable
+- Review scope: uncommitted changes, a base branch, or a specific commit; optionally cross-checks findings against `triangulate` review artifacts
+- `--adversarial` mode challenges the design/approach/failure-modes instead of a line-by-line pass (ollama gets a dedicated `adversarial-review` pass; codex/claude get an approach-challenging prompt)
+- Normalizes every backend's output into a canonical structured shape (`schemas/review-output.schema.json`: verdict / findings / next_steps), and backgrounds slow reviews via the harness's `run_in_background`
+- Data flow varies by backend — `ollama` stays on the local/LAN host, `codex`/`claude` send the diff to their servers; do not run an external backend on a diff that stages secrets
+- Add a backend by extending one branch in `review-backend.sh`; the skill steps stay identical
+- Borrows its structured-findings, background-job, and adversarial-review ideas from OpenAI's `codex-plugin-cc`, adapted to a single multi-backend skill
 
 ### explore
 
