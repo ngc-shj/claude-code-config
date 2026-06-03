@@ -13,3 +13,8 @@ node_modules/
 hooks/lib/go-build/
 hooks/lib/java-build/
 hooks/lib/java-lib/
+
+# Project-local Claude Code config auto-created per machine/session. Holds
+# absolute host paths and session permission grants — never shareable. This
+# repo installs into ~/.claude/, not via a committed project .claude/.
+.claude/
