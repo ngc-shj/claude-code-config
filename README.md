@@ -18,6 +18,7 @@ claude-code-config/
 │   ├── commit-msg-check.sh       # Commit message validation via local LLM
 │   ├── pre-review.sh             # Code/plan pre-screening via local LLM
 │   ├── ollama-utils.sh           # Shared Ollama utility commands for skills
+│   ├── resolve-ollama-host.sh    # Discover & load-balance across Ollama servers
 │   ├── notify.sh                 # Desktop notifications (macOS)
 │   └── stop-notify.sh            # Task completion notifications
 ├── skills/
@@ -147,6 +148,31 @@ bash ~/.claude/hooks/pre-review.sh code
 - Reads files directly via shell (git diff, cat) — no Claude tokens consumed
 - Configurable via `OLLAMA_HOST` and `REVIEW_MODEL` environment variables
 - Gracefully skips if Ollama is unavailable
+
+#### Multi-server load balancing (`resolve-ollama-host.sh`)
+
+Every Ollama-backed hook and skill sources `resolve-ollama-host.sh`, which
+discovers all reachable Ollama servers and load-balances across them:
+
+- **Zero-config, name-independent discovery** — servers are found automatically
+  from two sources and never hardcoded: mDNS-advertised LAN hosts **and** online
+  Tailscale peers (via the `tailscale` CLI). Any host that answers `/api/version`
+  joins the pool, regardless of hostname.
+- **Model-aware routing** — servers do **not** have to host the same models. At
+  discovery each server's `/api/tags` inventory is cached, and a request is
+  routed (round-robin) only among servers that actually have the requested
+  model. A model present nowhere makes the caller skip gracefully rather than
+  hit a 404. Callers resolve their target with the exported
+  `ollama_host_for_model <model>` function.
+- **Load balancing** — `OLLAMA_HOST` (one server, round-robin, model-agnostic
+  default) and `OLLAMA_HOSTS` (full pool) are exported for back-compat. Existing
+  callers that read only `$OLLAMA_HOST` keep working.
+- **Overrides** — `OLLAMA_HOST` pins to a single server (skips discovery);
+  `OLLAMA_DISCOVERY_MAX` caps probe fan-out per source (default 6);
+  `OLLAMA_EXTRA_HOSTS` is a rarely-needed manual escape hatch (space-separated
+  bare host, `host:port`, or URL) for hosts that neither mDNS nor Tailscale can
+  enumerate. Discovery is cached for 5 minutes; localhost is used only when no
+  remote server is reachable.
 
 ### ollama-utils.sh (Utility — called by skills)
 

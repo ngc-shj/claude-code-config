@@ -24,6 +24,15 @@ _ollama_request() {
     return
   fi
 
+  # Route to a server that actually hosts this model (the pool's servers do not
+  # necessarily share the same model set). Empty => skip rather than 404.
+  local host
+  host=$(ollama_host_for_model "$model")
+  if [ -z "$host" ]; then
+    echo "Warning: no reachable Ollama server hosts model '$model'" >&2
+    return
+  fi
+
   local tmpdir
   tmpdir=$(mktemp -d)
   # Use double quotes so $tmpdir is expanded now, not at EXIT time.
@@ -47,11 +56,11 @@ _ollama_request() {
   local http_code
   http_code=$(curl -s --max-time "$timeout" -w '%{http_code}' \
     -o "$tmpdir/response.json" \
-    "$OLLAMA_HOST/api/generate" \
+    "$host/api/generate" \
     -d @"$tmpdir/request.json" 2>/dev/null) || true
 
   if [ "$http_code" = "000" ] || [ ! -s "$tmpdir/response.json" ]; then
-    echo "Warning: Ollama unavailable at $OLLAMA_HOST" >&2
+    echo "Warning: Ollama unavailable at $host" >&2
     return
   fi
 

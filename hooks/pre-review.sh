@@ -194,13 +194,20 @@ jq -n \
       options: {num_predict: $num_predict}}' \
   > "$TMPDIR_REQ/request.json"
 
+# Route to a server that actually hosts $MODEL (pool servers may differ).
+HOST=$(ollama_host_for_model "$MODEL")
+if [ -z "$HOST" ]; then
+  echo "Warning: no reachable Ollama server hosts $MODEL. Skipping pre-review."
+  exit 0
+fi
+
 HTTP_CODE=$(curl -s --max-time "$TIMEOUT" -w '%{http_code}' \
   -o "$TMPDIR_REQ/response.json" \
-  "$OLLAMA_HOST/api/generate" \
+  "$HOST/api/generate" \
   -d @"$TMPDIR_REQ/request.json" 2>/dev/null) || true
 
 if [ "$HTTP_CODE" = "000" ] || [ ! -s "$TMPDIR_REQ/response.json" ]; then
-  echo "Warning: Ollama unavailable at $OLLAMA_HOST. Skipping pre-review."
+  echo "Warning: Ollama unavailable at $HOST. Skipping pre-review."
   exit 0
 fi
 
