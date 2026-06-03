@@ -37,8 +37,15 @@ if [ -z "$COMMIT_MSG" ]; then
   exit 0
 fi
 
+# Route to a server that actually hosts the model (pool servers may differ).
+OLLAMA_TARGET=$(ollama_host_for_model "gpt-oss:20b")
+if [ -z "$OLLAMA_TARGET" ]; then
+  echo '{"decision": "approve"}'
+  exit 0
+fi
+
 # Check with local LLM via Ollama API
-REVIEW=$(curl -sf --max-time 10 "$OLLAMA_HOST/api/generate" \
+REVIEW=$(curl -sf --max-time 10 "$OLLAMA_TARGET/api/generate" \
   -d "$(jq -n \
     --arg model "gpt-oss:20b" \
     --arg prompt "Review this git commit message. Reply with ONLY 'OK' if it follows best practices (concise, English, explains why not what, uses conventional prefix like feat/fix/refactor/docs/test/chore). Reply with a one-line suggestion if it needs improvement.\n\nCommit message: $COMMIT_MSG" \
