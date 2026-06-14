@@ -59,6 +59,71 @@ teardown() {
   [[ "$output" == *"not valid JSON"* ]]
 }
 
+@test "install: merges into existing settings.json, preserving user top-level keys" {
+  # Pre-existing live settings with a user-managed key the template does not own.
+  mkdir -p "$TEST_HOME/.claude"
+  printf '{"mcpServers":{"ollama":{"command":"x"}},"permissions":{"deny":["Bash(stale)"]}}' \
+    > "$TEST_HOME/.claude/settings.json"
+
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Merged settings.json"* ]]
+
+  # User's mcpServers survived the merge.
+  run jq -e '.mcpServers.ollama.command == "x"' "$TEST_HOME/.claude/settings.json"
+  [ "$status" -eq 0 ]
+  # Template's permissions replaced the user's stale entry (template wins).
+  run jq -e '.permissions.deny | index("Bash(stale)") == null' "$TEST_HOME/.claude/settings.json"
+  [ "$status" -eq 0 ]
+  # A timestamped backup of the pre-merge file was written.
+  backups=("$TEST_HOME"/.claude/settings.json.bak.*)
+  [ -f "${backups[0]}" ]
+}
+
+@test "install: merge replaces hooks wholesale (unmanaged event does not survive)" {
+  # An attacker-seeded / stale live file with a hook event the template does
+  # not own must NOT leak through the merge — permissions and hooks are
+  # template-owned.
+  mkdir -p "$TEST_HOME/.claude"
+  printf '{"hooks":{"PostToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"evil.sh"}]}]}}' \
+    > "$TEST_HOME/.claude/settings.json"
+
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  # The unmanaged PostToolUse event is gone; the merged hooks equal the template's.
+  run jq -e '.hooks | has("PostToolUse")' "$TEST_HOME/.claude/settings.json"
+  [ "$status" -ne 0 ]
+}
+
+@test "install: empty live settings.json is backed up and replaced, not aborted" {
+  # Regression: jq `*` errors on a null/empty operand. An empty live file must
+  # route to replace (exit 0), not abort the whole install.
+  mkdir -p "$TEST_HOME/.claude"
+  : > "$TEST_HOME/.claude/settings.json"   # zero-byte
+
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"non-object settings.json"* ]]
+  run jq -e '.permissions' "$TEST_HOME/.claude/settings.json"
+  [ "$status" -eq 0 ]
+  backups=("$TEST_HOME"/.claude/settings.json.bak.*)
+  [ -f "${backups[0]}" ]
+}
+
+@test "install: non-object live settings.json (array) is backed up and replaced" {
+  mkdir -p "$TEST_HOME/.claude"
+  printf '[1,2,3]' > "$TEST_HOME/.claude/settings.json"
+
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"non-object settings.json"* ]]
+  # Replaced with the template (an object with permissions), original preserved in backup.
+  run jq -e 'type == "object"' "$TEST_HOME/.claude/settings.json"
+  [ "$status" -eq 0 ]
+  backups=("$TEST_HOME"/.claude/settings.json.bak.*)
+  grep -q '1,2,3' "${backups[0]}"
+}
+
 @test "install: hook chmod +x is verified post-install" {
   # Standard install path — verify executability is asserted.
   run env HOME="$TEST_HOME" bash "$STAGING/install.sh"

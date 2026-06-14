@@ -19,7 +19,7 @@ claude-code-config/
 │   ├── pre-review.sh             # Code/plan pre-screening via local LLM
 │   ├── ollama-utils.sh           # Shared Ollama utility commands for skills
 │   ├── resolve-ollama-host.sh    # Discover & load-balance across Ollama servers
-│   ├── notify.sh                 # Desktop notifications (macOS)
+│   ├── notify.sh                 # Desktop notifications (macOS + Linux)
 │   └── stop-notify.sh            # Task completion notifications
 ├── skills/
 │   ├── triangulate/
@@ -249,12 +249,12 @@ git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
 
 ### notify.sh (Notification)
 
-macOS desktop notifications when:
+Cross-platform desktop notifications (macOS via `afplay`/`osascript`, Linux via `paplay`/`aplay` + `notify-send`) when:
 
 - **permission_prompt**: Claude needs permission approval — plays sound + notification
 - **idle_prompt**: Claude is waiting for input — plays sound + notification
 
-> Linux users: replace `afplay`/`osascript` with `paplay`/`notify-send`.
+> Linux sounds resolve from the freedesktop theme; all calls are best-effort and skip silently if the tools or audio are unavailable.
 
 ### stop-notify.sh (Stop)
 
@@ -357,7 +357,9 @@ cd claude-code-config
 bash install.sh
 ```
 
-The installer overwrites existing files. This repo is the source of truth — `git` history is the rollback mechanism, so no `.bak` files are kept. Any stale `.bak` under `~/.claude/{hooks,skills,rules}/` from earlier installs is removed on the next run (stale skill backups otherwise load as shadow skills).
+The installer overwrites `CLAUDE.md`, hooks, skills, and rules — this repo is the source of truth and `git` history is the rollback mechanism, so no `.bak` files are kept for them. Any stale `.bak` under `~/.claude/{hooks,skills,rules}/` from earlier installs is removed on the next run (stale skill backups otherwise load as shadow skills).
+
+`settings.json` is the exception: it is **merged** into any existing live file rather than overwritten, so user-managed top-level keys the template does not own (e.g. `mcpServers`) survive. `permissions` and `hooks` are template-owned and replaced wholesale, so a stale user sub-key or unmanaged hook event in the live file does not leak through. A non-object/garbage live file is backed up and replaced instead of merged. A timestamped `settings.json.bak.<ts>` (mode 600) is written first. Backups are not auto-pruned — purge old ones periodically.
 
 For local customizations that should survive installs, use `~/.claude/settings.local.json` instead of editing `~/.claude/settings.json` directly.
 
