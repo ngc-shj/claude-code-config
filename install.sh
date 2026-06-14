@@ -4,20 +4,25 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 
-# This repo is the source of truth for everything it manages. No .bak files
-# are created — git history is the rollback mechanism. Any *.bak that already
-# exists under ~/.claude/{,hooks,skills,rules}/ is removed so that stale skill
-# backups do not shadow or duplicate the live skill in Claude Code's loader.
+# This repo is the source of truth for everything it manages. CLAUDE.md, hooks,
+# skills, and rules are overwritten on install — git history is the rollback
+# mechanism, so no .bak files are kept for them. Any *.bak that already exists
+# under ~/.claude/{,hooks,skills,rules}/ is removed so that stale skill backups
+# do not shadow or duplicate the live skill in Claude Code's loader.
+#
+# settings.json is the exception: it is MERGED rather than overwritten, so that
+# user-managed top-level keys the template does not own (mcpServers, etc.) are
+# preserved. A timestamped backup is written before each merge.
 
 echo "Installing Claude Code settings..."
 
 # Pre-flight: validate settings.json is well-formed before touching anything.
 # A malformed settings.json silently breaks the harness on next launch
 # (hooks stop firing, permissions revert to defaults). Catching this at
-# install time, before we overwrite the live ~/.claude/settings.json,
-# preserves the previous good copy.
+# install time, before we touch the live ~/.claude/settings.json, preserves
+# the previous good copy.
 if ! command -v jq >/dev/null 2>&1; then
-  echo "ERROR: jq is required for install-time settings.json validation but is not on PATH." >&2
+  echo "ERROR: jq is required for settings.json validation and merge but is not on PATH." >&2
   exit 1
 fi
 if ! jq empty "$SCRIPT_DIR/settings.json" 2>/dev/null; then
@@ -28,10 +33,44 @@ fi
 
 mkdir -p "$CLAUDE_DIR"
 
-# Install settings.json
-cp "$SCRIPT_DIR/settings.json" "$CLAUDE_DIR/settings.json"
-rm -f "$CLAUDE_DIR/settings.json.bak"
-echo "  Installed settings.json"
+# Install settings.json by MERGING into the existing live file:
+#   jq -s '.[1] as $t | (.[0] * .[1]) | .permissions = $t.permissions | .hooks = $t.hooks'
+#   - The user's top-level keys the template does not own (mcpServers, ...) are kept.
+#   - `permissions` and `hooks` are template-owned: they are replaced WHOLESALE
+#     (not deep-merged), so a stale user sub-key or an unmanaged hook event in
+#     the live file cannot survive into the merged result.
+#   - Local-only overrides belong in ~/.claude/settings.local.json, which this
+#     installer never touches.
+# Only a valid JSON OBJECT is merged; an empty/garbage/non-object live file is
+# backed up and replaced (jq `*` errors on null/array operands). A timestamped
+# backup is written first so the operation is always reversible.
+LIVE_SETTINGS="$CLAUDE_DIR/settings.json"
+backup_live_settings() {
+  backup="$LIVE_SETTINGS.bak.$(date +%Y%m%d-%H%M%S)"
+  cp "$LIVE_SETTINGS" "$backup"
+  chmod 600 "$backup" 2>/dev/null || true  # may carry mcpServers env secrets
+}
+if [ -f "$LIVE_SETTINGS" ] && jq -e 'type == "object"' "$LIVE_SETTINGS" >/dev/null 2>&1; then
+  backup_live_settings
+  tmp="$(mktemp)"
+  if jq -s '.[1] as $t | (.[0] * .[1]) | .permissions = $t.permissions | .hooks = $t.hooks' \
+       "$LIVE_SETTINGS" "$SCRIPT_DIR/settings.json" > "$tmp"; then
+    mv "$tmp" "$LIVE_SETTINGS"
+    echo "  Merged settings.json (backup: $backup)"
+  else
+    rm -f "$tmp"
+    echo "ERROR: jq merge failed. Live settings.json left untouched; backup at $backup" >&2
+    exit 1
+  fi
+elif [ -f "$LIVE_SETTINGS" ]; then
+  # Present but not a usable JSON object — preserve it, then install fresh.
+  backup_live_settings
+  cp "$SCRIPT_DIR/settings.json" "$LIVE_SETTINGS"
+  echo "  Replaced non-object settings.json (backup: $backup)"
+else
+  cp "$SCRIPT_DIR/settings.json" "$LIVE_SETTINGS"
+  echo "  Installed settings.json"
+fi
 
 # Install CLAUDE.md
 cp "$SCRIPT_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
