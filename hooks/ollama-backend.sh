@@ -258,7 +258,8 @@ export OLLAMA_HOST OLLAMA_HOSTS
 # stdin = prompt. stdout = model text (empty on any failure; exit 0).
 _ollama_generate() {
   local model="$1" system="$2" timeout="$3" num_predict="${4:-16384}"
-  [ -z "$num_predict" ] && num_predict=16384
+  # Treat empty OR 0 as "use default" (0 would request a zero-token generation).
+  case "$num_predict" in ''|0) num_predict=16384 ;; esac
   local content
   content=$(cat)
 

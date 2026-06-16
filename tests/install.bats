@@ -132,3 +132,30 @@ teardown() {
     [ -x "$hook" ]
   done
 }
+
+@test "install: removes a stale top-level hook not present in source" {
+  # Source-of-truth sync: a renamed-away hook left in the live dir is purged.
+  mkdir -p "$TEST_HOME/.claude/hooks"
+  printf '#!/bin/bash\n' > "$TEST_HOME/.claude/hooks/ollama-utils.sh"
+  chmod +x "$TEST_HOME/.claude/hooks/ollama-utils.sh"
+
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Removed stale hook: ollama-utils.sh"* ]]
+  [ ! -e "$TEST_HOME/.claude/hooks/ollama-utils.sh" ]
+  # The source hook still installs.
+  [ -x "$TEST_HOME/.claude/hooks/block-sensitive-files.sh" ]
+}
+
+@test "install: keeps a live hook that still exists in source" {
+  # A hook present in the source must be overwritten, never removed by the sync.
+  mkdir -p "$TEST_HOME/.claude/hooks"
+  printf 'stale-content\n' > "$TEST_HOME/.claude/hooks/block-sensitive-files.sh"
+
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Removed stale hook: block-sensitive-files.sh"* ]]
+  [ -x "$TEST_HOME/.claude/hooks/block-sensitive-files.sh" ]
+  # Content came from source (the staged copy), not the stale live one.
+  ! grep -q 'stale-content' "$TEST_HOME/.claude/hooks/block-sensitive-files.sh"
+}

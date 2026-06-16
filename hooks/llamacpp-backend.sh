@@ -148,7 +148,9 @@ llamacpp_host_for_model() {
 # stdin = user prompt. stdout = model text (empty on any failure; exit 0).
 _llamacpp_request() {
   local model="$1" system="$2" timeout="$3" num_predict="${4:-16384}"
-  [ -z "$num_predict" ] && num_predict=16384
+  # Treat empty OR 0 as "use default" — max_tokens:0 means "generate nothing" on
+  # the OpenAI surface, which no caller intends.
+  case "$num_predict" in ''|0) num_predict=16384 ;; esac
   local content
   content=$(cat)
   [ -z "$content" ] && return
