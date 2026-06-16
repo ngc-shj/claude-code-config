@@ -17,8 +17,10 @@ claude-code-config/
 │   ├── block-sensitive-files.sh   # Block edits to secrets/lock files
 │   ├── commit-msg-check.sh       # Commit message validation via local LLM
 │   ├── pre-review.sh             # Code/plan pre-screening via local LLM
-│   ├── ollama-utils.sh           # Shared Ollama utility commands for skills
-│   ├── resolve-ollama-host.sh    # Discover & load-balance across Ollama servers
+│   ├── llm-utils.sh             # Common local-LLM layer: backend select + dispatch
+│   ├── llm-commands.sh          # Backend-agnostic LLM command library for skills
+│   ├── ollama-backend.sh        # Ollama provider: discover/load-balance + generate
+│   ├── llamacpp-backend.sh      # llama.cpp provider: OpenAI /v1 discovery + request
 │   ├── notify.sh                 # Desktop notifications (macOS + Linux)
 │   └── stop-notify.sh            # Task completion notifications
 ├── skills/
@@ -149,10 +151,30 @@ bash ~/.claude/hooks/pre-review.sh code
 - Configurable via `OLLAMA_HOST` and `REVIEW_MODEL` environment variables
 - Gracefully skips if Ollama is unavailable
 
-#### Multi-server load balancing (`resolve-ollama-host.sh`)
+#### Local-LLM backend layer (`llm-utils.sh`)
 
-Every Ollama-backed hook and skill sources `resolve-ollama-host.sh`, which
-discovers all reachable Ollama servers and load-balances across them:
+Hooks and skills reach a local LLM through a single backend-agnostic layer,
+`llm-utils.sh`, which holds the common processing (shared discovery helpers,
+backend selection, logical→real model mapping, and the `llm_request`
+dispatcher) and sources two backend providers:
+
+- `ollama-backend.sh` — Ollama (native `/api/generate`, multi-server discovery)
+- `llamacpp-backend.sh` — llama.cpp's OpenAI surface (`/v1/chat/completions`, `/v1/models`)
+
+Backend selection: `LLM_BACKEND=llamacpp|ollama` pins the choice; otherwise
+llama.cpp is **auto-preferred** when its `/v1/models` endpoint is reachable
+(default `localhost:8080`, overridable via `LLAMACPP_HOST`/`LLAMACPP_HOSTS`),
+falling back to Ollama. Hooks always pass logical model names (`gpt-oss:20b`,
+`gpt-oss:120b`); for llama.cpp these map to `unsloth/gpt-oss-20b-GGUF:F16` and
+`unsloth/Qwen3.6-35B-A3B-MTP-GGUF:UD-Q4_K_XL` (8080 has no 120b-class model),
+overridable via `LLAMACPP_MODEL_SMALL`/`LLAMACPP_MODEL_LARGE`. The
+command library (`llm-commands.sh`) and the direct-caller hooks
+(`pre-review.sh`, `commit-msg-check.sh`) source only `llm-utils.sh`.
+
+#### Multi-server load balancing (`ollama-backend.sh`)
+
+The Ollama provider discovers all reachable Ollama servers and load-balances
+across them:
 
 - **Zero-config, name-independent discovery** — servers are found automatically
   from two sources and never hardcoded: mDNS-advertised LAN hosts **and** online
@@ -174,44 +196,45 @@ discovers all reachable Ollama servers and load-balances across them:
   enumerate. Discovery is cached for 5 minutes; localhost is used only when no
   remote server is reachable.
 
-### ollama-utils.sh (Utility — called by skills)
+### llm-commands.sh (Utility — called by skills)
 
-Shared Ollama utility commands for skills and hooks:
+Backend-agnostic local-LLM command library for skills and hooks (routes through
+`llm-utils.sh`, so commands run on whichever backend is active):
 
 ```bash
 # Generate a kebab-case slug from task description
-echo "Add user authentication" | bash ~/.claude/hooks/ollama-utils.sh generate-slug
+echo "Add user authentication" | bash ~/.claude/hooks/llm-commands.sh generate-slug
 
 # Summarize a git diff
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh summarize-diff
+git diff main...HEAD | bash ~/.claude/hooks/llm-commands.sh summarize-diff
 
 # Merge and deduplicate review findings from multiple agents
-cat findings1.txt findings2.txt | bash ~/.claude/hooks/ollama-utils.sh merge-findings
+cat findings1.txt findings2.txt | bash ~/.claude/hooks/llm-commands.sh merge-findings
 
 # Classify changed files (feature/fix/refactor/docs/test/chore)
-git diff --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes
+git diff --name-only | bash ~/.claude/hooks/llm-commands.sh classify-changes
 
 # Classify a user question into an explore query type (explanation / usage-search / architecture / location / data-flow)
-echo "How does the request router work?" | bash ~/.claude/hooks/ollama-utils.sh classify-query
+echo "How does the request router work?" | bash ~/.claude/hooks/llm-commands.sh classify-query
 
 # Analyze a diff from an expert perspective (functionality / security / testing)
 # Used by triangulate Phase 3 to seed Claude sub-agents with findings
 # instead of each sub-agent reading the full diff — reduces Claude token usage.
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing
+git diff main...HEAD | bash ~/.claude/hooks/llm-commands.sh analyze-functionality
+git diff main...HEAD | bash ~/.claude/hooks/llm-commands.sh analyze-security
+git diff main...HEAD | bash ~/.claude/hooks/llm-commands.sh analyze-testing
 
 # Pre-screen reuse candidates (shared-utils inventory + diff) for the simplify skill
 { bash ~/.claude/hooks/scan-shared-utils.sh; echo '=== OLLAMA-INPUT-SEPARATOR ==='; \
-  git diff main...HEAD; } | bash ~/.claude/hooks/ollama-utils.sh score-utility-match
+  git diff main...HEAD; } | bash ~/.claude/hooks/llm-commands.sh score-utility-match
 
 # Audit mock return values in a test file against the real type definitions
 { cat tests/foo.test.ts; echo '=== OLLAMA-INPUT-SEPARATOR ==='; \
-  cat src/types/foo.ts; } | bash ~/.claude/hooks/ollama-utils.sh verify-mock-shapes
+  cat src/types/foo.ts; } | bash ~/.claude/hooks/llm-commands.sh verify-mock-shapes
 
 # Generate a PR title from classify-changes + summarize-diff output
 { echo "$CATEGORY"; echo '=== OLLAMA-INPUT-SEPARATOR ==='; echo "$SUMMARY"; } \
-  | bash ~/.claude/hooks/ollama-utils.sh generate-pr-title
+  | bash ~/.claude/hooks/llm-commands.sh generate-pr-title
 
 # Generate a PR body from commits + diff stat + ALL review artifacts (mirrors the pr-create skill invocation)
 { echo '=== COMMIT LOG ==='; git log main...HEAD --oneline; \
@@ -219,28 +242,28 @@ git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing
   for f in ./docs/archive/review/*-plan.md ./docs/archive/review/*-review.md \
            ./docs/archive/review/*-deviation.md ./docs/archive/review/*-code-review.md; do \
     [ -f "$f" ] || continue; echo; echo "=== $f ==="; cat "$f"; done; } \
-  | bash ~/.claude/hooks/ollama-utils.sh generate-pr-body
+  | bash ~/.claude/hooks/llm-commands.sh generate-pr-body
 
 # Generate a deviation log delta from plan + existing log + diff (three sections)
 { cat plan.md; echo '=== OLLAMA-INPUT-SEPARATOR ==='; \
   cat existing-deviation.md 2>/dev/null || echo '# new'; \
   echo '=== OLLAMA-INPUT-SEPARATOR ==='; git diff main...HEAD; } \
-  | bash ~/.claude/hooks/ollama-utils.sh generate-deviation-log  # output = delta entries; APPEND to existing log
+  | bash ~/.claude/hooks/llm-commands.sh generate-deviation-log  # output = delta entries; APPEND to existing log
 
 # Generate a commit body (subject line still hand-written)
-git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
+git diff --cached | bash ~/.claude/hooks/llm-commands.sh generate-commit-body
 
 # Generate a resolution-status entry from finding + fix commit
 { echo "$FINDING"; echo '=== OLLAMA-INPUT-SEPARATOR ==='; git show HEAD; } \
-  | bash ~/.claude/hooks/ollama-utils.sh generate-resolution-entry
+  | bash ~/.claude/hooks/llm-commands.sh generate-resolution-entry
 
 # Summarize a round-to-round change for review artifacts
 { git log r1..HEAD --oneline; echo '=== OLLAMA-INPUT-SEPARATOR ==='; cat findings.txt; } \
-  | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
+  | bash ~/.claude/hooks/llm-commands.sh summarize-round-changes
 
 # Propose plan edits for a finding (anchor + insertion pairs)
 { cat plan.md; echo '=== OLLAMA-INPUT-SEPARATOR ==='; echo "$FINDING"; } \
-  | bash ~/.claude/hooks/ollama-utils.sh propose-plan-edits
+  | bash ~/.claude/hooks/llm-commands.sh propose-plan-edits
 ```
 
 - All commands read stdin, write stdout — composable with pipes
@@ -300,7 +323,7 @@ Creates a pull request with auto-generated description:
 
 Backend-agnostic diff review: a *reviewer* is treated as any agent that takes a diff and returns findings headlessly, so the review path never depends on one CLI (this subsumes the former `codex-review` skill — Codex is now just one selectable backend):
 - Auto-detects available backends in preference order — `ollama` (local, free, private) → `codex` (external second opinion, `codex review`) → `claude` (fresh headless context, spends tokens)
-- Defaults to the free local backend, reusing `ollama-utils.sh` (functionality / security / testing) — zero Claude tokens when Ollama is reachable
+- Defaults to the free local backend, reusing `llm-commands.sh` (functionality / security / testing) — zero Claude tokens when Ollama is reachable
 - Review scope: uncommitted changes, a base branch, or a specific commit; optionally cross-checks findings against `triangulate` review artifacts
 - `--adversarial` mode challenges the design/approach/failure-modes instead of a line-by-line pass (ollama gets a dedicated `adversarial-review` pass; codex/claude get an approach-challenging prompt)
 - Normalizes every backend's output into a canonical structured shape (`schemas/review-output.schema.json`: verdict / findings / next_steps), and backgrounds slow reviews via the harness's `run_in_background`
@@ -327,7 +350,7 @@ Audits token overhead across agents, skills, rules, CLAUDE.md, and MCP servers, 
 
 Audits Claude Code configuration for common security misconfigurations — zero external dependencies:
 - Deterministic pattern checks (grep + jq) for secrets, `Bash(*)` wildcards, hook injection, MCP supply chain, prompt-injection surface in CLAUDE.md
-- Optional deep analysis via `gpt-oss:120b` through `ollama-utils.sh analyze-security` (zero Claude tokens)
+- Optional deep analysis via `gpt-oss:120b` through `llm-commands.sh analyze-security` (zero Claude tokens)
 - Graded A/F report with severity-classified findings
 - Concept borrowed from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (`skills/security-scan/`, which wraps the AgentShield npm package); reimplemented here as a self-contained shell + Ollama workflow
 

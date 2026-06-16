@@ -1,10 +1,12 @@
 #!/usr/bin/env bats
-# Tests for hooks/resolve-ollama-host.sh
+# Tests for hooks/ollama-backend.sh (the Ollama provider).
+# Sourced via hooks/llm-utils.sh, which defines the shared discovery helpers
+# (_models_have / _pick_round_robin / _rr_suffix) the provider relies on.
 # Mocks curl and avahi-browse to avoid real network calls.
 
 bats_require_minimum_version 1.5.0
 
-SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/resolve-ollama-host.sh"
+SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/llm-utils.sh"
 
 # ---------------------------------------------------------------------------
 # Helper: mock curl. Logs every probed URL. /api/version succeeds when the URL

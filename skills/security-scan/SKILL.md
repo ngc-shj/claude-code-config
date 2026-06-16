@@ -8,7 +8,7 @@ origin: "Independent reimplementation inspired by everything-claude-code skills/
 
 Audit Claude Code configuration for common misconfigurations using deterministic pattern checks, with optional local-LLM deep analysis.
 
-Inventory and pattern matching are pure shell (zero Claude tokens). Ollama (`gpt-oss:120b` via `ollama-utils.sh analyze-security`) provides optional depth. Claude only synthesizes the final report.
+Inventory and pattern matching are pure shell (zero Claude tokens). Ollama (`gpt-oss:120b` via `llm-commands.sh analyze-security`) provides optional depth. Claude only synthesizes the final report.
 
 ---
 
@@ -163,7 +163,7 @@ Pipe the surfaced findings plus the raw config content to `gpt-oss:120b` for con
   cat ~/.claude/settings.json
   echo "=== pattern-scan findings ==="
   echo "$FINDINGS"
-} | bash ~/.claude/hooks/ollama-utils.sh analyze-security
+} | bash ~/.claude/hooks/llm-commands.sh analyze-security
 ```
 
 The hook returns freeform text. Merge unique findings back into `$FINDINGS`. Skip this step if Ollama is unavailable — the deterministic checks alone are useful.

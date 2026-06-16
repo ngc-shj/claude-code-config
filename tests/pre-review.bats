@@ -23,6 +23,8 @@ setup() {
   export BATS_TEST_TMPDIR
   BATS_TEST_TMPDIR="$(mktemp -d)"
   export OLLAMA_HOST="http://mock-ollama:11434"
+  # Pin the backend so dispatch is deterministic (no live llama.cpp auto-detect).
+  export LLM_BACKEND=ollama
   setup_curl_fail_mock
 }
 

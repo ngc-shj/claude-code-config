@@ -1,10 +1,11 @@
 #!/usr/bin/env bats
-# Tests for hooks/ollama-utils.sh
-# Mocks curl to avoid real Ollama calls.
+# Tests for hooks/llm-commands.sh (the local-LLM command library).
+# Mocks curl to avoid real LLM calls. LLM_BACKEND is pinned to ollama in setup()
+# so the dispatcher takes the Ollama /api/generate path these mocks emulate.
 
 bats_require_minimum_version 1.5.0
 
-SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/ollama-utils.sh"
+SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/llm-commands.sh"
 
 # ---------------------------------------------------------------------------
 # Helper: write a mock curl into PATH
@@ -59,6 +60,9 @@ setup() {
   BATS_TEST_TMPDIR="$(mktemp -d)"
   # Use a predictable fake host so tests never hit real Ollama
   export OLLAMA_HOST="http://mock-ollama:11434"
+  # Pin the backend so the dispatcher uses the Ollama /api/generate path the
+  # curl mocks emulate (otherwise auto-detect could pick a live llama.cpp).
+  export LLM_BACKEND=ollama
 }
 
 teardown() {

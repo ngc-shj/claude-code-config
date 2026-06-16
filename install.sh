@@ -81,6 +81,17 @@ echo "  Installed CLAUDE.md"
 if [ -d "$SCRIPT_DIR/hooks" ]; then
   mkdir -p "$CLAUDE_DIR/hooks"
   rm -f "$CLAUDE_DIR/hooks"/*.bak
+  # Source-of-truth sync: remove any top-level installed hook script that no
+  # longer exists in the source, so renamed/deleted hooks do not linger as stale
+  # dead files (e.g. an old ollama-utils.sh after it became llm-commands.sh).
+  # Only top-level *.sh are managed here; hooks/lib/ and subdirs are handled below.
+  for live_hook in "$CLAUDE_DIR/hooks"/*.sh; do
+    [ -e "$live_hook" ] || continue
+    if [ ! -f "$SCRIPT_DIR/hooks/$(basename "$live_hook")" ]; then
+      rm -f "$live_hook"
+      echo "  Removed stale hook: $(basename "$live_hook")"
+    fi
+  done
   for hook_file in "$SCRIPT_DIR"/hooks/*.sh; do
     hook_name="$(basename "$hook_file")"
     cp "$hook_file" "$CLAUDE_DIR/hooks/$hook_name"

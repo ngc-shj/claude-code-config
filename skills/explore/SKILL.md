@@ -14,7 +14,7 @@ Deep codebase exploration and Q&A using local LLM for file discovery and Sonnet 
 Offload exploration-type classification to the local LLM:
 
 ```bash
-echo "[user's question]" | bash ~/.claude/hooks/ollama-utils.sh classify-query
+echo "[user's question]" | bash ~/.claude/hooks/llm-commands.sh classify-query
 ```
 
 Expected output: one of `explanation`, `usage-search`, `architecture`, `location`, `data-flow`.
@@ -33,7 +33,7 @@ If Ollama is unavailable, fall back to matching the question against these patte
 Use local LLM to extract search keywords from the user's question:
 
 ```bash
-echo "[user's question]" | bash ~/.claude/hooks/ollama-utils.sh generate-slug
+echo "[user's question]" | bash ~/.claude/hooks/llm-commands.sh generate-slug
 ```
 
 Then use shell tools for initial file discovery (zero Claude tokens):

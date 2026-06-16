@@ -1,8 +1,13 @@
 #!/bin/bash
+# Ollama backend provider (Ollama-specific processing). Sourced by llm-utils.sh
+# AFTER it defines the shared helpers (_models_have, _pick_round_robin,
+# _rr_suffix); this file uses them and must not be sourced standalone.
+#
 # Resolve Ollama server(s): honor env var, otherwise auto-detect every reachable
 # server on the LAN and load-balance across them — model-aware, so a request is
 # only ever routed to a server that actually hosts the requested model (the
-# servers are NOT guaranteed to hold the same model set).
+# servers are NOT guaranteed to hold the same model set). Also provides the
+# _ollama_generate primitive (/api/generate) used by the llm-utils.sh dispatcher.
 #
 # Sourcing this file sets and exports:
 #   OLLAMA_HOSTS — space-separated list of ALL reachable Ollama base URLs
@@ -25,8 +30,9 @@
 #                        is a bare hostname, host:port, or URL.
 #   OLLAMA_DISCOVERY_MAX — cap on candidates probed per discovery source (default 6).
 #
-# Must NOT read stdin (sourced before INPUT=$(cat) in commit-msg-check.sh).
-# Safe under set -euo pipefail — all fallible commands guarded with || true.
+# Must NOT read stdin (sourced via llm-utils.sh before INPUT=$(cat) in
+# commit-msg-check.sh). Safe under set -euo pipefail — all fallible commands
+# guarded with || true.
 
 _OLLAMA_CACHE_FILE="${_OLLAMA_HOST_CACHE:-/tmp/.ollama-host-cache-$(id -u)}"
 # Field separator between a cached server's URL and its model list. Kept in a
@@ -154,57 +160,9 @@ _probe_servers() {
   fi
 }
 
-# Pick one URL round-robin and advance the shared counter. Best-effort and
-# lock-free: a race between parallel processes only skews distribution slightly,
-# which load balancing tolerates. Portable (no flock) so it works on macOS bash.
-_pick_round_robin() {
-  local rr_file="$1"; shift
-  local pool=("$@")
-  local n=${#pool[@]}
-  if [ "$n" -eq 1 ]; then
-    echo "${pool[0]}"
-    return
-  fi
-
-  local idx=0
-  if [ -f "$rr_file" ] && ! [ -L "$rr_file" ]; then
-    idx=$(cat "$rr_file" 2>/dev/null || echo 0)
-  fi
-  case "$idx" in (''|*[!0-9]*) idx=0;; esac
-
-  if ! [ -L "$rr_file" ]; then
-    local tmp
-    tmp=$(mktemp "${rr_file}.XXXXXX" 2>/dev/null) || true
-    if [ -n "${tmp:-}" ]; then
-      echo "$(( (idx + 1) % n ))" > "$tmp"
-      mv "$tmp" "$rr_file" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true
-    fi
-  fi
-
-  echo "${pool[$(( idx % n ))]}"
-}
-
-# Does a model list (space-separated, or '*') satisfy the requested model?
-# Matches exact, "<want>:latest", and tag-less "<want>" against "<want>:*".
-_models_have() {
-  local list="$1" want="$2" m
-  [ "$list" = "*" ] && return 0
-  for m in $list; do
-    [ "$m" = "$want" ] && return 0
-    [ "$m" = "${want}:latest" ] && return 0
-    case "$want" in
-      *:*) ;;
-      *) case "$m" in "${want}:"*) return 0;; esac ;;
-    esac
-  done
-  return 1
-}
-
-# Sanitize a model name into a filename-safe round-robin counter suffix.
-_rr_suffix() {
-  local s="$1"
-  printf '%s' "${s//[^a-zA-Z0-9]/_}"
-}
+# Generic discovery helpers (_pick_round_robin, _models_have, _rr_suffix) are
+# backend-agnostic and live in llm-utils.sh, which defines them before sourcing
+# this file. This file (the Ollama provider) is only ever sourced via llm-utils.sh.
 
 # Public: echo a reachable base URL hosting <model>, picked round-robin among
 # all servers that have it. Empty output means no reachable server has it — the
@@ -292,3 +250,78 @@ else
 fi
 
 export OLLAMA_HOST OLLAMA_HOSTS
+
+# Ollama provider generate primitive: send a prompt to Ollama's /api/generate and
+# print the response. The model arg is already the real (backend-resolved) id.
+# The llm-utils.sh dispatcher calls this for the Ollama backend.
+# Args: $1=model $2=system_prompt $3=timeout $4=num_predict
+# stdin = prompt. stdout = model text (empty on any failure; exit 0).
+_ollama_generate() {
+  local model="$1" system="$2" timeout="$3" num_predict="${4:-16384}"
+  [ -z "$num_predict" ] && num_predict=16384
+  local content
+  content=$(cat)
+
+  if [ -z "$content" ]; then
+    return
+  fi
+
+  # Route to a server that actually hosts this model (the pool's servers do not
+  # necessarily share the same model set). Empty => skip rather than 404.
+  local host
+  host=$(ollama_host_for_model "$model")
+  if [ -z "$host" ]; then
+    echo "Warning: no reachable Ollama server hosts model '$model'" >&2
+    return
+  fi
+
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  # Use double quotes so $tmpdir is expanded now, not at EXIT time.
+  # Single-quoted trap would fail with set -euo pipefail because $tmpdir
+  # is a local variable and becomes unbound when evaluated at script EXIT.
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmpdir'" EXIT
+
+  printf '%s' "$system" > "$tmpdir/system"
+  printf '%s' "$content" > "$tmpdir/prompt"
+
+  jq -n \
+    --arg model "$model" \
+    --rawfile system "$tmpdir/system" \
+    --rawfile prompt "$tmpdir/prompt" \
+    --argjson num_predict "$num_predict" \
+    '{model: $model, system: $system, prompt: $prompt, stream: false,
+      options: {num_predict: $num_predict}}' \
+    > "$tmpdir/request.json"
+
+  local http_code
+  http_code=$(curl -s --max-time "$timeout" -w '%{http_code}' \
+    -o "$tmpdir/response.json" \
+    "$host/api/generate" \
+    -d @"$tmpdir/request.json" 2>/dev/null) || true
+
+  if [ "$http_code" = "000" ] || [ ! -s "$tmpdir/response.json" ]; then
+    echo "Warning: Ollama unavailable at $host" >&2
+    return
+  fi
+
+  if [ "$http_code" != "200" ]; then
+    echo "Warning: Ollama returned HTTP $http_code" >&2
+    # Do not dump response body — it may contain echoed request with user code
+    echo "  (response body suppressed — check Ollama server logs for details)" >&2
+    return
+  fi
+
+  # Support thinking models: prefer .response, fall back to .thinking
+  local response
+  response=$(jq -r '
+    if (.response // "") != "" then .response
+    elif (.thinking // "") != "" then .thinking
+    else empty
+    end' "$tmpdir/response.json")
+
+  if [ -n "$response" ]; then
+    printf '%s\n' "$response"
+  fi
+}

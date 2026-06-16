@@ -21,7 +21,7 @@ Reference backends, in default preference order:
 
 | Backend | Cost | Privacy | Notes |
 |---------|------|---------|-------|
-| `ollama` | **free** | local-only | gpt-oss:120b via `~/.claude/hooks/ollama-utils.sh` (functionality / security / testing) |
+| `ollama` | **free** | local-only | gpt-oss:120b via `~/.claude/hooks/llm-commands.sh` (functionality / security / testing) |
 | `codex` | Codex quota | sent to Codex servers | independent external model via `codex review` |
 | `claude` | Claude tokens | sent to Claude servers | fresh headless context, no conversation bias; run with `--tools ""` (read-only, cannot edit/run) |
 

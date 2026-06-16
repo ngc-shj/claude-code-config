@@ -36,14 +36,14 @@ Summarize changes, classify the PR type, and pre-generate a title:
 
 ```bash
 # Summarize the diff
-SUMMARY=$(git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh summarize-diff)
+SUMMARY=$(git diff main...HEAD | bash ~/.claude/hooks/llm-commands.sh summarize-diff)
 
 # Classify changes
-CATEGORY=$(git diff main...HEAD --name-only | bash ~/.claude/hooks/ollama-utils.sh classify-changes)
+CATEGORY=$(git diff main...HEAD --name-only | bash ~/.claude/hooks/llm-commands.sh classify-changes)
 
 # Generate a draft title from category + summary
 TITLE=$({ echo "$CATEGORY"; echo '=== OLLAMA-INPUT-SEPARATOR ==='; echo "$SUMMARY"; } \
-  | bash ~/.claude/hooks/ollama-utils.sh generate-pr-title)
+  | bash ~/.claude/hooks/llm-commands.sh generate-pr-title)
 
 printf '%s\n' "$SUMMARY" "$CATEGORY" "$TITLE"
 ```
@@ -68,7 +68,7 @@ If Ollama is unavailable, proceed to Step 3 without pre-analysis.
     cat "$f"
     echo
   done
-} | bash ~/.claude/hooks/ollama-utils.sh generate-pr-body
+} | bash ~/.claude/hooks/llm-commands.sh generate-pr-body
 ```
 
 If Ollama is unavailable, compose the PR body directly as fallback.
