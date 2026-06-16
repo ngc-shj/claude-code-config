@@ -671,7 +671,7 @@ count_symbol_usage() {
     awk -F'\t' -v total="$total_files" \
       '{ printf "%s | %s | %s of %s files | %s\n", $2, $3, $1, total, $4 }' \
       "$tmp_top_n" > "$tmp_llm_in"
-    bash "${SCRIPT_DIR}/ollama-utils.sh" classify-symbols < "$tmp_llm_in" 2>/dev/null \
+    bash "${SCRIPT_DIR}/llm-commands.sh" classify-symbols < "$tmp_llm_in" 2>/dev/null \
       | awk -F'\t' '
           $1 ~ /^[A-Za-z_][A-Za-z0-9_]*$/ && ($2 == "shared" || $2 == "ambiguous" || $2 == "local") {
             print $1 "\t" $2

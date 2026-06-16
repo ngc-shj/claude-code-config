@@ -48,7 +48,7 @@ Classify files and generate test case outlines using local LLM:
 
 ```bash
 # Classify target files
-echo "[file paths, one per line]" | bash ~/.claude/hooks/ollama-utils.sh classify-changes
+echo "[file paths, one per line]" | bash ~/.claude/hooks/llm-commands.sh classify-changes
 
 # Generate detailed review focusing on testability
 bash ~/.claude/hooks/pre-review.sh code
@@ -122,7 +122,7 @@ Review generated tests for completeness:
   { cat [generated-test-file]
     echo '=== OLLAMA-INPUT-SEPARATOR ==='
     cat [source-or-type-definition-file]
-  } | bash ~/.claude/hooks/ollama-utils.sh verify-mock-shapes
+  } | bash ~/.claude/hooks/llm-commands.sh verify-mock-shapes
   ```
 
   The output is a set of `[Severity] test-path:line — Problem — Fix` blocks (or `No findings`). Treat Critical/Major findings as mandatory fixes before reporting completion; Minor findings are informational. Remaining unflagged mocks still warrant a manual spot-check against the actual type definitions — the audit is a filter, not a substitute.

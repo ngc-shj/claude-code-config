@@ -6,7 +6,7 @@ Generate name candidates using local LLM (zero Claude tokens):
 
 ```bash
 # Generate plan name slug from task description
-PLAN_SLUG=$(echo "[one-line task summary]" | bash ~/.claude/hooks/ollama-utils.sh generate-slug)
+PLAN_SLUG=$(echo "[one-line task summary]" | bash ~/.claude/hooks/llm-commands.sh generate-slug)
 ```
 
 If Ollama is unavailable or the result is unsatisfactory, generate the slug yourself as fallback.
@@ -206,12 +206,12 @@ echo "TRI_DIR=$TRI_DIR"
 #   Write "<literal TRI_DIR>/sec-findings.txt"  ← Security expert output
 #   Write "<literal TRI_DIR>/test-findings.txt" ← Testing expert output
 cat "$TRI_DIR/func-findings.txt" "$TRI_DIR/sec-findings.txt" "$TRI_DIR/test-findings.txt" \
-  | bash ~/.claude/hooks/ollama-utils.sh merge-findings
+  | bash ~/.claude/hooks/llm-commands.sh merge-findings
 bash ~/.claude/hooks/tri-tmpdir.sh cleanup "$TRI_DIR"
 ```
 
 **Failure handling**: `merge-findings` enforces an internal **600 s** timeout via curl
-`--max-time` (see `cmd_merge_findings` in `hooks/ollama-utils.sh`). Ollama is a soft
+`--max-time` (see `cmd_merge_findings` in `hooks/llm-commands.sh`). Ollama is a soft
 dependency — when unavailable or when the call exceeds that budget, the helper returns
 empty stdout with a stderr warning, and the orchestrator MUST deduplicate manually as
 fallback. Do NOT wrap the call in an additional outer `timeout` shorter than 600 s; that
@@ -280,7 +280,7 @@ Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollam
 { git log <prev-round-commit>..HEAD --oneline
   echo '=== OLLAMA-INPUT-SEPARATOR ==='
   cat "$TRI_DIR"/*-findings.txt  # or equivalent new-findings aggregate
-} | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
+} | bash ~/.claude/hooks/llm-commands.sh summarize-round-changes
 ```
 
 The orchestrator reviews the 1-3 sentence output and places it under the `## Changes from Previous Round` heading.
@@ -300,7 +300,7 @@ The main agent scrutinizes each finding:
 { cat "./docs/archive/review/[plan-name]-plan.md"
   echo '=== OLLAMA-INPUT-SEPARATOR ==='
   echo "$FINDING_BLOCK"
-} | bash ~/.claude/hooks/ollama-utils.sh propose-plan-edits
+} | bash ~/.claude/hooks/llm-commands.sh propose-plan-edits
 ```
 
 **MANDATORY** before applying the drafted ANCHOR/INSERT pair via the Edit tool:

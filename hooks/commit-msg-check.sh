@@ -4,8 +4,9 @@
 
 set -euo pipefail
 
-# shellcheck source=resolve-ollama-host.sh
-source "$(dirname "${BASH_SOURCE[0]}")/resolve-ollama-host.sh"
+# Source the common LLM layer for llm_request (backend-agnostic dispatcher).
+# shellcheck source=llm-utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/llm-utils.sh"
 
 INPUT=$(cat)
 
@@ -37,20 +38,12 @@ if [ -z "$COMMIT_MSG" ]; then
   exit 0
 fi
 
-# Route to a server that actually hosts the model (pool servers may differ).
-OLLAMA_TARGET=$(ollama_host_for_model "gpt-oss:20b")
-if [ -z "$OLLAMA_TARGET" ]; then
-  echo '{"decision": "approve"}'
-  exit 0
-fi
+# Check with local LLM via the active backend (llama.cpp preferred, else Ollama).
+# An unreachable backend yields empty output → approve silently below.
+PROMPT="Review this git commit message. Reply with ONLY 'OK' if it follows best practices (concise, English, explains why not what, uses conventional prefix like feat/fix/refactor/docs/test/chore). Reply with a one-line suggestion if it needs improvement.
 
-# Check with local LLM via Ollama API
-REVIEW=$(curl -sf --max-time 10 "$OLLAMA_TARGET/api/generate" \
-  -d "$(jq -n \
-    --arg model "gpt-oss:20b" \
-    --arg prompt "Review this git commit message. Reply with ONLY 'OK' if it follows best practices (concise, English, explains why not what, uses conventional prefix like feat/fix/refactor/docs/test/chore). Reply with a one-line suggestion if it needs improvement.\n\nCommit message: $COMMIT_MSG" \
-    '{model: $model, prompt: $prompt, stream: false}')" \
-  2>/dev/null | jq -r '.response // empty' | head -1)
+Commit message: $COMMIT_MSG"
+REVIEW=$(printf '%s' "$PROMPT" | llm_request "gpt-oss:20b" "" 10 "" | head -1)
 
 if [ -z "$REVIEW" ]; then
   # Ollama unavailable, approve silently

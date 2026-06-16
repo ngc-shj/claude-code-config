@@ -6,8 +6,9 @@
 
 set -euo pipefail
 
-# shellcheck source=resolve-ollama-host.sh
-source "$(dirname "${BASH_SOURCE[0]}")/resolve-ollama-host.sh"
+# Source the common LLM layer for llm_request (backend-agnostic dispatcher).
+# shellcheck source=llm-utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/llm-utils.sh"
 MODEL="${REVIEW_MODEL:-gpt-oss:120b}"
 TIMEOUT="${REVIEW_TIMEOUT:-600}"
 MODE="${1:-code}"
@@ -178,55 +179,13 @@ IMPORTANT: Only flag issues you can confirm from the provided context. If a file
     ;;
 esac
 
-# Build request JSON via temp files to avoid ARG_MAX limits
-TMPDIR_REQ=$(mktemp -d)
-trap 'rm -rf "$TMPDIR_REQ"' EXIT
-printf '%s' "$SYSTEM" > "$TMPDIR_REQ/system"
-printf '%s' "$CONTENT" > "$TMPDIR_REQ/prompt"
-
-# Call Ollama API
-jq -n \
-    --arg model "$MODEL" \
-    --rawfile system "$TMPDIR_REQ/system" \
-    --rawfile prompt "$TMPDIR_REQ/prompt" \
-    --argjson num_predict "$NUM_PREDICT" \
-    '{model: $model, system: $system, prompt: $prompt, stream: false,
-      options: {num_predict: $num_predict}}' \
-  > "$TMPDIR_REQ/request.json"
-
-# Route to a server that actually hosts $MODEL (pool servers may differ).
-HOST=$(ollama_host_for_model "$MODEL")
-if [ -z "$HOST" ]; then
-  echo "Warning: no reachable Ollama server hosts $MODEL. Skipping pre-review."
-  exit 0
-fi
-
-HTTP_CODE=$(curl -s --max-time "$TIMEOUT" -w '%{http_code}' \
-  -o "$TMPDIR_REQ/response.json" \
-  "$HOST/api/generate" \
-  -d @"$TMPDIR_REQ/request.json" 2>/dev/null) || true
-
-if [ "$HTTP_CODE" = "000" ] || [ ! -s "$TMPDIR_REQ/response.json" ]; then
-  echo "Warning: Ollama unavailable at $HOST. Skipping pre-review."
-  exit 0
-fi
-
-if [ "$HTTP_CODE" != "200" ]; then
-  echo "Warning: Ollama returned HTTP $HTTP_CODE. Skipping pre-review."
-  # Do not dump response body — it may contain echoed request with user code
-  echo "  (response body suppressed — check Ollama server logs for details)" >&2
-  exit 0
-fi
-
-# Extract response; some models (thinking models) put output in .thinking
-RESPONSE=$(jq -r '
-  if (.response // "") != "" then .response
-  elif (.thinking // "") != "" then .thinking
-  else empty
-  end' "$TMPDIR_REQ/response.json")
+# Route to the active backend (llama.cpp preferred, else Ollama). The dispatcher
+# handles host resolution, logical->real model mapping, and graceful degradation
+# (warnings to stderr, empty stdout) — so an unreachable backend yields no output.
+RESPONSE=$(printf '%s' "$CONTENT" | llm_request "$MODEL" "$SYSTEM" "$TIMEOUT" "$NUM_PREDICT")
 
 if [ -z "$RESPONSE" ]; then
-  echo "Warning: Ollama returned empty response. Skipping pre-review."
+  echo "Warning: local LLM unavailable or returned empty response. Skipping pre-review."
   exit 0
 fi
 

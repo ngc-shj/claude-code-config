@@ -124,7 +124,7 @@ DEV_LOG="./docs/archive/review/[plan-name]-deviation.md"
   cat "$DEV_LOG"; \
   echo "=== OLLAMA-INPUT-SEPARATOR ==="; \
   git diff main...HEAD; } \
-  | bash ~/.claude/hooks/ollama-utils.sh generate-deviation-log \
+  | bash ~/.claude/hooks/llm-commands.sh generate-deviation-log \
   > "${DEV_LOG}.append"
 ```
 
@@ -278,7 +278,7 @@ fi
 # action"), the cross-check is a manual review obligation, not a script step.
 
 # Optional: draft the commit body via Ollama (subject line still hand-written).
-# git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
+# git diff --cached | bash ~/.claude/hooks/llm-commands.sh generate-commit-body
 
 ##### MANUAL CHECKS (not runnable commands — review obligations) #####
 
@@ -406,7 +406,7 @@ Merge and act on findings:
 
 ```bash
 cat "$TRI_DIR/self-rcheck-func.txt" "$TRI_DIR/self-rcheck-sec.txt" "$TRI_DIR/self-rcheck-test.txt" \
-  | bash ~/.claude/hooks/ollama-utils.sh merge-findings
+  | bash ~/.claude/hooks/llm-commands.sh merge-findings
 bash ~/.claude/hooks/tri-tmpdir.sh cleanup "$TRI_DIR"
 ```
 

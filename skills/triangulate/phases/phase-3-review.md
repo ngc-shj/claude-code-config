@@ -42,9 +42,9 @@ Generate per-perspective seed findings so each Claude sub-agent can start from v
 # and Write tool performs no shell expansion.
 TRI_DIR=$(bash ~/.claude/hooks/tri-tmpdir.sh create)
 : "${TRI_DIR:?tri-tmpdir create failed; cannot continue seed generation}"
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-functionality > "$TRI_DIR/seed-func.txt"
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-security      > "$TRI_DIR/seed-sec.txt"
-git diff main...HEAD | bash ~/.claude/hooks/ollama-utils.sh analyze-testing       > "$TRI_DIR/seed-test.txt"
+git diff main...HEAD | bash ~/.claude/hooks/llm-commands.sh analyze-functionality > "$TRI_DIR/seed-func.txt"
+git diff main...HEAD | bash ~/.claude/hooks/llm-commands.sh analyze-security      > "$TRI_DIR/seed-sec.txt"
+git diff main...HEAD | bash ~/.claude/hooks/llm-commands.sh analyze-testing       > "$TRI_DIR/seed-test.txt"
 echo "TRI_DIR=$TRI_DIR"
 ```
 
@@ -257,11 +257,11 @@ First, save each agent's raw output to temporary files, then use local LLM for d
 #   Write "<literal TRI_DIR>/sec-findings.txt"  ← Security expert output
 #   Write "<literal TRI_DIR>/test-findings.txt" ← Testing expert output
 cat "$TRI_DIR/func-findings.txt" "$TRI_DIR/sec-findings.txt" "$TRI_DIR/test-findings.txt" \
-  | bash ~/.claude/hooks/ollama-utils.sh merge-findings
+  | bash ~/.claude/hooks/llm-commands.sh merge-findings
 ```
 
 **Failure handling**: `merge-findings` enforces an internal **600 s** timeout via curl
-`--max-time` (see `cmd_merge_findings` in `hooks/ollama-utils.sh`). Ollama is a soft
+`--max-time` (see `cmd_merge_findings` in `hooks/llm-commands.sh`). Ollama is a soft
 dependency — when unavailable or when the call exceeds that budget, the helper returns
 empty stdout with a stderr warning, and the orchestrator MUST consolidate and deduplicate
 manually (merge same underlying issue flagged by multiple agents). Do NOT wrap the call
@@ -339,7 +339,7 @@ Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollam
 { git log <prev-round-commit>..HEAD --oneline
   echo '=== OLLAMA-INPUT-SEPARATOR ==='
   cat "$TRI_DIR"/*-findings.txt  # or equivalent new-findings aggregate
-} | bash ~/.claude/hooks/ollama-utils.sh summarize-round-changes
+} | bash ~/.claude/hooks/llm-commands.sh summarize-round-changes
 ```
 
 The orchestrator reviews the 1-3 sentence output and places it under the `## Changes from Previous Round` heading.
@@ -389,7 +389,7 @@ fi
 # Commit only if ALL three pass
 git add -A
 # Optional: draft the commit body via Ollama (subject line still hand-written).
-# git diff --cached | bash ~/.claude/hooks/ollama-utils.sh generate-commit-body
+# git diff --cached | bash ~/.claude/hooks/llm-commands.sh generate-commit-body
 git commit -m "review([n]): [summary of fixes]"
 ```
 
@@ -414,7 +414,7 @@ Optional: draft each entry via Ollama:
 { echo "$FINDING_BLOCK"
   echo '=== OLLAMA-INPUT-SEPARATOR ==='
   git show <fix-commit>
-} | bash ~/.claude/hooks/ollama-utils.sh generate-resolution-entry
+} | bash ~/.claude/hooks/llm-commands.sh generate-resolution-entry
 ```
 
 The orchestrator reviews and applies the drafted entry via the Edit tool. Set `$FINDING_BLOCK` to the finding text beforehand (e.g., via heredoc).

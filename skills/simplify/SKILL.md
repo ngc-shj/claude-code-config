@@ -49,7 +49,7 @@ Also pre-screen reuse candidates against the shared utility inventory so Sonnet 
 { bash ~/.claude/hooks/scan-shared-utils.sh
   echo '=== OLLAMA-INPUT-SEPARATOR ==='
   git diff main...HEAD
-} | bash ~/.claude/hooks/ollama-utils.sh score-utility-match
+} | bash ~/.claude/hooks/llm-commands.sh score-utility-match
 ```
 
 The output is a set of `[High|Medium|Low] path:line — Proposal — Candidate` blocks (or `No matches`). Feed these into the Step 3 sub-agent prompt as seed candidates; the sub-agent still performs verification and may discard low-confidence matches.

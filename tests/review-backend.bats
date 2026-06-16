@@ -128,7 +128,7 @@ EOF
   make_stub claude
   CLAUDE_HOOKS_DIR="$BATS_TEST_TMPDIR/no-hooks" run bash "$SCRIPT" detect
   [ "$status" -eq 0 ]
-  # ollama excluded (no ollama-utils.sh under hooks dir); codex precedes claude
+  # ollama excluded (no llm-commands.sh under hooks dir); codex precedes claude
   codex_line=$(printf '%s\n' "$output" | grep -n '^codex$'  | cut -d: -f1)
   claude_line=$(printf '%s\n' "$output" | grep -n '^claude$' | cut -d: -f1)
   [ -n "$codex_line" ] && [ -n "$claude_line" ] && [ "$codex_line" -lt "$claude_line" ]
