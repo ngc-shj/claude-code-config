@@ -41,7 +41,7 @@ When editing or reviewing a source file, consult `common/` plus the overlay whos
 
 Use the appropriate model for each task based on complexity, cost, and latency:
 
-### Claude Opus 4.6 (Main Orchestrator)
+### Claude Opus 4.8 (Main Orchestrator)
 
 - Complex architectural decisions and system design
 - Plan creation and final approval
@@ -55,16 +55,20 @@ Use the appropriate model for each task based on complexity, cost, and latency:
 - Writing tests based on existing patterns
 - Code review as a sub-agent
 
-### Local LLM via Ollama
+### Local LLM (llama.cpp or Ollama)
 
-Available models and their use cases:
+Hooks reach a local LLM through the `llm-utils.sh` dispatcher: `LLM_BACKEND`
+pins the backend, otherwise llama.cpp (`/v1/chat/completions`, default
+`localhost:8080`) is auto-preferred when reachable, else Ollama
+(`/api/generate`). Hooks pass logical model names; each backend resolves them
+to a real model (for llama.cpp via `LLAMACPP_MODEL_SMALL`/`LLAMACPP_MODEL_LARGE`).
 
-| Model           | Use case                                                                           |
-| --------------- | ---------------------------------------------------------------------------------- |
-| gpt-oss:20b     | Quick checks: lint, format validation, commit message review, simple summarization |
-| gpt-oss:120b    | Code review pre-screening, security pattern detection, detailed analysis           |
-| deepseek-r1:70b | Complex reasoning tasks, mathematical/logical verification                         |
-| deepseek-r1:8b  | Fast classification, simple Q&A, tagging                                           |
+Logical models and their use cases:
+
+| Logical model | Use case                                                                           |
+| ------------- | ---------------------------------------------------------------------------------- |
+| gpt-oss:20b   | Quick checks: lint, format validation, commit message review, simple summarization |
+| gpt-oss:120b  | Code review pre-screening, security pattern detection, detailed analysis           |
 
 ### How to call local LLM
 

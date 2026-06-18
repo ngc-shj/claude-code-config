@@ -87,7 +87,7 @@ teardown() {
 
 @test "model map: gpt-oss:120b -> default large (Qwen) model" {
   result=$(source "$SCRIPT" && llamacpp_model_for "gpt-oss:120b")
-  [ "$result" = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:UD-Q4_K_XL" ]
+  [ "$result" = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL" ]
 }
 
 @test "model map: env override is honored" {
@@ -112,7 +112,7 @@ teardown() {
 
 @test "llm_model_for: llamacpp backend delegates to the mapping" {
   result=$(source "$SCRIPT" && llm_model_for "gpt-oss:120b" llamacpp)
-  [ "$result" = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:UD-Q4_K_XL" ]
+  [ "$result" = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL" ]
 }
 
 # ---------------------------------------------------------------------------
