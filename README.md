@@ -57,14 +57,14 @@ claude-code-config/
 
 ```text
 ┌──────────────────────────────────────────────────┐
-│  Claude Opus 4.6 (Main Orchestrator)             │
+│  Claude Opus 4.8 (Main Orchestrator)             │
 │  Complex design, planning, final decisions       │
 └──┬────────────────┬─────────────────┬────────────┘
    │                │                 │
    ▼                ▼                 ▼
 ┌────────┐  ┌─────────────┐  ┌──────────────────┐
 │Sonnet  │  │gpt-oss:120b │  │gpt-oss:20b       │
-│4.6     │  │(Ollama)     │  │(Ollama)          │
+│4.6     │  │(local)      │  │(local)           │
 │        │  │             │  │                  │
 │Explore │  │Code review  │  │Commit msg check  │
 │Implement│ │pre-screening│  │Quick validation  │
@@ -76,15 +76,17 @@ claude-code-config/
 
 | Model | Role | Use case |
 | --- | --- | --- |
-| Claude Opus 4.6 | Main orchestrator | Architecture, planning, final decisions |
+| Claude Opus 4.8 | Main orchestrator | Architecture, planning, final decisions |
 | Claude Sonnet 4.6 | Sub-agent | Exploration, implementation, testing |
 | gpt-oss:120b | Local pre-screening | Code review, security analysis (before Claude) |
 | gpt-oss:20b | Local quick checks | Commit messages, lint, format, classification |
-| deepseek-r1:70b | Local reasoning | Complex logical verification |
-| deepseek-r1:8b | Local fast tasks | Simple Q&A, tagging |
 
-Local LLMs run via [Ollama](https://ollama.com/) — **no API cost, no data leaves your machine**.
-Called via hooks (shell + curl) for file-aware tasks, or MCP for ad-hoc text analysis.
+The two local logical names (`gpt-oss:120b`, `gpt-oss:20b`) are what the hooks
+request; the active backend resolves them to a real model. Run via
+[llama.cpp](https://github.com/ggml-org/llama.cpp) or [Ollama](https://ollama.com/)
+(auto-selected by the `llm-utils.sh` dispatcher, llama.cpp preferred) — **no API
+cost, no data leaves your machine**. Called via hooks (shell + curl) for
+file-aware tasks, or MCP for ad-hoc text analysis.
 
 ## Permission design
 
@@ -128,16 +130,16 @@ Blocks Edit/Write/MultiEdit operations on:
 
 ### commit-msg-check.sh (PreToolUse)
 
-Validates commit messages using local LLM (`gpt-oss:20b` via Ollama):
+Validates commit messages using the local LLM (logical model `gpt-oss:20b`, via the `llm-utils.sh` dispatcher — llama.cpp or Ollama):
 
 - Checks for conventional commit format (feat/fix/refactor/docs/test/chore)
 - Verifies the message is in English and concise
 - Provides improvement suggestions if needed
-- Gracefully skips if Ollama is unavailable
+- Gracefully skips if no local LLM backend is reachable
 
 ### pre-review.sh (Utility — called by skills)
 
-Pre-screening for code review and plan review using local LLM (`gpt-oss:120b` via Ollama):
+Pre-screening for code review and plan review using the local LLM (logical model `gpt-oss:120b`, via the `llm-utils.sh` dispatcher — llama.cpp or Ollama):
 
 ```bash
 # Review plan
@@ -148,8 +150,8 @@ bash ~/.claude/hooks/pre-review.sh code
 ```
 
 - Reads files directly via shell (git diff, cat) — no Claude tokens consumed
-- Configurable via `OLLAMA_HOST` and `REVIEW_MODEL` environment variables
-- Gracefully skips if Ollama is unavailable
+- Configurable via `REVIEW_MODEL`, `LLM_BACKEND`, and the backend host vars (`LLAMACPP_HOST` / `OLLAMA_HOST`)
+- Gracefully skips if no local LLM backend is reachable
 
 #### Local-LLM backend layer (`llm-utils.sh`)
 
@@ -166,7 +168,9 @@ llama.cpp is **auto-preferred** when its `/v1/models` endpoint is reachable
 (default `localhost:8080`, overridable via `LLAMACPP_HOST`/`LLAMACPP_HOSTS`),
 falling back to Ollama. Hooks always pass logical model names (`gpt-oss:20b`,
 `gpt-oss:120b`); for llama.cpp these map to `unsloth/gpt-oss-20b-GGUF:F16` and
-`unsloth/Qwen3.6-35B-A3B-MTP-GGUF:UD-Q4_K_XL` (8080 has no 120b-class model),
+`unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (8080 has no 120b-class model, so the
+heavy slot maps to Qwen3.6-35B-A3B; note llama-server strips the unsloth `UD-`
+prefix, so the `UD-Q4_K_XL` build is addressed as `Q4_K_XL`),
 overridable via `LLAMACPP_MODEL_SMALL`/`LLAMACPP_MODEL_LARGE`. The
 command library (`llm-commands.sh`) and the direct-caller hooks
 (`pre-review.sh`, `commit-msg-check.sh`) source only `llm-utils.sh`.
@@ -267,8 +271,9 @@ git diff --cached | bash ~/.claude/hooks/llm-commands.sh generate-commit-body
 ```
 
 - All commands read stdin, write stdout — composable with pipes
-- Gracefully returns empty output if Ollama is unavailable
-- Supports thinking models (`.response` → `.thinking` fallback)
+- Backend-agnostic: routed through `llm-utils.sh` (llama.cpp auto-preferred, else Ollama)
+- Gracefully returns empty output if no local LLM backend is reachable
+- Supports reasoning/thinking models (Ollama `.response`→`.thinking`; llama.cpp `content`→`reasoning_content`)
 
 ### notify.sh (Notification)
 
@@ -322,8 +327,8 @@ Creates a pull request with auto-generated description:
 ### agent-review
 
 Backend-agnostic diff review: a *reviewer* is treated as any agent that takes a diff and returns findings headlessly, so the review path never depends on one CLI (this subsumes the former `codex-review` skill — Codex is now just one selectable backend):
-- Auto-detects available backends in preference order — `ollama` (local, free, private) → `codex` (external second opinion, `codex review`) → `claude` (fresh headless context, spends tokens)
-- Defaults to the free local backend, reusing `llm-commands.sh` (functionality / security / testing) — zero Claude tokens when Ollama is reachable
+- Auto-detects available backends in preference order — `ollama` (local, free, private — runs through the `llm-utils.sh` dispatcher, so it uses llama.cpp when reachable, else Ollama) → `codex` (external second opinion, `codex review`) → `claude` (fresh headless context, spends tokens)
+- Defaults to the free local backend, reusing `llm-commands.sh` (functionality / security / testing) — zero Claude tokens when a local backend (llama.cpp or Ollama) is reachable
 - Review scope: uncommitted changes, a base branch, or a specific commit; optionally cross-checks findings against `triangulate` review artifacts
 - `--adversarial` mode challenges the design/approach/failure-modes instead of a line-by-line pass (ollama gets a dedicated `adversarial-review` pass; codex/claude get an approach-challenging prompt)
 - Normalizes every backend's output into a canonical structured shape (`schemas/review-output.schema.json`: verdict / findings / next_steps), and backgrounds slow reviews via the harness's `run_in_background`
@@ -352,7 +357,7 @@ Audits Claude Code configuration for common security misconfigurations — zero 
 - Deterministic pattern checks (grep + jq) for secrets, `Bash(*)` wildcards, hook injection, MCP supply chain, prompt-injection surface in CLAUDE.md
 - Optional deep analysis via `gpt-oss:120b` through `llm-commands.sh analyze-security` (zero Claude tokens)
 - Graded A/F report with severity-classified findings
-- Concept borrowed from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (`skills/security-scan/`, which wraps the AgentShield npm package); reimplemented here as a self-contained shell + Ollama workflow
+- Concept borrowed from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (`skills/security-scan/`, which wraps the AgentShield npm package); reimplemented here as a self-contained shell + local-LLM workflow
 
 ## Rules
 
@@ -370,7 +375,7 @@ Rules are referenced, not auto-injected — Claude reads them via the directive 
 ### Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
-- [Ollama](https://ollama.com/) installed (optional, for local LLM features)
+- [Ollama](https://ollama.com/) and/or [llama.cpp](https://github.com/ggml-org/llama.cpp) (optional, for local LLM features — when both are reachable, llama.cpp is auto-preferred)
 
 ### Setup
 
@@ -388,10 +393,24 @@ For local customizations that should survive installs, use `~/.claude/settings.l
 
 ### Install local models (optional)
 
+**Ollama backend** — the logical names are the real model tags:
+
 ```bash
 ollama pull gpt-oss:20b
 ollama pull gpt-oss:120b
 ```
+
+**llama.cpp backend** — run `llama-server` (default `localhost:8080`); the logical
+names map to these real model ids (override with `LLAMACPP_MODEL_SMALL` /
+`LLAMACPP_MODEL_LARGE`):
+
+| Logical | llama.cpp model id (default) |
+| --- | --- |
+| `gpt-oss:20b` | `unsloth/gpt-oss-20b-GGUF:F16` |
+| `gpt-oss:120b` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (8080 has no 120b-class model; llama-server strips the unsloth `UD-` prefix, so the `UD-Q4_K_XL` build is requested as `Q4_K_XL`) |
+
+When both backends are reachable, llama.cpp is auto-preferred; pin with
+`LLM_BACKEND=ollama` or `LLM_BACKEND=llamacpp`.
 
 ### What gets installed
 

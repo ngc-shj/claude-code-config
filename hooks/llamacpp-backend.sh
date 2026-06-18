@@ -23,8 +23,13 @@ _LLAMACPP_TAB=$'\t'
 # Default logical->real model mapping (env-overridable). 8080 has no 120b-class
 # model; the heavy slot maps to Qwen3.6-35B-A3B (top local coding-benchmark model)
 # on its MTP speculative-decoding preset for speed.
+#
+# NOTE the quant tag is `Q4_K_XL`, not `UD-Q4_K_XL`: llama-server strips the
+# unsloth-Dynamic `UD-` prefix, so a model loaded from `...:UD-Q4_K_XL` is
+# exposed in /v1/models — and must be requested — as `...:Q4_K_XL`. Using the
+# UD- form here would fail discovery (no /v1/models id matches it).
 _LLAMACPP_MODEL_SMALL="${LLAMACPP_MODEL_SMALL:-unsloth/gpt-oss-20b-GGUF:F16}"
-_LLAMACPP_MODEL_LARGE="${LLAMACPP_MODEL_LARGE:-unsloth/Qwen3.6-35B-A3B-MTP-GGUF:UD-Q4_K_XL}"
+_LLAMACPP_MODEL_LARGE="${LLAMACPP_MODEL_LARGE:-unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL}"
 
 # --- discovery ---
 
