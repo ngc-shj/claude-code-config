@@ -303,6 +303,34 @@ EOF
   [ "$OLLAMA_HOSTS" = "http://ul9c-r49.ts.net:11434" ]
 }
 
+@test "tailscale: TAILSCALE_BIN override resolves the CLI path (macOS app-bundle case)" {
+  # Simulate the macOS app bundle: a `Tailscale` binary at a non-PATH location.
+  mkdir -p "$BATS_TEST_TMPDIR/app"
+  printf '#!/bin/bash\n' > "$BATS_TEST_TMPDIR/app/Tailscale"
+  chmod +x "$BATS_TEST_TMPDIR/app/Tailscale"
+  export TAILSCALE_BIN="$BATS_TEST_TMPDIR/app/Tailscale"
+  result=$(source "$SCRIPT" && _tailscale_bin)
+  [ "$result" = "$BATS_TEST_TMPDIR/app/Tailscale" ]
+}
+
+@test "tailscale: a peer discovered via TAILSCALE_BIN override joins the pool" {
+  # The PATH `tailscale` mock emits path-peer (which never answers /api/version);
+  # the override binary emits override-peer (which does). Seeing override-peer in
+  # the pool proves the override CLI was the one actually invoked.
+  export TS_DISCOVERED_PEERS="path-peer.ts.net"
+  mkdir -p "$BATS_TEST_TMPDIR/app"
+  cat > "$BATS_TEST_TMPDIR/app/Tailscale" <<'EOF'
+#!/bin/bash
+printf '{"Peer":{"k0":{"Online":true,"DNSName":"override-peer.ts.net.","HostName":"override-peer"}}}'
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/app/Tailscale"
+  export TAILSCALE_BIN="$BATS_TEST_TMPDIR/app/Tailscale"
+  export CURL_SUCCEED_HOSTS="override-peer.ts.net"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://override-peer.ts.net:11434" ]
+}
+
 @test "tailscale: peers and mDNS hosts are both discovered and merged" {
   export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
@@ -319,6 +347,32 @@ EOF
   setup_curl_mock
   source "$SCRIPT"
   [ "$OLLAMA_HOSTS" = "http://localhost:11434" ]
+}
+
+# ===========================================================================
+# macOS mDNS fallback (dns-sd) — Linux box can't run real dns-sd, so the parser
+# is unit-tested against a mock emitting documented `dns-sd -B` output. The
+# avahi-vs-dns-sd selection and live behavior are validated on macOS.
+# ===========================================================================
+
+@test "mDNS dns-sd fallback: parses _workstation Add rows into .local hostnames" {
+  # Pin OLLAMA_HOST so sourcing skips discovery (avoids any real avahi-browse on
+  # this box); then exercise the dns-sd parser directly.
+  export OLLAMA_HOST="http://dummy:11434"
+  cat > "$BATS_TEST_TMPDIR/dns-sd" <<'EOF'
+#!/bin/bash
+printf 'Browsing for _workstation._tcp.local.\n'
+printf 'Timestamp     A/R Flags if Domain Service Type Instance Name\n'
+printf '12:00:00.000  Add 2 en0 local. _workstation._tcp. gx10-a9c0 [aa:bb:cc:dd:ee:ff]\n'
+printf '12:00:00.001  Add 2 en0 local. _workstation._tcp. plainhost\n'
+printf '12:00:00.002  Rmv 2 en0 local. _workstation._tcp. gonehost [11:22:33:44:55:66]\n'
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/dns-sd"
+  export OLLAMA_MDNS_BROWSE_SECS=0
+  source "$SCRIPT"
+  result=$(_discover_mdns_hosts_dnssd)
+  [ "$result" = "gx10-a9c0.local
+plainhost.local" ]
 }
 
 # ===========================================================================

@@ -29,6 +29,13 @@
 #                        Tailscale peers are discovered automatically. Each entry
 #                        is a bare hostname, host:port, or URL.
 #   OLLAMA_DISCOVERY_MAX — cap on candidates probed per discovery source (default 6).
+#   TAILSCALE_BIN      — path/name of the tailscale CLI. Defaults to `tailscale` on
+#                        PATH, then the macOS app bundle
+#                        (/Applications/Tailscale.app/Contents/MacOS/Tailscale).
+#   OLLAMA_MDNS_SERVICE     — (macOS dns-sd fallback) service type to browse
+#                        (default `_workstation._tcp`).
+#   OLLAMA_MDNS_BROWSE_SECS — (macOS dns-sd fallback) browse window in seconds
+#                        (default 2). dns-sd streams until killed.
 #
 # Must NOT read stdin (sourced via llm-utils.sh before INPUT=$(cat) in
 # commit-msg-check.sh). Safe under set -euo pipefail — all fallible commands
@@ -45,13 +52,69 @@ _OLLAMA_TAB=$'\t'
 # Ollama is picked up, whatever it is named. Capped so a LAN advertising many
 # hosts cannot stall the hook (each candidate costs up to --max-time 2 s of
 # curl probe time on a cache miss). Override the cap with OLLAMA_DISCOVERY_MAX.
+#
+# Linux uses avahi-browse (-t terminates, fully parseable). macOS has no avahi;
+# its dns-sd has no "all services" flag and streams until killed, so the fallback
+# browses one service type for a bounded window and derives each host's .local
+# name. Default service _workstation._tcp — what avahi-advertising Ollama boxes
+# expose; macOS hosts advertise other types, so set OLLAMA_MDNS_SERVICE for them.
 _discover_mdns_hosts() {
-  command -v avahi-browse >/dev/null 2>&1 || return 0
   local max="${OLLAMA_DISCOVERY_MAX:-6}"
-  avahi-browse -atrp 2>/dev/null \
-    | awk -F';' '$1 == "=" && $7 != "" { print $7 }' \
-    | sort -u \
-    | head -n "$max"
+  if command -v avahi-browse >/dev/null 2>&1; then
+    avahi-browse -atrp 2>/dev/null \
+      | awk -F';' '$1 == "=" && $7 != "" { print $7 }' \
+      | sort -u \
+      | head -n "$max"
+    return 0
+  fi
+  command -v dns-sd >/dev/null 2>&1 || return 0
+  { _discover_mdns_hosts_dnssd | sort -u | head -n "$max"; } 2>/dev/null || true
+}
+
+# Run a streaming dns-sd browse for a bounded window, then stop it. dns-sd never
+# exits on its own, so background it, wait the window, kill. Always returns 0 —
+# the kill/wait must not trip `set -e` in the sourcing hook.
+_dnssd_browse() {
+  local secs="$1" svc="$2" pid
+  dns-sd -B "$svc" local. &
+  pid=$!
+  sleep "$secs"
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  return 0
+}
+
+# macOS mDNS: turn `dns-sd -B` "Add" rows into <host>.local names. The instance
+# name is fields 7..end (it may contain spaces); for _workstation the avahi
+# convention is "<host> [<mac>]", so strip a trailing " [..]" and append .local.
+_discover_mdns_hosts_dnssd() {
+  local secs="${OLLAMA_MDNS_BROWSE_SECS:-2}"
+  local svc="${OLLAMA_MDNS_SERVICE:-_workstation._tcp}"
+  _dnssd_browse "$secs" "$svc" \
+    | awk '/ Add / { s=""; for (i=7;i<=NF;i++) s=s (i>7?" ":"") $i; if (s!="") print s }' \
+    | sed -E 's/[[:space:]]*\[[0-9A-Fa-f:]+\][[:space:]]*$//' \
+    | sed -E 's/[[:space:]]+$//' \
+    | awk 'NF { print $0 ".local" }'
+}
+
+# Resolve the tailscale CLI. Order: $TAILSCALE_BIN override → on PATH → the macOS
+# GUI app bundle. The Mac App Store / standalone Tailscale.app ships its CLI at
+# /Applications/Tailscale.app/Contents/MacOS/Tailscale and does NOT add it to
+# PATH, so a bare `command -v tailscale` silently misses it on macOS. Empty
+# output (return 1) means no usable CLI was found.
+_tailscale_bin() {
+  if [ -n "${TAILSCALE_BIN:-}" ]; then
+    if command -v "$TAILSCALE_BIN" >/dev/null 2>&1 || [ -x "$TAILSCALE_BIN" ]; then
+      printf '%s' "$TAILSCALE_BIN"; return 0
+    fi
+    return 1
+  fi
+  if command -v tailscale >/dev/null 2>&1; then
+    printf 'tailscale'; return 0
+  fi
+  local mac_app="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+  [ -x "$mac_app" ] && { printf '%s' "$mac_app"; return 0; }
+  return 1
 }
 
 # Discover online Tailscale peers by their MagicDNS FQDN. Same essence-driven
@@ -60,10 +123,11 @@ _discover_mdns_hosts() {
 # nodes) are ignored. Requires the tailscale CLI + jq; silently skipped if
 # either is missing. This removes any need to hardcode off-LAN hostnames.
 _discover_tailscale_hosts() {
-  command -v tailscale >/dev/null 2>&1 || return 0
+  local ts
+  ts=$(_tailscale_bin) || return 0
   command -v jq >/dev/null 2>&1 || return 0
   local max="${OLLAMA_DISCOVERY_MAX:-6}"
-  tailscale status --json 2>/dev/null \
+  "$ts" status --json 2>/dev/null \
     | jq -r '.Peer[]? | select(.Online == true) | select(.DNSName != "") | .DNSName' 2>/dev/null \
     | sed 's/\.$//' \
     | sort -u \
