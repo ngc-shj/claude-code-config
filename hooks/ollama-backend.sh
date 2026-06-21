@@ -63,21 +63,27 @@ _discover_mdns_hosts() {
     | head -n "$max"
 }
 
-# Resolve the tailscale CLI. Order: $TAILSCALE_BIN override → on PATH → the macOS
-# GUI app bundle. The Mac App Store / standalone Tailscale.app ships its CLI at
-# /Applications/Tailscale.app/Contents/MacOS/Tailscale and does NOT add it to
-# PATH, so a bare `command -v tailscale` silently misses it on macOS. Empty
-# output (return 1) means no usable CLI was found.
+# Resolve the tailscale CLI to an executable we can invoke from this function.
+# Order: $TAILSCALE_BIN override → an on-disk binary on PATH → the macOS GUI app
+# bundle. Two macOS gotchas drive this:
+#  1. Tailscale.app ships its CLI at /Applications/Tailscale.app/Contents/MacOS/
+#     Tailscale and does NOT add it to PATH; users commonly `alias tailscale` to
+#     it instead.
+#  2. `command -v tailscale` returns success for that alias, but a quoted call
+#     (`"$ts" status`) does NOT expand aliases and there is no real binary, so it
+#     fails silently. We therefore use `type -P` (on-disk binary path only,
+#     ignoring aliases/functions) and fall back to the app bundle's absolute path.
+# Empty output (return 1) means no usable CLI was found.
 _tailscale_bin() {
   if [ -n "${TAILSCALE_BIN:-}" ]; then
-    if command -v "$TAILSCALE_BIN" >/dev/null 2>&1 || [ -x "$TAILSCALE_BIN" ]; then
+    if [ -x "$TAILSCALE_BIN" ] || command -v "$TAILSCALE_BIN" >/dev/null 2>&1; then
       printf '%s' "$TAILSCALE_BIN"; return 0
     fi
     return 1
   fi
-  if command -v tailscale >/dev/null 2>&1; then
-    printf 'tailscale'; return 0
-  fi
+  local p
+  p=$(type -P tailscale 2>/dev/null)
+  [ -n "$p" ] && { printf '%s' "$p"; return 0; }
   local mac_app="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
   [ -x "$mac_app" ] && { printf '%s' "$mac_app"; return 0; }
   return 1
