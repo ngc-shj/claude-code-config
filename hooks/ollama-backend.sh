@@ -32,10 +32,6 @@
 #   TAILSCALE_BIN      — path/name of the tailscale CLI. Defaults to `tailscale` on
 #                        PATH, then the macOS app bundle
 #                        (/Applications/Tailscale.app/Contents/MacOS/Tailscale).
-#   OLLAMA_MDNS_SERVICE     — (macOS dns-sd fallback) service type to browse
-#                        (default `_workstation._tcp`).
-#   OLLAMA_MDNS_BROWSE_SECS — (macOS dns-sd fallback) browse window in seconds
-#                        (default 2). dns-sd streams until killed.
 #
 # Must NOT read stdin (sourced via llm-utils.sh before INPUT=$(cat) in
 # commit-msg-check.sh). Safe under set -euo pipefail — all fallible commands
@@ -53,48 +49,18 @@ _OLLAMA_TAB=$'\t'
 # hosts cannot stall the hook (each candidate costs up to --max-time 2 s of
 # curl probe time on a cache miss). Override the cap with OLLAMA_DISCOVERY_MAX.
 #
-# Linux uses avahi-browse (-t terminates, fully parseable). macOS has no avahi;
-# its dns-sd has no "all services" flag and streams until killed, so the fallback
-# browses one service type for a bounded window and derives each host's .local
-# name. Default service _workstation._tcp — what avahi-advertising Ollama boxes
-# expose; macOS hosts advertise other types, so set OLLAMA_MDNS_SERVICE for them.
+# Linux only: uses avahi-browse. macOS has no avahi, and its dns-sd
+# service-browse does not reliably surface plain Ollama hosts (they often publish
+# only an mDNS A record, not a browsable service type). On macOS, set
+# OLLAMA_EXTRA_HOSTS to the host name(s) instead — the OS resolver answers
+# `.local` for the probe even when service-browse does not see the host.
 _discover_mdns_hosts() {
+  command -v avahi-browse >/dev/null 2>&1 || return 0
   local max="${OLLAMA_DISCOVERY_MAX:-6}"
-  if command -v avahi-browse >/dev/null 2>&1; then
-    avahi-browse -atrp 2>/dev/null \
-      | awk -F';' '$1 == "=" && $7 != "" { print $7 }' \
-      | sort -u \
-      | head -n "$max"
-    return 0
-  fi
-  command -v dns-sd >/dev/null 2>&1 || return 0
-  { _discover_mdns_hosts_dnssd | sort -u | head -n "$max"; } 2>/dev/null || true
-}
-
-# Run a streaming dns-sd browse for a bounded window, then stop it. dns-sd never
-# exits on its own, so background it, wait the window, kill. Always returns 0 —
-# the kill/wait must not trip `set -e` in the sourcing hook.
-_dnssd_browse() {
-  local secs="$1" svc="$2" pid
-  dns-sd -B "$svc" local. &
-  pid=$!
-  sleep "$secs"
-  kill "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
-  return 0
-}
-
-# macOS mDNS: turn `dns-sd -B` "Add" rows into <host>.local names. The instance
-# name is fields 7..end (it may contain spaces); for _workstation the avahi
-# convention is "<host> [<mac>]", so strip a trailing " [..]" and append .local.
-_discover_mdns_hosts_dnssd() {
-  local secs="${OLLAMA_MDNS_BROWSE_SECS:-2}"
-  local svc="${OLLAMA_MDNS_SERVICE:-_workstation._tcp}"
-  _dnssd_browse "$secs" "$svc" \
-    | awk '/ Add / { s=""; for (i=7;i<=NF;i++) s=s (i>7?" ":"") $i; if (s!="") print s }' \
-    | sed -E 's/[[:space:]]*\[[0-9A-Fa-f:]+\][[:space:]]*$//' \
-    | sed -E 's/[[:space:]]+$//' \
-    | awk 'NF { print $0 ".local" }'
+  avahi-browse -atrp 2>/dev/null \
+    | awk -F';' '$1 == "=" && $7 != "" { print $7 }' \
+    | sort -u \
+    | head -n "$max"
 }
 
 # Resolve the tailscale CLI. Order: $TAILSCALE_BIN override → on PATH → the macOS

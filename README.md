@@ -184,10 +184,11 @@ across them:
   from two sources and never hardcoded: mDNS-advertised LAN hosts **and** online
   Tailscale peers. Any host that answers `/api/version` joins the pool,
   regardless of hostname.
-- **Cross-platform discovery** — mDNS uses `avahi-browse` on Linux and falls back
-  to `dns-sd` on macOS (browses `OLLAMA_MDNS_SERVICE`, default `_workstation._tcp`,
-  for `OLLAMA_MDNS_BROWSE_SECS`, default 2s; macOS hosts advertising other types
-  need `OLLAMA_MDNS_SERVICE` set). The Tailscale CLI is resolved from PATH, then
+- **Cross-platform discovery** — mDNS auto-discovery uses `avahi-browse` (Linux
+  only). macOS has no avahi and its `dns-sd` service-browse does not reliably
+  surface plain Ollama hosts, so on macOS set `OLLAMA_EXTRA_HOSTS` to your LAN
+  host name(s) — the OS resolver answers `.local`, so the probe reaches them
+  anyway. Tailscale discovery works on both: the CLI is resolved from PATH, then
   the macOS app bundle (`/Applications/Tailscale.app/Contents/MacOS/Tailscale`),
   then `$TAILSCALE_BIN`.
 - **Model-aware routing** — servers do **not** have to host the same models. At
