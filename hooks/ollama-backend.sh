@@ -29,6 +29,9 @@
 #                        Tailscale peers are discovered automatically. Each entry
 #                        is a bare hostname, host:port, or URL.
 #   OLLAMA_DISCOVERY_MAX — cap on candidates probed per discovery source (default 6).
+#   TAILSCALE_BIN      — path/name of the tailscale CLI. Defaults to `tailscale` on
+#                        PATH, then the macOS app bundle
+#                        (/Applications/Tailscale.app/Contents/MacOS/Tailscale).
 #
 # Must NOT read stdin (sourced via llm-utils.sh before INPUT=$(cat) in
 # commit-msg-check.sh). Safe under set -euo pipefail — all fallible commands
@@ -45,6 +48,12 @@ _OLLAMA_TAB=$'\t'
 # Ollama is picked up, whatever it is named. Capped so a LAN advertising many
 # hosts cannot stall the hook (each candidate costs up to --max-time 2 s of
 # curl probe time on a cache miss). Override the cap with OLLAMA_DISCOVERY_MAX.
+#
+# Linux only: uses avahi-browse. macOS has no avahi, and its dns-sd
+# service-browse does not reliably surface plain Ollama hosts (they often publish
+# only an mDNS A record, not a browsable service type). On macOS, set
+# OLLAMA_EXTRA_HOSTS to the host name(s) instead — the OS resolver answers
+# `.local` for the probe even when service-browse does not see the host.
 _discover_mdns_hosts() {
   command -v avahi-browse >/dev/null 2>&1 || return 0
   local max="${OLLAMA_DISCOVERY_MAX:-6}"
@@ -54,16 +63,43 @@ _discover_mdns_hosts() {
     | head -n "$max"
 }
 
+# Resolve the tailscale CLI to an executable we can invoke from this function.
+# Order: $TAILSCALE_BIN override → an on-disk binary on PATH → the macOS GUI app
+# bundle. Two macOS gotchas drive this:
+#  1. Tailscale.app ships its CLI at /Applications/Tailscale.app/Contents/MacOS/
+#     Tailscale and does NOT add it to PATH; users commonly `alias tailscale` to
+#     it instead.
+#  2. `command -v tailscale` returns success for that alias, but a quoted call
+#     (`"$ts" status`) does NOT expand aliases and there is no real binary, so it
+#     fails silently. We therefore use `type -P` (on-disk binary path only,
+#     ignoring aliases/functions) and fall back to the app bundle's absolute path.
+# Empty output (return 1) means no usable CLI was found.
+_tailscale_bin() {
+  if [ -n "${TAILSCALE_BIN:-}" ]; then
+    if [ -x "$TAILSCALE_BIN" ] || command -v "$TAILSCALE_BIN" >/dev/null 2>&1; then
+      printf '%s' "$TAILSCALE_BIN"; return 0
+    fi
+    return 1
+  fi
+  local p
+  p=$(type -P tailscale 2>/dev/null)
+  [ -n "$p" ] && { printf '%s' "$p"; return 0; }
+  local mac_app="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+  [ -x "$mac_app" ] && { printf '%s' "$mac_app"; return 0; }
+  return 1
+}
+
 # Discover online Tailscale peers by their MagicDNS FQDN. Same essence-driven
 # model as mDNS — a peer is only kept downstream if it answers /api/version, so
 # probing the iPhone or a VPS is harmless. Peers without a DNSName (funnel infra
 # nodes) are ignored. Requires the tailscale CLI + jq; silently skipped if
 # either is missing. This removes any need to hardcode off-LAN hostnames.
 _discover_tailscale_hosts() {
-  command -v tailscale >/dev/null 2>&1 || return 0
+  local ts
+  ts=$(_tailscale_bin) || return 0
   command -v jq >/dev/null 2>&1 || return 0
   local max="${OLLAMA_DISCOVERY_MAX:-6}"
-  tailscale status --json 2>/dev/null \
+  "$ts" status --json 2>/dev/null \
     | jq -r '.Peer[]? | select(.Online == true) | select(.DNSName != "") | .DNSName' 2>/dev/null \
     | sed 's/\.$//' \
     | sort -u \

@@ -182,8 +182,15 @@ across them:
 
 - **Zero-config, name-independent discovery** — servers are found automatically
   from two sources and never hardcoded: mDNS-advertised LAN hosts **and** online
-  Tailscale peers (via the `tailscale` CLI). Any host that answers `/api/version`
-  joins the pool, regardless of hostname.
+  Tailscale peers. Any host that answers `/api/version` joins the pool,
+  regardless of hostname.
+- **Cross-platform discovery** — mDNS auto-discovery uses `avahi-browse` (Linux
+  only). macOS has no avahi and its `dns-sd` service-browse does not reliably
+  surface plain Ollama hosts, so on macOS set `OLLAMA_EXTRA_HOSTS` to your LAN
+  host name(s) — the OS resolver answers `.local`, so the probe reaches them
+  anyway. Tailscale discovery works on both: the CLI is resolved from PATH, then
+  the macOS app bundle (`/Applications/Tailscale.app/Contents/MacOS/Tailscale`),
+  then `$TAILSCALE_BIN`.
 - **Model-aware routing** — servers do **not** have to host the same models. At
   discovery each server's `/api/tags` inventory is cached, and a request is
   routed (round-robin) only among servers that actually have the requested
