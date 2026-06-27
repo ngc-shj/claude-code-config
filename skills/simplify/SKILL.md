@@ -73,6 +73,14 @@ Why this matters: a literal pattern search only finds adoption gaps that share t
 
 Apply this to every helper extracted in the current session — once a helper is created, immediately invert the search to confirm adoption coverage.
 
+**Value-reemission sweep (security-boundary refactors)**: when the helper masks, sanitizes, redacts, or validates a *value* (a URL, a secret, a token, PII, a header), the inverted search from the helper's call sites is NOT sufficient — the raw value can leak through a path that never calls the helper. Add a second pass that greps for every site that *logs, audits, serializes, or returns* the value, independent of whether it calls the helper:
+
+- Audit / structured-log sinks that embed the value in a metadata field (e.g. `logAudit({ metadata: { url } })`, `logger.info({ token })`) — these are not call sites of the masking helper, so the inverted search skips them.
+- Response bodies and serialized payloads that echo the value back.
+- Error messages and exception payloads that interpolate the value.
+
+For each such site, decide whether the value must be masked there too. The recurring miss: a value masked at its display call sites still leaks raw into audit-log metadata at unrelated sinks, and audit logs commonly flow to an external SIEM — so a credential embedded in a URL (`user:pass@host`) leaves the trust boundary. Grep the value's identifier across all log/audit/serialize/return surfaces, not just the helper's primitive.
+
 ### Meta-pattern generalization step
 
 After fixing N specific findings in a session, step back and ask: "each finding is an instance of what broader meta-pattern?" Then search for other instances of that same meta-pattern.
