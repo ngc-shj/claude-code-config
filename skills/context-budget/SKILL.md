@@ -64,7 +64,9 @@ done
 
 ## Step 2: MCP Inventory (Shell Only)
 
-MCP tool schemas are the single largest context driver (~500 tokens per tool). Detect configured servers from every source Claude Code reads.
+MCP tool schemas are a major context driver (~500 tokens per tool). Detect configured servers from every source Claude Code reads.
+
+> **Tool Search caveat.** When the harness defers tool definitions (only `name` + `description` load up front; the JSON schema loads on demand at first call), the ~500 tokens/tool figure is an **upper bound**, not the steady-state cost. With deferral active, the always-loaded cost per tool is just its name+description; only schemas of tools actually invoked in the session add their full weight. Report MCP overhead as a range — name+description floor vs. all-schemas-loaded ceiling — rather than assuming every schema is resident.
 
 ```bash
 # Project-level .mcp.json
@@ -153,7 +155,7 @@ Verbose mode (`--verbose` or "詳細" requested): additionally print the per-fil
 
 ## Best Practices
 
-- **MCP is the biggest lever** — each tool schema costs ~500 tokens. A 30-tool server alone exceeds most skill collections.
+- **MCP is the biggest lever** — each tool schema costs ~500 tokens. A 30-tool server alone exceeds most skill collections. With Tool Search deferral active (see Step 2), that ~500/tool is a ceiling, not the resident cost — but a large server still inflates the name+description floor that *always* loads, so trimming unused servers still pays off.
 - **Agent descriptions always load** — even agents never invoked in a session contribute their description to every Task call.
 - **Hooks are free** — they execute but do not consume context. Prefer hooks over skills when the work is deterministic shell logic.
 - **Audit after each additive change** — run this skill after adding a skill, rule, agent, or MCP server to catch creep early.
