@@ -2,7 +2,7 @@
 # Tests for check-new-code-untested.sh (RT6).
 #
 # v1 detects new public/exported symbols added in diff `+` lines of
-# non-test source files (TS/JS, Python, Go, Rust) and flags Major when
+# non-test source files (TS/JS, Python, Go, Rust, Swift) and flags Major when
 # no test file appears anywhere in the diff. Loose mode: any test file
 # touched diff-wide satisfies the check.
 
@@ -153,6 +153,41 @@ EOF
   [[ "$output" == *"PublicStruct"* ]]
   [[ "$output" == *"PublicEnum"* ]]
   [[ "$output" != *"private_rust_fn"* ]]
+}
+
+@test "RT6: Swift public/open decls fire; internal/private skipped" {
+  init_with Sources/Vault.swift Tests/ExistingTests.swift
+  cat > "$WORK/Sources/Vault.swift" <<'EOF'
+import Foundation
+public func unwrapKey(_ data: Data) -> Data { return data }
+internal func helperOnly() {}
+private func hiddenFn() {}
+public var sharedToken: String = ""
+public let buildID = "1"
+public struct VaultContext {}
+open class KeyStore {}
+EOF
+  (cd "$WORK" && git add -A && git commit -qm "add swift exports")
+  run bash -c "cd '$WORK' && bash '$HOOK' HEAD~1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"unwrapKey"* ]]
+  [[ "$output" == *"sharedToken"* ]]
+  [[ "$output" == *"buildID"* ]]
+  [[ "$output" == *"VaultContext"* ]]
+  [[ "$output" == *"KeyStore"* ]]
+  [[ "$output" != *"helperOnly"* ]]
+  [[ "$output" != *"hiddenFn"* ]]
+}
+
+@test "RT6: Swift *Tests.swift in diff satisfies the check" {
+  init_with Sources/Vault.swift Tests/ExistingTests.swift
+  printf 'import Foundation\npublic func unwrapKey(_ d: Data) -> Data { d }\n' > "$WORK/Sources/Vault.swift"
+  printf 'import XCTest\nfinal class VaultTests: XCTestCase { func testU() {} }\n' > "$WORK/Tests/VaultTests.swift"
+  (cd "$WORK" && git add -A && git commit -qm "swift export with test")
+  run bash -c "cd '$WORK' && bash '$HOOK' HEAD~1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"test file diff present"* ]]
+  [[ "$output" == *"unwrapKey"* ]]
 }
 
 @test "RT6: test files in the changed source are not scanned for exports" {

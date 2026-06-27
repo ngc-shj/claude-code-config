@@ -20,6 +20,12 @@
 #   - Python: top-level `def NAME(` / `class NAME(`
 #            (private `_name` skipped per PEP 8 convention)
 #   - Go:    `func (recv) NAME(` / `func NAME(` where NAME is capitalized
+#   - Swift: `public`/`open` `func`/`var`/`let`/`class`/`struct`/`enum`/
+#            `actor`/`protocol NAME` (only externally-visible decls;
+#            `internal` default / `private` / `fileprivate` are skipped).
+#            Swift test files: `*Tests.swift` / `*Test.swift` and files
+#            under `Tests/` (XCTest / Swift Testing). Generated Swift
+#            (`*.generated.swift` / `*.gen.swift`) is excluded.
 #            (Go's export convention), `type NAME (struct|interface)`
 #   - Rust:  `pub (async )?fn NAME`, `pub (struct|trait|enum) NAME`
 #
@@ -112,11 +118,11 @@ git rev-parse --quiet --verify "$BASE_REF" >/dev/null 2>&1 || {
   exit 1
 }
 
-SOURCE_EXT_RE='\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs)$'
+SOURCE_EXT_RE='\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|swift)$'
 EXCLUDE_PATH_RE='^(.+/)?(migrations?/|migrate/|versions/|vendor/|node_modules/)|\.d\.ts$|\.generated\.|_generated\.|\.gen\.|(^|/)types?/'
 [ -n "${EXTRA_EXCLUDE_PATH_RE:-}" ] && EXCLUDE_PATH_RE="${EXCLUDE_PATH_RE}|${EXTRA_EXCLUDE_PATH_RE}"
 
-TEST_FILE_RE='(^|/)(tests?|__tests__|spec|specs)/|(\.test|\.spec|_test|_spec)\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs)$|(^|/)test_[^/]+\.py$'
+TEST_FILE_RE='(^|/)([Tt]ests?|__tests__|[Ss]pecs?)/|(\.test|\.spec|_test|_spec)\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs)$|(^|/)test_[^/]+\.py$|[A-Za-z0-9_]+Tests?\.swift$'
 [ -n "${EXTRA_TEST_FILE_RE:-}" ] && TEST_FILE_RE="${TEST_FILE_RE}|${EXTRA_TEST_FILE_RE}"
 
 echo "=== New-Code-Untested Check (RT6) ==="
@@ -204,6 +210,11 @@ git diff "$BASE_REF...HEAD" --unified=0 2>/dev/null \
           else if (file ~ /\.go$/ && content ~ /^type[[:space:]]+[A-Z][A-Za-z0-9_]*[[:space:]]+(struct|interface)/) kind = "go-type"
           else if (file ~ /\.rs$/ && content ~ /^[[:space:]]*pub[[:space:]]+(async[[:space:]]+)?fn[[:space:]]+/) kind = "rs-fn"
           else if (file ~ /\.rs$/ && content ~ /^[[:space:]]*pub[[:space:]]+(struct|trait|enum)[[:space:]]+/) kind = "rs-ty"
+          # Swift: `public`/`open` declarations. Function/type/member API
+          # surface. `private`/`fileprivate`/`internal` (the default) are
+          # not externally visible, so only `public`/`open` count.
+          else if (file ~ /\.swift$/ && content ~ /^[[:space:]]*(public|open)[[:space:]]+((static|final|class|convenience|override|mutating|@[A-Za-z]+[[:space:]]+)[[:space:]]*)*(func|var|let)[[:space:]]+/) kind = "swift-fn"
+          else if (file ~ /\.swift$/ && content ~ /^[[:space:]]*(public|open)[[:space:]]+((final|@[A-Za-z]+[[:space:]]+)[[:space:]]*)*(class|struct|enum|actor|protocol)[[:space:]]+/) kind = "swift-ty"
           else if (extra_re != "" && content ~ extra_re) kind = "extra"
           if (kind != "") {
             gsub(/\t/, " ", content)
@@ -259,6 +270,12 @@ while IFS=$'\t' read -r file lineno kind content; do
       ;;
     rs-ty)
       name=$(printf '%s\n' "$content" | sed -nE 's/^[[:space:]]*pub[[:space:]]+(struct|trait|enum)[[:space:]]+([A-Z][A-Za-z0-9_]*).*/\2/p')
+      ;;
+    swift-fn)
+      name=$(printf '%s\n' "$content" | sed -nE 's/^[[:space:]]*(public|open)[[:space:]]+.*(func|var|let)[[:space:]]+([A-Za-z_][A-Za-z0-9_]*).*/\3/p')
+      ;;
+    swift-ty)
+      name=$(printf '%s\n' "$content" | sed -nE 's/^[[:space:]]*(public|open)[[:space:]]+.*(class|struct|enum|actor|protocol)[[:space:]]+([A-Za-z_][A-Za-z0-9_]*).*/\3/p')
       ;;
     extra)
       name="match"
