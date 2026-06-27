@@ -89,22 +89,22 @@ Task:
    - Edge cases: boundary values, empty inputs, null/undefined
    - Error paths: invalid inputs, failure scenarios
    - Integration: key interactions between components (if applicable)
-3. Run the tests to verify they pass
-4. If tests fail, fix them (max 3 fix iterations)
-5. If tests still fail after 3 iterations, report:
+4. Run the tests to verify they pass
+5. If tests fail, fix them (max 3 fix iterations)
+6. If tests still fail after 3 iterations, report:
    - Which tests failed and why
    - Root cause analysis (test issue vs source code issue)
    - Whether the source code needs fixing (escalate to orchestrator)
-6. Check that test assertions are meaningful (not just "doesn't throw")
-7. Verify test independence (no shared mutable state between tests)
-8. Verify mock-reality consistency:
+7. Check that test assertions are meaningful (not just "doesn't throw")
+8. Verify test independence (no shared mutable state between tests)
+9. Verify mock-reality consistency:
    - Mock return values must match actual API response shapes (read the real type/interface)
    - Mock/spy resets must be in setup/teardown hooks, not inside test bodies
    - Async functions under test must be awaited before assertions
    - Per-test state must use per-test hooks (beforeEach), not once-before-all (beforeAll)
-9. When generating tests: NEVER modify production code to make it easier to test. If the production code uses a safe API variant (e.g., parameterized queries, tagged templates, structured builders), adapt the test mock to match that safe API — do not switch production code to an unsafe escape hatch for testability.
-10. **Denial-path tests must assert the side-effect's absence (RT8)**: when a generated test exercises a gate's *denial* path — an authorization/permission reject (403), rate-limit reject (429), fail-closed (503), or any "request is blocked" case — it MUST assert BOTH the status/outcome AND that the guarded operation did NOT run (e.g. `expect(deleteMock).not.toHaveBeenCalled()` / `toHaveBeenCalledTimes(0)`). A denial test that asserts only the status is vacuously green: if the gate is removed and the mutation proceeds, the test still passes. Never generate a status-only denial test when a mutation spy is in scope.
-11. **Race/concurrency tests must assert both branches occurred (RT4)**: when a generated test asserts a cardinality outcome under concurrency ("exactly one winner", "no double-success", `expect(collisions).toBe(0)`), it MUST also assert that the contested window actually opened — both the success and the failure/contention branch each occurred at least once (`expect(successes).toBeGreaterThan(0)` AND `expect(failures).toBeGreaterThan(0)`). A bare zero-cardinality assertion passes vacuously if a setup error short-circuits every iteration.
+10. When generating tests: NEVER modify production code to make it easier to test. If the production code uses a safe API variant (e.g., parameterized queries, tagged templates, structured builders), adapt the test mock to match that safe API — do not switch production code to an unsafe escape hatch for testability.
+11. **Denial-path tests must assert the side-effect's absence (RT8)** — framework-agnostic: when a generated test exercises a gate's *denial* path — an authorization/permission reject (403), rate-limit reject (429), fail-closed (503), or any "request is blocked" case — it MUST assert BOTH the status/outcome AND that the guarded operation did NOT run. A denial test that asserts only the status is vacuously green: if the gate is removed and the mutation proceeds, the test still passes. Never generate a status-only denial test when a mutation spy/double is in scope. (Illustrative spelling — adapt to the project's framework: Jest/Vitest `expect(deleteMock).not.toHaveBeenCalled()` / `toHaveBeenCalledTimes(0)`; pytest `delete_mock.assert_not_called()`; Go `require.Equal(t, 0, deleteCalls)`.)
+12. **Race/concurrency tests must assert both branches occurred (RT4)** — framework-agnostic: when a generated test asserts a cardinality outcome under concurrency ("exactly one winner", "no double-success", a zero-collision count), it MUST also assert that the contested window actually opened — both the success and the failure/contention branch each occurred at least once. A bare zero-cardinality assertion passes vacuously if a setup error short-circuits every iteration. (Illustrative spelling — Jest/Vitest `expect(collisions).toBe(0)` PLUS `expect(successes).toBeGreaterThan(0)` AND `expect(failures).toBeGreaterThan(0)`; adapt the matcher to the project's framework.)
 
 Output: generated test files with pass/fail status.
 ```
@@ -129,16 +129,19 @@ Review generated tests for completeness:
 
   The output is a set of `[Severity] test-path:line — Problem — Fix` blocks (or `No findings`). Treat Critical/Major findings as mandatory fixes before reporting completion; Minor findings are informational. Remaining unflagged mocks still warrant a manual spot-check against the actual type definitions — the audit is a filter, not a substitute.
 
-- Run the vacuous-test detectors on the generated tests (closes the generate→verify loop — test-gen is the skill that *produces* the tests these hooks later catch in review):
+- Run the vacuous-test detectors on the generated tests (closes the generate→verify loop — test-gen is the skill that *produces* the tests these hooks later catch in review). Pass the **same base ref the skill used to scope the run** (the merge-base / feature-branch point), not the default — the hooks default to `main...HEAD`, so a no-arg call silently sees an empty diff when test-gen ran on specific files while on `main` with no feature branch:
 
   ```bash
+  # BASE_REF = the ref test-gen scoped against (e.g. the merge-base with main).
+  # When test-gen ran on specific files with no branch, stage the new test
+  # files and pass a ref that includes them, else these hooks no-op.
   # RT8 — denial-path test asserts status but not the mutation's absence
-  bash ~/.claude/hooks/check-vacuous-denial.sh
+  bash ~/.claude/hooks/check-vacuous-denial.sh "$BASE_REF"
   # RT4 — race/cardinality test with no both-branches-occurred guard
-  bash ~/.claude/hooks/check-race-vacuous-guard.sh
+  bash ~/.claude/hooks/check-race-vacuous-guard.sh "$BASE_REF"
   ```
 
-  Any finding here is a vacuous test the generator just wrote — fix it before reporting completion (add the missing `.not.toHaveBeenCalled()` / lower-bound guard), do not defer to a later review round. Both hooks are no-ops when the diff has no matching test blocks.
+  Any finding here is a vacuous test the generator just wrote — fix it before reporting completion (add the missing negative / lower-bound assertion), do not defer to a later review round. **Scope caveat**: both hooks are **Jest/Vitest TS/JS only** (v1) and are no-ops for pytest / Go / RSpec / other frameworks — for those, the RT8/RT4 obligations (#10/#11 above) are a manual review of the generated denial/race tests, not a mechanical gate. A clean hook run on a non-JS project means "not checked", not "passed".
 
 If gaps are found, delegate additional test generation to Sonnet.
 
