@@ -7,6 +7,8 @@ Read `./docs/archive/review/[plan-name]-plan.md` and understand the implementati
 Before writing any code, perform the following impact analysis:
 
 1. **Enumerate all code paths**: grep for the target identifiers (e.g., function names, API endpoint paths, message types, and file name patterns) to identify every location that will need changes
+   - **Member-set derivation for universal obligations (R42)**: when the plan declares a control applied to a *class* — "every/all/each X must Y", "no Z without W" — derive the class membership by grepping the primitive that *defines* the class (`grep -rlE '<primitive>' <code roots>`), and reconcile against any list the plan or prompt supplied. A list-vs-code discrepancy is itself a finding, not just a hint. Include indirect members the symbol grep misses: rows reached via parent cascade, operations in raw SQL bypassing the ORM/guard layer, calls through aliased/wrapped services.
+   - **All-test-tree enumeration (R19)**: when the change alters an existing symbol's signature/behavior, additionally `grep -rl <symbol>` across ALL test roots — co-located (`*.test.*` beside source), centralized (`__tests__/` / `test/` / `spec/`), and e2e — and record every tree in the Implementation Checklist. Parallel test trees double-testing the same endpoint are the common silent-regression source (update one, leave a sibling stale ⇒ large surprise regression at the final full-suite re-run).
 2. **Check for duplicate implementations**: Verify there are no parallel implementations of the same feature (e.g., `.js` and `.ts` versions, direct and message-based paths, primary and fallback paths)
 3. **Read related type definitions and constants**: Confirm actual enum values, type shapes, and constant definitions before using them in implementation
 4. **Inventory reusable code**: Run two complementary scanners, then supplement with manual search.
@@ -334,7 +336,7 @@ a clean baseline:
 
 ### Step 2-5: Self-R-Check (Mini Sub-agent Pass)
 
-Before declaring Phase 2 complete, run a focused R-check pass with the same three sub-agents used in Phase 3, but with a narrowed prompt that targets ONLY the Recurring Issue Checklist (R1-R41 + RS*/RT*). Phase 3's Round 1 historically surfaces a large number of findings because Phase 2 has not yet run any R-check — pulling the first R-check into Phase 2 lets Phase 3 act as incremental verification rather than first-pass discovery.
+Before declaring Phase 2 complete, run a focused R-check pass with the same three sub-agents used in Phase 3, but with a narrowed prompt that targets ONLY the Recurring Issue Checklist (R1-R42 + RS*/RT*). Phase 3's Round 1 historically surfaces a large number of findings because Phase 2 has not yet run any R-check — pulling the first R-check into Phase 2 lets Phase 3 act as incremental verification rather than first-pass discovery.
 
 **Pre-step: mechanical R3 propagation check**. Run `bash ~/.claude/hooks/check-propagation.sh [base-ref]` (default base: `main`) before launching the sub-agents. The hook surfaces three categories of unpropagated diff-wide changes — symbol renames (Minor, advisory), constant value changes (Major), and string literal changes (Major). Address its findings or annotate them as deliberate skips before the sub-agent pass; this front-loads the easy R3 wins so the sub-agents can focus on the AST-level R3 cases (signature changes, type renames) the regex tool cannot detect.
 
@@ -381,9 +383,9 @@ You are a [role name] performing a focused self-check of the Phase 2 implementat
 against the Recurring Issue Checklist ONLY.
 
 Scope (rules to check):
-- Functionality expert: R1-R41
-- Security expert: R1-R41 + RS1-RS5
-- Testing expert: R1-R41 + RT1-RT7
+- Functionality expert: R1-R42
+- Security expert: R1-R42 + RS1-RS5
+- Testing expert: R1-R42 + RT1-RT7
 
 Out of scope: novel findings outside the Recurring Issue Checklist — those are Phase 3's
 responsibility, not this self-check.
