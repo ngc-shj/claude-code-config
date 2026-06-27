@@ -385,7 +385,7 @@ against the Recurring Issue Checklist ONLY.
 Scope (rules to check):
 - Functionality expert: R1-R42
 - Security expert: R1-R42 + RS1-RS5
-- Testing expert: R1-R42 + RT1-RT7
+- Testing expert: R1-R42 + RT1-RT8
 
 Out of scope: novel findings outside the Recurring Issue Checklist — those are Phase 3's
 responsibility, not this self-check.
