@@ -103,6 +103,8 @@ Task:
    - Async functions under test must be awaited before assertions
    - Per-test state must use per-test hooks (beforeEach), not once-before-all (beforeAll)
 9. When generating tests: NEVER modify production code to make it easier to test. If the production code uses a safe API variant (e.g., parameterized queries, tagged templates, structured builders), adapt the test mock to match that safe API — do not switch production code to an unsafe escape hatch for testability.
+10. **Denial-path tests must assert the side-effect's absence (RT8)**: when a generated test exercises a gate's *denial* path — an authorization/permission reject (403), rate-limit reject (429), fail-closed (503), or any "request is blocked" case — it MUST assert BOTH the status/outcome AND that the guarded operation did NOT run (e.g. `expect(deleteMock).not.toHaveBeenCalled()` / `toHaveBeenCalledTimes(0)`). A denial test that asserts only the status is vacuously green: if the gate is removed and the mutation proceeds, the test still passes. Never generate a status-only denial test when a mutation spy is in scope.
+11. **Race/concurrency tests must assert both branches occurred (RT4)**: when a generated test asserts a cardinality outcome under concurrency ("exactly one winner", "no double-success", `expect(collisions).toBe(0)`), it MUST also assert that the contested window actually opened — both the success and the failure/contention branch each occurred at least once (`expect(successes).toBeGreaterThan(0)` AND `expect(failures).toBeGreaterThan(0)`). A bare zero-cardinality assertion passes vacuously if a setup error short-circuits every iteration.
 
 Output: generated test files with pass/fail status.
 ```
@@ -126,6 +128,17 @@ Review generated tests for completeness:
   ```
 
   The output is a set of `[Severity] test-path:line — Problem — Fix` blocks (or `No findings`). Treat Critical/Major findings as mandatory fixes before reporting completion; Minor findings are informational. Remaining unflagged mocks still warrant a manual spot-check against the actual type definitions — the audit is a filter, not a substitute.
+
+- Run the vacuous-test detectors on the generated tests (closes the generate→verify loop — test-gen is the skill that *produces* the tests these hooks later catch in review):
+
+  ```bash
+  # RT8 — denial-path test asserts status but not the mutation's absence
+  bash ~/.claude/hooks/check-vacuous-denial.sh
+  # RT4 — race/cardinality test with no both-branches-occurred guard
+  bash ~/.claude/hooks/check-race-vacuous-guard.sh
+  ```
+
+  Any finding here is a vacuous test the generator just wrote — fix it before reporting completion (add the missing `.not.toHaveBeenCalled()` / lower-bound guard), do not defer to a later review round. Both hooks are no-ops when the diff has no matching test blocks.
 
 If gaps are found, delegate additional test generation to Sonnet.
 
