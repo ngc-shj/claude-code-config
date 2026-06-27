@@ -73,7 +73,7 @@ Task:
 1. Read the most relevant files from the discovery results
 2. Based on query type:
    - explanation: Trace the implementation step by step, explain each layer
-   - usage-search: Find all callers, build a dependency graph
+   - usage-search: Find all callers, build a dependency graph. **Derive the set from the defining primitive, not from the discovery keywords.** For "find every X" / "all callers of Y" / "everywhere that does Z", do not answer from the keyword-matched or "obvious" subset of files surfaced in Step 2 — identify the primitive that *defines* membership (the function/decorator/route-export/table/call whose presence makes a site a member) and `grep -rlE '<primitive>' <code roots>` across the whole tree to get the complete set. Then include *indirect* members the symbol grep alone misses: operations reached via a parent cascade, raw queries that bypass the ORM/guard layer, and calls routed through an aliased or wrapped caller. A keyword/path-scoped enumeration silently drops members under non-obvious paths — state the primitive you grepped so the completeness of the set is auditable.
    - architecture: Map the directory structure, identify key patterns
    - location: Pinpoint the exact file, line, and context
    - data-flow: Trace data through each transformation layer
