@@ -73,6 +73,8 @@ Why this matters: a literal pattern search only finds adoption gaps that share t
 
 Apply this to every helper extracted in the current session — once a helper is created, immediately invert the search to confirm adoption coverage.
 
+Migrating a call site to the helper is not automatic once you find it: confirm the site's current behavior is equivalent to the helper's before replacing it. A call site expressed differently (different identifier, different equivalent value, different call shape) may also *behave* differently at a boundary — a nullish vs falsy branch, a different default, a `===` vs `==`. Run the **value-handling diff audit** (below) on each migration candidate, not only on multi-copy extractions. If the site diverges from the helper on any boundary input, the divergence is a finding (one side is buggy), not a mechanical adoption gap — resolve which behavior is correct before migrating.
+
 **Value-reemission sweep (security-boundary refactors)**: when the helper masks, sanitizes, redacts, or validates a *value* (a URL, a secret, a token, PII, a header), the inverted search from the helper's call sites is NOT sufficient — the raw value can leak through a path that never calls the helper. Add a second pass that greps for every site that *logs, audits, serializes, or returns* the value, independent of whether it calls the helper:
 
 - Audit / structured-log sinks that embed the value in a metadata field (e.g. `logAudit({ metadata: { url } })`, `logger.info({ token })`) — these are not call sites of the masking helper, so the inverted search skips them.
@@ -112,6 +114,17 @@ When the repo has parallel implementations of the same logic in separate trees (
 Minimum action: add a mirror-comment block on each side pointing to its counterpart, with explicit wording that any format change requires updating both. Stronger action: shared fixtures, a shared module, or extraction to a published package.
 
 Also confirm: additions on one side (a new constant, a new helper, a new branch in a switch) must land on the other side in the same PR.
+
+### Value-handling diff audit when extracting duplicates
+
+Extracting two or more copies into a single helper is not a mechanical merge — it is a forced comparison that frequently surfaces a latent bug. Before collapsing the copies, diff their condition handling against each other, not just their surface structure:
+
+- **Nullish vs falsy branches**: `x != null ? … : default` vs `x ? … : default` diverge on `0`, `""`, and `false`. One of them is almost always wrong for a numeric floor, a count, or a boolean flag.
+- **Equality strictness**: `===`/`==`, `Object.is`, deep vs reference equality.
+- **Boundary and sentinel values**: zero, empty collection, negative, `NaN`, missing key vs present-but-undefined.
+- **Ordering / short-circuit**: the order operands are checked, and whether one copy has an early return the other lacks.
+
+When the copies differ on any of these, do NOT assume they are "coincidentally equivalent" — a difference means at least one copy is buggy, and the duplication was hiding it. Determine which handling is correct (trace a concrete boundary input through each), unify the helper on the correct one, and treat the correction as a **behavior change, not a refactor**: the previously-wrong copy's fix must be pinned by a test that fails against the old behavior. Report it as a bug fix in the findings, not a silent simplification. Extraction that averages or arbitrarily picks one side's handling ships the bug into both call sites.
 
 ## Step 3: Sonnet Deep Analysis (Sub-agent)
 
@@ -201,6 +214,13 @@ while read -r cmd; do
   echo "Running CI gate locally: $cmd"
   eval "$cmd" || { echo "CI gate failed locally: $cmd"; exit 1; }
 done < <(bash ~/.claude/hooks/extract-ci-checks.sh)
+# Environment-parity caveat: running a gate locally passes it in the LOCAL
+# environment, which carries generated artifacts (ORM/RPC codegen, build output)
+# that a "static"/"no-generate" CI job omits. If this session's refactor moved a
+# check into — or added an import consumed by — a generate-skipping job, the
+# local pass is blind to the CI-only missing-artifact failure. Displace the
+# generated artifact (`mv <codegen-out>{,.bak}`), re-run the gate, restore.
+# See triangulate phase-2 Step 2-1 item 7 environment-parity sub-check.
 
 # 5. User feedback memory cross-check (same mechanism as triangulate Phase 2).
 # Per-project feedback memories at ~/.claude/projects/<slug>/memory/feedback_*.md

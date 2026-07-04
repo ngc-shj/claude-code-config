@@ -187,6 +187,13 @@ while read -r cmd; do
   echo "Running CI gate locally: $cmd"
   eval "$cmd" || { echo "CI gate failed locally: $cmd"; exit 1; }
 done < <(bash ~/.claude/hooks/extract-ci-checks.sh)
+# Environment-parity caveat: a local pass runs in the LOCAL environment, which
+# carries generated artifacts (ORM/RPC codegen, build output) that a "static"/
+# "no-generate" CI job omits. If a generated test file (or a helper it imports)
+# lands in the input set of a generate-skipping job, the local pass is blind to
+# the CI-only missing-artifact failure. Displace the generated artifact
+# (`mv <codegen-out>{,.bak}`), re-run the gate, restore. See triangulate phase-2
+# Step 2-1 item 7 environment-parity sub-check.
 
 # 6. User feedback memory cross-check (same mechanism as triangulate Phase 2).
 # Per-project feedback memories at ~/.claude/projects/<slug>/memory/feedback_*.md
