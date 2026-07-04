@@ -79,6 +79,8 @@ This step prevents: using wrong constant values, missing fallback code paths, le
 
    Record gates that fire on **new files specifically** — these are easy to miss because the gate's pattern is `<all .ts under src/>` and a newly-introduced file silently joins the gate's input set without showing up in any existing reference. The most common class of CI-only gate is a regex grep over the diff that has no equivalent in the local pre-PR script — e.g., a forbidden-pattern check, a basePath/import-shape check, a license-header check. These are the exact gaps this parity diff exists to surface.
 
+   **Environment-parity sub-check (generated-artifact independence)**: CI gate parity guarantees the *same command* runs locally and in CI — it does NOT guarantee the *same environment*. A dev tree always carries generated artifacts (ORM/RPC client codegen, build output, downloaded schemas, vendored types) that a CI job may deliberately skip. When those artifacts are present locally but absent in CI, an identical command diverges on the environment, not the code — and every local pass (full pre-PR, Phase 2-4 verification, all Phase 3 review rounds) is blind to it because the artifact is silently satisfying an import the CI job cannot. Fires whenever a CI job **intentionally omits a generation step** — identify it from a job comment ("pure source/schema grep, no generate"), a missing `generate`/`build` step other jobs run, or a job named/scoped `static`/`lint-only`/`no-build`. For any check newly added to (or newly routed through) such a job, verify it does not import or otherwise depend on a generated artifact. **Verification procedure**: temporarily displace the generated artifact and re-run the job's command, then restore — e.g. `mv node_modules/.prisma/client{,.bak}` (or the project's codegen output dir / build dir) → run the CI command → `mv node_modules/.prisma/client{.bak,}`. If it now fails with a missing-module/missing-artifact error, the check has a hidden generation dependency: make the check pure (source/schema grep only) or move it to a job that runs the generate step. Mandatory when adding a check to a job that advertises "pure static" / "no generate". This is the "same command, different environment" companion to the "CI runs a gate the local script doesn't" gap above.
+
 ### Step 2-2: Implementation (Delegate to Sonnet Sub-agents)
 
 Split the plan's "Implementation steps" into independent batches and delegate to Sonnet sub-agents:
@@ -244,6 +246,14 @@ done < <(bash ~/.claude/hooks/extract-ci-checks.sh)
 # the extractor — the helper is opinionated about GitHub Actions because that
 # is what most projects use, but the Phase 2-4 contract (every CI gate runs
 # locally before declaring done) is platform-agnostic.
+#
+# CAVEAT — running the gate locally passes it in the LOCAL environment, which
+# carries generated artifacts (ORM/RPC codegen, build output) that a "static"/
+# "no-generate" CI job omits. For any check added this Phase that a generate-
+# skipping job runs, apply the Step 2-1 item 7 environment-parity sub-check:
+# displace the generated artifact (e.g. `mv <codegen-out>{,.bak}`), re-run the
+# command, restore. A pass here with the artifact present does NOT prove the
+# check is generation-independent — only the displaced re-run does.
 
 # 7. User feedback memory cross-check.
 # Per-project feedback memories live at ~/.claude/projects/<slug>/memory/feedback_*.md
@@ -342,7 +352,7 @@ Before declaring Phase 2 complete, run a focused R-check pass with the same thre
 
 **Pre-step: mechanical R35 deployment-artifact check**. Run `bash ~/.claude/hooks/check-deployment-artifact.sh [base-ref]` alongside the propagation check. The hook detects deployment artifacts (Dockerfile, K8s manifests, Helm charts, Terraform, CI/CD workflows, IAM/TLS material, IdP metadata, mesh policy CRDs, webhook signing-key config) in the diff, classifies severity Tier-1 (Major) vs Tier-2 (Critical) by path keyword, and warns when no `*-manual-test.md` is added. If the gate fires and no artifact is added, generate the manual-test.md with the required sections (Pre-conditions / Steps / Expected result / Rollback, plus Tier-2 Adversarial scenarios) before proceeding to the sub-agent pass.
 
-**Pre-step: mechanical R2 / RT3 hardcoded-reuse check**. Run `bash ~/.claude/hooks/check-hardcoded-reuse.sh [base-ref]` alongside the propagation and deployment-artifact checks. The hook indexes module-level `const NAME = literal` declarations across unchanged source files and cross-references diff `+` lines for hardcoded values that match an existing constant. String matches surface as Major (precise), numeric matches as Minor (small numbers collide easily). When the hook flags a value, replace the hardcoded literal with an import of the named constant before the sub-agent pass — front-loads the easy R2 / RT3 wins so sub-agents focus on R2 cases the regex tool cannot detect (computed expressions, semantically-equivalent-but-syntactically-different values).
+**Pre-step: mechanical R2 / RT3 hardcoded-reuse check**. Run `bash ~/.claude/hooks/check-hardcoded-reuse.sh [base-ref]` alongside the propagation and deployment-artifact checks. The hook indexes module-level `const NAME = literal` declarations across unchanged source files and cross-references diff `+` lines for hardcoded values that match an existing constant. String matches surface as Major (precise), numeric matches as Minor (small numbers collide easily). When the hook flags a value, first confirm the flagged literal and the named constant share *meaning*, not merely the same bytes (see R2's value-equality-is-not-meaning-equality clause) — a `3600` cache-TTL matching a `3600` clock-skew constant is a coincidence, and importing one for the other couples two independent concepts that will drift silently. Only after that check passes, replace the hardcoded literal with an import of the named constant before the sub-agent pass — front-loads the easy R2 / RT3 wins so sub-agents focus on R2 cases the regex tool cannot detect (computed expressions, semantically-equivalent-but-syntactically-different values). When the value coincides but the concept differs, do NOT replace — keep them separate and note why.
 
 **Pre-step: mechanical RS1 / R30 / R36 line-pattern checks**. Three additional hooks scan diff `+` lines for single-line anti-patterns that don't need codebase context:
 
@@ -384,7 +394,7 @@ against the Recurring Issue Checklist ONLY.
 
 Scope (rules to check):
 - Functionality expert: R1-R42
-- Security expert: R1-R42 + RS1-RS5
+- Security expert: R1-R42 + RS1-RS6
 - Testing expert: R1-R42 + RT1-RT8
 
 Out of scope: novel findings outside the Recurring Issue Checklist — those are Phase 3's
