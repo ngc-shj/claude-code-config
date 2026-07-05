@@ -423,6 +423,14 @@ The orchestrator reviews and applies the drafted entry via the Edit tool. Set `$
 
 End the loop when all agents return "No findings", or the maximum of **10 rounds** is reached.
 
+**Convergence condition for an expanding class (R42 ①b escalation) — mutation-verified CI guard required.** When an R42 class-membership derivation has had its member-set **expand two or more times** across rounds (the accretion signature clause ①b warns about — 1→5→6→10→17 is the canonical case), "all experts return No findings" is NO LONGER a sufficient stop condition on its own. A member-set that grew by accretion is evidence the class boundary was never derived from the true primitive, so the next silently-missed member is likely still unwritten — human review has already demonstrated it cannot see the whole class. The class is only closed when a **mutation-verified CI guard** over the class is green:
+
+- The guard mechanically enumerates the class from its defining primitive (the `A \ B` set-difference from R42 clause ①, runnable in CI — e.g. a `check-<class>-coverage` script) and fails when any member lacks control X.
+- "Mutation-verified" means the guard has been demonstrated able to go **red**: remove control X from one member (or inject the vulnerable primitive into a new site) and confirm the guard fails (RT7 shape b — an authored-but-unproven gate gives false assurance on exactly the invariant it advertises).
+- The guard must be wired into the authoritative gate (CI / pre-push), not merely authored (RT7 shape b — an orphaned check reports PASS by never running; `check-orphaned-checks.sh` covers this shape).
+
+Do not stop at "recommend adding a CI guard" and defer it — for a ≥2×-expanded class the guard IS the convergence artifact, and deferring it repeats the failure where the class stayed open until round 3 because the guard was only ever suggested. Fold guard authoring into the round that would otherwise be the last, and treat guard-green as the termination gate for that class. Record it in the Environment Verification Report / Resolution Status: `R42 class <name>: member-set expanded N× — closed by mutation-verified CI guard <path> (red-proven: <mutation that fails it>), wired in <CI job / pre-push>`.
+
 **Tightening-only skip** (between the natural "no findings" stop and the 10-round cap): the orchestrator MAY skip the next round when ALL of the following hold for every Round-n new finding:
 
 1. The finding's location is inside the **prior round's fix scope** — the file and line range are within or immediately adjacent to changes from Round n-1's commit.
