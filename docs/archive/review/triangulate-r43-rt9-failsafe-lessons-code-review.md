@@ -60,3 +60,28 @@ None.
 
 ## Termination
 Round 1: No findings from any perspective (inline). Tightening-only skip not needed. Loop ends.
+
+---
+
+# Code Review: triangulate-r43-rt9-failsafe-lessons
+Date: 2026-07-11
+Review round: 2 (external adversarial security review)
+
+## Changes from Previous Round
+External security review of the branch raised one Critical finding against the Round-1 state; no other findings; `git diff --check` clean.
+
+## Security Findings
+
+### SX1 Critical: recipient-side verification treated as a confidentiality boundary for privileged payloads — FIXED
+- File: skills/triangulate/phases/phase-3-review.md (Step 3-5 protocol step 1); docs/archive/review/triangulate-r43-rt9-failsafe-lessons-plan.md (C6 verbatim, C6 acceptance, Scenario 1, L2 narrative)
+- Problem: the protocol's illustrative both-satisfying moves listed "enforce the gate at the consumer side" generically. For confidential payloads this is not a confidentiality boundary: the recipient controls the verification code, and the secret has already crossed the boundary on delivery. An orchestrator could approve exactly the R43-Critical widening as a "both-satisfying design".
+- Root cause: over-generalization of the source session's special case, where the receiving code was the platform-injected TRUSTED code of the producer itself (isolated-world content script) — a trusted-endpoint condition the generic example silently dropped.
+- Fix applied: (1) replaced the first move with producer-side recipient authentication before delivery; (2) added an explicit anti-example clause — "For confidential payloads, verification AFTER delivery is NOT a both-satisfying design ... a design whose only gate runs on the recipient is the R43 widening itself"; recipient-side checks demoted to defense-in-depth admissible only for producer-owned trusted endpoints with non-exposing transport; (3) Scenario 1 and the L2 narrative updated to producer-side verification; (4) C6 acceptance criteria updated.
+- Verification: plan-vs-implementation conformance diff MATCH; zero residual "consumer-side" tokens in skill files; install parity ×5 OK.
+- R43 Round-2+ self-check on this fix: the change NARROWS guidance (removes a widening-sanctioning example) — no boundary predicate widened versus Round 1.
+
+## Resolution Status — Round 2
+- SX1 (Critical) — Fixed as above. Contract C6 was amended post-lock (material change to its acceptance criteria); per Go/No-Go rules it flipped to pending and is re-locked with this round's verification.
+
+## Termination
+Round 2: single Critical from external review, fixed and verified; external reviewer reported no other findings. Loop ends pending any further external re-review.
