@@ -304,3 +304,29 @@ Although phase-1's Round 2+ template has an "All obligations from Round 1 remain
 **Scenario 4 (L5)**: A reviewer finds legacy-format rows that predate a fix. Instead of a desk debate, Anti-Deferral item 6 requires a read-only count against the target environment; the entry records `SELECT count(*) ... → 0` and the accept disposition closes with evidence.
 
 **Scenario 5 (L6/L7)**: Three experts return findings; two point at the same line. The orchestrator's mechanical pre-pass joins the json indices, stamps `convergent: functionality+security`, raises the floor to Major, and fixes it first in the round.
+
+## Implementation Checklist
+
+Direct orchestrator implementation (verbatim paste from locked contracts; see deviation log). Anchors verified unique in Round-2 testing review.
+
+- [ ] common-rules.md: R43 row after R42 row (C1)
+- [ ] common-rules.md: footer self-contained list + R43 (C1)
+- [ ] common-rules.md: RT9 row after RT8 row (C2)
+- [ ] common-rules.md: Anti-Deferral items 6, 7 after item 5 (C3, C4)
+- [ ] common-rules.md: Perspective Convergence subsection after Handling [Adjacent] Findings (C5)
+- [ ] common-rules.md: template R43 line after R42 line; bracket line RT1-RT9 (C9)
+- [ ] common-rules.md:105: R1-R42 → R1-R43 (C9)
+- [ ] phase-3-review.md: Step 3-5 tradeoff protocol after Important rules (C6)
+- [ ] phase-3-review.md: Round 2+ R43 boundary-widening bullet (C7)
+- [ ] phase-3-review.md: findings-index bullet in Round 1 AND Round 2+ Requirements (C8)
+- [ ] phase-3-review.md: Step 3-4 mechanical merge pre-pass paragraph (C8)
+- [ ] phase-3-review.md: template +RS6/+RT8/+RT9 lines; (R1-R42)→(R1-R43) ×3; lines 80/90/114/127 (C9)
+- [ ] phase-1-plan.md: findings-index bullet in Round 1 AND Round 2+ Requirements (C8)
+- [ ] phase-1-plan.md: Step 1-5 mechanical merge pre-pass paragraph (C8)
+- [ ] phase-1-plan.md: template +RS6/+RT8/+RT9; (R1-R42)→(R1-R43) ×3; line 225 (C9)
+- [ ] phase-2-coding.md: lines 353/400/401/402 range updates (C9)
+- [ ] SKILL.md: lines 22/24 range updates (C9)
+- [ ] ./install.sh + diff -q parity ×5 files
+- [ ] Range sweep grep → 0; template-completeness greps → 1 each; awk field-count → 6/6
+
+No shared-utility/fingerprint inventory applicable (markdown-only, config-only repo, no CI config → CI gate parity n/a; verified no .github/workflows in repo).

@@ -123,6 +123,7 @@ Requirements:
 - Do not duplicate issues already caught by local LLM pre-screening
 - **Project context obligation**: If the project context above is `config-only` or test infrastructure is `none`, do NOT raise Major/Critical findings recommending the addition of automated tests, CI/CD, or test framework setup. Such recommendations are downgraded to Minor informational notes only. Recommending the introduction of a unit-test framework or CI pipeline for a config-only repo that has none is over-engineering and wastes review rounds.
 - If there are no findings, explicitly state "No findings"
+- After your findings and the Recurring Issue Check, append a machine-readable index of your findings as a fenced json code block: a JSON array with one element per finding — {"id": "F1", "severity": "Critical"|"Major"|"Minor", "title": "<short title>", "file": <"path" or null>, "line": <number or null>, "adjacent": <true|false>, "escalate": <true|false|null>} — or [] when you report "No findings". `file` is null when the finding has no concrete source-file target (typical for plan-prose findings). `escalate`: false = Critical finding assessed and not escalated (Security expert), true = escalation requested, null = not applicable (non-Critical finding, or non-Security expert). The prose finding remains authoritative; the index is a merge/tracking aid and must list exactly the findings your prose reports (no extras, no omissions).
 
 Plan-specific obligations:
 - Account for all downstream invariants of schema changes. When adding a new enum value, constant, or type, search for tests that enumerate all values of that type and check what invariants they enforce. Common patterns to check:
@@ -180,6 +181,7 @@ Requirements:
 - Flag out-of-scope issues with potential impact as: [Adjacent] Severity: Problem — this may overlap with [other expert]'s scope
 - Classify each finding by severity using YOUR expert-specific criteria
 - If there are no findings, explicitly state "No findings"
+- After your findings and the Recurring Issue Check, append a machine-readable index of your findings as a fenced json code block: a JSON array with one element per finding — {"id": "F1", "severity": "Critical"|"Major"|"Minor", "title": "<short title>", "file": <"path" or null>, "line": <number or null>, "adjacent": <true|false>, "escalate": <true|false|null>} — or [] when you report "No findings". `file` is null when the finding has no concrete source-file target (typical for plan-prose findings). `escalate`: false = Critical finding assessed and not escalated (Security expert), true = escalation requested, null = not applicable (non-Critical finding, or non-Security expert). The prose finding remains authoritative; the index is a merge/tracking aid and must list exactly the findings your prose reports (no extras, no omissions).
 
 All obligations from Round 1 remain in effect (Plan-specific obligations, severity criteria, etc.).
 
@@ -189,6 +191,8 @@ For Security expert only — append to each Critical finding:
 ```
 
 ### Step 1-5: Save Review Results and Deduplicate
+
+**Mechanical merge pre-pass (before the Ollama call)**: parse each expert's fenced json findings index and join entries across experts on (same file, line within ±5, similar title/root cause). Use the join to (a) seed deduplication, (b) detect perspective convergence and stamp the merged finding's severity floor per "Perspective Convergence as a Severity Signal" (Common Rules), and (c) carry finding IDs and statuses across rounds without re-parsing prose. The Ollama merge-findings call remains the prose merger; when Ollama is unavailable, this json join IS the fallback dedup skeleton. A missing or malformed index (or one that disagrees with the expert's prose findings) is returned to the expert for revision — same contract as a missing Recurring Issue Check section.
 
 First, save each agent's raw output to temporary files, then use local LLM for deduplication (zero Claude tokens):
 
@@ -222,7 +226,7 @@ routinely sits in the 90-300 s range). Manual fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R42 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R43 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -253,20 +257,21 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R42)
+- ... (R1-R43)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R42)
+- ... (R1-R43)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 - RS4: [status]
 - RS5: [status]
+- RS6: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R42)
+- ... (R1-R43)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -274,6 +279,8 @@ Review round: [nth]
 - RT5: [status]
 - RT6: [status]
 - RT7: [status]
+- RT8: [status]
+- RT9: [status]
 ```
 
 Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollama:

@@ -77,7 +77,7 @@ Launch the same three roles in parallel as the plan review.
 
 **Round 1 (incremental verification on top of Phase 2 self-R-check baseline):**
 
-Note: Phase 2 Step 2-5 already ran a focused R1-R42 (+ RS*/RT*) self-check. Round 1 here
+Note: Phase 2 Step 2-5 already ran a focused R1-R43 (+ RS*/RT*) self-check. Round 1 here
 is therefore incremental verification on top of that baseline — surface novel findings
 outside the Recurring Issue Checklist, cross-cutting issues, and any R-rule miss the
 self-check pass overlooked. Do NOT redo the rote R-check pass that Phase 2 already
@@ -87,7 +87,7 @@ for issues those outputs missed.
 ```
 You are a [role name].
 Review the code on the current branch from a [perspective] perspective.
-Phase 2 already ran a focused R1-R42 self-check; treat this round as incremental
+Phase 2 already ran a focused R1-R43 self-check; treat this round as incremental
 verification, surfacing novel issues and any R-rule miss the self-check overlooked.
 
 Scope: [In-scope items for this expert]
@@ -111,7 +111,7 @@ Ollama seed findings (your perspective only — verify each, do not re-report as
      Insert: "Seed unavailable or truncated — perform full-diff review. Read `git diff main...HEAD` directly for this perspective."
 
  (b) File ends with sentinel AND contains exactly `No findings` followed by the sentinel:
-     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R42 Recurring Issue Check using targeted greps."
+     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R43 Recurring Issue Check using targeted greps."
 
  (c) File ends with sentinel AND contains finding entries:
      Insert the finding entries verbatim (stripping only the trailing `## END-OF-ANALYSIS` line).
@@ -124,7 +124,7 @@ Seed trust advisory (MANDATORY):
 Verification contract (MANDATORY):
 - For each seed finding, run targeted verification: `grep -n <symbol> <file>` or `Read <file>` with `offset`/`limit` scoped to the reported line range (±20 lines context). Do NOT read entire files.
 - Accept only seed findings you independently verify. Reject and note any seed finding that does not reproduce.
-- After processing seeds, perform your R1-R42 Recurring Issue Check using targeted greps (not full-file reads) to catch patterns the seed missed.
+- After processing seeds, perform your R1-R43 Recurring Issue Check using targeted greps (not full-file reads) to catch patterns the seed missed.
 - You MAY read a full file only when the seed is empty OR when targeted verification is inconclusive; record the file+reason in your output.
 
 Seed Finding Disposition section (MANDATORY — addresses audit gap):
@@ -149,6 +149,7 @@ Requirements:
 - **Project context obligation**: If the project context above is `config-only` or test infrastructure is `none`, do NOT raise Major/Critical findings recommending the addition of automated tests, CI/CD, or test framework setup. Such recommendations are downgraded to Minor informational notes only. Recommending the introduction of a unit-test framework or CI pipeline for a config-only repo that has none is over-engineering and wastes review rounds.
 - **Pre-existing-in-changed-file rule**: Any pre-existing bug in a file that appears in `git diff main...HEAD` (even with a one-line edit) is IN SCOPE. Do not skip such findings as "pre-existing" — flag them with severity based on impact.
 - If there are no findings, explicitly state "No findings"
+- After your findings and the Recurring Issue Check, append a machine-readable index of your findings as a fenced json code block: a JSON array with one element per finding — {"id": "F1", "severity": "Critical"|"Major"|"Minor", "title": "<short title>", "file": <"path" or null>, "line": <number or null>, "adjacent": <true|false>, "escalate": <true|false|null>} — or [] when you report "No findings". `file` is null when the finding has no concrete source-file target (typical for plan-prose findings). `escalate`: false = Critical finding assessed and not escalated (Security expert), true = escalation requested, null = not applicable (non-Critical finding, or non-Security expert). The prose finding remains authoritative; the index is a merge/tracking aid and must list exactly the findings your prose reports (no extras, no omissions).
 
 Codebase awareness (mandatory — see "Codebase Awareness Obligations" in Common Rules):
 - Before writing any finding or recommendation, search the codebase for existing shared utilities, helpers, and patterns related to the changed code
@@ -222,7 +223,9 @@ Requirements:
 - Classify each finding by severity using YOUR expert-specific criteria
 - For each finding, specify file name, line number, severity, problem, and recommended fix
 - Indicate status from previous round (resolved, new, continuing)
+- **Fix-induced boundary-widening check (R43, all experts)**: for each fix in this round's diff, compare every security-boundary predicate it touches (delivery/broadcast scope, origin/frame/tenant gate, allowlist entry, permission/entitlement scope, input-acceptance predicate) against the PREVIOUS round's state — not only against main — and flag any widening, including reverts of an earlier round's tightening made to restore functionality. Evaluate per R43: widening that delivers credentials/secrets/privileged operations to added recipients is Critical.
 - If there are no findings, explicitly state "No findings"
+- After your findings and the Recurring Issue Check, append a machine-readable index of your findings as a fenced json code block: a JSON array with one element per finding — {"id": "F1", "severity": "Critical"|"Major"|"Minor", "title": "<short title>", "file": <"path" or null>, "line": <number or null>, "adjacent": <true|false>, "escalate": <true|false|null>} — or [] when you report "No findings". `file` is null when the finding has no concrete source-file target (typical for plan-prose findings). `escalate`: false = Critical finding assessed and not escalated (Security expert), true = escalation requested, null = not applicable (non-Critical finding, or non-Security expert). The prose finding remains authoritative; the index is a merge/tracking aid and must list exactly the findings your prose reports (no extras, no omissions).
 
 Cross-cutting verification (mandatory for all experts):
 - For each changed pattern, grep the codebase to verify no other locations use the same pattern without the equivalent change
@@ -241,6 +244,8 @@ For Security expert only — append to each Critical finding:
 ```
 
 ### Step 3-4: Save Review Results and Deduplicate
+
+**Mechanical merge pre-pass (before the Ollama call)**: parse each expert's fenced json findings index and join entries across experts on (same file, line within ±5, similar title/root cause). Use the join to (a) seed deduplication, (b) detect perspective convergence and stamp the merged finding's severity floor per "Perspective Convergence as a Severity Signal" (Common Rules), and (c) carry finding IDs and statuses across rounds without re-parsing prose. The Ollama merge-findings call remains the prose merger; when Ollama is unavailable, this json join IS the fallback dedup skeleton. A missing or malformed index (or one that disagrees with the expert's prose findings) is returned to the expert for revision — same contract as a missing Recurring Issue Check section.
 
 First, save each agent's raw output to temporary files, then use local LLM for deduplication (zero Claude tokens):
 
@@ -299,20 +304,21 @@ Review round: [nth]
 ## Recurring Issue Check
 ### Functionality expert
 - R1: [status]
-- ... (R1-R42)
+- ... (R1-R43)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R42)
+- ... (R1-R43)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
 - RS4: [status]
 - RS5: [status]
+- RS6: [status]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R42)
+- ... (R1-R43)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -320,6 +326,8 @@ Review round: [nth]
 - RT5: [status]
 - RT6: [status]
 - RT7: [status]
+- RT8: [status]
+- RT9: [status]
 
 ## Environment Verification Report
 For every contract that declared `Verification environment constraints` entries in Phase 1, classify each manual-test / acceptance path as one of:
@@ -360,6 +368,12 @@ Important rules:
 - **Fix ALL errors** — including pre-existing errors in files not touched by the current task. Never dismiss failures as "unrelated to our changes."
 - **Anti-Deferral enforcement**: Any finding recorded as Skipped / Accepted / Out of scope / Pre-existing MUST follow the mandatory format defined in "Anti-Deferral Rules" (Common Rules). Resolution Status entries that omit the Anti-Deferral check are invalid and must be revised before commit.
 - **Test-verified behavior conflict check**: Before accepting any finding that reverses a configuration or behavior confirmed during implementation/testing (Phase 2), verify: (1) the finding cites a specific spec or concrete attack vector, not a general heuristic, (2) the finding explains why the tested scenario is invalid. If neither is met, reject the finding and note the test evidence. After applying any fix that changes security boundaries (CSP, CORS, auth, rate limiting), re-run the relevant E2E flow in production-equivalent mode.
+
+**Cross-perspective tradeoff protocol (fail-safe precedence)**: when a fix that satisfies one expert's finding would violate another expert's requirement — the canonical case: restoring functionality coverage requires widening a security boundary (R43) — do NOT pick between the options the findings offer:
+
+1. **Search for a both-satisfying design first.** The options enumerated inside a finding are proposals, not the design space. Before accepting any tradeoff, spend an explicit search step on a design that preserves the security invariant AND restores the function. Typical moves (illustrative): enforce the gate at the consumer side instead of the producer (each recipient independently verifies its own origin/identity/context before acting on the payload); scope the delivery to the specific legitimate member instead of re-opening the broad surface; split the privileged payload from the broadcast signal (broadcast only a notification, let the legitimate consumer pull the payload through a gated channel). Record the alternatives searched in the Resolution Status entry even when the first one succeeds — the search step is evidence the tradeoff was not accepted by default.
+2. **If no both-satisfying design is found, security wins by default.** Keep the narrower boundary, accept the functionality regression, and record it as a known limitation with a full Anti-Deferral entry. Reversing this default — accepting the boundary widening — requires an isolated security re-review of the widening change (R43) AND explicit user approval recorded in Resolution Status, and the approval entry MUST carry the same Worst case / Likelihood / Cost-to-fix quantification the Anti-Deferral mandatory format requires — a bare "user approved" line is invalid, exactly as it is for a Skipped/Accepted finding. (Accepting a widening permanently must never be cheaper to record than deferring a fix.)
+3. **A functionality-regression report against a security fix is never, by itself, authorization to weaken the fix.** It is the trigger for step 1. On a security-remediation branch this is absolute: the branch's purpose fixes the priority order, and "restore the previous behavior" is presumed to re-open the vulnerability until shown otherwise.
 
 ### Step 3-6: Test, Build, and Commit
 
