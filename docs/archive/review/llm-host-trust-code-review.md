@@ -1,0 +1,230 @@
+# Code Review: llm-host-trust
+
+Date: 2026-07-11
+Review rounds: 3 (Round 1 = external security audit of `main`; Round 2 = triangulate
+verification of the fixes; Round 3 = incremental verification of Round-2 finding fixes)
+Termination: Round 3 — all three experts returned "No findings".
+
+## Round 1 — external security audit findings (verified by orchestrator)
+
+### S1 [Critical]: unauthenticated LAN hosts can receive code and diffs
+
+- File: `hooks/ollama-backend.sh` (`_probe_servers`, `_is_ollama_up`), `hooks/pre-review.sh:119-143`
+- Evidence: any mDNS-enumerated or Tailscale-enumerated host answering
+  `/api/version` joined the round-robin pool; `_ollama_generate` then POSTs
+  prompts (git diffs and full changed-file contents from `pre-review.sh`) to
+  `$host/api/generate` over plain HTTP with no server authentication.
+- Attacker: any device on the same LAN able to advertise mDNS and serve a fake
+  Ollama API (mimic `/api/version` + `/api/tags`).
+- Impact: exfiltration of private code, unpublished vulnerabilities, config
+  values, mistakenly committed credentials; poisoning of downstream fix
+  decisions via fake review output.
+- Additional: `README.md` and `skills/agent-review/SKILL.md` described this
+  path as `private` / `local-only`.
+- Status: **Fixed** (see Resolution Status).
+
+### S2 [Major]: predictable /tmp caches trusted without ownership checks
+
+- File: `hooks/ollama-backend.sh` (cache at `/tmp/.ollama-host-cache-<uid>`),
+  `hooks/llamacpp-backend.sh` (`/tmp/.llamacpp-host-cache-<uid>`), plus derived
+  `.rr` round-robin counter files read by `_pick_round_robin` (`hooks/llm-utils.sh`).
+- Evidence: reads checked only regular-file + non-symlink + mtime < 5 min — not
+  owner UID or mode. On a multi-user host, another user can pre-create the
+  predictable path with their own server URL + model list; the victim process
+  skips re-discovery and sends prompts there.
+- Status: **Fixed** (see Resolution Status).
+
+## Fix Summary (what Round 2 reviewed)
+
+1. **S1** — auto-discovery is now opt-in. New `OLLAMA_DISCOVERY` env gate
+   (`_ollama_discovery_enabled` in `hooks/ollama-backend.sh`): unset/`0`/`off`/`none`
+   (default) disables both sources; `1`/`on`/`all` enables both; or a
+   space/comma list of `mdns` / `tailscale`. `OLLAMA_EXTRA_HOSTS` is the primary
+   explicit (trusted) multi-server configuration; `OLLAMA_HOST` pin unchanged.
+   Trust model documented in the file header and README; `private`/`local-only`
+   claims removed from README and `skills/agent-review/SKILL.md`.
+2. **S2** — caches moved out of world-writable `/tmp`. New `_llm_state_dir`
+   (`hooks/llm-utils.sh`): `XDG_RUNTIME_DIR` → `XDG_CACHE_HOME` → `~/.cache`,
+   directory `claude-llm-hooks` created `0700`, accepted only if non-symlink
+   directory owned by the current user, `chmod 0700` enforced; falls back to a
+   per-process `mktemp -d`. New `_llm_trusted_file` predicate (regular file,
+   non-symlink, owned by current user via `[ -O ]`) guards every cache and
+   round-robin counter read in both backends and `_pick_round_robin`.
+3. **Tests** — existing discovery tests updated to opt in explicitly; new
+   `trust:` and `state dir:` tests added.
+
+## Round 2 — expert verification of the S1/S2 fixes
+
+### Functionality Findings
+
+No findings. Verified directly: `_ollama_discovery_enabled` parsing across 19
+value cases (all fail closed on unknown/malformed input); back-compat for
+`OLLAMA_HOST` pin and `OLLAMA_EXTRA_HOSTS`-only users unchanged; zero-config
+users degrade gracefully to localhost with the change documented; `_llm_state_dir`
+edge cases (no HOME/XDG, unwritable TMPDIR, pre-existing wrong-mode dir,
+source-time command substitution ordering) all degrade without crashing under
+`set -euo pipefail`; no other consumer of the old /tmp cache paths; no stale
+doc still claims default-on discovery; R43 — no boundary widening.
+
+### Security Findings
+
+No findings. Verified: no code path bypasses the discovery gate (single call
+site per source, all entry points route through `llm-utils.sh`); `mkdir -p -m
+0700` caveat neutralized by unconditional `chmod 0700`; `[ -O ]` ownership is
+the operative invariant defeating cache preseeding, applied at every read site;
+mktemp fallback is 0700 + unpredictable, so the "never world-writable /tmp"
+claim holds; `_OLLAMA_HOST_CACHE`/`_LLAMACPP_HOST_CACHE` env overrides are not
+a new abuse channel (require env control, a stronger precondition); README
+trust-model wording accurate (plain-HTTP residual risk neither over- nor
+understated); R43 — every touched predicate strictly narrows.
+
+### Testing Findings
+
+- T1 [Major]: `OLLAMA_DISCOVERY` alias values `on`/`all`/`none` untested —
+  mutation (misgrouping `none` into the enable branch = fail-open on the S1
+  invariant) left the suite green. **Resolved in Round 3.**
+- T2 [Major]: comma-separated list form untested — dropping `${cfg//,/ }`
+  translation left the suite green. **Resolved in Round 3.**
+- T3 [Major]: `_pick_round_robin`'s trusted-file guard on the `.rr` counter had
+  no red-on-revert test. **Resolved in Round 3.**
+- T4 [Minor] [Adjacent → Security]: `_llm_trusted_file`'s `[ -O ]` clause has no
+  test seam (bats cannot create foreign-uid files without root); symlink tests
+  are not a proxy for it. **Closed in Round 3 — accepted (see Resolution Status).**
+- T5 [Minor]: `_llm_state_dir`'s `~/.cache` tier and final mktemp tier untested.
+  **Resolved in Round 3.**
+
+## Round 3 — incremental verification (delta: test-only additions)
+
+- Functionality: No findings. Confirmed the delta is purely appended tests
+  (`@@ -584,0` pure addition), each a non-tautological exercise of real
+  production code paths.
+- Security: No findings. Confirmed hooks byte-identical to Round 2; all 7 new
+  tests assert restrictive behavior; no test writes outside `BATS_TEST_TMPDIR`;
+  R43 — nothing widened. Delivered the T4 disposition (below).
+- Testing: No new findings. Independently re-ran all mutations: T1/T2/T3/T5
+  fixes are load-bearing (each goes red when its guard/branch is reverted);
+  no vacuous assertions, no state leakage, subshell env isolation verified,
+  stat portability idiom consistent. One non-defect observation (missing `-d`
+  assert in the `~/.cache` test) applied directly under tightening-only skip.
+
+## Adjacent Findings
+
+- T4 routed Testing → Security; disposition recorded in Resolution Status.
+
+## Quality Warnings
+
+None (no VAGUE / NO-EVIDENCE / UNTESTED-CLAIM flags; merge performed
+mechanically by the orchestrator — Ollama merge-findings not used because the
+findings sets were small and disjoint by perspective).
+
+## Recurring Issue Check
+
+### Functionality expert (Round 2)
+R1 OK (new helpers single-sourced, reused by both backends) / R3 OK (guard
+propagated to all 4 call sites) / R12 OK / R16 OK / R17 OK / R19 OK / R30 OK /
+R43 checked — no widening. All other R-rules N/A for this diff.
+
+### Security expert (Round 2)
+R1 OK / R3 OK / R17 OK / R18 OK / R22 OK / R30 OK / R34 N/A (both backends
+migrated together) / R43 OK (all predicates strictly narrow). RS1-RS3, RS5,
+RS6 N/A; RS4 OK. All other R-rules N/A for this diff.
+
+### Testing expert (Round 2)
+R1-R3 OK / R16 OK / R17 OK / R19-R22 OK / R31 OK / R36 OK / R41 OK /
+R42 noted — alias-value class coverage gap captured as T1/T2 (fixed) /
+R43 OK. RS1-RS6: RS4 OK, rest N/A. RT1 OK / RT2 OK (applied to T4) /
+RT3 OK / RT5 OK / RT6 satisfied (helpers covered; call-site gap = T3, fixed) /
+RT7 applied (mutation testing drove T1-T3) / RT4, RT8, RT9 N/A.
+
+## Environment Verification Report
+
+N/A — no environment constraints declared in Phase 1 (standalone Phase 3
+invocation on external audit findings). All verification paths are
+`verified-local`: `bats tests/` 566/566 after the tightening edit
+(`bash -n` clean on all touched hooks; shellcheck unavailable in this
+environment).
+
+## Tightening-only skip — Round 3
+
+Findings applied directly (no Round 4 review):
+- [Testing observation, non-finding] [Minor] `~/.cache` fallback test asserted
+  only the path string — `tests/ollama-backend.bats` ("falls back to ~/.cache"
+  test) — added `[ -d "$result" ]`, applied verbatim.
+Justification: scoped within the Round-3 fix range, inline minor (test
+assertion depth), no security-boundary touch.
+
+## Resolution Status
+
+### S1 [Critical] Unauthenticated LAN hosts can receive code — Fixed
+- Action: auto-discovery gated behind explicit `OLLAMA_DISCOVERY` opt-in
+  (default off); explicit-host configuration is the default path; trust model
+  documented; misleading privacy claims corrected.
+- Cross-perspective tradeoff protocol applied: the zero-config discovery
+  feature (functionality) conflicts with the confidentiality boundary
+  (security). Both-satisfying designs searched: (a) recipient-side
+  verification — rejected, confidentiality is crossed at delivery; (b) TLS +
+  server auth — Ollama servers expose no authenticated TLS surface, cost
+  exceeds scope; (c) allowlist gating of discovered hosts — equivalent to
+  explicit `OLLAMA_EXTRA_HOSTS` with extra machinery, so the simpler
+  explicit-hosts + opt-in-discovery design was chosen. Security-wins default
+  applied: zero-config-by-default is regressed intentionally; users restore
+  multi-server via one-time `OLLAMA_EXTRA_HOSTS` (or accept the documented
+  risk with `OLLAMA_DISCOVERY`).
+- Residual (accepted, documented in README trust model): plain-HTTP transport
+  to explicitly trusted hosts. Worst case: passive LAN sniffing of code sent
+  to a trusted host. Likelihood: low on user-controlled networks; mitigated
+  fully by using Tailscale hostnames (WireGuard-encrypted transport).
+  Cost to fix: Ollama/llama.cpp have no native authenticated-TLS surface; a
+  reverse-proxy requirement is out of scope for this repo. Tracked as
+  documentation guidance, not code.
+- Modified files: `hooks/ollama-backend.sh`, `README.md`,
+  `skills/agent-review/SKILL.md`, `tests/ollama-backend.bats`.
+
+### S2 [Major] Predictable /tmp cache trusted without ownership checks — Fixed
+- Action: per-user private state dir with ownership/symlink verification and
+  0700 modes; `_llm_trusted_file` ownership check on every cache/counter read;
+  atomic writes retained (mktemp + mv inside the private dir).
+- Modified files: `hooks/llm-utils.sh`, `hooks/ollama-backend.sh`,
+  `hooks/llamacpp-backend.sh`, `tests/ollama-backend.bats`,
+  `tests/llamacpp-backend.bats`.
+
+### T1 [Major] Alias values on/all/none untested — Fixed
+- Action: three tests added (`OLLAMA_DISCOVERY=on`, `=all`, `=none`);
+  mutation-verified red-on-revert by orchestrator and independently by the
+  Round-3 Testing expert.
+- Modified file: `tests/ollama-backend.bats`.
+
+### T2 [Major] Comma list form untested — Fixed
+- Action: `OLLAMA_DISCOVERY='mdns,tailscale'` test added; mutation-verified.
+- Modified file: `tests/ollama-backend.bats`.
+
+### T3 [Major] rr-counter guard untested — Fixed
+- Action: symlinked `.rr` counter rejection test added (idx forced to 0);
+  mutation-verified red when the guard is dropped to bare `[ -f ]`.
+- Modified file: `tests/ollama-backend.bats`.
+
+### T4 [Minor] `[ -O ]` ownership clause has no test seam — Accepted
+- **Anti-Deferral check**: acceptable risk (quantified below).
+- **Justification**:
+  - Worst case: a future refactor silently removes the `-O` clause and no test
+    goes red; on a multi-user host the S2 preseeding vector partially reopens
+    (still mitigated by the 0700 private state dir, which is itself
+    ownership-checked and covered by a red-verified symlink test).
+  - Likelihood: low — the clause is a single kernel-enforced POSIX primitive
+    with no internal branching, centralized in one helper carrying a security
+    comment, and the same helper is exercised red-verified via its symlink arm.
+  - Cost to fix: an injectable-uid parameter would convert a hard-coded
+    security invariant into a runtime value (a lever reachable from
+    attacker-influenced env upstream) and violates "do not modify production
+    code to simplify test setup". A root/two-uid CI harness exceeds this
+    repo's test-infra scope. Security expert's recommendation (Round 3):
+    keep as-is; correct escalation path, if ever needed, is a CI-only
+    two-real-uid integration test, not a production seam.
+- **Orchestrator sign-off**: acceptable-risk exception satisfied with the three
+  values above; Security expert concurrence recorded in Round 3.
+
+### T5 [Minor] Fallback tiers untested — Fixed
+- Action: `~/.cache` tier test and mktemp last-resort test (0700 mode assert)
+  added; mutation-verified. `-d` assert added to the `~/.cache` test under
+  tightening-only skip.
+- Modified file: `tests/ollama-backend.bats`.
