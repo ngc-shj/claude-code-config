@@ -177,22 +177,35 @@ command library (`llm-commands.sh`) and the direct-caller hooks
 
 #### Multi-server load balancing (`ollama-backend.sh`)
 
-The Ollama provider discovers all reachable Ollama servers and load-balances
+The Ollama provider probes the configured Ollama servers and load-balances
 across them:
 
-- **Zero-config, name-independent discovery** — servers are found automatically
-  from two sources and never hardcoded: mDNS-advertised LAN hosts **and** online
-  Tailscale peers. Any host that answers `/api/version` joins the pool,
-  regardless of hostname.
+- **Trust model (read this first)** — prompts sent to a pool member include
+  git diffs and **full source-file contents**, so every host in the pool is a
+  potential exfiltration sink. The pool is therefore built from hosts you
+  explicitly name (`OLLAMA_HOST` pin or `OLLAMA_EXTRA_HOSTS` list). Requests
+  travel over plain HTTP with no server authentication — use hosts on networks
+  you control (or a Tailscale tailnet, which encrypts and authenticates the
+  transport).
+- **Opt-in auto-discovery** (`OLLAMA_DISCOVERY`, default **off**) — setting
+  `OLLAMA_DISCOVERY=1` (both sources) or a list like
+  `OLLAMA_DISCOVERY="tailscale"` / `"mdns tailscale"` enables automatic
+  candidate enumeration: online Tailscale peers (MagicDNS FQDNs) and/or
+  mDNS-advertised LAN hosts. Any candidate that answers `/api/version` joins
+  the pool, regardless of hostname. **mDNS candidates are unauthenticated: any
+  device on the LAN that mimics the Ollama API will receive your code — enable
+  `mdns` only on networks where every host is trusted.** Tailscale peers are
+  tailnet-authenticated, but shared or compromised nodes still receive code,
+  hence opt-in as well.
 - **Cross-platform discovery** — mDNS auto-discovery uses `avahi-browse` (Linux
   only). macOS has no avahi and its `dns-sd` service-browse does not reliably
-  surface plain Ollama hosts, so on macOS set `OLLAMA_EXTRA_HOSTS` to your LAN
-  host name(s) — the OS resolver answers `.local`, so the probe reaches them
-  anyway. Tailscale discovery works on both: the CLI is resolved from PATH, then
-  the macOS app bundle (`/Applications/Tailscale.app/Contents/MacOS/Tailscale`),
-  then `$TAILSCALE_BIN`.
+  surface plain Ollama hosts, so on macOS list your LAN host name(s) in
+  `OLLAMA_EXTRA_HOSTS` — the OS resolver answers `.local`, so the probe reaches
+  them anyway. Tailscale discovery works on both: the CLI is resolved from PATH,
+  then the macOS app bundle
+  (`/Applications/Tailscale.app/Contents/MacOS/Tailscale`), then `$TAILSCALE_BIN`.
 - **Model-aware routing** — servers do **not** have to host the same models. At
-  discovery each server's `/api/tags` inventory is cached, and a request is
+  probe time each server's `/api/tags` inventory is cached, and a request is
   routed (round-robin) only among servers that actually have the requested
   model. A model present nowhere makes the caller skip gracefully rather than
   hit a 404. Callers resolve their target with the exported
@@ -200,12 +213,13 @@ across them:
 - **Load balancing** — `OLLAMA_HOST` (one server, round-robin, model-agnostic
   default) and `OLLAMA_HOSTS` (full pool) are exported for back-compat. Existing
   callers that read only `$OLLAMA_HOST` keep working.
-- **Overrides** — `OLLAMA_HOST` pins to a single server (skips discovery);
+- **Overrides** — `OLLAMA_HOST` pins to a single server (skips probing);
   `OLLAMA_DISCOVERY_MAX` caps probe fan-out per source (default 6);
-  `OLLAMA_EXTRA_HOSTS` is a rarely-needed manual escape hatch (space-separated
-  bare host, `host:port`, or URL) for hosts that neither mDNS nor Tailscale can
-  enumerate. Discovery is cached for 5 minutes; localhost is used only when no
-  remote server is reachable.
+  `OLLAMA_EXTRA_HOSTS` is the primary multi-server configuration (space-separated
+  bare host, `host:port`, or URL). Probe results are cached for 5 minutes in a
+  per-user private state dir (`$XDG_RUNTIME_DIR/claude-llm-hooks`, falling back
+  to `~/.cache/claude-llm-hooks` — never world-writable `/tmp`); localhost is
+  used only when no remote server is reachable.
 
 ### llm-commands.sh (Utility — called by skills)
 
@@ -334,7 +348,7 @@ Creates a pull request with auto-generated description:
 ### agent-review
 
 Backend-agnostic diff review: a *reviewer* is treated as any agent that takes a diff and returns findings headlessly, so the review path never depends on one CLI (this subsumes the former `codex-review` skill — Codex is now just one selectable backend):
-- Auto-detects available backends in preference order — `ollama` (local, free, private — runs through the `llm-utils.sh` dispatcher, so it uses llama.cpp when reachable, else Ollama) → `codex` (external second opinion, `codex review`) → `claude` (fresh headless context, spends tokens)
+- Auto-detects available backends in preference order — `ollama` (free; sends the diff only to your explicitly configured local-LLM hosts via the `llm-utils.sh` dispatcher — llama.cpp when reachable, else Ollama; see the ollama-backend trust model above) → `codex` (external second opinion, `codex review`) → `claude` (fresh headless context, spends tokens)
 - Defaults to the free local backend, reusing `llm-commands.sh` (functionality / security / testing) — zero Claude tokens when a local backend (llama.cpp or Ollama) is reachable
 - Review scope: uncommitted changes, a base branch, or a specific commit; optionally cross-checks findings against `triangulate` review artifacts
 - `--adversarial` mode challenges the design/approach/failure-modes instead of a line-by-line pass (ollama gets a dedicated `adversarial-review` pass; codex/claude get an approach-challenging prompt)

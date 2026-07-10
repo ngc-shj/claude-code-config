@@ -27,6 +27,35 @@
 
 # --- shared discovery helpers (backend-agnostic) ---
 
+# Per-user private state directory for host caches and round-robin counters.
+# World-writable /tmp is off-limits: a predictable /tmp path lets any local user
+# pre-create the cache and route prompts (diffs, source files) to their own
+# server. Preference order: XDG_RUNTIME_DIR (0700, tmpfs) → XDG_CACHE_HOME →
+# ~/.cache. Each candidate is accepted only if the resulting directory is a
+# non-symlink directory owned by the current user; otherwise fall back to a
+# per-process mktemp dir (safe, but no cross-process cache reuse).
+_llm_state_dir() {
+  local base dir
+  for base in "${XDG_RUNTIME_DIR:-}" "${XDG_CACHE_HOME:-}" "${HOME:+${HOME}/.cache}"; do
+    [ -n "$base" ] && [ -d "$base" ] || continue
+    dir="$base/claude-llm-hooks"
+    mkdir -p -m 0700 "$dir" 2>/dev/null || true
+    if [ -d "$dir" ] && ! [ -L "$dir" ] && [ -O "$dir" ]; then
+      chmod 0700 "$dir" 2>/dev/null || true
+      printf '%s' "$dir"
+      return 0
+    fi
+  done
+  mktemp -d "${TMPDIR:-/tmp}/claude-llm-hooks-XXXXXX" 2>/dev/null
+}
+
+# Is $1 a state file we may trust? Regular file, not a symlink, owned by the
+# current user. Guards every cache/counter read against files pre-created by
+# another local user (mode alone is not enough — ownership is the invariant).
+_llm_trusted_file() {
+  [ -f "$1" ] && ! [ -L "$1" ] && [ -O "$1" ]
+}
+
 # Pick one URL round-robin and advance the shared counter. Best-effort and
 # lock-free: a race between parallel processes only skews distribution slightly,
 # which load balancing tolerates. Portable (no flock) so it works on macOS bash.
@@ -40,7 +69,7 @@ _pick_round_robin() {
   fi
 
   local idx=0
-  if [ -f "$rr_file" ] && ! [ -L "$rr_file" ]; then
+  if _llm_trusted_file "$rr_file"; then
     idx=$(cat "$rr_file" 2>/dev/null || echo 0)
   fi
   case "$idx" in (''|*[!0-9]*) idx=0;; esac

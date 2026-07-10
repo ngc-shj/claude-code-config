@@ -15,7 +15,10 @@
 # discovery like the Ollama pool is intentionally out of scope (see plan SC1);
 # LLAMACPP_HOST / LLAMACPP_HOSTS are the manual escape hatches.
 
-_LLAMACPP_CACHE_FILE="${_LLAMACPP_HOST_CACHE:-/tmp/.llamacpp-host-cache-$(id -u)}"
+# Host cache lives in the per-user private state dir (_llm_state_dir,
+# llm-utils.sh) — never in world-writable /tmp, where a predictable name lets
+# another local user pre-seed the pool with their own server.
+_LLAMACPP_CACHE_FILE="${_LLAMACPP_HOST_CACHE:-$(_llm_state_dir)/llamacpp-host-cache}"
 # Field separator between a cached server's URL and its model list. Kept in a
 # variable (not a literal tab) so editors/linters cannot silently mangle it.
 _LLAMACPP_TAB=$'\t'
@@ -104,7 +107,8 @@ _llamacpp_records() {
     return
   fi
   local cache="$_LLAMACPP_CACHE_FILE" blob=""
-  if [ -f "$cache" ] && ! [ -L "$cache" ]; then
+  # Trusted file only: regular, non-symlink, owned by the current user.
+  if _llm_trusted_file "$cache"; then
     local mtime
     mtime=$(stat -c %Y "$cache" 2>/dev/null || stat -f %m "$cache" 2>/dev/null || echo 0)
     if [ "$(( $(date +%s) - mtime ))" -lt 300 ]; then

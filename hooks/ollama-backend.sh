@@ -3,11 +3,18 @@
 # AFTER it defines the shared helpers (_models_have, _pick_round_robin,
 # _rr_suffix); this file uses them and must not be sourced standalone.
 #
-# Resolve Ollama server(s): honor env var, otherwise auto-detect every reachable
-# server on the LAN and load-balance across them — model-aware, so a request is
-# only ever routed to a server that actually hosts the requested model (the
-# servers are NOT guaranteed to hold the same model set). Also provides the
-# _ollama_generate primitive (/api/generate) used by the llm-utils.sh dispatcher.
+# Resolve Ollama server(s): honor env var, otherwise probe the explicitly
+# configured hosts (OLLAMA_EXTRA_HOSTS) and load-balance across them — model-aware,
+# so a request is only ever routed to a server that actually hosts the requested
+# model (the servers are NOT guaranteed to hold the same model set). Also provides
+# the _ollama_generate primitive (/api/generate) used by the llm-utils.sh dispatcher.
+#
+# TRUST MODEL: prompts sent to a server include diffs and full source files, so
+# every pool member is a data-exfiltration sink if untrusted. mDNS/Tailscale
+# auto-discovery adds hosts on the sole evidence that they answer /api/version —
+# any LAN device can fake that — so it is OFF by default and gated behind
+# OLLAMA_DISCOVERY (explicit, informed opt-in). Explicitly configured hosts
+# (OLLAMA_HOST / OLLAMA_EXTRA_HOSTS) are trusted because the user named them.
 #
 # Sourcing this file sets and exports:
 #   OLLAMA_HOSTS — space-separated list of ALL reachable Ollama base URLs
@@ -23,11 +30,18 @@
 #
 # Inputs (env):
 #   OLLAMA_HOST        — if set, pins to that one server; discovery is skipped.
-#   OLLAMA_EXTRA_HOSTS — manual escape hatch: space-separated hosts to probe in
-#                        ADDITION to auto-discovery, for hosts that neither mDNS
-#                        nor Tailscale can enumerate. Normally unneeded — online
-#                        Tailscale peers are discovered automatically. Each entry
-#                        is a bare hostname, host:port, or URL.
+#   OLLAMA_EXTRA_HOSTS — primary multi-server configuration: space-separated
+#                        trusted hosts to probe. Each entry is a bare hostname,
+#                        host:port, or URL.
+#   OLLAMA_DISCOVERY   — opt-in for UNAUTHENTICATED auto-discovery sources.
+#                        Unset/empty/"0"/"off"/"none" (default): no auto-discovery.
+#                        "1"/"on"/"all": enable both sources. Or a space/comma
+#                        list of sources: "mdns", "tailscale". Enabling mDNS
+#                        means any device on the local network that mimics the
+#                        Ollama API can receive your diffs and source files —
+#                        enable it only on networks where every host is trusted.
+#                        Tailscale peers are at least tailnet-authenticated, but
+#                        still opt-in (shared/compromised nodes receive code).
 #   OLLAMA_DISCOVERY_MAX — cap on candidates probed per discovery source (default 6).
 #   TAILSCALE_BIN      — path/name of the tailscale CLI. Defaults to `tailscale` on
 #                        PATH, then the macOS app bundle
@@ -37,10 +51,28 @@
 # commit-msg-check.sh). Safe under set -euo pipefail — all fallible commands
 # guarded with || true.
 
-_OLLAMA_CACHE_FILE="${_OLLAMA_HOST_CACHE:-/tmp/.ollama-host-cache-$(id -u)}"
+# Host cache lives in the per-user private state dir (_llm_state_dir,
+# llm-utils.sh) — never in world-writable /tmp, where a predictable name lets
+# another local user pre-seed the pool with their own server.
+_OLLAMA_CACHE_FILE="${_OLLAMA_HOST_CACHE:-$(_llm_state_dir)/ollama-host-cache}"
 # Field separator between a cached server's URL and its model list. Kept in a
 # variable (not a literal tab) so editors/linters cannot silently mangle it.
 _OLLAMA_TAB=$'\t'
+
+# Is auto-discovery source $1 ("mdns" | "tailscale") enabled? Default: no.
+# Auto-discovered hosts are unauthenticated (see TRUST MODEL above), so each
+# source requires explicit opt-in via OLLAMA_DISCOVERY.
+_ollama_discovery_enabled() {
+  local src="$1" cfg="${OLLAMA_DISCOVERY:-}"
+  case "$cfg" in
+    ''|0|off|none) return 1 ;;
+    1|on|all)      return 0 ;;
+  esac
+  case " ${cfg//,/ } " in
+    *" $src "*) return 0 ;;
+    *)          return 1 ;;
+  esac
+}
 
 # Discover mDNS hostnames advertised on the LAN. Name-independent by design:
 # an Ollama server is identified by a live /api/version response (see
@@ -151,10 +183,10 @@ _probe_host_entry() {
 # Discover every reachable Ollama server. Emits one TAB-separated record per
 # physical host: "<base_url>\t<space-separated models or '*'>". Candidates come
 # from three sources, probed in order:
-#   1. OLLAMA_EXTRA_HOSTS — manual escape hatch for hosts neither mDNS nor
-#      Tailscale can enumerate. Space-separated bare hostname, host:port, or URL.
-#   2. Online Tailscale peers (MagicDNS FQDNs).
-#   3. mDNS-advertised hosts on the local LAN.
+#   1. OLLAMA_EXTRA_HOSTS — explicitly trusted hosts (primary configuration).
+#      Space-separated bare hostname, host:port, or URL.
+#   2. Online Tailscale peers (MagicDNS FQDNs) — only with OLLAMA_DISCOVERY opt-in.
+#   3. mDNS-advertised hosts on the local LAN — only with OLLAMA_DISCOVERY opt-in.
 # Duplicates (same base URL) are dropped. localhost is emitted only when NO
 # remote server is reachable — the load-balance pool should target dedicated
 # inference hosts, not the machine already running Claude.
@@ -164,14 +196,18 @@ _probe_servers() {
   for e in ${OLLAMA_EXTRA_HOSTS:-}; do
     [ -n "$e" ] && entries+=("$e")
   done
-  while IFS= read -r e; do
-    [ -z "$e" ] && continue
-    entries+=("$e")
-  done < <(_discover_tailscale_hosts)
-  while IFS= read -r e; do
-    [ -z "$e" ] && continue
-    entries+=("$e")
-  done < <(_discover_mdns_hosts)
+  if _ollama_discovery_enabled tailscale; then
+    while IFS= read -r e; do
+      [ -z "$e" ] && continue
+      entries+=("$e")
+    done < <(_discover_tailscale_hosts)
+  fi
+  if _ollama_discovery_enabled mdns; then
+    while IFS= read -r e; do
+      [ -z "$e" ] && continue
+      entries+=("$e")
+    done < <(_discover_mdns_hosts)
+  fi
 
   local records=()
   local seen=" "
@@ -212,7 +248,7 @@ ollama_host_for_model() {
     return
   fi
   local cache="$_OLLAMA_CACHE_FILE"
-  if [ -z "${cache:-}" ] || ! [ -f "$cache" ] || [ -L "$cache" ]; then
+  if [ -z "${cache:-}" ] || ! _llm_trusted_file "$cache"; then
     echo "${OLLAMA_HOST:-http://localhost:11434}"
     return
   fi
@@ -237,8 +273,9 @@ _resolve_ollama_servers() {
   local cache_file="$_OLLAMA_CACHE_FILE"
 
   local records_blob=""
-  # Use cache if it exists, is a regular file (not symlink), and fresh (< 5 min)
-  if [ -f "$cache_file" ] && ! [ -L "$cache_file" ]; then
+  # Use cache if it is a trusted file (regular, non-symlink, owned by the
+  # current user) and fresh (< 5 min)
+  if _llm_trusted_file "$cache_file"; then
     local mtime
     mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)
     if [ "$(( $(date +%s) - mtime ))" -lt 300 ]; then

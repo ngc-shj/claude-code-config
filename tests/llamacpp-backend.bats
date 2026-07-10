@@ -257,3 +257,18 @@ teardown() {
   result=$(source "$SCRIPT" && printf 'hi' | llm_request "gpt-oss:20b" "" 30 0)
   [ "$result" = "OK" ]
 }
+
+# ===========================================================================
+# Trust boundary: cache lives in a user-private state dir (S2)
+# ===========================================================================
+
+@test "state dir: default llamacpp cache path is under XDG_RUNTIME_DIR, not /tmp" {
+  unset _LLAMACPP_HOST_CACHE
+  export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime"
+  mkdir -p "$XDG_RUNTIME_DIR"
+  export CPP_SUCCEED_HOSTS="localhost:8080"
+  setup_curl_mock
+  source "$SCRIPT"
+  llamacpp_available
+  [ -f "$XDG_RUNTIME_DIR/claude-llm-hooks/llamacpp-host-cache" ]
+}

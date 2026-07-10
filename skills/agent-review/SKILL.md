@@ -21,7 +21,7 @@ Reference backends, in default preference order:
 
 | Backend | Cost | Privacy | Notes |
 |---------|------|---------|-------|
-| `ollama` | **free** | local-only | gpt-oss:120b via `~/.claude/hooks/llm-commands.sh` (functionality / security / testing) |
+| `ollama` | **free** | sent to your configured local-LLM hosts (plain HTTP; see README "Multi-server load balancing" trust model) | gpt-oss:120b via `~/.claude/hooks/llm-commands.sh` (functionality / security / testing) |
 | `codex` | Codex quota | sent to Codex servers | independent external model via `codex review` |
 | `claude` | Claude tokens | sent to Claude servers | fresh headless context, no conversation bias; run with `--tools ""` (read-only, cannot edit/run) |
 
@@ -72,7 +72,8 @@ changes and unpushed commits present). Otherwise proceed with the default.
   default, matching this config's local-first routing strategy).
 
 State which backend was chosen and why before running, e.g. "No Codex installed
-and Ollama is reachable → reviewing locally with Ollama (free, private)."
+and Ollama is reachable → reviewing with Ollama (free, runs on your configured
+local-LLM hosts)."
 
 ## Step 3: Wait or Background
 
