@@ -55,13 +55,15 @@ Use the appropriate model for each task based on complexity, cost, and latency:
 - Writing tests based on existing patterns
 - Code review as a sub-agent
 
-### Local LLM (llama.cpp or Ollama)
+### Local LLM (OpenAI-compatible backend or Ollama)
 
 Hooks reach a local LLM through the `llm-utils.sh` dispatcher: `LLM_BACKEND`
-pins the backend, otherwise llama.cpp (`/v1/chat/completions`, default
-`localhost:8080`) is auto-preferred when reachable, else Ollama
+pins the backend, otherwise the OpenAI-compatible backend
+(`/v1/chat/completions`; llama.cpp on 8080 and/or vLLM on 8000 via
+`LLM_OPENAI_PORTS`) is auto-preferred when reachable, else Ollama
 (`/api/generate`). Hooks pass logical model names; each backend resolves them
-to a real model (for llama.cpp via `LLAMACPP_MODEL_SMALL`/`LLAMACPP_MODEL_LARGE`).
+to a real model (OpenAI backend via `OPENAI_MODEL_SMALL`/`OPENAI_MODEL_LARGE`,
+and `ds4:flash`/`ds4:pro` for DeepSeek-V4 on vLLM).
 
 Logical models and their use cases:
 
