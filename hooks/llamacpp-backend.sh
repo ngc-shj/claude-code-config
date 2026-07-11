@@ -11,11 +11,17 @@
 # /v1/models) and does NOT implement Ollama's /api/generate or /api/tags, so it
 # needs its own discovery + request path.
 #
-# Discovery is single-host by default (localhost:8080). Multi-host mDNS/Tailscale
-# discovery like the Ollama pool is intentionally out of scope (see plan SC1);
-# LLAMACPP_HOST / LLAMACPP_HOSTS are the manual escape hatches.
+# Candidates: LLAMACPP_HOST pins one server; LLAMACPP_HOSTS is an exclusive
+# llama.cpp-only list; otherwise the shared LLM_TRUSTED_HOSTS (bare names
+# probed on port 8080) plus localhost:8080. Membership is decided by behavior:
+# a trusted host joins this pool only if it answers /v1/models. Unauthenticated
+# mDNS/Tailscale auto-discovery like the Ollama opt-in is intentionally out of
+# scope (see plan SC1).
 
-_LLAMACPP_CACHE_FILE="${_LLAMACPP_HOST_CACHE:-/tmp/.llamacpp-host-cache-$(id -u)}"
+# Host cache lives in the per-user private state dir (_llm_state_dir,
+# llm-utils.sh) — never in world-writable /tmp, where a predictable name lets
+# another local user pre-seed the pool with their own server.
+_LLAMACPP_CACHE_FILE="${_LLAMACPP_HOST_CACHE:-$(_llm_state_dir)/llamacpp-host-cache}"
 # Field separator between a cached server's URL and its model list. Kept in a
 # variable (not a literal tab) so editors/linters cannot silently mangle it.
 _LLAMACPP_TAB=$'\t'
@@ -52,18 +58,27 @@ _llamacpp_fetch_models() {
   printf '%s' "$models"
 }
 
-# Candidate hosts, in order: LLAMACPP_HOST (pin) | LLAMACPP_HOSTS | localhost:8080.
+# Candidate hosts, in order: LLAMACPP_HOST (pin) | LLAMACPP_HOSTS (exclusive
+# list) | LLM_TRUSTED_HOSTS + localhost:8080. The probe's dedup drops a
+# trusted entry that resolves to the same URL as localhost.
 _llamacpp_candidates() {
   if [ -n "${LLAMACPP_HOST:-}" ]; then
     printf '%s\n' "$LLAMACPP_HOST"
   elif [ -n "${LLAMACPP_HOSTS:-}" ]; then
-    local h
-    for h in $LLAMACPP_HOSTS; do
-      [ -n "$h" ] && printf '%s\n' "$h"
-    done
+    _llm_split_hosts "$LLAMACPP_HOSTS"
   else
+    _llm_split_hosts "${LLM_TRUSTED_HOSTS:-}"
     printf '%s\n' "http://localhost:8080"
   fi
+}
+
+# Fingerprint of the trust configuration that shapes the unpinned candidate
+# set (normalized: whitespace collapsed). Stored as the cache's first line so
+# editing LLM_TRUSTED_HOSTS invalidates the cache on the next call — same
+# revocation semantics as the Ollama pool. Pinned configs (LLAMACPP_HOST /
+# LLAMACPP_HOSTS) bypass the cache entirely and need no fingerprint.
+_llamacpp_trust_fingerprint() {
+  printf '#cfg hosts=%s' "$(_llm_join_hosts "${LLM_TRUSTED_HOSTS:-}")"
 }
 
 # Normalize a candidate (full URL | host:port | bare host) to a reachable base
@@ -92,11 +107,11 @@ _llamacpp_probe() {
   [ "${#records[@]}" -gt 0 ] && printf '%s\n' "${records[@]}"
 }
 
-# Cached discovery records (regular file, symlink-guarded, 5-min TTL). A "down"
-# result is not cached, so recovery is picked up on the next call.
+# Cached discovery records (trusted file, fingerprint-bound, 5-min TTL). A
+# "down" result is not cached, so recovery is picked up on the next call.
 _llamacpp_records() {
   # Explicit host override pins discovery to that host — probe it directly and
-  # never consult or populate the shared cache, which may hold auto-discovered
+  # never consult or populate the shared cache, which may hold trusted-host
   # defaults (e.g. localhost:8080) from a prior run. Mirrors the OLLAMA_HOST pin
   # in ollama-backend.sh.
   if [ -n "${LLAMACPP_HOST:-}" ] || [ -n "${LLAMACPP_HOSTS:-}" ]; then
@@ -104,23 +119,10 @@ _llamacpp_records() {
     return
   fi
   local cache="$_LLAMACPP_CACHE_FILE" blob=""
-  if [ -f "$cache" ] && ! [ -L "$cache" ]; then
-    local mtime
-    mtime=$(stat -c %Y "$cache" 2>/dev/null || stat -f %m "$cache" 2>/dev/null || echo 0)
-    if [ "$(( $(date +%s) - mtime ))" -lt 300 ]; then
-      blob=$(cat "$cache")
-    fi
-  fi
+  blob=$(_llm_cached_records "$cache" "$(_llamacpp_trust_fingerprint)")
   if [ -z "$blob" ]; then
     blob=$(_llamacpp_probe)
-    if [ -n "$blob" ] && ! [ -L "$cache" ]; then
-      local tmp
-      tmp=$(mktemp "${cache}.XXXXXX" 2>/dev/null) || true
-      if [ -n "${tmp:-}" ]; then
-        printf '%s\n' "$blob" > "$tmp"
-        mv "$tmp" "$cache" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true
-      fi
-    fi
+    _llm_write_cache "$cache" "$(_llamacpp_trust_fingerprint)" "$blob"
   fi
   # Emit with a trailing newline so a single-record (no-newline) result is not
   # skipped by `while read` in llamacpp_host_for_model. Stay empty when down.

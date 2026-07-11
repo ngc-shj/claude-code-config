@@ -95,6 +95,16 @@ set_mtime_ago() {
   python3 -c "import os; os.utime('$file', ($target_ts, $target_ts))" 2>/dev/null || true
 }
 
+
+# Write a host-cache file valid for the CURRENT trust config (discovery off,
+# no extra hosts — the setup() default) by prepending the fingerprint header
+# the production reader requires. stdin = records.
+write_cache() {
+  printf '#cfg mdns=0 ts=0 hosts=\n' > "$_OLLAMA_HOST_CACHE"
+  cat >> "$_OLLAMA_HOST_CACHE"
+  touch "$_OLLAMA_HOST_CACHE"
+}
+
 # ---------------------------------------------------------------------------
 # Helper: mock tailscale CLI. `tailscale status --json` emits an online peer
 # per FQDN in TS_DISCOVERED_PEERS (space-separated). Always installed in setup()
@@ -126,6 +136,9 @@ setup() {
   export CURL_LOG_FILE="$BATS_TEST_TMPDIR/curl-calls.log"
   unset OLLAMA_HOST
   unset OLLAMA_HOSTS
+  unset OLLAMA_DISCOVERY
+  unset LLM_TRUSTED_HOSTS
+  unset OLLAMA_EXTRA_HOSTS
   unset AVAHI_DISCOVERED_HOSTS
   unset TS_DISCOVERED_PEERS
   setup_avahi_mock
@@ -163,6 +176,7 @@ teardown() {
 # ===========================================================================
 
 @test "discovery: any reachable host is recognized regardless of name prefix" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local ul9c-r49.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49"
   setup_curl_mock
@@ -171,6 +185,7 @@ teardown() {
 }
 
 @test "discovery: only hosts that answer /api/version join the pool" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local printer.local ul9c-r49.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49"
   setup_curl_mock
@@ -180,6 +195,7 @@ teardown() {
 }
 
 @test "discovery: bare name preferred, .local not double-probed when bare answers" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0"
   setup_curl_mock
@@ -191,6 +207,7 @@ teardown() {
 }
 
 @test "discovery: falls back to .local when bare is unreachable" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0.local"
   setup_curl_mock
@@ -199,6 +216,7 @@ teardown() {
 }
 
 @test "discovery: discovery cap bounds probe fan-out" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="h1.local h2.local h3.local h4.local h5.local h6.local h7.local h8.local"
   export OLLAMA_DISCOVERY_MAX=3
   setup_curl_fail_mock
@@ -209,6 +227,7 @@ teardown() {
 }
 
 @test "discovery: unresolved (+) avahi lines do not trigger probes" {
+  export OLLAMA_DISCOVERY=mdns
   cat > "$BATS_TEST_TMPDIR/avahi-browse" <<'EOF'
 #!/bin/bash
 echo "+;eth0;IPv4;gx10-ghost;_workstation._tcp;local"
@@ -223,6 +242,7 @@ EOF
 }
 
 @test "discovery: missing avahi-browse probes only localhost" {
+  export OLLAMA_DISCOVERY=mdns
   command() {
     if [ "$1" = "-v" ] && [ "$2" = "avahi-browse" ]; then
       return 1
@@ -248,6 +268,7 @@ EOF
 }
 
 @test "extra hosts: probed before mDNS hosts (explicit priority)" {
+  export OLLAMA_DISCOVERY=mdns
   export OLLAMA_EXTRA_HOSTS="ul9c-r49"
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="ul9c-r49 gx10-a9c0"
@@ -273,6 +294,7 @@ EOF
 }
 
 @test "extra hosts: unreachable extra host is excluded" {
+  export OLLAMA_DISCOVERY=mdns
   export OLLAMA_EXTRA_HOSTS="ul9c-r49"
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0"
@@ -282,6 +304,7 @@ EOF
 }
 
 @test "extra hosts: duplicate of an mDNS host is not double-counted" {
+  export OLLAMA_DISCOVERY=mdns
   export OLLAMA_EXTRA_HOSTS="gx10-a9c0"
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0"
@@ -295,6 +318,7 @@ EOF
 # ===========================================================================
 
 @test "tailscale: an online peer hosting Ollama joins the pool" {
+  export OLLAMA_DISCOVERY=tailscale
   export TS_DISCOVERED_PEERS="ul9c-r49.ts.net iphone.ts.net"
   export CURL_SUCCEED_HOSTS="ul9c-r49.ts.net"
   setup_curl_mock
@@ -314,6 +338,7 @@ EOF
 }
 
 @test "tailscale: a peer discovered via TAILSCALE_BIN override joins the pool" {
+  export OLLAMA_DISCOVERY=tailscale
   # The PATH `tailscale` mock emits path-peer (which never answers /api/version);
   # the override binary emits override-peer (which does). Seeing override-peer in
   # the pool proves the override CLI was the one actually invoked.
@@ -332,6 +357,7 @@ EOF
 }
 
 @test "tailscale: peers and mDNS hosts are both discovered and merged" {
+  export OLLAMA_DISCOVERY=1
   export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="ul9c-r49.ts.net gx10-a9c0"
@@ -342,6 +368,7 @@ EOF
 }
 
 @test "tailscale: no peers reachable falls through to mDNS/localhost" {
+  export OLLAMA_DISCOVERY=tailscale
   export TS_DISCOVERED_PEERS="iphone.ts.net vps.ts.net"
   export CURL_SUCCEED_HOSTS="localhost"
   setup_curl_mock
@@ -354,6 +381,7 @@ EOF
 # ===========================================================================
 
 @test "localhost: excluded from pool when a remote server is reachable" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0 localhost"
   setup_curl_mock
@@ -362,6 +390,7 @@ EOF
 }
 
 @test "localhost: used only when no remote server reachable" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="localhost"
   setup_curl_mock
@@ -375,10 +404,11 @@ EOF
 # ===========================================================================
 
 @test "round-robin: successive sources rotate through the pool" {
-  echo "http://a:11434
+  write_cache <<'CACHE'
+http://a:11434
 http://b:11434
-http://c:11434" > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+http://c:11434
+CACHE
   setup_curl_fail_mock
   first=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
   second=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
@@ -391,8 +421,9 @@ http://c:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "round-robin: single-server pool always returns that server" {
-  echo "http://only:11434" > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  write_cache <<'CACHE'
+http://only:11434
+CACHE
   setup_curl_fail_mock
   first=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
   second=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
@@ -402,6 +433,7 @@ http://c:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "round-robin: OLLAMA_HOST is always a member of OLLAMA_HOSTS" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local ul9c-r49.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49"
   setup_curl_mock
@@ -410,9 +442,10 @@ http://c:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "round-robin: corrupt counter file is treated as zero" {
-  echo "http://a:11434
-http://b:11434" > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  write_cache <<'CACHE'
+http://a:11434
+http://b:11434
+CACHE
   echo "garbage" > "$_OLLAMA_HOST_CACHE.rr"
   setup_curl_fail_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
@@ -424,9 +457,10 @@ http://b:11434" > "$_OLLAMA_HOST_CACHE"
 # ===========================================================================
 
 @test "cache: fresh cache returns cached pool without probing" {
-  echo "http://cached-a:11434
-http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  write_cache <<'CACHE'
+http://cached-a:11434
+http://cached-b:11434
+CACHE
   setup_curl_fail_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOSTS")
   [ "$result" = "http://cached-a:11434 http://cached-b:11434" ]
@@ -434,7 +468,9 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "cache: stale cache triggers re-probe" {
-  echo "http://stale-host:11434" > "$_OLLAMA_HOST_CACHE"
+  write_cache <<'CACHE'
+http://stale-host:11434
+CACHE
   set_mtime_ago "$_OLLAMA_HOST_CACHE" 600
   setup_curl_fail_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
@@ -451,15 +487,19 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "cache write: creates cache file listing the reachable pool" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local ul9c-r49.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49"
   setup_curl_mock
   source "$SCRIPT"
   [ -f "$_OLLAMA_HOST_CACHE" ]
-  # Each line is "<url>\t<models>"; the URL field is what the pool is built from.
+  # Line 1 is the trust-fingerprint header; records follow. Each record is
+  # "<url>\t<models>"; the URL field is what the pool is built from.
+  run head -1 "$_OLLAMA_HOST_CACHE"
+  [ "$output" = "#cfg mdns=1 ts=0 hosts=" ]
   run cut -f1 "$_OLLAMA_HOST_CACHE"
-  [ "${lines[0]}" = "http://gx10-a9c0:11434" ]
-  [ "${lines[1]}" = "http://ul9c-r49:11434" ]
+  [ "${lines[1]}" = "http://gx10-a9c0:11434" ]
+  [ "${lines[2]}" = "http://ul9c-r49:11434" ]
 }
 
 @test "cache write: does not create cache on fallback to localhost" {
@@ -473,6 +513,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 # ===========================================================================
 
 @test "fallback: nothing reachable returns localhost for both vars" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   setup_curl_fail_mock
   source "$SCRIPT"
@@ -485,6 +526,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 # ===========================================================================
 
 @test "export: OLLAMA_HOST and OLLAMA_HOSTS are exported after sourcing" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0"
   setup_curl_mock
@@ -498,6 +540,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 # ===========================================================================
 
 @test "idempotent: second source within window does not re-probe" {
+  export OLLAMA_DISCOVERY=mdns
   export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
   export CURL_SUCCEED_HOSTS="gx10-a9c0"
   setup_curl_mock
@@ -515,8 +558,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 
 @test "model routing: only servers hosting the model are candidates" {
   printf 'http://big:11434\tgpt-oss:120b gpt-oss:20b\nhttp://small:11434\tgpt-oss:20b\n' \
-    > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+    | write_cache
   setup_curl_fail_mock
   source "$SCRIPT"
   # 120b lives only on big — every pick must be big
@@ -528,8 +570,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 
 @test "model routing: shared model round-robins across hosts that have it" {
   printf 'http://big:11434\tgpt-oss:120b gpt-oss:20b\nhttp://small:11434\tgpt-oss:20b\n' \
-    > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+    | write_cache
   setup_curl_fail_mock
   source "$SCRIPT"
   first=$(ollama_host_for_model "gpt-oss:20b")
@@ -538,8 +579,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "model routing: unknown model yields empty (caller skips)" {
-  printf 'http://big:11434\tgpt-oss:120b\n' > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  printf 'http://big:11434\tgpt-oss:120b\n' | write_cache
   setup_curl_fail_mock
   source "$SCRIPT"
   result=$(ollama_host_for_model "llama3:70b")
@@ -548,8 +588,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 
 @test "model routing: wildcard (unknown inventory) matches any model" {
   # A server whose models could not be enumerated is stored as '*'.
-  printf 'http://mystery:11434\t*\n' > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  printf 'http://mystery:11434\t*\n' | write_cache
   setup_curl_fail_mock
   source "$SCRIPT"
   result=$(ollama_host_for_model "anything:latest")
@@ -557,8 +596,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "model routing: tag-less request matches a tagged model" {
-  printf 'http://big:11434\tgpt-oss:120b\n' > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  printf 'http://big:11434\tgpt-oss:120b\n' | write_cache
   setup_curl_fail_mock
   source "$SCRIPT"
   result=$(ollama_host_for_model "gpt-oss")
@@ -581,4 +619,327 @@ small=gpt-oss:20b"
   source "$SCRIPT"
   # 120b only on big
   [ "$(ollama_host_for_model "gpt-oss:120b")" = "http://big:11434" ]
+}
+
+# ===========================================================================
+# Trust boundary: auto-discovery is opt-in (S1)
+# ===========================================================================
+
+@test "trust: mDNS host is ignored by default (no OLLAMA_DISCOVERY)" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0 localhost"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://localhost:11434" ]
+  # The mDNS candidate must never even be probed
+  run grep -c 'gx10-a9c0' "$CURL_LOG_FILE"
+  [ "$output" -eq 0 ]
+}
+
+@test "trust: tailscale peer is ignored by default (no OLLAMA_DISCOVERY)" {
+  export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
+  export CURL_SUCCEED_HOSTS="ul9c-r49.ts.net localhost"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://localhost:11434" ]
+  run grep -c 'ul9c-r49' "$CURL_LOG_FILE"
+  [ "$output" -eq 0 ]
+}
+
+@test "trust: OLLAMA_DISCOVERY=mdns enables mDNS only" {
+  export OLLAMA_DISCOVERY=mdns
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49.ts.net"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://gx10-a9c0:11434" ]
+}
+
+@test "trust: OLLAMA_DISCOVERY=tailscale enables tailscale only" {
+  export OLLAMA_DISCOVERY=tailscale
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49.ts.net"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://ul9c-r49.ts.net:11434" ]
+}
+
+@test "trust: OLLAMA_DISCOVERY='mdns tailscale' enables both" {
+  export OLLAMA_DISCOVERY="mdns tailscale"
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49.ts.net"
+  setup_curl_mock
+  source "$SCRIPT"
+  # Tailscale probed before mDNS
+  [ "$OLLAMA_HOSTS" = "http://ul9c-r49.ts.net:11434 http://gx10-a9c0:11434" ]
+}
+
+@test "trust: OLLAMA_DISCOVERY=off disables both sources" {
+  export OLLAMA_DISCOVERY=off
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49.ts.net localhost"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://localhost:11434" ]
+}
+
+@test "trust: extra hosts work without any discovery opt-in" {
+  export OLLAMA_EXTRA_HOSTS="ul9c-r49"
+  export CURL_SUCCEED_HOSTS="ul9c-r49"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://ul9c-r49:11434" ]
+}
+
+# ===========================================================================
+# Trust boundary: cache lives in a user-private state dir (S2)
+# ===========================================================================
+
+@test "state dir: default cache path is under XDG_RUNTIME_DIR, mode 0700, not /tmp" {
+  unset _OLLAMA_HOST_CACHE
+  export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime"
+  mkdir -p "$XDG_RUNTIME_DIR"
+  export OLLAMA_EXTRA_HOSTS="gx10-a9c0"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ -f "$XDG_RUNTIME_DIR/claude-llm-hooks/ollama-host-cache" ]
+  mode=$(stat -c %a "$XDG_RUNTIME_DIR/claude-llm-hooks" 2>/dev/null \
+    || stat -f %Lp "$XDG_RUNTIME_DIR/claude-llm-hooks")
+  [ "$mode" = "700" ]
+}
+
+@test "state dir: falls back to XDG_CACHE_HOME when XDG_RUNTIME_DIR unset" {
+  unset _OLLAMA_HOST_CACHE
+  unset XDG_RUNTIME_DIR
+  export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/cache"
+  mkdir -p "$XDG_CACHE_HOME"
+  export OLLAMA_EXTRA_HOSTS="gx10-a9c0"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ -f "$XDG_CACHE_HOME/claude-llm-hooks/ollama-host-cache" ]
+}
+
+@test "state dir: symlinked claude-llm-hooks dir is rejected, next base used" {
+  unset _OLLAMA_HOST_CACHE
+  export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime"
+  export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/cache"
+  mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME" "$BATS_TEST_TMPDIR/evil"
+  ln -s "$BATS_TEST_TMPDIR/evil" "$XDG_RUNTIME_DIR/claude-llm-hooks"
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  result=$(_llm_state_dir)
+  [ "$result" = "$XDG_CACHE_HOME/claude-llm-hooks" ]
+}
+
+@test "trust: OLLAMA_DISCOVERY=on enables both sources" {
+  export OLLAMA_DISCOVERY=on
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49.ts.net"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://ul9c-r49.ts.net:11434 http://gx10-a9c0:11434" ]
+}
+
+@test "trust: OLLAMA_DISCOVERY=all enables both sources" {
+  export OLLAMA_DISCOVERY=all
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49.ts.net"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://ul9c-r49.ts.net:11434 http://gx10-a9c0:11434" ]
+}
+
+@test "trust: OLLAMA_DISCOVERY=none disables both sources" {
+  export OLLAMA_DISCOVERY=none
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49.ts.net localhost"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://localhost:11434" ]
+}
+
+@test "trust: OLLAMA_DISCOVERY='mdns,tailscale' (comma form) enables both" {
+  export OLLAMA_DISCOVERY="mdns,tailscale"
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export TS_DISCOVERED_PEERS="ul9c-r49.ts.net"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0 ul9c-r49.ts.net"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://ul9c-r49.ts.net:11434 http://gx10-a9c0:11434" ]
+}
+
+@test "trust: symlinked rr counter file is not trusted (idx treated as 0)" {
+  write_cache <<'CACHE'
+http://a:11434
+http://b:11434
+CACHE
+  echo "1" > "$BATS_TEST_TMPDIR/attacker-rr"
+  ln -s "$BATS_TEST_TMPDIR/attacker-rr" "$_OLLAMA_HOST_CACHE.rr"
+  setup_curl_fail_mock
+  result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
+  # Untrusted counter must be ignored: idx stays 0 -> first pool member
+  [ "$result" = "http://a:11434" ]
+}
+
+@test "state dir: falls back to ~/.cache when both XDG vars are unset" {
+  setup_curl_fail_mock
+  export OLLAMA_HOST="http://pinned:9999"
+  source "$SCRIPT"
+  result=$(
+    unset XDG_RUNTIME_DIR XDG_CACHE_HOME
+    HOME="$BATS_TEST_TMPDIR/home"; export HOME
+    mkdir -p "$HOME/.cache"
+    _llm_state_dir
+  )
+  [ "$result" = "$BATS_TEST_TMPDIR/home/.cache/claude-llm-hooks" ]
+  [ -d "$result" ]
+}
+
+@test "state dir: falls back to a private mktemp dir when no base dir is usable" {
+  setup_curl_fail_mock
+  export OLLAMA_HOST="http://pinned:9999"
+  source "$SCRIPT"
+  result=$(
+    unset XDG_RUNTIME_DIR XDG_CACHE_HOME HOME
+    TMPDIR="$BATS_TEST_TMPDIR"; export TMPDIR
+    _llm_state_dir
+  )
+  case "$result" in
+    "$BATS_TEST_TMPDIR/claude-llm-hooks-"*) ;;
+    *) echo "unexpected state dir: $result"; return 1 ;;
+  esac
+  [ -d "$result" ]
+  mode=$(stat -c %a "$result" 2>/dev/null || stat -f %Lp "$result")
+  [ "$mode" = "700" ]
+}
+
+# ===========================================================================
+# Trust boundary: cache is bound to the trust configuration (S3)
+# ===========================================================================
+
+@test "trust: cached discovery pool is not reused after OLLAMA_DISCOVERY is revoked" {
+  export AVAHI_DISCOVERED_HOSTS="evil.local"
+  export CURL_SUCCEED_HOSTS="evil localhost"
+  setup_curl_mock
+  first=$(export OLLAMA_DISCOVERY=mdns; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$first" = "http://evil:11434" ]
+  # Opt-in revoked (OLLAMA_DISCOVERY unset): the still-fresh cache written
+  # under the opt-in must NOT be served
+  second=$(source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$second" = "http://localhost:11434" ]
+}
+
+@test "trust: cached pool is invalidated when the discovery source set changes" {
+  export AVAHI_DISCOVERED_HOSTS="evil.local"
+  export TS_DISCOVERED_PEERS="good.ts.net"
+  export CURL_SUCCEED_HOSTS="evil good.ts.net"
+  setup_curl_mock
+  first=$(export OLLAMA_DISCOVERY=mdns; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$first" = "http://evil:11434" ]
+  second=$(export OLLAMA_DISCOVERY=tailscale; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$second" = "http://good.ts.net:11434" ]
+}
+
+@test "trust: cached pool is invalidated when OLLAMA_EXTRA_HOSTS is removed" {
+  export CURL_SUCCEED_HOSTS="extra1 localhost"
+  setup_curl_mock
+  first=$(export OLLAMA_EXTRA_HOSTS="extra1"; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$first" = "http://extra1:11434" ]
+  second=$(source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$second" = "http://localhost:11434" ]
+}
+
+@test "trust: alias spellings of the same source set share the cache" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0"
+  setup_curl_mock
+  first=$(export OLLAMA_DISCOVERY=1; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$first" = "http://gx10-a9c0:11434" ]
+  probes_after_first=$(wc -l < "$CURL_LOG_FILE")
+  # 1 vs all: same effective source set -> normalized fingerprint matches,
+  # cache reused, no re-probe
+  second=$(export OLLAMA_DISCOVERY=all; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$second" = "http://gx10-a9c0:11434" ]
+  [ "$(wc -l < "$CURL_LOG_FILE")" -eq "$probes_after_first" ]
+}
+
+@test "trust: model routing ignores a cache written under a different trust config" {
+  printf '#cfg mdns=1 ts=0 hosts=\nhttp://evil:11434\t*\n' > "$_OLLAMA_HOST_CACHE"
+  touch "$_OLLAMA_HOST_CACHE"
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  result=$(ollama_host_for_model "gpt-oss:20b")
+  [ "$result" = "http://localhost:11434" ]
+}
+
+@test "trust: legacy cache without fingerprint header is not reused" {
+  echo "http://legacy:11434" > "$_OLLAMA_HOST_CACHE"
+  touch "$_OLLAMA_HOST_CACHE"
+  export CURL_SUCCEED_HOSTS="localhost"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://localhost:11434" ]
+}
+
+@test "model routing: stale cache is not reused; falls back to default host" {
+  printf 'http://big:11434\tgpt-oss:120b\n' | write_cache
+  set_mtime_ago "$_OLLAMA_HOST_CACHE" 600
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  result=$(ollama_host_for_model "gpt-oss:120b")
+  [ "$result" = "http://localhost:11434" ]
+}
+
+# ===========================================================================
+# LLM_TRUSTED_HOSTS (backend-agnostic trusted host list)
+# ===========================================================================
+
+@test "trusted hosts: LLM_TRUSTED_HOSTS joins the pool without discovery opt-in" {
+  export LLM_TRUSTED_HOSTS="trusted-1 trusted-2"
+  export CURL_SUCCEED_HOSTS="trusted-1 trusted-2"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://trusted-1:11434 http://trusted-2:11434" ]
+}
+
+@test "trusted hosts: merged with OLLAMA_EXTRA_HOSTS, duplicates dropped" {
+  export LLM_TRUSTED_HOSTS="trusted-1 shared-host"
+  export OLLAMA_EXTRA_HOSTS="shared-host extra-1"
+  export CURL_SUCCEED_HOSTS="trusted-1 shared-host extra-1"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://trusted-1:11434 http://shared-host:11434 http://extra-1:11434" ]
+}
+
+@test "trust: cached pool is invalidated when LLM_TRUSTED_HOSTS changes" {
+  export CURL_SUCCEED_HOSTS="trusted-1 trusted-2"
+  setup_curl_mock
+  first=$(export LLM_TRUSTED_HOSTS="trusted-1"; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$first" = "http://trusted-1:11434" ]
+  second=$(export LLM_TRUSTED_HOSTS="trusted-2"; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$second" = "http://trusted-2:11434" ]
+}
+
+@test "trusted hosts: glob-metachar entry is treated literally, not CWD-expanded" {
+  # A '*' entry must NOT expand against the CWD (which would balloon the
+  # candidate list into every filename in the working directory).
+  cd "$BATS_TEST_TMPDIR"
+  : > decoy-file-a; : > decoy-file-b
+  export LLM_TRUSTED_HOSTS="trusted-1 *"
+  export CURL_SUCCEED_HOSTS="trusted-1"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://trusted-1:11434" ]
+  # The decoy filenames must never have been probed as hosts
+  run grep -c 'decoy-file' "$CURL_LOG_FILE"
+  [ "$output" -eq 0 ]
 }

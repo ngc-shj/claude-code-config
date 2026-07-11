@@ -67,7 +67,7 @@ setup() {
   export CURL_LOG_FILE="$BATS_TEST_TMPDIR/curl-calls.log"
   # Pin Ollama so sourcing llm-utils.sh does not run real Ollama discovery.
   export OLLAMA_HOST="http://dummy-ollama:11434"
-  unset LLM_BACKEND LLAMACPP_HOST LLAMACPP_HOSTS
+  unset LLM_BACKEND LLAMACPP_HOST LLAMACPP_HOSTS LLM_TRUSTED_HOSTS
   unset LLAMACPP_MODEL_SMALL LLAMACPP_MODEL_LARGE
   setup_curl_mock
 }
@@ -256,4 +256,74 @@ teardown() {
   export CPP_SUCCEED_HOSTS="localhost:8080"
   result=$(source "$SCRIPT" && printf 'hi' | llm_request "gpt-oss:20b" "" 30 0)
   [ "$result" = "OK" ]
+}
+
+# ===========================================================================
+# Trust boundary: cache lives in a user-private state dir (S2)
+# ===========================================================================
+
+@test "state dir: default llamacpp cache path is under XDG_RUNTIME_DIR, not /tmp" {
+  unset _LLAMACPP_HOST_CACHE
+  export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime"
+  mkdir -p "$XDG_RUNTIME_DIR"
+  export CPP_SUCCEED_HOSTS="localhost:8080"
+  setup_curl_mock
+  source "$SCRIPT"
+  llamacpp_available
+  [ -f "$XDG_RUNTIME_DIR/claude-llm-hooks/llamacpp-host-cache" ]
+}
+
+# ===========================================================================
+# LLM_TRUSTED_HOSTS (backend-agnostic trusted host list)
+# ===========================================================================
+
+@test "trusted hosts: bare LLM_TRUSTED_HOSTS entry joins the pool on port 8080" {
+  export LLM_TRUSTED_HOSTS="trusted-1"
+  export CPP_SUCCEED_HOSTS="trusted-1"
+  result=$(source "$SCRIPT" && llamacpp_host_for_model "unsloth/gpt-oss-20b-GGUF:F16")
+  [ "$result" = "http://trusted-1:8080" ]
+}
+
+@test "trusted hosts: localhost:8080 remains a candidate alongside LLM_TRUSTED_HOSTS" {
+  export LLM_TRUSTED_HOSTS="trusted-1"
+  export CPP_SUCCEED_HOSTS="trusted-1 localhost"
+  source "$SCRIPT"
+  llamacpp_available
+  grep -q '^http://trusted-1:8080' "$_LLAMACPP_HOST_CACHE"
+  grep -q '^http://localhost:8080' "$_LLAMACPP_HOST_CACHE"
+}
+
+@test "trusted hosts: LLAMACPP_HOSTS is exclusive and overrides LLM_TRUSTED_HOSTS" {
+  export LLAMACPP_HOSTS="only-a"
+  export LLM_TRUSTED_HOSTS="trusted-1"
+  export CPP_SUCCEED_HOSTS="only-a trusted-1"
+  source "$SCRIPT"
+  result=$(llamacpp_host_for_model "unsloth/gpt-oss-20b-GGUF:F16")
+  [ "$result" = "http://only-a:8080" ]
+  # The generic trusted host must never even be probed
+  run grep -c 'trusted-1' "$CURL_LOG_FILE"
+  [ "$output" -eq 0 ]
+}
+
+@test "trust: llamacpp cache is invalidated when LLM_TRUSTED_HOSTS changes" {
+  export CPP_SUCCEED_HOSTS="trusted-1 localhost"
+  first=$(export LLM_TRUSTED_HOSTS="trusted-1"; source "$SCRIPT" \
+    && llamacpp_host_for_model "unsloth/gpt-oss-20b-GGUF:F16" && llamacpp_host_for_model "unsloth/gpt-oss-20b-GGUF:F16")
+  # Round-robins across trusted-1 and localhost -> both appear
+  [[ "$first" == *"http://trusted-1:8080"* ]]
+  # Trusted list revoked: the still-fresh cache must not serve trusted-1
+  second=$(source "$SCRIPT" && llamacpp_host_for_model "unsloth/gpt-oss-20b-GGUF:F16")
+  [ "$second" = "http://localhost:8080" ]
+}
+
+@test "trusted hosts: glob-metachar entry is treated literally, not CWD-expanded" {
+  cd "$BATS_TEST_TMPDIR"
+  : > decoy-file-a; : > decoy-file-b
+  export LLM_TRUSTED_HOSTS="trusted-1 *"
+  export CPP_SUCCEED_HOSTS="trusted-1"
+  source "$SCRIPT"
+  result=$(llamacpp_host_for_model "unsloth/gpt-oss-20b-GGUF:F16")
+  [ "$result" = "http://trusted-1:8080" ]
+  run grep -c 'decoy-file' "$CURL_LOG_FILE"
+  [ "$output" -eq 0 ]
 }

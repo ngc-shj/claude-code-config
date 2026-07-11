@@ -27,6 +27,91 @@
 
 # --- shared discovery helpers (backend-agnostic) ---
 
+# Per-user private state directory for host caches and round-robin counters.
+# World-writable /tmp is off-limits: a predictable /tmp path lets any local user
+# pre-create the cache and route prompts (diffs, source files) to their own
+# server. Preference order: XDG_RUNTIME_DIR (0700, tmpfs) → XDG_CACHE_HOME →
+# ~/.cache. Each candidate is accepted only if the resulting directory is a
+# non-symlink directory owned by the current user; otherwise fall back to a
+# per-process mktemp dir (safe, but no cross-process cache reuse).
+_llm_state_dir() {
+  local base dir
+  for base in "${XDG_RUNTIME_DIR:-}" "${XDG_CACHE_HOME:-}" "${HOME:+${HOME}/.cache}"; do
+    [ -n "$base" ] && [ -d "$base" ] || continue
+    dir="$base/claude-llm-hooks"
+    mkdir -p -m 0700 "$dir" 2>/dev/null || true
+    if [ -d "$dir" ] && ! [ -L "$dir" ] && [ -O "$dir" ]; then
+      chmod 0700 "$dir" 2>/dev/null || true
+      printf '%s' "$dir"
+      return 0
+    fi
+  done
+  mktemp -d "${TMPDIR:-/tmp}/claude-llm-hooks-XXXXXX" 2>/dev/null
+}
+
+# Is $1 a state file we may trust? Regular file, not a symlink, owned by the
+# current user. Guards every cache/counter read against files pre-created by
+# another local user (mode alone is not enough — ownership is the invariant).
+_llm_trusted_file() {
+  [ -f "$1" ] && ! [ -L "$1" ] && [ -O "$1" ]
+}
+
+# Word-split the given host-list argument strings on IFS WITHOUT filename
+# globbing, emitting one non-empty host per line. A host entry containing `*`,
+# `?`, or `[...]` (typo, or a misguided "trust everything" wildcard) must be
+# treated literally — never expanded against the hook's current directory,
+# which would balloon the candidate/fingerprint into CWD-dependent garbage.
+_llm_split_hosts() {
+  local had_f=0 h
+  case $- in *f*) had_f=1 ;; esac
+  set -f
+  # shellcheck disable=SC2048,SC2086 -- intentional word-split, globbing disabled
+  set -- $*
+  [ "$had_f" -eq 1 ] || set +f
+  for h in "$@"; do
+    [ -n "$h" ] && printf '%s\n' "$h"
+  done
+}
+
+# Same split, joined into a single space-normalized line (for fingerprints).
+_llm_join_hosts() {
+  _llm_split_hosts "$@" | tr '\n' ' ' | sed 's/ *$//'
+}
+
+# Emit the records of cache file $1 iff it is a trusted file, fresh (< 5 min),
+# AND its first line equals fingerprint $2 — the trust configuration that
+# produced it. Empty output otherwise, so callers re-probe. Binding the cache
+# to its fingerprint makes revoking/changing a trust setting take effect on
+# the NEXT call, not after the TTL — a host admitted under a since-revoked
+# setting must never be served from cache.
+_llm_cached_records() {
+  local cache="$1" fingerprint="$2"
+  [ -n "${cache:-}" ] || return 0
+  _llm_trusted_file "$cache" || return 0
+  local mtime
+  mtime=$(stat -c %Y "$cache" 2>/dev/null || stat -f %m "$cache" 2>/dev/null || echo 0)
+  [ "$(( $(date +%s) - mtime ))" -lt 300 ] || return 0
+  local header
+  IFS= read -r header < "$cache"
+  [ "$header" = "$fingerprint" ] || return 0
+  tail -n +2 "$cache"
+}
+
+# Atomically write records blob $3 to cache file $1, stamped with fingerprint
+# $2 as the first line. No-op when the blob is empty or the path is a symlink.
+_llm_write_cache() {
+  local cache="$1" fingerprint="$2" blob="$3"
+  [ -n "$blob" ] || return 0
+  if [ -L "$cache" ]; then
+    return 0
+  fi
+  local tmp
+  tmp=$(mktemp "${cache}.XXXXXX" 2>/dev/null) || return 0
+  printf '%s\n%s\n' "$fingerprint" "$blob" > "$tmp"
+  mv "$tmp" "$cache" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true
+  return 0
+}
+
 # Pick one URL round-robin and advance the shared counter. Best-effort and
 # lock-free: a race between parallel processes only skews distribution slightly,
 # which load balancing tolerates. Portable (no flock) so it works on macOS bash.
@@ -40,7 +125,7 @@ _pick_round_robin() {
   fi
 
   local idx=0
-  if [ -f "$rr_file" ] && ! [ -L "$rr_file" ]; then
+  if _llm_trusted_file "$rr_file"; then
     idx=$(cat "$rr_file" 2>/dev/null || echo 0)
   fi
   case "$idx" in (''|*[!0-9]*) idx=0;; esac

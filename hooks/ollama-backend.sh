@@ -3,11 +3,19 @@
 # AFTER it defines the shared helpers (_models_have, _pick_round_robin,
 # _rr_suffix); this file uses them and must not be sourced standalone.
 #
-# Resolve Ollama server(s): honor env var, otherwise auto-detect every reachable
-# server on the LAN and load-balance across them — model-aware, so a request is
-# only ever routed to a server that actually hosts the requested model (the
-# servers are NOT guaranteed to hold the same model set). Also provides the
-# _ollama_generate primitive (/api/generate) used by the llm-utils.sh dispatcher.
+# Resolve Ollama server(s): honor env var, otherwise probe the explicitly
+# configured hosts (OLLAMA_EXTRA_HOSTS) and load-balance across them — model-aware,
+# so a request is only ever routed to a server that actually hosts the requested
+# model (the servers are NOT guaranteed to hold the same model set). Also provides
+# the _ollama_generate primitive (/api/generate) used by the llm-utils.sh dispatcher.
+#
+# TRUST MODEL: prompts sent to a server include diffs and full source files, so
+# every pool member is a data-exfiltration sink if untrusted. mDNS/Tailscale
+# auto-discovery adds hosts on the sole evidence that they answer /api/version —
+# any LAN device can fake that — so it is OFF by default and gated behind
+# OLLAMA_DISCOVERY (explicit, informed opt-in). Explicitly configured hosts
+# (OLLAMA_HOST / LLM_TRUSTED_HOSTS / OLLAMA_EXTRA_HOSTS) are trusted because
+# the user named them.
 #
 # Sourcing this file sets and exports:
 #   OLLAMA_HOSTS — space-separated list of ALL reachable Ollama base URLs
@@ -23,11 +31,23 @@
 #
 # Inputs (env):
 #   OLLAMA_HOST        — if set, pins to that one server; discovery is skipped.
-#   OLLAMA_EXTRA_HOSTS — manual escape hatch: space-separated hosts to probe in
-#                        ADDITION to auto-discovery, for hosts that neither mDNS
-#                        nor Tailscale can enumerate. Normally unneeded — online
-#                        Tailscale peers are discovered automatically. Each entry
-#                        is a bare hostname, host:port, or URL.
+#   LLM_TRUSTED_HOSTS  — primary multi-server configuration, shared with the
+#                        llama.cpp backend: space-separated trusted hosts to
+#                        probe. Each entry is a bare hostname (Ollama probes
+#                        port 11434), host:port, or URL. Backend membership is
+#                        decided by behavior — a listed host joins whichever
+#                        backend's pool answers that backend's probe.
+#   OLLAMA_EXTRA_HOSTS — Ollama-only additions to LLM_TRUSTED_HOSTS, for hosts
+#                        that should not be probed by other backends.
+#   OLLAMA_DISCOVERY   — opt-in for UNAUTHENTICATED auto-discovery sources.
+#                        Unset/empty/"0"/"off"/"none" (default): no auto-discovery.
+#                        "1"/"on"/"all": enable both sources. Or a space/comma
+#                        list of sources: "mdns", "tailscale". Enabling mDNS
+#                        means any device on the local network that mimics the
+#                        Ollama API can receive your diffs and source files —
+#                        enable it only on networks where every host is trusted.
+#                        Tailscale peers are at least tailnet-authenticated, but
+#                        still opt-in (shared/compromised nodes receive code).
 #   OLLAMA_DISCOVERY_MAX — cap on candidates probed per discovery source (default 6).
 #   TAILSCALE_BIN      — path/name of the tailscale CLI. Defaults to `tailscale` on
 #                        PATH, then the macOS app bundle
@@ -37,10 +57,28 @@
 # commit-msg-check.sh). Safe under set -euo pipefail — all fallible commands
 # guarded with || true.
 
-_OLLAMA_CACHE_FILE="${_OLLAMA_HOST_CACHE:-/tmp/.ollama-host-cache-$(id -u)}"
+# Host cache lives in the per-user private state dir (_llm_state_dir,
+# llm-utils.sh) — never in world-writable /tmp, where a predictable name lets
+# another local user pre-seed the pool with their own server.
+_OLLAMA_CACHE_FILE="${_OLLAMA_HOST_CACHE:-$(_llm_state_dir)/ollama-host-cache}"
 # Field separator between a cached server's URL and its model list. Kept in a
 # variable (not a literal tab) so editors/linters cannot silently mangle it.
 _OLLAMA_TAB=$'\t'
+
+# Is auto-discovery source $1 ("mdns" | "tailscale") enabled? Default: no.
+# Auto-discovered hosts are unauthenticated (see TRUST MODEL above), so each
+# source requires explicit opt-in via OLLAMA_DISCOVERY.
+_ollama_discovery_enabled() {
+  local src="$1" cfg="${OLLAMA_DISCOVERY:-}"
+  case "$cfg" in
+    ''|0|off|none) return 1 ;;
+    1|on|all)      return 0 ;;
+  esac
+  case " ${cfg//,/ } " in
+    *" $src "*) return 0 ;;
+    *)          return 1 ;;
+  esac
+}
 
 # Discover mDNS hostnames advertised on the LAN. Name-independent by design:
 # an Ollama server is identified by a live /api/version response (see
@@ -151,27 +189,31 @@ _probe_host_entry() {
 # Discover every reachable Ollama server. Emits one TAB-separated record per
 # physical host: "<base_url>\t<space-separated models or '*'>". Candidates come
 # from three sources, probed in order:
-#   1. OLLAMA_EXTRA_HOSTS — manual escape hatch for hosts neither mDNS nor
-#      Tailscale can enumerate. Space-separated bare hostname, host:port, or URL.
-#   2. Online Tailscale peers (MagicDNS FQDNs).
-#   3. mDNS-advertised hosts on the local LAN.
+#   1. LLM_TRUSTED_HOSTS then OLLAMA_EXTRA_HOSTS — explicitly trusted hosts
+#      (primary configuration). Space-separated bare hostname, host:port, or URL.
+#   2. Online Tailscale peers (MagicDNS FQDNs) — only with OLLAMA_DISCOVERY opt-in.
+#   3. mDNS-advertised hosts on the local LAN — only with OLLAMA_DISCOVERY opt-in.
 # Duplicates (same base URL) are dropped. localhost is emitted only when NO
 # remote server is reachable — the load-balance pool should target dedicated
 # inference hosts, not the machine already running Claude.
 _probe_servers() {
   local entries=()
   local e
-  for e in ${OLLAMA_EXTRA_HOSTS:-}; do
-    [ -n "$e" ] && entries+=("$e")
-  done
   while IFS= read -r e; do
-    [ -z "$e" ] && continue
     entries+=("$e")
-  done < <(_discover_tailscale_hosts)
-  while IFS= read -r e; do
-    [ -z "$e" ] && continue
-    entries+=("$e")
-  done < <(_discover_mdns_hosts)
+  done < <(_llm_split_hosts "${LLM_TRUSTED_HOSTS:-}" "${OLLAMA_EXTRA_HOSTS:-}")
+  if _ollama_discovery_enabled tailscale; then
+    while IFS= read -r e; do
+      [ -z "$e" ] && continue
+      entries+=("$e")
+    done < <(_discover_tailscale_hosts)
+  fi
+  if _ollama_discovery_enabled mdns; then
+    while IFS= read -r e; do
+      [ -z "$e" ] && continue
+      entries+=("$e")
+    done < <(_discover_mdns_hosts)
+  fi
 
   local records=()
   local seen=" "
@@ -203,6 +245,29 @@ _probe_servers() {
 # Public: echo a reachable base URL hosting <model>, picked round-robin among
 # all servers that have it. Empty output means no reachable server has it — the
 # caller should treat that as "model unavailable" and skip gracefully.
+# One-line fingerprint of the trust-relevant configuration, stored as the
+# cache's first line (consumed via _llm_cached_records / _llm_write_cache in
+# llm-utils.sh). A cached pool is only valid for the exact allow-set that
+# produced it: revoking an opt-in (OLLAMA_DISCOVERY) or editing the trusted
+# host lists must take effect on the NEXT call, not after the 5-min TTL —
+# otherwise a host admitted under a since-revoked opt-in keeps receiving
+# prompts. Normalized to effective sources (so alias spellings 1/on/all don't
+# needlessly invalidate) and to the effective candidate list (LLM_TRUSTED_HOSTS
+# and OLLAMA_EXTRA_HOSTS joined in probe order, whitespace collapsed).
+_ollama_trust_fingerprint() {
+  local mdns=0 ts=0
+  _ollama_discovery_enabled mdns && mdns=1
+  _ollama_discovery_enabled tailscale && ts=1
+  printf '#cfg mdns=%s ts=%s hosts=%s' "$mdns" "$ts" \
+    "$(_llm_join_hosts "${LLM_TRUSTED_HOSTS:-}" "${OLLAMA_EXTRA_HOSTS:-}")"
+}
+
+# Emit the cached records iff the cache is trusted, fresh, and was written
+# under the current trust configuration. Empty output otherwise.
+_ollama_read_cache() {
+  _llm_cached_records "$_OLLAMA_CACHE_FILE" "$(_ollama_trust_fingerprint)"
+}
+
 ollama_host_for_model() {
   local want="$1"
 
@@ -212,7 +277,9 @@ ollama_host_for_model() {
     return
   fi
   local cache="$_OLLAMA_CACHE_FILE"
-  if [ -z "${cache:-}" ] || ! [ -f "$cache" ] || [ -L "$cache" ]; then
+  local records
+  records=$(_ollama_read_cache)
+  if [ -z "$records" ]; then
     echo "${OLLAMA_HOST:-http://localhost:11434}"
     return
   fi
@@ -227,7 +294,7 @@ ollama_host_for_model() {
       url="${line%%"$_OLLAMA_TAB"*}"; models="${line#*"$_OLLAMA_TAB"}"
     fi
     _models_have "$models" "$want" && candidates+=("$url")
-  done < "$cache"
+  done <<< "$records"
 
   [ "${#candidates[@]}" -eq 0 ] && return
   _pick_round_robin "${cache}.rr.$(_rr_suffix "$want")" "${candidates[@]}"
@@ -236,27 +303,14 @@ ollama_host_for_model() {
 _resolve_ollama_servers() {
   local cache_file="$_OLLAMA_CACHE_FILE"
 
-  local records_blob=""
-  # Use cache if it exists, is a regular file (not symlink), and fresh (< 5 min)
-  if [ -f "$cache_file" ] && ! [ -L "$cache_file" ]; then
-    local mtime
-    mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)
-    if [ "$(( $(date +%s) - mtime ))" -lt 300 ]; then
-      records_blob=$(cat "$cache_file")
-    fi
-  fi
+  # Reuse the cache only when trusted, fresh, AND written under the current
+  # trust configuration (see _ollama_read_cache).
+  local records_blob
+  records_blob=$(_ollama_read_cache)
 
   if [ -z "$records_blob" ]; then
     records_blob=$(_probe_servers)
-    # Cache the discovered list (atomic write; skip if path is a symlink).
-    if [ -n "$records_blob" ] && ! [ -L "$cache_file" ]; then
-      local tmp
-      tmp=$(mktemp "${cache_file}.XXXXXX" 2>/dev/null) || true
-      if [ -n "${tmp:-}" ]; then
-        printf '%s\n' "$records_blob" > "$tmp"
-        mv "$tmp" "$cache_file" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true
-      fi
-    fi
+    _llm_write_cache "$cache_file" "$(_ollama_trust_fingerprint)" "$records_blob"
   fi
 
   local pool=()
