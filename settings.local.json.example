@@ -1,0 +1,5 @@
+{
+  "env": {
+    "OLLAMA_EXTRA_HOSTS": "llm-server-1 llm-server-2.your-tailnet.ts.net"
+  }
+}

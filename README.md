@@ -226,19 +226,26 @@ across them:
 - **Configuration example** — hooks inherit Claude Code's process environment,
   so the most reliable place for these variables is the `env` block of
   `~/.claude/settings.local.json` (machine-specific, works for both IDE and
-  CLI launches; a shell-profile `export` also works for terminal launches):
+  CLI launches; a shell-profile `export` also works for terminal launches).
+  Copy the template and edit the host list:
+
+  ```bash
+  cp settings.local.json.example ~/.claude/settings.local.json
+  ```
 
   ```json
   {
     "env": {
-      "OLLAMA_EXTRA_HOSTS": "gx10-a9c0 ul9c-r49.tailnet-example.ts.net"
+      "OLLAMA_EXTRA_HOSTS": "llm-server-1 llm-server-2.your-tailnet.ts.net"
     }
   }
   ```
 
-  To restore zero-config auto-discovery instead (after reading the trust
-  model above), set `"OLLAMA_DISCOVERY": "tailscale"` (tailnet only) or
-  `"1"` (also mDNS — trusted networks only).
+  If `~/.claude/settings.local.json` already exists, merge the `env` block
+  instead of overwriting. To restore zero-config auto-discovery instead
+  (after reading the trust model above), set
+  `"OLLAMA_DISCOVERY": "tailscale"` (tailnet only) or `"1"` (also mDNS —
+  trusted networks only).
 
 ### llm-commands.sh (Utility — called by skills)
 
