@@ -218,8 +218,11 @@ across them:
   `OLLAMA_EXTRA_HOSTS` is the primary multi-server configuration (space-separated
   bare host, `host:port`, or URL). Probe results are cached for 5 minutes in a
   per-user private state dir (`$XDG_RUNTIME_DIR/claude-llm-hooks`, falling back
-  to `~/.cache/claude-llm-hooks` — never world-writable `/tmp`); localhost is
-  used only when no remote server is reachable.
+  to `~/.cache/claude-llm-hooks` — never world-writable `/tmp`). The cache is
+  bound to the trust configuration (`OLLAMA_DISCOVERY` + `OLLAMA_EXTRA_HOSTS`)
+  that produced it, so revoking or changing an opt-in takes effect on the next
+  call — a host admitted under a since-revoked setting is never served from
+  cache. localhost is used only when no remote server is reachable.
 
 ### llm-commands.sh (Utility — called by skills)
 

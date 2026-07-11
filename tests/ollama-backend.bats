@@ -95,6 +95,16 @@ set_mtime_ago() {
   python3 -c "import os; os.utime('$file', ($target_ts, $target_ts))" 2>/dev/null || true
 }
 
+
+# Write a host-cache file valid for the CURRENT trust config (discovery off,
+# no extra hosts — the setup() default) by prepending the fingerprint header
+# the production reader requires. stdin = records.
+write_cache() {
+  printf '#cfg mdns=0 ts=0 extra=\n' > "$_OLLAMA_HOST_CACHE"
+  cat >> "$_OLLAMA_HOST_CACHE"
+  touch "$_OLLAMA_HOST_CACHE"
+}
+
 # ---------------------------------------------------------------------------
 # Helper: mock tailscale CLI. `tailscale status --json` emits an online peer
 # per FQDN in TS_DISCOVERED_PEERS (space-separated). Always installed in setup()
@@ -392,10 +402,11 @@ EOF
 # ===========================================================================
 
 @test "round-robin: successive sources rotate through the pool" {
-  echo "http://a:11434
+  write_cache <<'CACHE'
+http://a:11434
 http://b:11434
-http://c:11434" > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+http://c:11434
+CACHE
   setup_curl_fail_mock
   first=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
   second=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
@@ -408,8 +419,9 @@ http://c:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "round-robin: single-server pool always returns that server" {
-  echo "http://only:11434" > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  write_cache <<'CACHE'
+http://only:11434
+CACHE
   setup_curl_fail_mock
   first=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
   second=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
@@ -428,9 +440,10 @@ http://c:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "round-robin: corrupt counter file is treated as zero" {
-  echo "http://a:11434
-http://b:11434" > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  write_cache <<'CACHE'
+http://a:11434
+http://b:11434
+CACHE
   echo "garbage" > "$_OLLAMA_HOST_CACHE.rr"
   setup_curl_fail_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
@@ -442,9 +455,10 @@ http://b:11434" > "$_OLLAMA_HOST_CACHE"
 # ===========================================================================
 
 @test "cache: fresh cache returns cached pool without probing" {
-  echo "http://cached-a:11434
-http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  write_cache <<'CACHE'
+http://cached-a:11434
+http://cached-b:11434
+CACHE
   setup_curl_fail_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOSTS")
   [ "$result" = "http://cached-a:11434 http://cached-b:11434" ]
@@ -452,7 +466,9 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "cache: stale cache triggers re-probe" {
-  echo "http://stale-host:11434" > "$_OLLAMA_HOST_CACHE"
+  write_cache <<'CACHE'
+http://stale-host:11434
+CACHE
   set_mtime_ago "$_OLLAMA_HOST_CACHE" 600
   setup_curl_fail_mock
   result=$(source "$SCRIPT" && echo "$OLLAMA_HOST")
@@ -475,10 +491,13 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
   setup_curl_mock
   source "$SCRIPT"
   [ -f "$_OLLAMA_HOST_CACHE" ]
-  # Each line is "<url>\t<models>"; the URL field is what the pool is built from.
+  # Line 1 is the trust-fingerprint header; records follow. Each record is
+  # "<url>\t<models>"; the URL field is what the pool is built from.
+  run head -1 "$_OLLAMA_HOST_CACHE"
+  [ "$output" = "#cfg mdns=1 ts=0 extra=" ]
   run cut -f1 "$_OLLAMA_HOST_CACHE"
-  [ "${lines[0]}" = "http://gx10-a9c0:11434" ]
-  [ "${lines[1]}" = "http://ul9c-r49:11434" ]
+  [ "${lines[1]}" = "http://gx10-a9c0:11434" ]
+  [ "${lines[2]}" = "http://ul9c-r49:11434" ]
 }
 
 @test "cache write: does not create cache on fallback to localhost" {
@@ -537,8 +556,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 
 @test "model routing: only servers hosting the model are candidates" {
   printf 'http://big:11434\tgpt-oss:120b gpt-oss:20b\nhttp://small:11434\tgpt-oss:20b\n' \
-    > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+    | write_cache
   setup_curl_fail_mock
   source "$SCRIPT"
   # 120b lives only on big — every pick must be big
@@ -550,8 +568,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 
 @test "model routing: shared model round-robins across hosts that have it" {
   printf 'http://big:11434\tgpt-oss:120b gpt-oss:20b\nhttp://small:11434\tgpt-oss:20b\n' \
-    > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+    | write_cache
   setup_curl_fail_mock
   source "$SCRIPT"
   first=$(ollama_host_for_model "gpt-oss:20b")
@@ -560,8 +577,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "model routing: unknown model yields empty (caller skips)" {
-  printf 'http://big:11434\tgpt-oss:120b\n' > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  printf 'http://big:11434\tgpt-oss:120b\n' | write_cache
   setup_curl_fail_mock
   source "$SCRIPT"
   result=$(ollama_host_for_model "llama3:70b")
@@ -570,8 +586,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 
 @test "model routing: wildcard (unknown inventory) matches any model" {
   # A server whose models could not be enumerated is stored as '*'.
-  printf 'http://mystery:11434\t*\n' > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  printf 'http://mystery:11434\t*\n' | write_cache
   setup_curl_fail_mock
   source "$SCRIPT"
   result=$(ollama_host_for_model "anything:latest")
@@ -579,8 +594,7 @@ http://cached-b:11434" > "$_OLLAMA_HOST_CACHE"
 }
 
 @test "model routing: tag-less request matches a tagged model" {
-  printf 'http://big:11434\tgpt-oss:120b\n' > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  printf 'http://big:11434\tgpt-oss:120b\n' | write_cache
   setup_curl_fail_mock
   source "$SCRIPT"
   result=$(ollama_host_for_model "gpt-oss")
@@ -762,9 +776,10 @@ small=gpt-oss:20b"
 }
 
 @test "trust: symlinked rr counter file is not trusted (idx treated as 0)" {
-  echo "http://a:11434
-http://b:11434" > "$_OLLAMA_HOST_CACHE"
-  touch "$_OLLAMA_HOST_CACHE"
+  write_cache <<'CACHE'
+http://a:11434
+http://b:11434
+CACHE
   echo "1" > "$BATS_TEST_TMPDIR/attacker-rr"
   ln -s "$BATS_TEST_TMPDIR/attacker-rr" "$_OLLAMA_HOST_CACHE.rr"
   setup_curl_fail_mock
@@ -803,4 +818,81 @@ http://b:11434" > "$_OLLAMA_HOST_CACHE"
   [ -d "$result" ]
   mode=$(stat -c %a "$result" 2>/dev/null || stat -f %Lp "$result")
   [ "$mode" = "700" ]
+}
+
+# ===========================================================================
+# Trust boundary: cache is bound to the trust configuration (S3)
+# ===========================================================================
+
+@test "trust: cached discovery pool is not reused after OLLAMA_DISCOVERY is revoked" {
+  export AVAHI_DISCOVERED_HOSTS="evil.local"
+  export CURL_SUCCEED_HOSTS="evil localhost"
+  setup_curl_mock
+  first=$(export OLLAMA_DISCOVERY=mdns; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$first" = "http://evil:11434" ]
+  # Opt-in revoked (OLLAMA_DISCOVERY unset): the still-fresh cache written
+  # under the opt-in must NOT be served
+  second=$(source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$second" = "http://localhost:11434" ]
+}
+
+@test "trust: cached pool is invalidated when the discovery source set changes" {
+  export AVAHI_DISCOVERED_HOSTS="evil.local"
+  export TS_DISCOVERED_PEERS="good.ts.net"
+  export CURL_SUCCEED_HOSTS="evil good.ts.net"
+  setup_curl_mock
+  first=$(export OLLAMA_DISCOVERY=mdns; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$first" = "http://evil:11434" ]
+  second=$(export OLLAMA_DISCOVERY=tailscale; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$second" = "http://good.ts.net:11434" ]
+}
+
+@test "trust: cached pool is invalidated when OLLAMA_EXTRA_HOSTS is removed" {
+  export CURL_SUCCEED_HOSTS="extra1 localhost"
+  setup_curl_mock
+  first=$(export OLLAMA_EXTRA_HOSTS="extra1"; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$first" = "http://extra1:11434" ]
+  second=$(source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$second" = "http://localhost:11434" ]
+}
+
+@test "trust: alias spellings of the same source set share the cache" {
+  export AVAHI_DISCOVERED_HOSTS="gx10-a9c0.local"
+  export CURL_SUCCEED_HOSTS="gx10-a9c0"
+  setup_curl_mock
+  first=$(export OLLAMA_DISCOVERY=1; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$first" = "http://gx10-a9c0:11434" ]
+  probes_after_first=$(wc -l < "$CURL_LOG_FILE")
+  # 1 vs all: same effective source set -> normalized fingerprint matches,
+  # cache reused, no re-probe
+  second=$(export OLLAMA_DISCOVERY=all; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$second" = "http://gx10-a9c0:11434" ]
+  [ "$(wc -l < "$CURL_LOG_FILE")" -eq "$probes_after_first" ]
+}
+
+@test "trust: model routing ignores a cache written under a different trust config" {
+  printf '#cfg mdns=1 ts=0 extra=\nhttp://evil:11434\t*\n' > "$_OLLAMA_HOST_CACHE"
+  touch "$_OLLAMA_HOST_CACHE"
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  result=$(ollama_host_for_model "gpt-oss:20b")
+  [ "$result" = "http://localhost:11434" ]
+}
+
+@test "trust: legacy cache without fingerprint header is not reused" {
+  echo "http://legacy:11434" > "$_OLLAMA_HOST_CACHE"
+  touch "$_OLLAMA_HOST_CACHE"
+  export CURL_SUCCEED_HOSTS="localhost"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://localhost:11434" ]
+}
+
+@test "model routing: stale cache is not reused; falls back to default host" {
+  printf 'http://big:11434\tgpt-oss:120b\n' | write_cache
+  set_mtime_ago "$_OLLAMA_HOST_CACHE" 600
+  setup_curl_fail_mock
+  source "$SCRIPT"
+  result=$(ollama_host_for_model "gpt-oss:120b")
+  [ "$result" = "http://localhost:11434" ]
 }
