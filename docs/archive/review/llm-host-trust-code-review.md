@@ -1,9 +1,14 @@
 # Code Review: llm-host-trust
 
 Date: 2026-07-11
-Review rounds: 3 (Round 1 = external security audit of `main`; Round 2 = triangulate
-verification of the fixes; Round 3 = incremental verification of Round-2 finding fixes)
-Termination: Round 3 — all three experts returned "No findings".
+Review rounds: 5 (Round 1 = external security audit of `main`; Round 2 = triangulate
+verification of the S1/S2 fixes; Round 3 = incremental verification of Round-2
+finding fixes; Round 4 = user review of the committed branch, finding S3;
+Round 5 = triangulate verification of the S3 fix)
+Termination: Round 5 — Functionality and Security "No findings"; Testing's T6 was
+resolved by applying, verbatim, the test the Testing expert authored AND
+red/green-mutation-verified inside the same round, so its verification
+obligation was discharged by the finding's author (no Round 6).
 
 ## Round 1 — external security audit findings (verified by orchestrator)
 
@@ -107,6 +112,44 @@ understated); R43 — every touched predicate strictly narrows.
   stat portability idiom consistent. One non-defect observation (missing `-d`
   assert in the `~/.cache` test) applied directly under tightening-only skip.
 
+## Round 4 — user review of the committed branch
+
+### S3 [Major]: cache reuse survives trust-configuration revocation for up to 5 min
+
+- File: `hooks/ollama-backend.sh` (`_resolve_ollama_servers` cache read)
+- Evidence: cache validity was judged only by owner/symlink/mtime; the current
+  `OLLAMA_DISCOVERY`, `OLLAMA_EXTRA_HOSTS`, and each record's provenance were
+  not part of the cache key. After e.g. `OLLAMA_DISCOVERY=mdns` cached an
+  attacker's server, unsetting the opt-in still served the fresh cache — the
+  trust-boundary revocation was not immediate. The pre-fix test
+  "cache: fresh cache returns cached pool" codified this behavior.
+- Status: **Fixed in Round 5** (see Resolution Status).
+
+## Round 5 — expert verification of the S3 fix
+
+- Functionality: No findings. The stale-cache fallback concern is unreachable
+  for real callers (`_resolve_ollama_servers` always refreshes at source time
+  before `ollama_host_for_model` can run); `tail -n +2` is POSIX; unset vs
+  empty `OLLAMA_EXTRA_HOSTS` fingerprint identically; legacy headerless cache
+  re-probes exactly once; `write_cache` helper correct in both heredoc and
+  pipe forms; R43 — strictly narrowing.
+- Security: No findings. Exactly two cache read sites, both routed through
+  `_ollama_read_cache`; fingerprint unforgeable via `OLLAMA_EXTRA_HOSTS`
+  (booleans precede the free-form field and derive solely from
+  `OLLAMA_DISCOVERY`; embedded newlines cause only spurious re-probes);
+  header/tail double-open TOCTOU is self-attack-only inside the 0700
+  owned dir; llamacpp backend structurally immune (unpinned candidates are
+  localhost-only, pinned path never touches the cache); alias normalization
+  (1/on/all) verified as identical effective source sets, not widening;
+  `.rr` counters carry only a rotation index — correctly out of
+  fingerprint scope. R43 — no widening.
+- Testing: T6 [Major] — `ollama_host_for_model`'s freshness branch had no
+  dedicated red-on-revert test (only `_resolve_ollama_servers`' branch was
+  covered). The expert authored the exact missing test and verified it green
+  on the fix and red under the freshness-mutation. **Resolved: test applied
+  verbatim.** All 6 S3 regression tests independently re-verified as
+  load-bearing and non-vacuous; both orchestrator mutations reproduced.
+
 ## Adjacent Findings
 
 - T4 routed Testing → Security; disposition recorded in Resolution Status.
@@ -140,7 +183,7 @@ RT7 applied (mutation testing drove T1-T3) / RT4, RT8, RT9 N/A.
 
 N/A — no environment constraints declared in Phase 1 (standalone Phase 3
 invocation on external audit findings). All verification paths are
-`verified-local`: `bats tests/` 566/566 after the tightening edit
+`verified-local`: `bats tests/` 573/573 after the Round-5 fixes
 (`bash -n` clean on all touched hooks; shellcheck unavailable in this
 environment).
 
@@ -227,4 +270,32 @@ assertion depth), no security-boundary touch.
 - Action: `~/.cache` tier test and mktemp last-resort test (0700 mode assert)
   added; mutation-verified. `-d` assert added to the `~/.cache` test under
   tightening-only skip.
+- Modified file: `tests/ollama-backend.bats`.
+
+### S3 [Major] Cache reuse survives trust-config revocation — Fixed
+- Action: `_ollama_trust_fingerprint` (normalized effective sources +
+  `OLLAMA_EXTRA_HOSTS`) is written as the cache's first line;
+  `_ollama_read_cache` centralizes trusted-file + freshness + fingerprint
+  checks and both read sites (`_resolve_ollama_servers`,
+  `ollama_host_for_model`) route through it. Revoking/changing
+  `OLLAMA_DISCOVERY` or `OLLAMA_EXTRA_HOSTS` invalidates the cache on the
+  next call; legacy headerless caches never match. Design note: the simpler
+  "skip cache when discovery disabled" alternative was rejected — it removes
+  caching for the default explicit-hosts configuration (probing on every hook
+  call) while the fingerprint preserves it for all configs.
+- Regression tests (6, mutation-verified red-on-revert): discovery
+  revocation, source-set change (mdns→tailscale), `OLLAMA_EXTRA_HOSTS`
+  removal, alias spellings sharing the cache (probe-count equality),
+  model-routing ignoring a mismatched-config cache, legacy headerless cache.
+  Crafted-cache tests migrated to a header-writing `write_cache` helper,
+  removing the test that codified the old behavior.
+- Modified files: `hooks/ollama-backend.sh`, `README.md`,
+  `tests/ollama-backend.bats`.
+
+### T6 [Major] Freshness branch of ollama_host_for_model untested — Fixed
+- Action: "model routing: stale cache is not reused; falls back to default
+  host" test applied verbatim from the Round-5 Testing expert's finding; the
+  expert had already verified it green on the fix and red under the
+  freshness-check mutation, discharging the fix-verification obligation
+  within the same round.
 - Modified file: `tests/ollama-backend.bats`.
