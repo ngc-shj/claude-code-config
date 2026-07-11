@@ -35,9 +35,10 @@ _backends_in_order() { printf '%s\n' ollama codex claude; }
 
 # The "ollama" backend is really "the local LLM reached via the dispatcher":
 # _run_ollama pipes the diff through llm-commands.sh analyze-*, which routes to
-# whichever backend llm-utils.sh selects (llama.cpp auto-preferred, else Ollama).
-# Availability must therefore reflect EITHER backend being reachable — gating on
-# Ollama alone would make a llama.cpp-only host fall through to the paid backends.
+# whichever backend llm-utils.sh selects (OpenAI backend auto-preferred, else
+# Ollama). Availability must therefore reflect EITHER backend being reachable —
+# gating on Ollama alone would make an OpenAI-backend-only host fall through to
+# the paid backends.
 _ollama_available() {
   [ -f "$HOOKS_DIR/llm-commands.sh" ] || return 1
   [ -f "$HOOKS_DIR/llm-utils.sh" ] || return 1
@@ -46,8 +47,8 @@ _ollama_available() {
   # best-effort probes Ollama hosts, leaving OLLAMA_HOST set.
   # shellcheck source=/dev/null
   source "$HOOKS_DIR/llm-utils.sh"
-  # llama.cpp reachable? (the auto-preferred local backend)
-  if command -v llamacpp_available >/dev/null 2>&1 && llamacpp_available; then
+  # OpenAI-compatible backend reachable? (the auto-preferred local backend)
+  if command -v openai_available >/dev/null 2>&1 && openai_available; then
     return 0
   fi
   # Otherwise fall back to an Ollama reachability probe (OLLAMA_HOST is the

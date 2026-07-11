@@ -20,7 +20,7 @@ claude-code-config/
 │   ├── llm-utils.sh             # Common local-LLM layer: backend select + dispatch
 │   ├── llm-commands.sh          # Backend-agnostic LLM command library for skills
 │   ├── ollama-backend.sh        # Ollama provider: discover/load-balance + generate
-│   ├── llamacpp-backend.sh      # llama.cpp provider: OpenAI /v1 discovery + request
+│   ├── openai-backend.sh      # OpenAI-compatible provider (llama.cpp/vLLM): /v1 discovery + request
 │   ├── notify.sh                 # Desktop notifications (macOS + Linux)
 │   └── stop-notify.sh            # Task completion notifications
 ├── skills/
@@ -150,7 +150,7 @@ bash ~/.claude/hooks/pre-review.sh code
 ```
 
 - Reads files directly via shell (git diff, cat) — no Claude tokens consumed
-- Configurable via `REVIEW_MODEL`, `LLM_BACKEND`, and the host vars (`LLM_TRUSTED_HOSTS`, `LLAMACPP_HOST` / `OLLAMA_HOST`)
+- Configurable via `REVIEW_MODEL`, `LLM_BACKEND`, and the host vars (`LLM_TRUSTED_HOSTS`, `OPENAI_HOST` / `OLLAMA_HOST`)
 - Gracefully skips if no local LLM backend is reachable
 
 #### Local-LLM backend layer (`llm-utils.sh`)
@@ -161,20 +161,25 @@ backend selection, logical→real model mapping, and the `llm_request`
 dispatcher) and sources two backend providers:
 
 - `ollama-backend.sh` — Ollama (native `/api/generate`, multi-server discovery)
-- `llamacpp-backend.sh` — llama.cpp's OpenAI surface (`/v1/chat/completions`, `/v1/models`)
+- `openai-backend.sh` — OpenAI-compatible servers (llama.cpp, vLLM, …) via `/v1/chat/completions`, `/v1/models`
 
-Backend selection: `LLM_BACKEND=llamacpp|ollama` pins the choice; otherwise
-llama.cpp is **auto-preferred** when its `/v1/models` endpoint is reachable
-(default `localhost:8080`; `LLM_TRUSTED_HOSTS` entries are probed too, and
-`LLAMACPP_HOST`/`LLAMACPP_HOSTS` pin or replace the candidate list),
-falling back to Ollama. Hooks always pass logical model names (`gpt-oss:20b`,
-`gpt-oss:120b`); for llama.cpp these map to `unsloth/gpt-oss-20b-GGUF:F16` and
+Backend selection: `LLM_BACKEND=openai|ollama` pins the choice; otherwise the
+OpenAI-compatible backend is **auto-preferred** when a `/v1/models` endpoint is
+reachable, falling back to Ollama. That backend serves any OpenAI-surface
+server — llama.cpp, vLLM, etc. Bare `LLM_TRUSTED_HOSTS` entries (and localhost)
+are probed on every port in `LLM_OPENAI_PORTS` (default `8080 8000`, i.e.
+llama.cpp's 8080 and vLLM's 8000), so one host running both joins the pool
+once per reachable port; `OPENAI_HOST`/`OPENAI_HOSTS` pin or replace the
+candidate list. Hooks always pass logical model names — `gpt-oss:20b` /
+`gpt-oss:120b` map to `unsloth/gpt-oss-20b-GGUF:F16` /
 `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (8080 has no 120b-class model, so the
 heavy slot maps to Qwen3.6-35B-A3B; note llama-server strips the unsloth `UD-`
-prefix, so the `UD-Q4_K_XL` build is addressed as `Q4_K_XL`),
-overridable via `LLAMACPP_MODEL_SMALL`/`LLAMACPP_MODEL_LARGE`. The
-command library (`llm-commands.sh`) and the direct-caller hooks
-(`pre-review.sh`, `commit-msg-check.sh`) source only `llm-utils.sh`.
+prefix, so the `UD-Q4_K_XL` build is addressed as `Q4_K_XL`), and `ds4:flash` /
+`ds4:pro` map to `deepseek-v4-flash` / `deepseek-v4-pro` (DeepSeek-V4 on vLLM).
+Overridable via `OPENAI_MODEL_SMALL`/`OPENAI_MODEL_LARGE` /
+`OPENAI_MODEL_DS4_FLASH`/`OPENAI_MODEL_DS4_PRO`. The command library
+(`llm-commands.sh`) and the direct-caller hooks (`pre-review.sh`,
+`commit-msg-check.sh`) source only `llm-utils.sh`.
 
 #### Multi-server load balancing (`ollama-backend.sh`)
 
@@ -248,8 +253,11 @@ across them:
     "env": {
       "LLM_TRUSTED_HOSTS": "llm-server-1 llm-server-2.your-tailnet.ts.net",
       "OLLAMA_DISCOVERY": "off",
-      "LLAMACPP_MODEL_SMALL": "unsloth/gpt-oss-20b-GGUF:F16",
-      "LLAMACPP_MODEL_LARGE": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL",
+      "LLM_OPENAI_PORTS": "8080 8000",
+      "OPENAI_MODEL_SMALL": "unsloth/gpt-oss-20b-GGUF:F16",
+      "OPENAI_MODEL_LARGE": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL",
+      "OPENAI_MODEL_DS4_FLASH": "deepseek-v4-flash",
+      "OPENAI_MODEL_DS4_PRO": "deepseek-v4-pro",
       "REVIEW_MODEL": "gpt-oss:120b"
     }
   }
@@ -272,11 +280,14 @@ across them:
   | `OLLAMA_HOST` | _(unset)_ | Pin Ollama to one server; skips all probing/discovery. |
   | `OLLAMA_DISCOVERY_MAX` | `6` | Cap on candidates probed per discovery source. |
   | `TAILSCALE_BIN` | `tailscale` on PATH, then the macOS app bundle | Path/name of the tailscale CLI, used only when `OLLAMA_DISCOVERY` enables the `tailscale` source. |
-  | `LLAMACPP_HOST` | _(unset)_ | Pin llama.cpp to one server; skips probing and the cache. |
-  | `LLAMACPP_HOSTS` | _(unset)_ | Exclusive llama.cpp host list (replaces `LLM_TRUSTED_HOSTS` + localhost for this backend). |
-  | `LLAMACPP_MODEL_SMALL` | `unsloth/gpt-oss-20b-GGUF:F16` | Real model for the `gpt-oss:20b` logical name on llama.cpp. |
-  | `LLAMACPP_MODEL_LARGE` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` | Real model for the `gpt-oss:120b` logical name on llama.cpp. |
-  | `LLM_BACKEND` | _(auto)_ | Pin the backend to `llamacpp` or `ollama`; otherwise llama.cpp is auto-preferred when reachable. |
+  | `LLM_OPENAI_PORTS` | `8080 8000` | Ports probed for a bare OpenAI-backend host (llama.cpp 8080, vLLM 8000). A down bare host is probed on **every** port each hook call, so prune dead hosts — latency scales with the port count. |
+  | `OPENAI_HOST` | _(unset)_ | Pin the OpenAI backend to one server; skips probing and the cache. |
+  | `OPENAI_HOSTS` | _(unset)_ | Exclusive OpenAI-backend host list (replaces `LLM_TRUSTED_HOSTS` + localhost for this backend). |
+  | `OPENAI_MODEL_SMALL` | `unsloth/gpt-oss-20b-GGUF:F16` | Real model for the `gpt-oss:20b` logical name. |
+  | `OPENAI_MODEL_LARGE` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` | Real model for the `gpt-oss:120b` logical name. |
+  | `OPENAI_MODEL_DS4_FLASH` | `deepseek-v4-flash` | Real model for the `ds4:flash` logical name (vLLM). |
+  | `OPENAI_MODEL_DS4_PRO` | `deepseek-v4-pro` | Real model for the `ds4:pro` logical name (vLLM). |
+  | `LLM_BACKEND` | _(auto)_ | Pin the backend to `openai` or `ollama`; otherwise the OpenAI backend is auto-preferred when reachable. |
   | `REVIEW_MODEL` | `gpt-oss:120b` | Logical model for `pre-review.sh`. |
   | `REVIEW_TIMEOUT` | `600` | Per-request timeout (seconds) for `pre-review.sh`. |
 
@@ -468,7 +479,7 @@ Rules are referenced, not auto-injected — Claude reads them via the directive 
 ### Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
-- [Ollama](https://ollama.com/) and/or [llama.cpp](https://github.com/ggml-org/llama.cpp) (optional, for local LLM features — when both are reachable, llama.cpp is auto-preferred)
+- [Ollama](https://ollama.com/) and/or an OpenAI-compatible server ([llama.cpp](https://github.com/ggml-org/llama.cpp), [vLLM](https://github.com/vllm-project/vllm), …) (optional, for local LLM features — when both are reachable, the OpenAI backend is auto-preferred)
 
 ### Setup
 
@@ -493,17 +504,20 @@ ollama pull gpt-oss:20b
 ollama pull gpt-oss:120b
 ```
 
-**llama.cpp backend** — run `llama-server` (default `localhost:8080`); the logical
-names map to these real model ids (override with `LLAMACPP_MODEL_SMALL` /
-`LLAMACPP_MODEL_LARGE`):
+**OpenAI-compatible backend** — any server exposing `/v1/models` +
+`/v1/chat/completions`. Bare hosts are probed on `LLM_OPENAI_PORTS`
+(default `8080 8000`): run `llama-server` on 8080 and/or vLLM on 8000. Logical
+names map to these real model ids (override with the matching `OPENAI_MODEL_*`):
 
-| Logical | llama.cpp model id (default) |
-| --- | --- |
-| `gpt-oss:20b` | `unsloth/gpt-oss-20b-GGUF:F16` |
-| `gpt-oss:120b` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (8080 has no 120b-class model; llama-server strips the unsloth `UD-` prefix, so the `UD-Q4_K_XL` build is requested as `Q4_K_XL`) |
+| Logical | Real model id (default) | Server |
+| --- | --- | --- |
+| `gpt-oss:20b` | `unsloth/gpt-oss-20b-GGUF:F16` | llama.cpp |
+| `gpt-oss:120b` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (8080 has no 120b-class model; llama-server strips the unsloth `UD-` prefix, so the `UD-Q4_K_XL` build is requested as `Q4_K_XL`) | llama.cpp |
+| `ds4:flash` | `deepseek-v4-flash` | vLLM (:8000) |
+| `ds4:pro` | `deepseek-v4-pro` | vLLM (:8000) |
 
-When both backends are reachable, llama.cpp is auto-preferred; pin with
-`LLM_BACKEND=ollama` or `LLM_BACKEND=llamacpp`.
+When both backends are reachable, the OpenAI backend is auto-preferred; pin with
+`LLM_BACKEND=ollama` or `LLM_BACKEND=openai`.
 
 ### What gets installed
 

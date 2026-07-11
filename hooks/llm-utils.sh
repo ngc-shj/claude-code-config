@@ -13,11 +13,13 @@
 # without sourcing anything themselves):
 #   - ollama-backend.sh   — Ollama provider (discovery, ollama_host_for_model,
 #                           _ollama_generate via /api/generate)
-#   - llamacpp-backend.sh — llama.cpp provider (discovery, llamacpp_host_for_model,
-#                           _llamacpp_request via /v1/chat/completions)
+#   - openai-backend.sh — OpenAI-compatible provider (llama.cpp, vLLM, …;
+#                           discovery, openai_host_for_model,
+#                           _openai_request via /v1/chat/completions)
 #
-# Backend selection: LLM_BACKEND (llamacpp|ollama) pins the choice; otherwise
-# llama.cpp is auto-preferred when reachable, falling back to Ollama. Sourcing is
+# Backend selection: LLM_BACKEND (openai|ollama) pins the choice; otherwise
+# the OpenAI-compatible backend is auto-preferred when reachable, falling back
+# to Ollama. Sourcing is
 # side-effect-free for the dispatcher (the Ollama provider still runs its own
 # discovery at source time, as it always has).
 
@@ -167,31 +169,31 @@ _rr_suffix() {
 # --- provider leaves (sourced after the helpers above are defined) ---
 # shellcheck source=ollama-backend.sh
 source "$(dirname "${BASH_SOURCE[0]}")/ollama-backend.sh"
-# shellcheck source=llamacpp-backend.sh
-source "$(dirname "${BASH_SOURCE[0]}")/llamacpp-backend.sh"
+# shellcheck source=openai-backend.sh
+source "$(dirname "${BASH_SOURCE[0]}")/openai-backend.sh"
 
 # --- backend selection + model mapping + dispatch (common) ---
 
-# echo the active backend: "llamacpp" or "ollama". An invalid LLM_BACKEND value
+# echo the active backend: "openai" or "ollama". An invalid LLM_BACKEND value
 # is ignored (falls through to auto) rather than failing the hook.
 llm_select_backend() {
   case "${LLM_BACKEND:-}" in
-    llamacpp|ollama) printf '%s' "$LLM_BACKEND"; return ;;
+    openai|ollama) printf '%s' "$LLM_BACKEND"; return ;;
   esac
-  if llamacpp_available; then
-    printf 'llamacpp'
+  if openai_available; then
+    printf 'openai'
   else
     printf 'ollama'
   fi
 }
 
 # echo the real model id for a logical name under a backend. The Ollama backend
-# uses identity; the llama.cpp mapping (incl. env overrides) is owned by the
-# llama.cpp provider.
+# uses identity; the OpenAI-backend mapping (incl. env overrides) is owned by
+# the openai provider.
 llm_model_for() {
   local logical="$1" backend="$2"
-  if [ "$backend" = "llamacpp" ]; then
-    llamacpp_model_for "$logical"
+  if [ "$backend" = "openai" ]; then
+    openai_model_for "$logical"
   else
     printf '%s' "$logical"
   fi
@@ -205,8 +207,8 @@ llm_request() {
   local backend real
   backend=$(llm_select_backend)
   real=$(llm_model_for "$logical" "$backend")
-  if [ "$backend" = "llamacpp" ]; then
-    _llamacpp_request "$real" "$system" "$timeout" "$num_predict"
+  if [ "$backend" = "openai" ]; then
+    _openai_request "$real" "$system" "$timeout" "$num_predict"
   else
     _ollama_generate "$real" "$system" "$timeout" "$num_predict"
   fi
