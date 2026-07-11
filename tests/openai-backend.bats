@@ -420,3 +420,26 @@ teardown() {
   run grep -c 'decoy-port-file' "$CURL_LOG_FILE"
   [ "$output" -eq 0 ]
 }
+
+@test "trust: default localhost is probed on 8080 only, never other ports" {
+  # No LLM_TRUSTED_HOSTS: the implicit loopback default must not widen to :8000
+  # even though 8000 is in the default LLM_OPENAI_PORTS set.
+  export CPP_SUCCEED_HOSTS="localhost:8080 localhost:8000"
+  source "$SCRIPT"
+  openai_available
+  grep -q '^http://localhost:8080' "$_OPENAI_HOST_CACHE"
+  ! grep -q '^http://localhost:8000' "$_OPENAI_HOST_CACHE"
+  # :8000 must never even be probed for the implicit localhost default
+  run grep -c 'localhost:8000' "$CURL_LOG_FILE"
+  [ "$output" -eq 0 ]
+}
+
+@test "trust: localhost vLLM on 8000 requires explicit opt-in" {
+  # Naming localhost in LLM_TRUSTED_HOSTS opts into multi-port probing for it.
+  export LLM_TRUSTED_HOSTS="localhost"
+  export CPP_SUCCEED_HOSTS="localhost:8000"
+  export CPP_MODELS_JSON='{"data":[{"id":"deepseek-v4-flash"}]}'
+  source "$SCRIPT"
+  result=$(openai_host_for_model deepseek-v4-flash)
+  [ "$result" = "http://localhost:8000" ]
+}

@@ -69,9 +69,14 @@ _openai_fetch_models() {
 }
 
 # Candidate hosts, in order: OPENAI_HOST (pin) | OPENAI_HOSTS (exclusive
-# list) | LLM_TRUSTED_HOSTS + localhost. Bare candidates (incl. localhost) are
-# multi-port-probed downstream; the probe's dedup drops a trusted entry that
-# resolves to the same URL as localhost.
+# list) | LLM_TRUSTED_HOSTS + localhost:8080. Bare LLM_TRUSTED_HOSTS entries are
+# multi-port-probed downstream (the user named them, so trying every configured
+# port is fine); localhost is emitted as the fixed `localhost:8080` host:port
+# form so it is probed on 8080 ONLY. The implicit trust of the loopback default
+# must not silently widen to other ports (e.g. an unrelated :8000 service that
+# happens to answer /v1/models) — to trust a local vLLM on 8000, name it
+# explicitly via LLM_TRUSTED_HOSTS="localhost" or OPENAI_HOST. The probe's dedup
+# drops a trusted entry that resolves to the same URL as localhost:8080.
 _openai_candidates() {
   if [ -n "${OPENAI_HOST:-}" ]; then
     printf '%s\n' "$OPENAI_HOST"
@@ -79,7 +84,7 @@ _openai_candidates() {
     _llm_split_hosts "$OPENAI_HOSTS"
   else
     _llm_split_hosts "${LLM_TRUSTED_HOSTS:-}"
-    printf '%s\n' "localhost"
+    printf '%s\n' "localhost:8080"
   fi
 }
 

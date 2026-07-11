@@ -166,11 +166,14 @@ dispatcher) and sources two backend providers:
 Backend selection: `LLM_BACKEND=openai|ollama` pins the choice; otherwise the
 OpenAI-compatible backend is **auto-preferred** when a `/v1/models` endpoint is
 reachable, falling back to Ollama. That backend serves any OpenAI-surface
-server — llama.cpp, vLLM, etc. Bare `LLM_TRUSTED_HOSTS` entries (and localhost)
-are probed on every port in `LLM_OPENAI_PORTS` (default `8080 8000`, i.e.
-llama.cpp's 8080 and vLLM's 8000), so one host running both joins the pool
-once per reachable port; `OPENAI_HOST`/`OPENAI_HOSTS` pin or replace the
-candidate list. Hooks always pass logical model names — `gpt-oss:20b` /
+server — llama.cpp, vLLM, etc. Bare `LLM_TRUSTED_HOSTS` entries are probed on
+every port in `LLM_OPENAI_PORTS` (default `8080 8000`, i.e. llama.cpp's 8080
+and vLLM's 8000), so one named host running both joins the pool once per
+reachable port. The implicit `localhost` default is probed on **8080 only** —
+it is not multi-port-probed, so an unrelated local service on 8000 that happens
+to answer `/v1/models` is never silently trusted; to use a local vLLM on 8000,
+name it explicitly with `LLM_TRUSTED_HOSTS="localhost"` or `OPENAI_HOST`.
+`OPENAI_HOST`/`OPENAI_HOSTS` pin or replace the candidate list. Hooks always pass logical model names — `gpt-oss:20b` /
 `gpt-oss:120b` map to `unsloth/gpt-oss-20b-GGUF:F16` /
 `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (8080 has no 120b-class model, so the
 heavy slot maps to Qwen3.6-35B-A3B; note llama-server strips the unsloth `UD-`
