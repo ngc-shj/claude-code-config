@@ -223,6 +223,22 @@ across them:
   that produced it, so revoking or changing an opt-in takes effect on the next
   call — a host admitted under a since-revoked setting is never served from
   cache. localhost is used only when no remote server is reachable.
+- **Configuration example** — hooks inherit Claude Code's process environment,
+  so the most reliable place for these variables is the `env` block of
+  `~/.claude/settings.local.json` (machine-specific, works for both IDE and
+  CLI launches; a shell-profile `export` also works for terminal launches):
+
+  ```json
+  {
+    "env": {
+      "OLLAMA_EXTRA_HOSTS": "gx10-a9c0 ul9c-r49.tailnet-example.ts.net"
+    }
+  }
+  ```
+
+  To restore zero-config auto-discovery instead (after reading the trust
+  model above), set `"OLLAMA_DISCOVERY": "tailscale"` (tailnet only) or
+  `"1"` (also mDNS — trusted networks only).
 
 ### llm-commands.sh (Utility — called by skills)
 
