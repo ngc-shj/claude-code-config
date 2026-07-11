@@ -150,7 +150,7 @@ bash ~/.claude/hooks/pre-review.sh code
 ```
 
 - Reads files directly via shell (git diff, cat) — no Claude tokens consumed
-- Configurable via `REVIEW_MODEL`, `LLM_BACKEND`, and the backend host vars (`LLAMACPP_HOST` / `OLLAMA_HOST`)
+- Configurable via `REVIEW_MODEL`, `LLM_BACKEND`, and the host vars (`LLM_TRUSTED_HOSTS`, `LLAMACPP_HOST` / `OLLAMA_HOST`)
 - Gracefully skips if no local LLM backend is reachable
 
 #### Local-LLM backend layer (`llm-utils.sh`)
@@ -165,7 +165,8 @@ dispatcher) and sources two backend providers:
 
 Backend selection: `LLM_BACKEND=llamacpp|ollama` pins the choice; otherwise
 llama.cpp is **auto-preferred** when its `/v1/models` endpoint is reachable
-(default `localhost:8080`, overridable via `LLAMACPP_HOST`/`LLAMACPP_HOSTS`),
+(default `localhost:8080`; `LLM_TRUSTED_HOSTS` entries are probed too, and
+`LLAMACPP_HOST`/`LLAMACPP_HOSTS` pin or replace the candidate list),
 falling back to Ollama. Hooks always pass logical model names (`gpt-oss:20b`,
 `gpt-oss:120b`); for llama.cpp these map to `unsloth/gpt-oss-20b-GGUF:F16` and
 `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (8080 has no 120b-class model, so the
@@ -183,7 +184,8 @@ across them:
 - **Trust model (read this first)** — prompts sent to a pool member include
   git diffs and **full source-file contents**, so every host in the pool is a
   potential exfiltration sink. The pool is therefore built from hosts you
-  explicitly name (`OLLAMA_HOST` pin or `OLLAMA_EXTRA_HOSTS` list). Requests
+  explicitly name (`LLM_TRUSTED_HOSTS` list, `OLLAMA_HOST` pin, or the
+  backend-specific lists below). Requests
   travel over plain HTTP with no server authentication — use hosts on networks
   you control (or a Tailscale tailnet, which encrypts and authenticates the
   transport).
@@ -200,7 +202,7 @@ across them:
 - **Cross-platform discovery** — mDNS auto-discovery uses `avahi-browse` (Linux
   only). macOS has no avahi and its `dns-sd` service-browse does not reliably
   surface plain Ollama hosts, so on macOS list your LAN host name(s) in
-  `OLLAMA_EXTRA_HOSTS` — the OS resolver answers `.local`, so the probe reaches
+  `LLM_TRUSTED_HOSTS` — the OS resolver answers `.local`, so the probe reaches
   them anyway. Tailscale discovery works on both: the CLI is resolved from PATH,
   then the macOS app bundle
   (`/Applications/Tailscale.app/Contents/MacOS/Tailscale`), then `$TAILSCALE_BIN`.
@@ -213,16 +215,24 @@ across them:
 - **Load balancing** — `OLLAMA_HOST` (one server, round-robin, model-agnostic
   default) and `OLLAMA_HOSTS` (full pool) are exported for back-compat. Existing
   callers that read only `$OLLAMA_HOST` keep working.
-- **Overrides** — `OLLAMA_HOST` pins to a single server (skips probing);
-  `OLLAMA_DISCOVERY_MAX` caps probe fan-out per source (default 6);
-  `OLLAMA_EXTRA_HOSTS` is the primary multi-server configuration (space-separated
-  bare host, `host:port`, or URL). Probe results are cached for 5 minutes in a
+- **Overrides** — `LLM_TRUSTED_HOSTS` is the primary multi-server
+  configuration, shared with the llama.cpp backend (space-separated bare host,
+  `host:port`, or URL; each backend probes bare names on its own default port
+  and keeps only hosts that answer its own API — a host joins whichever
+  backend's pool matches its actual behavior). `OLLAMA_HOST` pins to a single
+  server (skips probing); `OLLAMA_EXTRA_HOSTS` adds Ollama-only hosts;
+  `OLLAMA_DISCOVERY_MAX` caps probe fan-out per source (default 6).
+  Probe results are cached for 5 minutes in a
   per-user private state dir (`$XDG_RUNTIME_DIR/claude-llm-hooks`, falling back
   to `~/.cache/claude-llm-hooks` — never world-writable `/tmp`). The cache is
-  bound to the trust configuration (`OLLAMA_DISCOVERY` + `OLLAMA_EXTRA_HOSTS`)
+  bound to the trust configuration (`OLLAMA_DISCOVERY` + the trusted host
+  lists)
   that produced it, so revoking or changing an opt-in takes effect on the next
   call — a host admitted under a since-revoked setting is never served from
-  cache. localhost is used only when no remote server is reachable.
+  cache. localhost is used only when no remote server is reachable. A host
+  that is *down* is not cached, so a permanently unreachable entry is
+  re-probed (up to ~2 s) on every hook invocation — prune dead hosts from
+  `LLM_TRUSTED_HOSTS` to avoid the per-call latency.
 - **Configuration example** — hooks inherit Claude Code's process environment,
   so the most reliable place for these variables is the `env` block of
   `~/.claude/settings.local.json` (machine-specific, works for both IDE and
@@ -236,16 +246,52 @@ across them:
   ```json
   {
     "env": {
-      "OLLAMA_EXTRA_HOSTS": "llm-server-1 llm-server-2.your-tailnet.ts.net"
+      "LLM_TRUSTED_HOSTS": "llm-server-1 llm-server-2.your-tailnet.ts.net",
+      "OLLAMA_DISCOVERY": "off",
+      "LLAMACPP_MODEL_SMALL": "unsloth/gpt-oss-20b-GGUF:F16",
+      "LLAMACPP_MODEL_LARGE": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL",
+      "REVIEW_MODEL": "gpt-oss:120b"
     }
   }
   ```
 
-  If `~/.claude/settings.local.json` already exists, merge the `env` block
-  instead of overwriting. To restore zero-config auto-discovery instead
-  (after reading the trust model above), set
-  `"OLLAMA_DISCOVERY": "tailscale"` (tailnet only) or `"1"` (also mDNS —
-  trusted networks only).
+  Only `LLM_TRUSTED_HOSTS` needs editing — the other entries show the
+  defaults and are safe to keep or drop. If `~/.claude/settings.local.json`
+  already exists, merge the `env` block instead of overwriting.
+
+- **All environment variables** — the example ships the common defaults; the
+  rest are optional and belong in the same `env` block only when you need them
+  (JSON has no comments, so opt-in / site-specific values are listed here
+  rather than shipped as broken placeholders):
+
+  | Variable | Default | Purpose |
+  |----------|---------|---------|
+  | `LLM_TRUSTED_HOSTS` | _(empty)_ | Space-separated trusted hosts, probed by **both** backends. Primary multi-server config. |
+  | `OLLAMA_DISCOVERY` | `off` | Opt in to unauthenticated auto-discovery: `tailscale`, `mdns`, `"mdns tailscale"`, or `1`/`on`/`all`. See the trust model above. |
+  | `OLLAMA_EXTRA_HOSTS` | _(empty)_ | Ollama-only additional hosts (probed on `:11434`), on top of `LLM_TRUSTED_HOSTS`. |
+  | `OLLAMA_HOST` | _(unset)_ | Pin Ollama to one server; skips all probing/discovery. |
+  | `OLLAMA_DISCOVERY_MAX` | `6` | Cap on candidates probed per discovery source. |
+  | `TAILSCALE_BIN` | `tailscale` on PATH, then the macOS app bundle | Path/name of the tailscale CLI, used only when `OLLAMA_DISCOVERY` enables the `tailscale` source. |
+  | `LLAMACPP_HOST` | _(unset)_ | Pin llama.cpp to one server; skips probing and the cache. |
+  | `LLAMACPP_HOSTS` | _(unset)_ | Exclusive llama.cpp host list (replaces `LLM_TRUSTED_HOSTS` + localhost for this backend). |
+  | `LLAMACPP_MODEL_SMALL` | `unsloth/gpt-oss-20b-GGUF:F16` | Real model for the `gpt-oss:20b` logical name on llama.cpp. |
+  | `LLAMACPP_MODEL_LARGE` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` | Real model for the `gpt-oss:120b` logical name on llama.cpp. |
+  | `LLM_BACKEND` | _(auto)_ | Pin the backend to `llamacpp` or `ollama`; otherwise llama.cpp is auto-preferred when reachable. |
+  | `REVIEW_MODEL` | `gpt-oss:120b` | Logical model for `pre-review.sh`. |
+  | `REVIEW_TIMEOUT` | `600` | Per-request timeout (seconds) for `pre-review.sh`. |
+
+  Tailscale example — trust specific peers **and** let discovery add any other
+  online peer that answers, resolving the CLI from a non-standard path:
+
+  ```json
+  {
+    "env": {
+      "LLM_TRUSTED_HOSTS": "llm-server-1.your-tailnet.ts.net",
+      "OLLAMA_DISCOVERY": "tailscale",
+      "TAILSCALE_BIN": "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    }
+  }
+  ```
 
 ### llm-commands.sh (Utility — called by skills)
 

@@ -1,5 +1,9 @@
 {
   "env": {
-    "OLLAMA_EXTRA_HOSTS": "llm-server-1 llm-server-2.your-tailnet.ts.net"
+    "LLM_TRUSTED_HOSTS": "llm-server-1 llm-server-2.your-tailnet.ts.net",
+    "OLLAMA_DISCOVERY": "off",
+    "LLAMACPP_MODEL_SMALL": "unsloth/gpt-oss-20b-GGUF:F16",
+    "LLAMACPP_MODEL_LARGE": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL",
+    "REVIEW_MODEL": "gpt-oss:120b"
   }
 }

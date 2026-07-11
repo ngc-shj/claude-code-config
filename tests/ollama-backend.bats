@@ -100,7 +100,7 @@ set_mtime_ago() {
 # no extra hosts — the setup() default) by prepending the fingerprint header
 # the production reader requires. stdin = records.
 write_cache() {
-  printf '#cfg mdns=0 ts=0 extra=\n' > "$_OLLAMA_HOST_CACHE"
+  printf '#cfg mdns=0 ts=0 hosts=\n' > "$_OLLAMA_HOST_CACHE"
   cat >> "$_OLLAMA_HOST_CACHE"
   touch "$_OLLAMA_HOST_CACHE"
 }
@@ -137,6 +137,8 @@ setup() {
   unset OLLAMA_HOST
   unset OLLAMA_HOSTS
   unset OLLAMA_DISCOVERY
+  unset LLM_TRUSTED_HOSTS
+  unset OLLAMA_EXTRA_HOSTS
   unset AVAHI_DISCOVERED_HOSTS
   unset TS_DISCOVERED_PEERS
   setup_avahi_mock
@@ -494,7 +496,7 @@ CACHE
   # Line 1 is the trust-fingerprint header; records follow. Each record is
   # "<url>\t<models>"; the URL field is what the pool is built from.
   run head -1 "$_OLLAMA_HOST_CACHE"
-  [ "$output" = "#cfg mdns=1 ts=0 extra=" ]
+  [ "$output" = "#cfg mdns=1 ts=0 hosts=" ]
   run cut -f1 "$_OLLAMA_HOST_CACHE"
   [ "${lines[1]}" = "http://gx10-a9c0:11434" ]
   [ "${lines[2]}" = "http://ul9c-r49:11434" ]
@@ -871,7 +873,7 @@ CACHE
 }
 
 @test "trust: model routing ignores a cache written under a different trust config" {
-  printf '#cfg mdns=1 ts=0 extra=\nhttp://evil:11434\t*\n' > "$_OLLAMA_HOST_CACHE"
+  printf '#cfg mdns=1 ts=0 hosts=\nhttp://evil:11434\t*\n' > "$_OLLAMA_HOST_CACHE"
   touch "$_OLLAMA_HOST_CACHE"
   setup_curl_fail_mock
   source "$SCRIPT"
@@ -895,4 +897,49 @@ CACHE
   source "$SCRIPT"
   result=$(ollama_host_for_model "gpt-oss:120b")
   [ "$result" = "http://localhost:11434" ]
+}
+
+# ===========================================================================
+# LLM_TRUSTED_HOSTS (backend-agnostic trusted host list)
+# ===========================================================================
+
+@test "trusted hosts: LLM_TRUSTED_HOSTS joins the pool without discovery opt-in" {
+  export LLM_TRUSTED_HOSTS="trusted-1 trusted-2"
+  export CURL_SUCCEED_HOSTS="trusted-1 trusted-2"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://trusted-1:11434 http://trusted-2:11434" ]
+}
+
+@test "trusted hosts: merged with OLLAMA_EXTRA_HOSTS, duplicates dropped" {
+  export LLM_TRUSTED_HOSTS="trusted-1 shared-host"
+  export OLLAMA_EXTRA_HOSTS="shared-host extra-1"
+  export CURL_SUCCEED_HOSTS="trusted-1 shared-host extra-1"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://trusted-1:11434 http://shared-host:11434 http://extra-1:11434" ]
+}
+
+@test "trust: cached pool is invalidated when LLM_TRUSTED_HOSTS changes" {
+  export CURL_SUCCEED_HOSTS="trusted-1 trusted-2"
+  setup_curl_mock
+  first=$(export LLM_TRUSTED_HOSTS="trusted-1"; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$first" = "http://trusted-1:11434" ]
+  second=$(export LLM_TRUSTED_HOSTS="trusted-2"; source "$SCRIPT" && echo "$OLLAMA_HOSTS")
+  [ "$second" = "http://trusted-2:11434" ]
+}
+
+@test "trusted hosts: glob-metachar entry is treated literally, not CWD-expanded" {
+  # A '*' entry must NOT expand against the CWD (which would balloon the
+  # candidate list into every filename in the working directory).
+  cd "$BATS_TEST_TMPDIR"
+  : > decoy-file-a; : > decoy-file-b
+  export LLM_TRUSTED_HOSTS="trusted-1 *"
+  export CURL_SUCCEED_HOSTS="trusted-1"
+  setup_curl_mock
+  source "$SCRIPT"
+  [ "$OLLAMA_HOSTS" = "http://trusted-1:11434" ]
+  # The decoy filenames must never have been probed as hosts
+  run grep -c 'decoy-file' "$CURL_LOG_FILE"
+  [ "$output" -eq 0 ]
 }
