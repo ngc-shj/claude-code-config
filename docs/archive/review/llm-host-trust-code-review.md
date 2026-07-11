@@ -150,6 +150,56 @@ understated); R43 — every touched predicate strictly narrows.
   verbatim.** All 6 S3 regression tests independently re-verified as
   load-bearing and non-vacuous; both orchestrator mutations reproduced.
 
+## Round 6 — backend-agnostic trusted host list (`LLM_TRUSTED_HOSTS`)
+
+Follow-up feature (user request): the trusted host list should serve BOTH
+backends, not just Ollama. `LLM_TRUSTED_HOSTS` is now consumed by
+ollama-backend.sh (probed with `OLLAMA_EXTRA_HOSTS`) and llamacpp-backend.sh
+(unpinned candidates = `LLM_TRUSTED_HOSTS` + localhost:8080). Cache read/write
+was factored into shared `_llm_cached_records` / `_llm_write_cache`
+(llm-utils.sh); because llama.cpp's unpinned candidate set became
+config-dependent, its cache gained the same S3 fingerprint binding — otherwise
+llama.cpp would be an uncovered member of the S3 vulnerability class (R42:
+audit scope was the seed, not the set). Fingerprint field renamed `extra=` →
+`hosts=` (committed-era caches auto-invalidate once).
+
+### Functionality Findings
+- F1 [Major]: unquoted `set -- $var` / `for e in $var` word-splits in the two
+  new fingerprint functions AND the candidate loops glob-expand a host entry
+  containing `*`/`?`/`[...]` against the hook's CWD — ballooning the candidate
+  list into every filename in the working directory and thrashing the cache.
+  A regression I introduced (Round-5 fingerprint used the quoted form).
+  **Fixed** (see Resolution Status).
+- F2 [Minor]: a permanently-down trusted host is re-probed (~2 s) on every hook
+  call — pre-existing "down is not cached" behavior, but its latency now scales
+  with the trusted-list size. **Documented** (README trust-list note).
+
+### Security Findings
+No findings. S3-class completeness confirmed (every config-dependent cache read
+routes through the shared helpers; pinned llama.cpp paths never touch the
+cache); fingerprint normalization collisions occur only for identical effective
+candidate sets (safe); the llamacpp candidate widening from {localhost} to
+{LLM_TRUSTED_HOSTS + localhost} is user-directed (new env must be set), not an
+R43 silent widening. Note (doc nuance, not a finding): a URL-form
+`LLM_TRUSTED_HOSTS` entry like `http://host:11434` is probed verbatim by
+llama.cpp on `/v1/models` — harmless since the host is user-trusted either way.
+
+### Testing Findings
+No new findings on the feature tests. Independently re-verified all three
+mutation guards (candidates-ignore-list, fingerprint-drops-list, shared-helper
+header-compare) reproduce red. Coverage gaps (whitespace-normalization
+equivalence, legacy-`extra=`-header upgrade path) assessed as defensible skips.
+
+## Round 6 (cont.) — verification of the F1 fix
+
+`_llm_split_hosts` / `_llm_join_hosts` added to llm-utils.sh with a `set -f`
+(noglob) guard that restores the prior noglob state; all four unquoted
+word-splits (2 fingerprints + 2 candidate loops) rewired through them.
+Glob-safety regression tests added to both suites and mutation-verified
+(re-enabling globbing turns them red). Real-environment check: a
+`LLM_TRUSTED_HOSTS="host *"` config with CWD=/tmp resolves to the literal host,
+not the directory listing. Full suite 582/582.
+
 ## Adjacent Findings
 
 - T4 routed Testing → Security; disposition recorded in Resolution Status.
@@ -291,6 +341,41 @@ assertion depth), no security-boundary touch.
   removing the test that codified the old behavior.
 - Modified files: `hooks/ollama-backend.sh`, `README.md`,
   `tests/ollama-backend.bats`.
+
+### LLM_TRUSTED_HOSTS [Feature] Backend-agnostic trusted host list — Done
+- Action: `LLM_TRUSTED_HOSTS` consumed by both backends; cache read/write
+  factored into shared `_llm_cached_records`/`_llm_write_cache`; llama.cpp
+  cache fingerprint-bound (`#cfg hosts=...`); ollama fingerprint field
+  `extra=` → `hosts=`. 7 feature tests (join, merge+dedup, exclusive override,
+  invalidation on change for both backends), all mutation-verified.
+- Modified files: `hooks/llm-utils.sh`, `hooks/ollama-backend.sh`,
+  `hooks/llamacpp-backend.sh`, `tests/ollama-backend.bats`,
+  `tests/llamacpp-backend.bats`, `README.md`, `settings.local.json.example`.
+
+### F1 [Major] Unquoted word-split glob-expands host entries — Fixed
+- Action: added `_llm_split_hosts`/`_llm_join_hosts` (noglob-guarded via
+  `set -f`, restoring prior state) in llm-utils.sh; rewired both fingerprint
+  functions and both candidate loops through them. Glob-safety regression
+  tests added to both suites, mutation-verified red when globbing is
+  re-enabled. Real-env verified (`LLM_TRUSTED_HOSTS="host *"`, CWD=/tmp →
+  literal host, no expansion).
+- Modified files: `hooks/llm-utils.sh`, `hooks/ollama-backend.sh`,
+  `hooks/llamacpp-backend.sh`, `tests/ollama-backend.bats`,
+  `tests/llamacpp-backend.bats`.
+
+### F2 [Minor] Down trusted host re-probed every call — Documented (Accepted)
+- **Anti-Deferral check**: acceptable risk (quantified below).
+- **Justification**:
+  - Worst case: ~2 s added latency per hook invocation per permanently-down
+    trusted host (each hook is a fresh process; "down" is intentionally not
+    cached so recovery is immediate).
+  - Likelihood: low — only when a user leaves a decommissioned host in
+    `LLM_TRUSTED_HOSTS`; self-inflicted and self-correcting once pruned.
+  - Cost to fix: a known-down TTL marker adds state + a new invalidation
+    dimension for marginal benefit; the pre-existing Ollama path made the same
+    freshness/latency tradeoff. Documented in README (prune dead hosts) rather
+    than adding caching complexity.
+- **Orchestrator sign-off**: acceptable-risk exception satisfied.
 
 ### T6 [Major] Freshness branch of ollama_host_for_model untested — Fixed
 - Action: "model routing: stale cache is not reused; falls back to default
