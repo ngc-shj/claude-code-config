@@ -416,9 +416,13 @@ Inputs:
   [paste]
 
 Requirements:
-- For each rule, run the targeted grep / read pattern specified in common-rules.md
+- Read `common-rules.digest.md` first and select candidate rules from its pattern names.
+- For each selected rule, extract only its anchored row from `common-rules.md`, then run the
+  targeted grep / read pattern specified there
   ("Known Recurring Issue Checklist" row + "Extended obligations" procedure where
   one exists). Do NOT read full files unless the targeted check is inconclusive.
+- Do NOT read all of `common-rules.md`. A full-file read is a fallback only; record why
+  digest routing plus targeted extraction was inconclusive.
 - Report rules that fire with: rule ID, file:line, evidence (grep hit), severity.
 - Conclude with one line listing rule IDs that were checked-and-clean.
 - If nothing fires, output exactly: `No findings`.

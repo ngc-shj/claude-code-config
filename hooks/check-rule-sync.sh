@@ -21,6 +21,7 @@
 #   5. no file references a rule ID above the declared max
 #   6. the "full procedures on ..." pointer sentence lists exactly the
 #      rules that have an Extended-obligations section header
+#   7. the generated compact digest matches the source table (when present)
 #
 # Usage: bash check-rule-sync.sh [triangulate-skill-dir]
 #   The default dir resolves to ../skills/triangulate relative to this
@@ -185,6 +186,18 @@ if [ -n "$ext_line" ] || [ -n "$ext_actual" ]; then
     if [ "$ext_listed" != "$ext_actual" ]; then
       drift "common-rules.md: 'full procedures on' pointer lists R{$(echo $ext_listed | tr ' ' ',')} but Extended-obligations headers are R{$(echo $ext_actual | tr ' ' ',')}"
     fi
+  fi
+fi
+
+# --- 7. generated digest matches the source table ---
+
+DIGEST="$SKILL_DIR/common-rules.digest.md"
+GENERATOR="$SCRIPT_DIR/generate-triangulate-rule-digest.sh"
+if [ -f "$DIGEST" ]; then
+  if [ ! -f "$GENERATOR" ]; then
+    drift "common-rules.digest.md exists but digest generator is missing"
+  elif ! bash "$GENERATOR" "$COMMON" "$DIGEST" --check >/dev/null; then
+    drift "common-rules.digest.md is stale; regenerate it from common-rules.md"
   fi
 fi
 
