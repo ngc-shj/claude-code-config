@@ -209,6 +209,26 @@ while IFS= read -r detail; do
   fi
 done < <(grep -oE 'rule-details/(R|RS|RT)[0-9]+\.md' "$COMMON" | sort -u)
 
+# Detail files are bidirectional sync points: no orphan files, and their
+# heading/full-row identity must match the compact table row.
+if [ -d "$SKILL_DIR/rule-details" ]; then
+  for detail_file in "$SKILL_DIR"/rule-details/{R,RS,RT}[0-9]*.md; do
+    [ -e "$detail_file" ] || continue
+    detail="rule-details/$(basename "$detail_file")"
+    if ! grep -qF "$detail" "$COMMON"; then
+      drift "orphan mandatory rule detail not referenced by common-rules.md: $detail"
+      continue
+    fi
+    id=$(basename "$detail_file" .md)
+    table_pattern=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" {p=$3; gsub(/^ +| +$/, "", p); print p; exit}' "$COMMON")
+    detail_heading=$(sed -nE "s/^# $id — (.*)$/\\1/p" "$detail_file" | head -n 1)
+    detail_row_pattern=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" {p=$3; gsub(/^ +| +$/, "", p); print p; exit}' "$detail_file")
+    if [ -z "$table_pattern" ] || [ "$detail_heading" != "$table_pattern" ] || [ "$detail_row_pattern" != "$table_pattern" ]; then
+      drift "$detail ID/pattern does not match common-rules.md row $id"
+    fi
+  done
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo ""
   echo "Rule-ID drift detected. Sync points: common-rules.md table + template"

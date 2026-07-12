@@ -6,6 +6,7 @@ Read this routing index first. Match the diff against pattern names, then extrac
 ```bash
 rg -n '^\| (R1|R3|RS2|RT4) \|' skills/triangulate/common-rules.md
 ```
+If `rg` is unavailable, use the environment's Grep/search tool with the same anchored pattern.
 
 Also extract a rule's Extended obligations section when the selected row points to it. Do not read the full rules file unless targeted extraction is inconclusive.
 

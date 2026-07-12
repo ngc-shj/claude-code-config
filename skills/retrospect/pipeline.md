@@ -71,9 +71,8 @@ For each source with candidates, Read its `sources/<source>.md` and launch ONE s
 per source (parallel when multiple). Every sub-agent receives:
 
 1. The candidate list from the prescreen JSON (its complete work queue — nothing else).
-2. The rule-ID digest: extract `ID + one-line pattern name` from the rule tables in
-   `skills/triangulate/common-rules.md` (the `| R<n> | <name> |` columns only — never the
-   full table prose).
+2. The rule-ID digest: pass `skills/triangulate/common-rules.digest.md` directly. Never
+   extract or pass the full table prose from `common-rules.md`.
 3. The source file's procedure and prohibitions verbatim.
 
 Sub-agents return candidate lessons as text: one block per lesson in

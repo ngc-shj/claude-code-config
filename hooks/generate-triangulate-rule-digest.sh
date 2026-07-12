@@ -4,12 +4,9 @@
 
 set -eu
 
-ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
-  echo "Error: not inside a git repository" >&2
-  exit 2
-}
-SOURCE="${1:-$ROOT/skills/triangulate/common-rules.md}"
-OUTPUT="${2:-$ROOT/skills/triangulate/common-rules.digest.md}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="${1:-$SCRIPT_DIR/../skills/triangulate/common-rules.md}"
+OUTPUT="${2:-$SCRIPT_DIR/../skills/triangulate/common-rules.digest.md}"
 MODE="${3:-write}"
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
@@ -25,6 +22,7 @@ trap 'rm -f "$TMP"' EXIT
   echo '```bash'
   echo "rg -n '^\\| (R1|R3|RS2|RT4) \\|' skills/triangulate/common-rules.md"
   echo '```'
+  echo "If \`rg\` is unavailable, use the environment's Grep/search tool with the same anchored pattern."
   echo
   echo "Also extract a rule's Extended obligations section when the selected row points to it. Do not read the full rules file unless targeted extraction is inconclusive."
   echo

@@ -7,6 +7,31 @@ SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/generate-triang
   [ "$status" -eq 0 ]
 }
 
+@test "explicit paths work outside a git repository" {
+  work="$BATS_TEST_TMPDIR/non-git"
+  mkdir -p "$work"
+  source="$work/common.md"
+  digest="$work/digest.md"
+  printf '%s\n' '| R1 | Rule | Check | Major |' > "$source"
+  run bash -c 'cd "$1" && bash "$2" "$3" "$4"' _ "$work" "$SCRIPT" "$source" "$digest"
+  [ "$status" -eq 0 ]
+  run bash -c 'cd "$1" && bash "$2" "$3" "$4" --check' _ "$work" "$SCRIPT" "$source" "$digest"
+  [ "$status" -eq 0 ]
+}
+
+@test "installed-layout defaults work outside a git repository" {
+  work="$BATS_TEST_TMPDIR/installed"
+  mkdir -p "$work/hooks" "$work/skills/triangulate" "$work/cwd"
+  cp "$SCRIPT" "$work/hooks/generate-triangulate-rule-digest.sh"
+  printf '%s\n' '| R1 | Rule | Check | Major |' > "$work/skills/triangulate/common-rules.md"
+
+  run bash -c 'cd "$1" && bash "$2"' _ "$work/cwd" "$work/hooks/generate-triangulate-rule-digest.sh"
+  [ "$status" -eq 0 ]
+  grep -q '^| R1 | Rule | Major |$' "$work/skills/triangulate/common-rules.digest.md"
+  run bash -c 'cd "$1" && bash "$2" "" "" --check' _ "$work/cwd" "$work/hooks/generate-triangulate-rule-digest.sh"
+  [ "$status" -eq 0 ]
+}
+
 @test "digest generator extracts all rule families without descriptions" {
   work="$BATS_TEST_TMPDIR/work"
   mkdir -p "$work"
