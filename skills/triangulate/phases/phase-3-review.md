@@ -124,7 +124,11 @@ Seed trust advisory (MANDATORY):
 Verification contract (MANDATORY):
 - For each seed finding, run targeted verification: `grep -n <symbol> <file>` or `Read <file>` with `offset`/`limit` scoped to the reported line range (±20 lines context). Do NOT read entire files.
 - Accept only seed findings you independently verify. Reject and note any seed finding that does not reproduce.
-- After processing seeds, perform your R1-R44 Recurring Issue Check using targeted greps (not full-file reads) to catch patterns the seed missed.
+- After processing seeds, read `common-rules.digest.md`, select candidate R/RS/RT rules from
+  its pattern names, and extract only those anchored rows (plus referenced Extended
+  obligations) from `common-rules.md`. Perform the resulting targeted greps to catch
+  patterns the seed missed. Do not read all of `common-rules.md` unless routing is
+  inconclusive; record the reason for that fallback.
 - You MAY read a full file only when the seed is empty OR when targeted verification is inconclusive; record the file+reason in your output.
 
 Seed Finding Disposition section (MANDATORY — addresses audit gap):

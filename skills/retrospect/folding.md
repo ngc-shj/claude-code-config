@@ -32,10 +32,13 @@ the text must be repo-neutral.
 
 1. `skills/triangulate/common-rules.md`
    - Table row in the correct table (`| R<n> | <pattern name> | <check> | <severity> |`).
-   - If the procedure exceeds a table cell: an "Extended obligations" subsection, and the
-     row references it. Append the rule's ID to the "full procedures on ..." pointer
-     sentence after the table (guarded by check-rule-sync.sh check 6); self-contained
-     rules need no edit there — the "All other rules" sentence covers them generically.
+   - Keep the row to a short routing summary. If the procedure is large, put its full
+     normative text in `skills/triangulate/rule-details/<ID>.md` and add
+     `**Mandatory full procedure**: rule-details/<ID>.md` to the row. The detail heading
+     and full-row ID/pattern must match the compact row; check-rule-sync rejects missing,
+     orphaned, or mismatched detail files.
+   - Extended obligations remain appropriate for shared procedures spanning multiple
+     rules. Append covered IDs to the "full procedures on ..." pointer sentence.
    - Recurring Issue Check template: add the `- R<n> (<name>): [status …]` line (R rules
      only; RS/RT ride the bracket line).
    - Bracket line: bump `Security adds RS1-RS<max>` / `Testing adds RT1-RT<max>`.
@@ -48,6 +51,8 @@ the text must be repo-neutral.
 6. When the rule warrants review-time procedure text, add it to the phase file that owns
    the moment it fires (plan review → phase-1; implementation → phase-2; code review →
    phase-3).
+7. Regenerate `skills/triangulate/common-rules.digest.md` with
+   `bash hooks/generate-triangulate-rule-digest.sh`; never edit the digest directly.
 
 ## 3. Detection hook (only when mechanically detectable)
 

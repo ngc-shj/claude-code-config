@@ -99,6 +99,30 @@ EOF
   [[ "$output" == OK:* ]]
 }
 
+@test "drift: referenced mandatory rule detail is missing" {
+  sed -i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"references missing mandatory detail: rule-details/R1.md"* ]]
+}
+
+@test "drift: orphan mandatory rule detail is rejected" {
+  mkdir -p "$FIX/rule-details"
+  printf '%s\n' '# R1 — Alpha' > "$FIX/rule-details/R1.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"orphan mandatory rule detail"* ]]
+}
+
+@test "drift: mandatory rule detail pattern must match table" {
+  mkdir -p "$FIX/rule-details"
+  sed -i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Wrong pattern' '' '| R1 | Wrong pattern | Procedure | Major |' > "$FIX/rule-details/R1.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ID/pattern does not match"* ]]
+}
+
 # ============================================================
 # DRIFT cases — one red fixture per linter check
 # ============================================================
