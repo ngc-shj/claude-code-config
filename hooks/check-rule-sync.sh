@@ -19,6 +19,8 @@
 #   3. every range string anchored at 1 ends at the current max
 #   4. phase-1 and phase-3 enumerate exactly RS1..maxRS and RT1..maxRT
 #   5. no file references a rule ID above the declared max
+#   6. the "full procedures on ..." pointer sentence lists exactly the
+#      rules that have an Extended-obligations section header
 #
 # Usage: bash check-rule-sync.sh [triangulate-skill-dir]
 #   The default dir resolves to ../skills/triangulate relative to this
@@ -159,11 +161,39 @@ for f in "${ALL_FILES[@]}"; do
              | sed -E 's/^[^A-Za-z0-9_]+//' | sort -u)
 done
 
+# --- 6. Extended-obligations pointer list matches actual section headers ---
+
+ext_actual=$(awk '/^### Extended obligations/{flag=1; next} /^## /{flag=0} flag' "$COMMON" \
+  | sed -nE 's/^\*\*R([0-9]+)[: ].*/\1/p' | sort -n -u)
+ext_line=$(grep -m1 'full procedures on R' "$COMMON" || true)
+if [ -n "$ext_line" ] || [ -n "$ext_actual" ]; then
+  if [ -z "$ext_line" ]; then
+    drift "common-rules.md: Extended-obligations section headers exist but no 'full procedures on ...' pointer sentence found"
+  elif [ -z "$ext_actual" ]; then
+    drift "common-rules.md: 'full procedures on ...' pointer sentence exists but no Extended-obligations section headers found"
+  else
+    ext_listed=$(printf '%s\n' "$ext_line" \
+      | sed -E 's/.*full procedures on //; s/\. .*//' \
+      | grep -oE 'R[0-9]+(-R[0-9]+)?' \
+      | { while IFS= read -r tok; do
+            case "$tok" in
+              *-*) a="${tok%%-*}"; a="${a#R}"; b="${tok##*-}"; b="${b#R}"
+                   for ((i = a; i <= b; i++)); do echo "$i"; done ;;
+              *)   echo "${tok#R}" ;;
+            esac
+          done; } | sort -n -u)
+    if [ "$ext_listed" != "$ext_actual" ]; then
+      drift "common-rules.md: 'full procedures on' pointer lists R{$(echo $ext_listed | tr ' ' ',')} but Extended-obligations headers are R{$(echo $ext_actual | tr ' ' ',')}"
+    fi
+  fi
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo ""
   echo "Rule-ID drift detected. Sync points: common-rules.md table + template"
-  echo "block, phase-1/phase-3 '- RSn/RTn: [status]' lines, and every"
-  echo "'R1-Rn'/'RS1-RSn'/'RT1-RTn' range string in the five checked files."
+  echo "block, the Extended-obligations pointer sentence, phase-1/phase-3"
+  echo "'- RSn/RTn: [status]' lines, and every 'R1-Rn'/'RS1-RSn'/'RT1-RTn'"
+  echo "range string in the five checked files."
   exit 1
 fi
 

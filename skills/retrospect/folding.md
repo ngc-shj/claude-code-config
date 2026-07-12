@@ -33,8 +33,9 @@ the text must be repo-neutral.
 1. `skills/triangulate/common-rules.md`
    - Table row in the correct table (`| R<n> | <pattern name> | <check> | <severity> |`).
    - If the procedure exceeds a table cell: an "Extended obligations" subsection, and the
-     row references it. Update the "self-contained in the table row" enumeration line if
-     the rule is listed there.
+     row references it. Append the rule's ID to the "full procedures on ..." pointer
+     sentence after the table (guarded by check-rule-sync.sh check 6); self-contained
+     rules need no edit there — the "All other rules" sentence covers them generically.
    - Recurring Issue Check template: add the `- R<n> (<name>): [status …]` line (R rules
      only; RS/RT ride the bracket line).
    - Bracket line: bump `Security adds RS1-RS<max>` / `Testing adds RT1-RT<max>`.
@@ -77,4 +78,6 @@ bats tests/                                    # full suite green, including new
 ```
 
 A rule-sync failure means the edit map above was applied incompletely — fix the named
-sync point; never silence the linter.
+sync point; never silence the linter. Judge each gate by its OWN exit status (R44): run
+it unpiped, or redirect output to a file and inspect afterwards — piping a gate through
+`head`/`tail`/`grep` reports the pipe tail's status and masks a real failure as green.

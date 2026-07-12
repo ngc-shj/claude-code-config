@@ -3,7 +3,8 @@
 # triangulate skill files. The fixture list is DERIVED from the linter's
 # check list (one red fixture per check, RT7): (1a) table gap, (1b)
 # duplicate table ID, (2) missing template-block R line, (3) stale range
-# string, (4) missing phase-1/phase-3 status line, (5) dangling reference —
+# string, (4) missing phase-1/phase-3 status line, (5) dangling reference,
+# (6) Extended-obligations pointer list out of sync with section headers —
 # plus exit-2 fixtures (missing file; unparsable table) and a live-repo
 # pass run.
 
@@ -171,6 +172,48 @@ EOF
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT: SKILL.md: reference to undeclared rule RS9"* ]]
+}
+
+@test "drift (6): extended-obligations pointer list out of sync with headers" {
+  cat >> "$FIX/common-rules.md" <<'EOF'
+
+See "Extended obligations" below for full procedures on R1. All other rules are self-contained in the table row above.
+
+### Extended obligations
+
+**R1: Alpha**
+
+Procedure text.
+
+**R2: Beta**
+
+Procedure text.
+EOF
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"DRIFT:"*"pointer lists R{1} but Extended-obligations headers are R{1,2}"* ]]
+}
+
+@test "pass: extended-obligations pointer with range form matches headers" {
+  # Range deliberately NOT anchored at 1 (an anchored-at-1 range that stops
+  # short of the table max is check 3's stale-range drift, correctly).
+  cat >> "$FIX/common-rules.md" <<'EOF'
+
+See "Extended obligations" below for full procedures on R2-R3. All other rules are self-contained in the table row above.
+
+### Extended obligations
+
+**R2: Beta**
+
+Procedure text.
+
+**R3: Gamma**
+
+Procedure text.
+EOF
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK: R1-R3 / RS1-RS2 / RT1-RT2"* ]]
 }
 
 # ============================================================
