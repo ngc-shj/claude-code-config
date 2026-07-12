@@ -234,7 +234,8 @@ if [ "$fail" -ne 0 ]; then
   echo "Rule-ID drift detected. Sync points: common-rules.md table + template"
   echo "block, the Extended-obligations pointer sentence, phase-1/phase-3"
   echo "'- RSn/RTn: [status]' lines, and every 'R1-Rn'/'RS1-RSn'/'RT1-RTn'"
-  echo "range string in the five checked files."
+  echo "range string in the five checked files, common-rules.digest.md, and"
+  echo "mandatory rule-details references/files/ID-pattern identities."
   exit 1
 fi
 
