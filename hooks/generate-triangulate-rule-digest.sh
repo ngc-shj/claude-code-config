@@ -32,7 +32,10 @@ trap 'rm -f "$TMP"' EXIT
   echo '|---|---|---|'
   awk -F'[|]' '
     /^\| (R[0-9]+|RS[0-9]+|RT[0-9]+) [|]/ {
-      id=$2; pattern=$3; severity=$5
+      # Procedure cells may contain literal pipes (for example regexes such
+      # as /\|/g). The ID and pattern are the first two cells, while severity
+      # is always the final non-empty cell before the trailing row pipe.
+      id=$2; pattern=$3; severity=$(NF-1)
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", id)
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", pattern)
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", severity)

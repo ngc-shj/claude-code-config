@@ -40,7 +40,7 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R27 | Numeric range hardcoded in user-facing strings | Minor (Major when constant governs any security or privacy policy boundary) |
 | R28 | Grammatical inconsistency in toggle/switch labels | Minor |
 | R29 | External spec citation accuracy | Major (Critical when the hallucinated citation drives a security-tightening or security-loosening decision) |
-| R30 | Markdown autolink footguns in citations | [^a-zA-Z0-9])#[0-9]+' file.md` to enumerate bare `#<number>` occurrences in a Markdown file. Applies to both the doc being reviewed and the review output itself. Scope: GitHub-hosted repos and any tool that renders GitHub-flavored Markdown identically; for repos hosted on other platforms with different autolink rules, adjust accordingly. **Mechanical detection**: `bash ~/.claude/hooks/check-markdown-autolinks.sh [base-ref]` scans diff `+` lines in `*.md` / `CHANGELOG` / `README` files for the three autolink shapes and emits Minor findings. Lines containing any backtick are conservatively suppressed (assume the user wrapped autolink-prone tokens) |
+| R30 | Markdown autolink footguns in citations | Minor |
 | R31 | Destructive operations without explicit user confirmation | Major (a, b, d) / Critical (c, e, f, g, h, i) |
 | R32 | New long-running runtime artifact merged without real boot smoke test | Major |
 | R33 | CI configuration change applied to one config but not its duplicates | Major (Critical when the drifting gate is a security control) |
@@ -57,16 +57,16 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R44 | Gate exit status read through a pipeline | Major (Critical when the masked gate guards a security invariant) |
 | RS1 | Timing-safe comparison | Critical |
 | RS2 | Rate limiter on new routes | Major |
-| RS3 | Input validation at boundaries | PUT |
+| RS3 | Input validation at boundaries | Major |
 | RS4 | Personal-identifying data in committed artifacts | Critical for secrets or exploitable identity data; Major otherwise |
 | RS5 | Untrusted externally-supplied security parameter without floor/whitelist | Major (Critical when no transport pinning/TOFU mitigates the MITM vector) |
-| RS6 | Incomplete sanitization — escape-character ordering | /g, "\\ |
+| RS6 | Incomplete sanitization — escape-character ordering | Major (Critical when the unsanitized output crosses into an interpolation/injection sink — SQL, shell, HTML attribute, template) |
 | RT1 | Mock-reality divergence | Critical |
 | RT2 | Testability verification | — (reject finding if untestable) |
 | RT3 | Shared constant in tests | Major |
 | RT4 | Race-test vacuous-pass guard | Critical |
 | RT5 | Test call-path must include the production primitive | Critical for security controls; Major otherwise |
-| RT6 | Newly added production exports without test diff | class |
+| RT6 | Newly added production exports without test diff | Major |
 | RT7 | New guard / test / gate must be proven able to fail | Major; Critical when the blind check guards a security invariant |
 | RT8 | Vacuous denial-path test (status asserted, mutation not) | Major; Critical for authn/authz, rate-limit, step-up, or fail-closed controls |
 | RT9 | Parallel-implementation twin drift (production artifact vs test-importable twin) | Critical when the drifting logic is a security control (auth/authz check, origin/frame gate, sanitizer, crypto parameter, signature verification, rate limiter, RLS/tenancy predicate, idempotency guard on a security-state mutation — a superset of RT5's Critical-escalation list); Major otherwise |
