@@ -159,3 +159,47 @@ teardown() {
   # Content came from source (the staged copy), not the stale live one.
   ! grep -q 'stale-content' "$TEST_HOME/.claude/hooks/block-sensitive-files.sh"
 }
+
+# ============================================================
+# Retrospect additions (C7/C8): state dir, config non-install,
+# SessionStart registration survival
+# ============================================================
+
+@test "install: creates ~/.claude/state with mode 0700" {
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  [ -d "$TEST_HOME/.claude/state" ]
+  perms=$(stat -c %a "$TEST_HOME/.claude/state" 2>/dev/null || stat -f %Lp "$TEST_HOME/.claude/state")
+  [ "$perms" = "700" ]
+}
+
+@test "install: does NOT install retrospect.config.json and prints the opt-in hint" {
+  cp "$REPO_DIR/retrospect.config.json.example" "$STAGING/retrospect.config.json.example"
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  [ ! -e "$TEST_HOME/.claude/retrospect.config.json" ]
+  [[ "$output" == *"retrospective mining is disabled"* ]]
+}
+
+@test "install: leaves an existing retrospect config and state untouched on re-install" {
+  mkdir -p "$TEST_HOME/.claude/state"
+  printf '{"user":"config"}' > "$TEST_HOME/.claude/retrospect.config.json"
+  printf '{"user":"state"}' > "$TEST_HOME/.claude/state/retrospect.json"
+
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  grep -q '"user":"config"' "$TEST_HOME/.claude/retrospect.config.json"
+  grep -q '"user":"state"' "$TEST_HOME/.claude/state/retrospect.json"
+  [[ "$output" != *"retrospective mining is disabled"* ]]
+}
+
+@test "install: SessionStart registration survives the settings merge" {
+  mkdir -p "$TEST_HOME/.claude"
+  printf '{"mcpServers":{"keepme":{}}}' > "$TEST_HOME/.claude/settings.json"
+
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  run jq -e '.hooks.SessionStart[0].hooks[0].command | test("session-retrospect-check")' \
+    "$TEST_HOME/.claude/settings.json"
+  [ "$status" -eq 0 ]
+}

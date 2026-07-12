@@ -162,6 +162,10 @@
       "Bash(bash ~/.claude/hooks/check-input-validation.sh *)",
       "Bash(bash ~/.claude/hooks/check-race-vacuous-guard.sh)",
       "Bash(bash ~/.claude/hooks/check-race-vacuous-guard.sh *)",
+      "Bash(bash ~/.claude/hooks/check-rule-sync.sh)",
+      "Bash(bash ~/.claude/hooks/check-rule-sync.sh *)",
+      "Bash(bash ~/.claude/hooks/retro-state.sh *)",
+      "Bash(bash ~/.claude/hooks/retro-prescreen.sh *)",
       "Bash(bash ~/.claude/hooks/tri-tmpdir.sh create)",
       "Bash(bash ~/.claude/hooks/tri-tmpdir.sh cleanup *)",
       "Read(~/.claude/plans/*)",
@@ -271,6 +275,17 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/notify.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/session-retrospect-check.sh",
             "timeout": 5
           }
         ]

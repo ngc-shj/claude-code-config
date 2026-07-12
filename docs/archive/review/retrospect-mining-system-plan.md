@@ -634,6 +634,41 @@ scrub allowlist carve-out recorded in C4).
   install/enablement time (C9 documents the seed command); deleting/rewriting the old memory
   file is a post-merge janitorial step, not a repo change.
 
+## Implementation Checklist
+
+Files (create): `hooks/check-rule-sync.sh` [C1], `hooks/retro-state.sh` [C2],
+`hooks/session-retrospect-check.sh` [C3], `hooks/retro-prescreen.sh` [C4],
+`retrospect.config.json.example` [C5], `skills/retrospect/{SKILL.md,pipeline.md,folding.md,
+sources/{artifacts,github,transcripts,scout}.md}` [C6], `tests/{check-rule-sync,retro-state,
+session-retrospect-check,retro-prescreen}.bats` [C11].
+Files (modify): `settings.json` [C7], `install.sh` [C8], `README.md` [C9],
+`tests/bench-hooks.sh` [C10], `tests/install.bats` [C8/C7 cases],
+`hooks/llm-utils.sh` [C4: `llm_resolved_hosts` helper only].
+
+Reused assets (MUST NOT be reimplemented): `llm_request` + backend discovery
+(`hooks/llm-utils.sh` — extended with `llm_resolved_hosts`, no behavior change for
+existing callers); the trusted-file predicate pattern (3 lines, restated in
+`retro-state.sh` deliberately — sourcing llm-utils runs Ollama discovery side effects at
+source time, unacceptable for a SessionStart-path CLI); `hooks/tri-tmpdir.sh` (skill-side
+hand-off files); `skills/pr-create` (PR flow); `skills/triangulate` phase-3 (self-review);
+bats conventions from `tests/block-vcs-history-rewrite.bats` (jq stdin builder),
+`tests/openai-backend.bats` (`setup_curl_mock` speaking /v1/models + /v1/chat/completions),
+`tests/pre-review.bats` (PATH-prepended curl-fail mock), `tests/ollama-backend.bats:92`
+(`touch -d "@epoch"` portability fallback).
+
+CI gate parity: this repo has NO CI configuration (verified — no .github/, no CI YAML);
+the full local gate set is `bats tests/` + `tests/bench-hooks.sh` (eyeball) + the plan's
+contract-conformance greps. extract-ci-checks.sh has nothing to extract — recorded here
+as the Step 2-1 item-7 disposition (no deferred-parity entries needed).
+
+R42 member sets (re-derived at implementation start): five-file range-string set —
+recomputed by check-rule-sync.sh at every run, live-repo audit green (bats "pass: live
+repo files are drift-free"); permissions.allow additions = {retro-state.sh *,
+retro-prescreen.sh *, check-rule-sync.sh, check-rule-sync.sh *} — matches C7; high_water
+writers = {seed, mark-run} — both route through `_validate_hw` (single chokepoint);
+scrub consumers = {C4 transcripts lessons, C4 github comment bodies, C4 artifacts LLM
+bullets, C6 folding gate} — all invoke `retro-prescreen.sh scrub`.
+
 ## User operation scenarios
 
 1. **Fresh machine, no config**: install.sh prints the opt-in hint; sessions start silently;

@@ -199,6 +199,23 @@ llm_model_for() {
   fi
 }
 
+# echo the candidate host list (one per line, as URLs or host:port exactly as
+# the backends hold them) that llm_request would use for the ACTIVE backend —
+# reusing the SAME discovery code path (openai: _openai_candidates, the
+# candidate-entry source _openai_request resolves through; ollama:
+# OLLAMA_HOSTS, the list _ollama_generate resolves from). No behavior change
+# for existing callers — read-only introspection. Used by C4's loopback gate
+# to decide whether a distillation request would leave the loopback interface.
+llm_resolved_hosts() {
+  local backend
+  backend=$(llm_select_backend)
+  if [ "$backend" = "openai" ]; then
+    _openai_candidates
+  else
+    _llm_split_hosts "${OLLAMA_HOSTS:-}"
+  fi
+}
+
 # Route a generate request to the active backend.
 # Args: $1=logical_model $2=system $3=timeout $4=num_predict
 # stdin = prompt. stdout = model text (empty on failure; exit 0).

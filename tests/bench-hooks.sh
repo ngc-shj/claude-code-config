@@ -46,14 +46,18 @@ APPROVE_INPUT='{"tool_name":"Bash","tool_input":{"command":"echo hello"}}'
 command -v jq >/dev/null 2>&1 || { echo "jq required" >&2; exit 1; }
 
 # Runs $hook $ITERATIONS times, prints "min median p95 max avg" in ms.
+# The stdin fixture defaults to APPROVE_INPUT but may be overridden via
+# the second argument (used by the session-retrospect-check.sh section,
+# which needs its own SessionStart JSON instead of a PreToolUse fixture).
 benchmark_hook() {
   local hook="$1"
+  local stdin_fixture="${2:-$APPROVE_INPUT}"
   local i samples=()
 
   for ((i = 0; i < ITERATIONS; i++)); do
     local start_ns end_ns
     start_ns=$(date +%s%N)
-    printf '%s' "$APPROVE_INPUT" | bash "$hook" > /dev/null
+    printf '%s' "$stdin_fixture" | bash "$hook" > /dev/null
     end_ns=$(date +%s%N)
     samples+=( $(( (end_ns - start_ns) / 1000000 )) )  # ns -> ms
   done
@@ -118,6 +122,70 @@ for hook in "$HOOKS_DIR"/block-*.sh; do
       ;;
   esac
 done
+
+printf '\n## session-retrospect-check.sh (SessionStart)\n\n'
+printf 'A dedicated section: this hook fires on SessionStart, not PreToolUse, so it\n'
+printf 'needs its own stdin JSON plus RETRO_CONFIG/RETRO_STATE fixtures instead of the\n'
+printf 'block-*.sh PreToolUse fixture above. The fixture models the "due" path (the\n'
+printf 'more expensive branch: config parsed, due computed, mark-prompted written,\n'
+printf 'additionalContext built).\n\n'
+
+RETRO_BENCH_DIR="$(mktemp -d)"
+trap 'rm -rf "$RETRO_BENCH_DIR"' EXIT
+
+RETRO_BENCH_CONFIG="$RETRO_BENCH_DIR/config.json"
+RETRO_BENCH_STATE="$RETRO_BENCH_DIR/state.json"
+jq -nc '{
+  version: 1,
+  prompt_sources: ["startup"],
+  snooze_days: 3,
+  sources: {
+    artifacts:   {enabled: true,  interval_days: 0,  repos: ["~/sib"], glob: "*.md"},
+    github:      {enabled: false, interval_days: 7,  repos: []},
+    transcripts: {enabled: false, interval_days: 14, root: "~/.claude/projects"},
+    scout:       {enabled: false, interval_days: 30, urls: []}
+  }
+}' > "$RETRO_BENCH_CONFIG"
+
+SESSION_START_INPUT='{"session_id":"bench","transcript_path":"/tmp/bench.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","source":"startup"}'
+
+retro_hook="$HOOKS_DIR/session-retrospect-check.sh"
+if [ -f "$retro_hook" ]; then
+  # Reset state each iteration so the hook keeps taking the due path
+  # rather than degrading to the (cheaper) same-day-silent path after
+  # the first mark-prompted.
+  export RETRO_CONFIG="$RETRO_BENCH_CONFIG"
+  export RETRO_STATE="$RETRO_BENCH_STATE"
+  retro_samples=()
+  for ((i = 0; i < ITERATIONS; i++)); do
+    rm -f "$RETRO_BENCH_STATE"
+    start_ns=$(date +%s%N)
+    printf '%s' "$SESSION_START_INPUT" | bash "$retro_hook" > /dev/null
+    end_ns=$(date +%s%N)
+    retro_samples+=( $(( (end_ns - start_ns) / 1000000 )) )
+  done
+  unset RETRO_CONFIG RETRO_STATE
+
+  retro_sorted=$(printf '%s\n' "${retro_samples[@]}" | sort -n)
+  retro_count=${#retro_samples[@]}
+  retro_min=$(printf '%s\n' "$retro_sorted" | head -1)
+  retro_max=$(printf '%s\n' "$retro_sorted" | tail -1)
+  retro_median=$(printf '%s\n' "$retro_sorted" | awk -v c="$retro_count" 'NR == int((c+1)/2) {print; exit}')
+  retro_p95=$(printf '%s\n' "$retro_sorted" | awk -v c="$retro_count" 'NR == int(c*0.95) {print; exit}')
+  retro_sum=0
+  for s in "${retro_samples[@]}"; do retro_sum=$((retro_sum + s)); done
+  retro_avg=$((retro_sum / retro_count))
+
+  printf '| Hook | Matcher | min | median | p95 | max | avg |\n'
+  printf '| --- | --- | ---:| ---:| ---:| ---:| ---:|\n'
+  printf '| session-retrospect-check | SessionStart | %s ms | %s ms | %s ms | %s ms | %s ms |\n' \
+    "$retro_min" "$retro_median" "$retro_p95" "$retro_max" "$retro_avg"
+else
+  printf '(hooks/session-retrospect-check.sh not found — skipping)\n'
+fi
+
+rm -rf "$RETRO_BENCH_DIR"
+trap - EXIT
 
 printf '\n## Per-matcher chain estimates\n\n'
 printf '| Matcher | Hooks counted | Cumulative avg |\n'

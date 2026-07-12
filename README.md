@@ -13,6 +13,7 @@ claude-code-config/
 ├── CLAUDE.md                      # Global behavior rules + model routing strategy
 ├── settings.json                  # Permissions + hooks configuration
 ├── install.sh                     # Installer script
+├── retrospect.config.json.example # Retrospective-mining config template (opt-in)
 ├── hooks/
 │   ├── block-sensitive-files.sh   # Block edits to secrets/lock files
 │   ├── commit-msg-check.sh       # Commit message validation via local LLM
@@ -22,7 +23,11 @@ claude-code-config/
 │   ├── ollama-backend.sh        # Ollama provider: discover/load-balance + generate
 │   ├── openai-backend.sh      # OpenAI-compatible provider (llama.cpp/vLLM): /v1 discovery + request
 │   ├── notify.sh                 # Desktop notifications (macOS + Linux)
-│   └── stop-notify.sh            # Task completion notifications
+│   ├── stop-notify.sh            # Task completion notifications
+│   ├── session-retrospect-check.sh # SessionStart: prompt when retrospective mining is due
+│   ├── retro-state.sh            # Retrospect state CLI (cursors, due, snooze, config gate)
+│   ├── retro-prescreen.sh        # Zero-token candidate discovery per knowledge source
+│   └── check-rule-sync.sh        # Rule-ID consistency linter for triangulate files
 ├── skills/
 │   ├── triangulate/
 │   │   └── SKILL.md              # Triangulate: 3-phase × 3-expert review workflow
@@ -41,8 +46,13 @@ claude-code-config/
 │   │   └── SKILL.md              # Deep codebase exploration and Q&A
 │   ├── context-budget/
 │   │   └── SKILL.md              # Audit context window consumption and surface savings
-│   └── security-scan/
-│       └── SKILL.md              # Audit Claude Code config for secrets, injection, MCP risks
+│   ├── security-scan/
+│   │   └── SKILL.md              # Audit Claude Code config for secrets, injection, MCP risks
+│   └── retrospect/
+│       ├── SKILL.md              # Retrospective mining: lessons → rules/hooks/PR (opt-in)
+│       ├── pipeline.md           # Steps 0-9, dispositions, safety invariants
+│       ├── folding.md            # Rule sync-point edit map + hook authoring
+│       └── sources/              # Per-source mining procedures (artifacts/github/transcripts/scout)
 └── rules/
     ├── common/                   # Language-agnostic baseline (always applied)
     │   ├── coding-style.md
@@ -466,6 +476,52 @@ Audits Claude Code configuration for common security misconfigurations — zero 
 - Graded A/F report with severity-classified findings
 - Concept borrowed from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (`skills/security-scan/`, which wraps the AgentShield npm package); reimplemented here as a self-contained shell + local-LLM workflow
 
+### retrospect
+
+Automates this repo's self-improvement loop (opt-in — see "Retrospective mining" below):
+- Mines configured knowledge sources for lessons: review artifacts in sibling repos,
+  GitHub PR review comments, own session transcripts (privacy-protected), whitelisted
+  external references
+- Skepticism-first dedupe against the existing rule set, then folds novel lessons into
+  `skills/triangulate/common-rules.md` rows, detection hooks + bats tests, and
+  cross-skill guards — gated by `check-rule-sync.sh` and the full test suite
+- Ends with a triangulate self-review and a PR; the human squash-merges
+
+## Retrospective mining (opt-in)
+
+Disabled until you create a config. Everything is driven by three hooks
+(`session-retrospect-check.sh`, `retro-state.sh`, `retro-prescreen.sh`) plus the
+`retrospect` skill; state (per-source high-water cursors) lives in
+`~/.claude/state/retrospect.json`, which the installer never touches.
+
+### Enable
+
+```bash
+cp retrospect.config.json.example ~/.claude/retrospect.config.json
+# edit: list your sibling repos under sources.artifacts.repos, enable sources
+bash ~/.claude/hooks/retro-state.sh seed --high-water artifacts=<last-manually-mined-date>
+```
+
+From then on, the first session of a day where a source's `interval_days` has elapsed
+opens with a prompt offering to run the `retrospect` skill. Decline to snooze
+(`bash ~/.claude/hooks/retro-state.sh snooze <source> [days]`); delete the config to
+disable entirely.
+
+### Notes
+
+- **Transcripts source**: raw transcript text never reaches Claude context, stdout,
+  stderr, or a non-loopback LLM endpoint. Distillation requires a LOOPBACK local LLM;
+  setting `sources.transcripts.allow_remote_llm: true` acknowledges that raw excerpts
+  would then cross the network in plaintext HTTP to your configured LLM host.
+- **State-loss recovery**: re-run
+  `bash ~/.claude/hooks/retro-state.sh seed --high-water <source>=<scalar>` with the
+  scalar cursors recorded in the latest `docs/archive/audit/*-lessons-*.md` frontmatter
+  (applies to artifacts/github/transcripts; scout recovers by re-fetching). Worst case,
+  a lost cursor only causes re-mining, which the skill's dedupe pass absorbs.
+- **Manual verification of the SessionStart hook**: set a source's `interval_days` to 0,
+  run `seed`, start a new Claude Code session — the mining prompt should appear once per
+  day; `bash tests/bench-hooks.sh` reports the hook's latency.
+
 ## Rules
 
 Layered coding-style / testing / security guidance, consulted when editing matching files.
@@ -531,6 +587,10 @@ When both backends are reachable, the OpenAI backend is auto-preferred; pin with
 | `hooks/*.sh`        | `~/.claude/hooks/`            |
 | `skills/*/SKILL.md` | `~/.claude/skills/*/SKILL.md` |
 | `rules/*/*.md`      | `~/.claude/rules/*/*.md`      |
+
+Additionally, `~/.claude/state/` is created (0700) for retrospect cursors; the installer
+never writes into it and never installs `retrospect.config.json` (user-created, see
+"Retrospective mining").
 
 ## Customization
 
