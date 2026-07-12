@@ -45,28 +45,28 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R32 | New long-running runtime artifact merged without real boot smoke test | Major |
 | R33 | CI configuration change applied to one config but not its duplicates | Major (Critical when the drifting gate is a security control) |
 | R34 | Pre-existing bug in adjacent file deferred without Anti-Deferral cost-justification | Major |
-| R35 | Production-deployed component merged without manual test plan | Tier-1 Major / Tier-2 Critical |
-| R36 | Static-analysis warning suppression as substitute for fix | Major (Critical when the suppressed warning is in a security category) |
-| R37 | Internal implementation jargon in user-facing strings | Minor (Major in security-relevant flows OR for stale-organization claims with measurable user impact) |
+| R35 | Production-deployed component merged without manual test plan | Major; Critical for unvalidated security-sensitive deployed behavior |
+| R36 | Static-analysis warning suppression as substitute for fix | Major |
+| R37 | Internal implementation jargon in user-facing strings | Major when it blocks comprehension or safe recovery; Minor otherwise |
 | R38 | Async state machine: non-terminal state + fail-open supersession | Major (non-terminal state) / Critical (fail-open supersession on auth/session/key/token state) |
 | R39 | Lifecycle secret/metadata zeroization (inverse of R25) | Major (Critical when long-term key material / live tokens survive) |
 | R40 | Cross-boundary serialization shape vs strict consumer | Critical (silent total-path failure or data loss) |
 | R41 | Declared capability without a working backing path | Major (Critical when the declared path never worked at all) |
-| R42 | Class-membership derivation (anchoring on a supplied list) | Major by default; **Critical when the un-derived member means a security control (step-up, authz guard, rate limit, fail-closed gate, revocation) does not cover a member it was declared to cover — fail-open, same direction R38 Part 2 flags Critical** |
-| R43 | Fix-induced security-boundary widening (fail-safe precedence) | Major (Critical when the widened surface delivers credentials, session/key material, decrypted secrets, or privileged operations to the added recipients) |
+| R42 | Class-membership derivation (anchoring on a supplied list) | Major by default; Critical when an omitted member leaves a security control fail-open |
+| R43 | Fix-induced security-boundary widening (fail-safe precedence) | Major; Critical when added recipients receive credentials, key/session material, decrypted secrets, or privileged operations |
 | R44 | Gate exit status read through a pipeline | Major (Critical when the masked gate guards a security invariant) |
 | RS1 | Timing-safe comparison | Critical |
 | RS2 | Rate limiter on new routes | Major |
 | RS3 | Input validation at boundaries | PUT |
-| RS4 | Personal-identifying data in committed artifacts | Major |
+| RS4 | Personal-identifying data in committed artifacts | Critical for secrets or exploitable identity data; Major otherwise |
 | RS5 | Untrusted externally-supplied security parameter without floor/whitelist | Major (Critical when no transport pinning/TOFU mitigates the MITM vector) |
 | RS6 | Incomplete sanitization — escape-character ordering | /g, "\\ |
 | RT1 | Mock-reality divergence | Critical |
 | RT2 | Testability verification | — (reject finding if untestable) |
 | RT3 | Shared constant in tests | Major |
 | RT4 | Race-test vacuous-pass guard | Critical |
-| RT5 | Test call-path must include the production primitive | Critical (security-relevant primitive) / Major (otherwise) |
+| RT5 | Test call-path must include the production primitive | Critical for security controls; Major otherwise |
 | RT6 | Newly added production exports without test diff | class |
-| RT7 | New guard / test / gate must be proven able to fail | Major (Critical when the blind gate guards a security invariant) |
-| RT8 | Vacuous denial-path test (status asserted, mutation not) | Major (Critical when the gate is a security control — authz/authn/rate-limit/step-up/fail-closed) |
+| RT7 | New guard / test / gate must be proven able to fail | Major; Critical when the blind check guards a security invariant |
+| RT8 | Vacuous denial-path test (status asserted, mutation not) | Major; Critical for authn/authz, rate-limit, step-up, or fail-closed controls |
 | RT9 | Parallel-implementation twin drift (production artifact vs test-importable twin) | Critical when the drifting logic is a security control (auth/authz check, origin/frame gate, sanitizer, crypto parameter, signature verification, rate limiter, RLS/tenancy predicate, idempotency guard on a security-state mutation — a superset of RT5's Critical-escalation list); Major otherwise |

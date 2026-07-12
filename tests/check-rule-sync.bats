@@ -99,6 +99,13 @@ EOF
   [[ "$output" == OK:* ]]
 }
 
+@test "drift: referenced mandatory rule detail is missing" {
+  sed -i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"references missing mandatory detail: rule-details/R1.md"* ]]
+}
+
 # ============================================================
 # DRIFT cases — one red fixture per linter check
 # ============================================================

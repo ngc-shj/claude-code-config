@@ -201,6 +201,14 @@ if [ -f "$DIGEST" ]; then
   fi
 fi
 
+# Every mandatory per-rule detail referenced by the compact table must exist.
+while IFS= read -r detail; do
+  [ -n "$detail" ] || continue
+  if [ ! -f "$SKILL_DIR/$detail" ]; then
+    drift "common-rules.md references missing mandatory detail: $detail"
+  fi
+done < <(grep -oE 'rule-details/(R|RS|RT)[0-9]+\.md' "$COMMON" | sort -u)
+
 if [ "$fail" -ne 0 ]; then
   echo ""
   echo "Rule-ID drift detected. Sync points: common-rules.md table + template"
