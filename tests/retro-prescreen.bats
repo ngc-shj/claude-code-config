@@ -141,7 +141,18 @@ if [ "\$1" = "pr" ] && [ "\$2" = "list" ]; then
   exit 0
 fi
 if [ "\$1" = "api" ]; then
-  printf '%s' '${GH_PR_COMMENTS_BODY:-}'
+  # The hook requests \`--jq '.[].body | @base64'\`, one base64 line per
+  # comment. Emit each configured comment body base64-encoded so multi-line
+  # bodies survive intact. GH_PR_COMMENTS_BODY is a single comment body;
+  # GH_PR_COMMENTS_BODIES (newline-separated, one per line) supplies multiple.
+  if [ -n "\${GH_PR_COMMENTS_BODIES:-}" ]; then
+    while IFS= read -r _b; do
+      [ -n "\$_b" ] && printf '%s' "\$_b" | base64 | tr -d '\n' && printf '\n'
+    done <<<"\${GH_PR_COMMENTS_BODIES}"
+  elif [ -n "\${GH_PR_COMMENTS_BODY:-}" ]; then
+    printf '%s' "\${GH_PR_COMMENTS_BODY}" | base64 | tr -d '\n'
+    printf '\n'
+  fi
   exit 0
 fi
 exit 1
@@ -235,6 +246,21 @@ teardown() {
   run bash -c "echo 'server at 192.168.1.42 responded' | bash '$SCRIPT' scrub"
   [[ "$output" == *"[REDACTED]"* ]]
   [[ "$output" != *"192.168.1.42"* ]]
+}
+
+@test "scrub: IPv6 addresses redacted (compressed, full, loopback) (S2)" {
+  run bash -c "echo 'a fe80::1234:5678:9abc:def0 b 2001:db8::1 c ::1' | bash '$SCRIPT' scrub"
+  [[ "$output" != *"fe80::1234"* ]]
+  [[ "$output" != *"2001:db8::1"* ]]
+  [[ "$output" != *"::1"* ]]
+  [[ "$output" == *"[REDACTED]"* ]]
+}
+
+@test "scrub: IPv6 pass does not eat clock times / host:port / owner:repo prose" {
+  run bash -c "echo 'time 12:34:56 host:8080 acme/widgets' | bash '$SCRIPT' scrub"
+  [[ "$output" == *"12:34:56"* ]]
+  [[ "$output" == *"host:8080"* ]]
+  [[ "$output" == *"acme/widgets"* ]]
 }
 
 @test "scrub: /home/<user>/ path redacted" {
@@ -360,6 +386,31 @@ setup_artifacts_repo() {
   [ "$status" -eq 0 ]
 }
 
+@test "artifacts: two-hop symlink chain escaping the repo is rejected (S1)" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local outside="$BATS_TEST_TMPDIR/outside-secret.md"
+  echo "secret content" > "$outside"
+  # hop1 -> hop2 (both inside the repo) -> outside (escapes). A one-hop check
+  # would accept hop1 because hop2's directory is still inside the repo.
+  ln -s "$repo/docs/archive/review/hop2.md" "$repo/docs/archive/review/hop1.md"
+  ln -s "$outside" "$repo/docs/archive/review/hop2.md"
+  # a legitimate real file to prove non-escaping candidates still pass
+  echo "real finding" > "$repo/docs/archive/review/real.md"
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  # only real.md survives; both symlink hops are rejected
+  run jq -e '[.candidates[].path | test("real.md")] | all and (length == 1)' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$DOC" != *"hop1.md"* ]]
+  [[ "$DOC" != *"hop2.md"* ]]
+}
+
 @test "artifacts: LLM online -> summary bullets pass the scrub" {
   local repo
   repo=$(setup_artifacts_repo)
@@ -375,7 +426,57 @@ setup_artifacts_repo() {
   [ "$status" -eq 0 ]
   run jq -e '.candidates[0].summary != null' <<<"$DOC"
   [ "$status" -eq 0 ]
-  [[ "$output" != *"bob@example.com"* ]]
+  [[ "$DOC" != *"bob@example.com"* ]]
+}
+
+@test "artifacts: reachable remote LLM without consent -> raw NOT sent, summary null (egress gate)" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  # An artifact containing internal detail that must NOT leave the machine.
+  echo "Symptom: SQLi in /internal/admin endpoint; token AKIAIOSFODNN7EXAMPLE" \
+    > "$repo/docs/archive/review/sensitive-review.md"
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  # Backend is reachable (trusted remote + online mock answers), so the probe
+  # would succeed — the ONLY thing stopping raw egress is the S3 gate refusing
+  # a non-loopback host without allow_remote_llm. artifacts ships consent=false.
+  export LLM_BACKEND=openai
+  export LLM_MOCK_CONTENT="leaked summary"
+  export OPENAI_HOST="http://remote-host.example.com:8080"
+  export OPENAI_HOSTS="http://remote-host.example.com:8080"
+  export LLM_TRUSTED_HOSTS="remote-host.example.com"
+  setup_llm_online_mock
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  # No summary was produced — the raw artifact was never sent to the remote LLM.
+  run jq -e '.candidates[0].summary == null' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  # The file is still surfaced as a candidate (file-list-only fallback).
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"skipped"* || "$ERR" == *"consent"* ]]
+}
+
+@test "artifacts: remote LLM WITH allow_remote_llm consent -> summary produced" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  write_config --arg r "$repo" \
+    '.sources.artifacts.repos = [$r] | .sources.artifacts.allow_remote_llm = true'
+  echo "review notes" > "$repo/docs/archive/review/consented-review.md"
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  export LLM_BACKEND=openai
+  export LLM_MOCK_CONTENT="Symptom: a distilled bullet"
+  export OPENAI_HOST="http://remote-host.example.com:8080"
+  export OPENAI_HOSTS="http://remote-host.example.com:8080"
+  export LLM_TRUSTED_HOSTS="remote-host.example.com"
+  setup_llm_online_mock
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates[0].summary != null' <<<"$DOC"
+  [ "$status" -eq 0 ]
 }
 
 # ===========================================================================
@@ -436,6 +537,24 @@ setup_github_config() {
   [[ "$DOC" == *"[REDACTED]"* ]]
 }
 
+@test "github: multi-line comment body kept as ONE candidate (F4 boundary preservation)" {
+  setup_github_config
+  seed_state
+  export GH_PR_LIST_JSON='[{"number":42,"title":"Fix","updatedAt":"2026-01-01T00:00:00Z"}]'
+  # A single review comment spanning multiple lines with an interior blank line.
+  export GH_PR_COMMENTS_BODY=$'The problem is X.\n\nThis breaks because Y.'
+  setup_gh_mock
+
+  run_prescreen github --json
+  [ "$status" -eq 0 ]
+  # Exactly one comment (not three line-fragments), and both lines survive
+  # inside that single string with the boundary intact.
+  run jq -e '.candidates[0].comment_bodies | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates[0].comment_bodies[0] | test("The problem is X") and test("This breaks because Y")' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
 @test "github: HIGH-WATER-spoofing PR title does not escape its jq-encoded field" {
   setup_github_config
   seed_state
@@ -448,6 +567,13 @@ setup_github_config() {
   run jq -e '. | type == "object"' <<<"$DOC"
   [ "$status" -eq 0 ]
   run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  # The spoofed "2099-..." string in the PR title must NOT contaminate the
+  # real cursor — high_water comes only from the structured updatedAt field
+  # (T2). Assert it equals the genuine updatedAt, never the spoofed value.
+  run jq -e '.high_water["acme/widgets"] == "2026-01-01T00:00:00Z"' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e '.high_water["acme/widgets"] | test("2099") | not' <<<"$DOC"
   [ "$status" -eq 0 ]
 }
 
@@ -475,7 +601,11 @@ setup_github_config() {
 
   run_prescreen github --json
   [ "$status" -eq 0 ]
-  [[ "$stderr" == *"200"* || "$stderr" == *"limit"* ]]
+  [[ "$ERR" == *"200"* || "$ERR" == *"limit"* ]]
+  # The warning is the weakest observable — also assert no candidate was
+  # silently dropped: all 200 returned PRs became candidates (T3).
+  run jq -e '.candidates | length == 200' <<<"$DOC"
+  [ "$status" -eq 0 ]
 }
 
 # F-10 round-trip: config with ~/ repo -> prescreen --json high_water feeds
@@ -660,6 +790,34 @@ write_transcript_fixture() {
   [ "$status" -eq 0 ]
 }
 
+@test "transcripts: correction marker matches ARRAY-shaped user content (F1 real transcript shape)" {
+  # Real Claude Code user messages store .message.content as an array of
+  # content blocks, not a string. This fixture contains ONLY a user-correction
+  # event in that array shape (no tool_result/decision:block events), so it is
+  # extracted iff the array-normalizing filter works — proving the
+  # correction-marker signal actually fires on the real transcript shape.
+  local root
+  root=$(setup_transcripts_config)
+  mkdir -p "$root/proj"
+  local f="$root/proj/arr.jsonl"
+  jq -nc '{type:"user", message:{content: [{type:"text", text:"no, that is wrong, revert it"}]}}' > "$f"
+  printf '\n' >> "$f"
+  set_mtime_ago "$f" 600
+  seed_state
+  export LLM_BACKEND=openai
+  export LLM_MOCK_CONTENT="a generic distilled lesson"
+  setup_llm_online_mock
+  export OPENAI_HOST="http://127.0.0.1:8080"
+
+  run_prescreen transcripts --json
+  [ "$status" -eq 0 ]
+  # The array-shaped correction event was extracted and distilled -> a candidate.
+  run jq -e '.candidates | length > 0' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e '.deferred == false' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
 @test "transcripts: malformed jsonl fixture — payload absent from both streams" {
   local root canary
   root=$(setup_transcripts_config)
@@ -791,10 +949,19 @@ setup_transcripts_with_events() {
   seed_state
 }
 
-@test "loopback gate: remote host -> deferred true, high_water null, canary absent" {
+@test "loopback gate: reachable remote host without consent -> deferred (S3 isolated, T1)" {
   setup_transcripts_with_events
   export LLM_BACKEND=openai
+  # Make the remote host genuinely REACHABLE by the backend (trusted + online
+  # mock answers), so the reachability probe SUCCEEDS. The only thing that can
+  # still force `deferred` is the S3 egress gate itself refusing a non-loopback
+  # host without allow_remote_llm. This isolates S3: if S3 were removed, the
+  # probe would pass and Stage 2 would run (deferred=false) — so this test goes
+  # red when the gate is disabled, which the previous unreachable-host version
+  # could not (the host-trust backstop masked it).
   export OPENAI_HOST="http://remote-host.example.com:8080"
+  export OPENAI_HOSTS="http://remote-host.example.com:8080"
+  export LLM_TRUSTED_HOSTS="remote-host.example.com"
   setup_llm_online_mock
 
   run_prescreen transcripts --json
@@ -803,7 +970,8 @@ setup_transcripts_with_events() {
   [ "$status" -eq 0 ]
   run jq -e '.high_water == null' <<<"$DOC"
   [ "$status" -eq 0 ]
-  [[ "$output" != *"CANARY-LOOPBACK"* ]]
+  [[ "$DOC" != *"CANARY-LOOPBACK"* ]]
+  [[ "$ERR" != *"CANARY-LOOPBACK"* ]]
 }
 
 @test "loopback gate: loopback host + online mock -> Stage 2 runs" {

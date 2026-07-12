@@ -55,7 +55,7 @@ _state_high_water() {
 # the directory holding the link. Emits the resolved path on success; empty
 # on rejection.
 _resolve_contained() {
-  local file="$1" root="$2" dir base resolved_dir resolved_root real_dir
+  local file="$1" root="$2" dir base resolved_dir resolved_root
   dir=$(dirname "$file")
   base=$(basename "$file")
   case "$base" in
@@ -66,24 +66,27 @@ _resolve_contained() {
   esac
   resolved_root=$(cd -P -- "$root" 2>/dev/null && pwd -P) || return 1
 
-  # Resolve the file's real location. When the entry is a symlink, chase it to
-  # its target's real directory so a link pointing outside the root is caught.
-  if [ -L "$file" ]; then
-    local target
-    target=$(cd -P -- "$dir" 2>/dev/null && pwd -P)/$base || return 1
-    # Follow one level via the link's own directory + link text; then re-resolve.
-    local link_dest
-    link_dest=$(readlink "$file" 2>/dev/null) || return 1
+  # Chase the ENTIRE symlink chain to its terminal real file, re-resolving the
+  # containing directory at every hop. A single readlink only catches a
+  # one-hop escape (D4); an attacker who plants two links inside the (untrusted)
+  # repo — link A -> link B (both inside) -> target (outside) — would slip
+  # past a one-hop check because A's immediate target B still sits inside the
+  # root. Loop until the entry is no longer a symlink, capped at 40 hops so a
+  # symlink cycle terminates instead of spinning.
+  local cur="$file" hops=0 link_dest
+  while [ -L "$cur" ] && [ "$hops" -lt 40 ]; do
+    link_dest=$(readlink "$cur" 2>/dev/null) || return 1
     case "$link_dest" in
-      /*) real_dir=$(cd -P -- "$(dirname "$link_dest")" 2>/dev/null && pwd -P) || return 1
-          base=$(basename "$link_dest") ;;
-      *)  real_dir=$(cd -P -- "$dir" 2>/dev/null && cd -P -- "$(dirname "$link_dest")" 2>/dev/null && pwd -P) || return 1
-          base=$(basename "$link_dest") ;;
+      /*) cur="$link_dest" ;;
+      *)  cur="$(dirname "$cur")/$link_dest" ;;
     esac
-    resolved_dir="$real_dir"
-  else
-    resolved_dir=$(cd -P -- "$dir" 2>/dev/null && pwd -P) || return 1
-  fi
+    hops=$((hops + 1))
+  done
+  [ -L "$cur" ] && return 1   # still a link after the cap: refuse (likely a cycle)
+
+  dir=$(dirname "$cur")
+  base=$(basename "$cur")
+  resolved_dir=$(cd -P -- "$dir" 2>/dev/null && pwd -P) || return 1
 
   case "$resolved_dir" in
     "$resolved_root"|"$resolved_root"/*) ;;
@@ -122,6 +125,16 @@ cmd_scrub() {
 
   # IPv4 addresses.
   input=$(printf '%s' "$input" | sed -E 's/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[REDACTED]/g')
+
+  # IPv6 addresses. Two shapes: (a) a `::`-compressed form (the double colon is
+  # a strong IPv6 signal that clock times `12:34:56` and `host:port` prose lack)
+  # and (b) a full 8-group form. The hex-only groups and the `::`/8-group
+  # requirement keep this off ordinary `key:value` text; allowlisted
+  # `~/.claude/…` tokens and `owner/repo` keys carry neither shape.
+  input=$(printf '%s' "$input" | sed -E '
+    s/([0-9a-fA-F]{1,4}:)*([0-9a-fA-F]{1,4})?::([0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4})*)?/[REDACTED]/g;
+    s/([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}/[REDACTED]/g
+  ')
 
   # /home/<user>/... paths (any depth).
   input=$(printf '%s' "$input" | sed -E 's#/home/[A-Za-z0-9_.-]+(/[^[:space:]]*)?#[REDACTED]#g')
@@ -165,9 +178,24 @@ cmd_artifacts() {
     exit 2
   fi
 
-  local glob repos
+  local glob repos allow_remote
   glob=$(jq -r '.sources.artifacts.glob // "docs/archive/review/*.md"' <<<"$cfg")
   repos=$(jq -r '.sources.artifacts.repos // [] | .[]' <<<"$cfg")
+  allow_remote=$(jq -r '.sources.artifacts.allow_remote_llm // false' <<<"$cfg")
+
+  # Egress gate for sending RAW artifact text to the LLM summarizer — decided
+  # ONCE (not per file). Without a loopback backend (or explicit consent) the
+  # raw artifacts are never sent; summarization is skipped and the source
+  # falls back to file-list-only, which is still fully usable by the mining
+  # sub-agent (it Reads the files locally). See _summarize_artifact.
+  # shellcheck source=llm-utils.sh
+  source "$HOOK_DIR/llm-utils.sh" 2>/dev/null
+  local artifacts_llm_ok=0
+  if _raw_llm_egress_ok "$allow_remote"; then
+    artifacts_llm_ok=1
+  else
+    echo "retro-prescreen: artifacts LLM summarization skipped (no loopback backend / no allow_remote_llm consent) — emitting file list only" >&2
+  fi
 
   local candidates='[]' hw_map='{}'
   local repo
@@ -200,9 +228,7 @@ cmd_artifacts() {
       fi
 
       local summary=""
-      if command -v jq >/dev/null 2>&1; then
-        summary=$(_summarize_artifact "$resolved")
-      fi
+      summary=$(_summarize_artifact "$resolved" "$artifacts_llm_ok")
 
       if [ -n "$summary" ]; then
         candidates=$(jq -c --arg p "$resolved" --arg s "$summary" '. + [{path: $p, summary: $s}]' <<<"$candidates")
@@ -223,14 +249,18 @@ cmd_artifacts() {
   fi
 }
 
-# Summarize one artifact file to Symptom/Root-cause bullets via the local
-# LLM, when reachable. Empty output (LLM offline) -> caller falls back to
-# file-list-only (fail-open toward more review). Every summary passes the
-# shared scrub before it may enter candidates (T17).
+# Summarize one artifact file to Symptom/Root-cause bullets via the local LLM.
+# $2 is the egress-ok flag the caller computed ONCE via _raw_llm_egress_ok:
+# when it is not "1", the raw artifact is NOT sent anywhere (the caller falls
+# back to file-list-only). This mirrors the transcripts loopback gate — a
+# review artifact carries the same untrusted internal content (paths,
+# identifiers, vulnerability detail, secrets) and must not leave the machine
+# to a non-loopback LLM without explicit allow_remote_llm consent, since the
+# scrub only runs on the LLM's RESPONSE, never on the artifact sent to it.
+# Every summary passes the shared scrub before it may enter candidates (T17).
 _summarize_artifact() {
-  local file="$1"
-  # shellcheck source=llm-utils.sh
-  source "$HOOK_DIR/llm-utils.sh" 2>/dev/null
+  local file="$1" egress_ok="$2"
+  [ "$egress_ok" = "1" ] || return 0
   command -v llm_request >/dev/null 2>&1 || return 0
 
   local raw
@@ -302,14 +332,20 @@ cmd_github() {
         repo_max="$updated_at"
       fi
 
+      # Emit one base64 line PER COMMENT (not per body line): a review comment
+      # routinely spans multiple lines, and `--jq '.[].body'` newline-separates
+      # them so line-splitting would shred one comment into several unrelated
+      # candidates and drop interior blank lines. @base64 keeps each whole
+      # comment (newlines and all) intact across the shell boundary.
       local bodies_raw scrubbed_bodies
-      bodies_raw=$(gh api "repos/${repo}/pulls/${pr_num}/comments" --jq '.[].body' 2>/dev/null) || bodies_raw=""
+      bodies_raw=$(gh api "repos/${repo}/pulls/${pr_num}/comments" --jq '.[].body | @base64' 2>/dev/null) || bodies_raw=""
       scrubbed_bodies='[]'
       if [ -n "$bodies_raw" ]; then
-        local body
-        while IFS= read -r body; do
+        local b64 body clean
+        while IFS= read -r b64; do
+          [ -n "$b64" ] || continue
+          body=$(printf '%s' "$b64" | base64 -d 2>/dev/null) || continue
           [ -n "$body" ] || continue
-          local clean
           clean=$(cmd_scrub <<<"$body")
           scrubbed_bodies=$(jq -c --arg b "$clean" '. + [$b]' <<<"$scrubbed_bodies")
         done <<<"$bodies_raw"
@@ -355,6 +391,29 @@ _hosts_all_loopback() {
     esac
   done <<<"$1"
   [ "$any" -eq 1 ]
+}
+
+# Shared egress+reachability gate for sending RAW (pre-scrub) corpus text to
+# the LLM. Both the transcripts distiller and the artifacts summarizer feed
+# untrusted internal documents (review artifacts, transcript excerpts) to
+# llm_request, so both MUST clear the same S3 egress boundary: the resolved
+# backend must be loopback-only, OR the source's allow_remote_llm consent flag
+# is set; and the backend must actually answer (else it is functionally
+# offline). Returns 0 iff raw text may be sent. $1 = allow_remote value
+# ("true"/other). Assumes llm-utils.sh is already sourced by the caller.
+_raw_llm_egress_ok() {
+  local allow_remote="$1" hosts egress_ok=0 probe
+  command -v llm_resolved_hosts >/dev/null 2>&1 || return 1
+  hosts=$(llm_resolved_hosts 2>/dev/null)
+  if _hosts_all_loopback "$hosts"; then
+    egress_ok=1
+  elif [ "$allow_remote" = "true" ]; then
+    egress_ok=1
+  fi
+  [ "$egress_ok" -eq 1 ] || return 1
+  command -v llm_request >/dev/null 2>&1 || return 1
+  probe=$(printf 'ping' | llm_request "gpt-oss:20b" "Reply with the single word: pong." 10 8 2>/dev/null)
+  [ -n "$probe" ]
 }
 
 cmd_transcripts() {
@@ -427,12 +486,21 @@ cmd_transcripts() {
     while IFS= read -r line || [ -n "$line" ]; do
       [ -n "$line" ] || continue
       filtered=$(printf '%s' "$line" | jq -c --argjson markers "$markers" '
+        # Normalize a user message body to a plain string. Real Claude Code
+        # transcripts store .message.content as an ARRAY of content blocks
+        # ([{type:"text",text:"…"}]), not a string; older/other shapes use a
+        # bare string. `test` on an array throws, so a naive `.content | test`
+        # silently drops every real user event (the correction-marker signal).
+        def as_text:
+          if type == "array" then ([.[]? | (.text? // (if type=="string" then . else "" end))] | join(" "))
+          elif type == "string" then .
+          else "" end;
         select(
           (.type? == "tool_result" and .is_error? == true)
           or (.hook_event?.decision? == "block")
           or (.decision? == "block")
           or (.type? == "user" and (
-                (.message.content? // .content? // "") as $t
+                ((.message.content? // .content? // "") | as_text) as $t
                 | any($markers[]?; . as $m | $t | test($m))
               ))
         )
@@ -457,36 +525,12 @@ cmd_transcripts() {
     fi
   done
 
-  # --- loopback gate (S3) ---
+  # --- S3 loopback egress gate + reachability probe (shared with artifacts) ---
   # shellcheck source=llm-utils.sh
   source "$HOOK_DIR/llm-utils.sh" 2>/dev/null
-  local hosts loopback_ok=0
-  if command -v llm_resolved_hosts >/dev/null 2>&1; then
-    hosts=$(llm_resolved_hosts 2>/dev/null)
-    if _hosts_all_loopback "$hosts"; then
-      loopback_ok=1
-    fi
-  fi
-
-  # S3 egress gate FIRST: raw excerpts may only reach a loopback endpoint, or
-  # a remote one the user explicitly consented to. This is decided before any
-  # probe so a non-consented remote host is never contacted at all.
-  local egress_ok=0
-  if [ "$loopback_ok" -eq 1 ]; then
-    egress_ok=1
-  elif [ "$allow_remote" = "true" ]; then
-    egress_ok=1
-  fi
-
-  # Then reachability: an egress-allowed host that does not actually ANSWER
-  # (curl fails) is functionally LLM-offline and must fail-closed (deferred,
-  # cursor preserved) rather than silently advance the cursor past excerpts it
-  # could not process. Probe only after the egress gate has passed.
   local stage2_allowed=0
-  if [ "$egress_ok" -eq 1 ] && command -v llm_request >/dev/null 2>&1; then
-    local probe
-    probe=$(printf 'ping' | llm_request "gpt-oss:20b" "Reply with the single word: pong." 10 8 2>/dev/null)
-    [ -n "$probe" ] && stage2_allowed=1
+  if _raw_llm_egress_ok "$allow_remote"; then
+    stage2_allowed=1
   fi
 
   if [ "$stage2_allowed" -ne 1 ]; then

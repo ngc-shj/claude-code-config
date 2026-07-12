@@ -48,6 +48,45 @@
   offline → deferred, cursor preserved. This is the fail-safe reading of the locked
   contract, not a deviation from it; recorded for review visibility.
 
+## D7 — Phase-3 review findings (all fixed in impl)
+
+Code-review round on the implementation diff (3 experts + a user security pass) raised 10
+findings; all fixed, none deferred. Each fix carries a red-capable regression test
+(mutation-verified where it is a security gate).
+
+- **S1/F2 (Major, security+func)** — two-hop symlink chain escaped the repo-containment
+  check (D4 closed only one hop). `_resolve_contained` now chases the FULL chain (≤40 hops,
+  cycle-capped) to the terminal real file before the containment test. Mutation-verified
+  red on a one-hop-accepting mutant.
+- **[High] (user security)** — `_summarize_artifact` sent RAW artifact text to the LLM with
+  NO loopback/consent gate (transcripts had one, artifacts did not); on a remote-LLM host
+  that leaked pre-scrub internal content. Added `sources.artifacts.allow_remote_llm` and a
+  shared `_raw_llm_egress_ok` gate (loopback-only OR explicit consent, AND reachable) used
+  by BOTH artifacts and transcripts (transcripts refactored to the shared helper — R1).
+  Non-consented remote → summarization skipped, file-list-only fallback. Mutation-verified.
+- **F1 (Major, func)** — transcripts correction-marker filter was dead against the REAL
+  transcript shape (`.message.content` is an array of blocks, not a string); `test` on an
+  array threw and the event was silently dropped. Filter now normalizes array/string
+  content to text before matching. Regression test uses the array shape.
+- **F3 + [Medium] (user) (Minor→corrected)** — one malformed per-source timestamp aborted
+  the whole `due` jq comprehension, silencing ALL sources. Wrapped each source's date parse
+  in try/catch: malformed `last_run` → treated as due (`catch $ivl`), malformed
+  `snoozed_until` → treated as EXPIRED (`catch $now`, not far-future — the user caught that
+  `$now+1` would silence forever; corrected). Two regression tests.
+- **F4 (Minor)** — github review-comment bodies were shredded per-line by
+  `--jq '.[].body'`. Now `--jq '.[].body | @base64'`, one base64 line per comment, decoded
+  before scrub — boundaries and interior blank lines preserved.
+- **S2 (Minor)** — scrub redacted IPv4 but not IPv6. Added an IPv6 pass (compressed `::`
+  and full forms) that does not eat clock times / host:port / owner/repo prose.
+- **T1 (Major, testing)** — the S3 loopback-gate negative tests were vacuous (`deferred`
+  reachable via 3 paths). Rewrote to isolate S3: a REACHABLE remote host (trusted + online
+  mock) with consent=false, so only the gate can force `deferred`. Mutation-verified red on
+  a fail-open gate.
+- **T2/T3/T4 (Minor, testing)** — HIGH-WATER-spoof test now asserts `.high_water` is
+  uncontaminated; count==limit test asserts 200 candidates (not just the warning);
+  clobber-prone `$output`/`$stderr` reuse across `run jq` fixed via `$DOC`/`$ERR`/`$due`
+  saves throughout.
+
 ## D3 — seed with config absent produces empty object expansion (edge noted)
 
 - Plan: C2 seed expands artifacts/github scalars "to an object mapping every key

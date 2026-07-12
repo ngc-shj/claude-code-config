@@ -254,6 +254,46 @@ write_full_config() {
   [ "$status" -eq 0 ]
 }
 
+@test "due: one malformed last_run does not poison other sources' due status (F3)" {
+  write_full_config
+  run_state seed
+  [ "$status" -eq 0 ]
+  # Corrupt ONE source's cursor with a valid-JSON but non-ISO string, and make
+  # github genuinely due by removing its entry. A naive whole-array jq parse
+  # would throw on the bad artifacts date and report nothing-due for all.
+  jq -c '.sources.artifacts.last_run = "not-a-date" | del(.sources.github)' \
+    "$STATE" > "$BATS_TEST_TMPDIR/state/tmp.json"
+  mv "$BATS_TEST_TMPDIR/state/tmp.json" "$STATE"
+
+  run_state due --json
+  [ "$status" -eq 0 ]
+  # Save the due list before any `run jq` clobbers $output.
+  local due="$output"
+  # github (missing entry) must still be reported due despite artifacts' bad date.
+  run jq -e 'index("github") != null' <<<"$due"
+  [ "$status" -eq 0 ]
+  # the source with the unparseable cursor fails toward due, not toward silence.
+  run jq -e 'index("artifacts") != null' <<<"$due"
+  [ "$status" -eq 0 ]
+}
+
+@test "due: malformed snoozed_until is treated as EXPIRED, not far-future (F3 fail-safe)" {
+  write_full_config
+  run_state seed
+  [ "$status" -eq 0 ]
+  # A bad snoozed_until must be read as expired (source due), never as a
+  # far-future timestamp that would silence the source forever.
+  jq -c '.sources.artifacts.last_run = "2000-01-01T00:00:00Z"
+         | .sources.artifacts.snoozed_until = "not-a-date"' \
+    "$STATE" > "$BATS_TEST_TMPDIR/state/tmp.json"
+  mv "$BATS_TEST_TMPDIR/state/tmp.json" "$STATE"
+
+  run_state due --json
+  [ "$status" -eq 0 ]
+  run jq -e 'index("artifacts") != null' <<<"$output"
+  [ "$status" -eq 0 ]
+}
+
 @test "due: config absent yields [] with --json" {
   run_state due --json
   [ "$status" -eq 0 ]

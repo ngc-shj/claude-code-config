@@ -8,7 +8,8 @@
       "enabled": true,
       "interval_days": 7,
       "repos": ["~/path/to/sibling-repo"],
-      "glob": "docs/archive/review/*.md"
+      "glob": "docs/archive/review/*.md",
+      "allow_remote_llm": false
     },
     "github": {
       "enabled": false,

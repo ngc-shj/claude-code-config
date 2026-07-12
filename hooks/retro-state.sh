@@ -273,6 +273,11 @@ cmd_due() {
   fi
 
   local due
+  # Each source's date arithmetic is wrapped in try/catch so one malformed
+  # timestamp (a hand-edited last_run / snoozed_until that is valid JSON but
+  # not ISO-8601) cannot abort the whole array comprehension and silently
+  # report nothing-due for EVERY source. A source with an unparseable cursor
+  # is treated as due (fail toward more mining, never toward silently skipping).
   due=$(jq -c --argjson now "$now" --argjson state "$state" '
     [ (.sources | to_entries[])
       | select(.value.enabled == true)
@@ -280,9 +285,13 @@ cmd_due() {
       | ((.value.interval_days // 7) * 86400) as $ivl
       | (($state.sources? // {})[$k] // null) as $e
       | if $e == null or ($e.last_run // null) == null then $k
+        # A malformed snoozed_until must be treated as EXPIRED (catch -> $now,
+        # which is not > $now), never as far-future — otherwise one bad value
+        # would suppress the source forever. A malformed last_run is treated as
+        # past the interval (catch -> $ivl), i.e. due. Both fail toward mining.
         elif (($e.snoozed_until // null) != null)
-             and (($e.snoozed_until | fromdateiso8601) > $now) then empty
-        elif ($now - ($e.last_run | fromdateiso8601)) >= $ivl then $k
+             and ((try ($e.snoozed_until | fromdateiso8601) catch $now) > $now) then empty
+        elif ((try ($now - ($e.last_run | fromdateiso8601)) catch $ivl) >= $ivl) then $k
         else empty
         end ]' <<<"$cfg") || due='[]'
 
