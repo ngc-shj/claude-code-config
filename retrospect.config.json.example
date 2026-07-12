@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "prompt_sources": ["startup"],
+  "snooze_days": 3,
+  "correction_markers": ["\\bwrong\\b", "そうじゃなく", "違う"],
+  "sources": {
+    "artifacts": {
+      "enabled": true,
+      "interval_days": 7,
+      "repos": ["~/path/to/sibling-repo"],
+      "glob": "docs/archive/review/*.md",
+      "allow_remote_llm": false
+    },
+    "github": {
+      "enabled": false,
+      "interval_days": 7,
+      "repos": ["owner/repo"]
+    },
+    "transcripts": {
+      "enabled": false,
+      "interval_days": 14,
+      "root": "~/.claude/projects",
+      "allow_remote_llm": false
+    },
+    "scout": {
+      "enabled": false,
+      "interval_days": 30,
+      "urls": []
+    }
+  }
+}

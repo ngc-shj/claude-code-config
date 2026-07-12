@@ -243,4 +243,14 @@ if [ -d "$SCRIPT_DIR/rules" ]; then
   done
 fi
 
+# Retrospect state directory. User-owned durable state (high-water cursors)
+# lives here; the installer only guarantees the directory exists with safe
+# permissions — it never writes, copies, or removes anything inside it, and
+# never installs the retrospect config (that file is user-created by copying
+# retrospect.config.json.example).
+mkdir -p -m 0700 "$CLAUDE_DIR/state"
+if [ ! -f "$CLAUDE_DIR/retrospect.config.json" ]; then
+  echo "  Note: retrospective mining is disabled — to enable, copy retrospect.config.json.example to $CLAUDE_DIR/retrospect.config.json and edit it (see README)"
+fi
+
 echo "Done."
