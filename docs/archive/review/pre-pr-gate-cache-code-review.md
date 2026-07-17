@@ -347,3 +347,24 @@ hash, ignored-file declaration, symlink non-follow, NUL framing) remain
 sound. This was the last cache-integrity class.
 
 Suite after round 7: 63/63 (bats tests/check-pre-pr.bats).
+
+---
+
+# Round 8 (external security review round 3, relayed by the operator)
+
+**F1 [Medium] — FIFO / socket / device all mapped to a constant `O`
+marker, hiding special-file state/type from the fingerprint.** Reproduced:
+a declared FIFO passed and cached; swapping it for a Unix socket left the
+`O` fingerprint unchanged, so a gate testing `[ -p ]` was skipped despite
+the change.
+- **Resolution: Fixed — fail closed.** `_hash_path`'s final `else` now
+  returns non-zero, aborting fingerprinting for any special file. A type
+  tag cannot represent dynamic content or a type swap, and reading a FIFO/
+  device could block. `O` is no longer emitted anywhere; the record
+  alphabet is now `L`/`F`/`D` plus fail-closed. T32 added, red-proven
+  against the D5 implementation.
+
+The reviewer confirmed the directory/submodule fixes (D5) are sound and
+that this was the last special-file class in that branch.
+
+Suite after round 8: 64/64 (bats tests/check-pre-pr.bats).

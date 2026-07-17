@@ -107,3 +107,21 @@
 - Tests: T30 (declared ignored dir → never cached, change never skipped),
   T31 (submodule gitlink → never cached, submodule dirt never skips). Both
   red-proven against the round-6 `O`-grammar hook.
+
+## D6 — FIFO / socket / device inputs fail closed (2026-07-18, external security review round 3)
+
+- After D5 closed the directory branch, the remaining `_hash_path` `else`
+  still mapped every special file (FIFO, socket, block/char device) to a
+  constant `O\0<path>` marker. Reproduced: a declared FIFO `gate-node`
+  passed and was cached; swapping it for a Unix socket (a state a gate
+  testing `[ -p ]` would reject) left the fingerprint unchanged as `O`, so
+  the failing gate was skipped.
+- Fix: the `else` now `return 1` — a special file aborts fingerprinting
+  (no fingerprint -> full run, fail closed). A type marker cannot represent
+  a FIFO's/device's dynamic content or a type swap, and opening one to hash
+  could block indefinitely (the hang class the symlink non-follow guard
+  already avoids). The `O` record type is therefore no longer emitted by
+  any path; `_hash_path` now yields only `L`/`F`/`D` records or a
+  fail-closed non-zero.
+- Test: T32 (declared FIFO -> never cached; FIFO->socket swap never skips),
+  red-proven against the D5 (`O`-emitting) implementation.

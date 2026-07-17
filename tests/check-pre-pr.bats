@@ -890,3 +890,25 @@ write_counting_script() {
 
   rm -rf "$sub"
 }
+
+@test "T32: special file (FIFO / socket) -> fingerprinting aborts (fail closed); a FIFO->socket swap never skips the gate" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf 'gate-node\n' > .gitignore
+  printf 'gate-node\n' > scripts/pre-pr.cache-paths
+  mkfifo gate-node
+  commit_baseline
+
+  # A declared FIFO must not be cacheable: no fingerprint -> full run, and
+  # the cache file is never written.
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  # Swapping the FIFO for a socket (a type change a gate testing [ -p ]
+  # would reject) must not produce a stale skip.
+  rm gate-node
+  python3 -c 'import socket; socket.socket(socket.AF_UNIX).bind("gate-node")'
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}

@@ -43,16 +43,17 @@
 #     worktree byte hash (never git's clean/textconv-filtered view, which
 #     can hide worktree changes), symlinks contribute their target string
 #     WITHOUT being followed (a hostile symlink to /dev/zero cannot hang
-#     the hook), fifo/socket/device contribute a type marker, missing
-#     paths a deletion marker. A DIRECTORY (a declared path that is a dir,
-#     or a submodule gitlink) aborts fingerprinting — its contents are not
-#     recursively hashed, so caching a repo whose gate reads inside a
-#     submodule or declared directory would be a stale-skip bypass;
-#     failing closed (no fingerprint -> full run) is the safe direction.
-#     Regular files above PRE_PR_CACHE_MAX_FILE_BYTES (default 100 MiB)
-#     also abort. Any failure yields no fingerprint, which is always
-#     treated as a cache miss (full run) — the cache can only narrow the
-#     gate, never widen it.
+#     the hook), missing paths a deletion marker. A DIRECTORY (a declared
+#     path that is a dir, or a submodule gitlink) aborts fingerprinting —
+#     its contents are not recursively hashed, so caching a repo whose gate
+#     reads inside a submodule or declared directory would be a stale-skip
+#     bypass; failing closed (no fingerprint -> full run) is the safe
+#     direction. A FIFO / socket / device likewise aborts: a type marker
+#     cannot represent its dynamic content or a type swap a gate would
+#     react to, and reading one can block. Regular files above
+#     PRE_PR_CACHE_MAX_FILE_BYTES (default 100 MiB) also abort. Any failure
+#     yields no fingerprint, which is always treated as a cache miss (full
+#     run) — the cache can only narrow the gate, never widen it.
 #   - Cache file: `$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass`,
 #     one line `<sha256-hex> <epoch-seconds>`, written atomically
 #     (mktemp in the same dir + mv). Only trusted (regular, non-symlink,
@@ -162,7 +163,15 @@ _hash_path() {
   elif [ ! -e "$p" ]; then
     printf 'D\0%s\0' "$p"
   else
-    printf 'O\0%s\0' "$p"
+    # Special file (FIFO / socket / block or char device). A single type
+    # marker cannot represent its dynamic state — a FIFO's or device's
+    # readable content, or a type swap (FIFO -> socket) that a gate
+    # inspecting `[ -p ]` / `[ -S ]` would react to. Fail closed: abort
+    # fingerprinting -> full run, so a gate that reads a special file is
+    # never cached. (Opening it to hash is also unsafe: a FIFO/device read
+    # can block indefinitely — the same hang class the symlink non-follow
+    # guard avoids.)
+    return 1
   fi
 }
 
