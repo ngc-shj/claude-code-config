@@ -78,8 +78,10 @@ fingerprints and use identical cache paths). No new helper file: the logic is
      hashed — pre-pr.sh validates the worktree, and committing that index
      changes HEAD, which is a fingerprint miss anyway.
   3. per-file SHA-256 of every untracked, non-ignored file, deterministic
-     pipeline:
-     `git ls-files --others --exclude-standard -z | LC_ALL=C sort -z | xargs -0 -r sha256sum`
+     pipeline (Phase 3 revision — paths are `./`-prefixed via a
+     null-delimited read loop so dash-prefixed names are not parsed as
+     options and a file named `-` is not read as stdin):
+     `git ls-files --others --exclude-standard -z | LC_ALL=C sort -z | (cd root && while IFS= read -r -d '' f; do sha256sum -- "./$f" || exit 1; done)`
   Any git failure (not a repo, unborn HEAD, unreadable file → non-zero from
   the pipeline under `set -o pipefail`) → no fingerprint → full run (N1).
 - **Cache file** = `$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass`,
@@ -301,7 +303,8 @@ Fixture: pre-pr.sh test scripts append a line to `$TMPREPO/run-count` so
 | T1 | pass → identical tree → push again | approve, run-count stays 1 (cache hit), AND stderr breadcrumb substring `already passed for identical source state` present (N3 acceptance; mirrors the existing SKIP_PRE_PR_GATE breadcrumb test) |
 | T2 | pass → modify tracked file → push | run-count 2 (fingerprint miss) |
 | T3 | pass → add untracked file → push | run-count 2 |
-| T3b | pass with dash-prefixed untracked file (`--help`) → change its content → push | run-count 2 (Phase 3 finding: without `sha256sum --`, dash-named files are parsed as options and silently drop out of the fingerprint, violating F4/I1-2) |
+| T3b | pass with dash-prefixed untracked file (`--help`) → change its content → push | run-count 2 (Phase 3 finding: without the `./` prefix, dash-named files are parsed as sha256sum options and silently drop out of the fingerprint, violating F4/I1-2) |
+| T3c | pass with untracked file literally named `-` → change its content → push | run-count 2 (Phase 3 residual: `sha256sum -- -` still reads stdin — `--` ends option parsing but not the stdin operand convention; the `./` prefix closes the class) |
 | T4 | pass → commit → push | run-count 2 (HEAD changed) |
 | T5 | pass → backdate cache stamp to `now - 7200` (well beyond default TTL 3600) | run-count 2 (expired; wide margin tolerates backward clock steps) |
 | T6 | PRE_PR_CACHE_TTL=0 → two passing pushes | run-count 2 (cache disabled, no skip, no record) |
@@ -309,7 +312,7 @@ Fixture: pre-pr.sh test scripts append a line to `$TMPREPO/run-count` so
 | T8a | malformed cache file content | run-count increments (miss), no crash |
 | T8b | symlinked cache file | run-count increments (miss), no crash |
 | T8c | cache file owned by another user | (documented as covered-by-code-review: `-O` check; not mechanically testable in unprivileged bats — creating a foreign-owned file requires root. Noted here so the gap is explicit, not silent) |
-| T9 | `run` mode: failing script | wrapper exit == script exit (non-zero). R44 red-proof scope (Phase 3 clarification): the mutation this turns red on is a pipe/capture inserted into the exec path (pipe tail's 0 becomes the observed status). It can NOT distinguish the explicit if-guard from raw errexit propagation — bash's errexit termination code coincides with the failing command's code, so both implementations exit with the script's own status. The guard exists for future code placed after the exec, which is not observable today |
+| T9 | `run` mode: failing script | wrapper exit == script exit (non-zero). R44 red-proof scope (Phase 3, mutation-verified): the mutations T9 turns red on are exit-status swallowing (`\|\| true` on the exec) and status flattening (non-zero mapped to a constant). A pipe inserted into the exec path is masked by the wrapper's own `set -o pipefail` (red only if pipefail is also removed); the static forbidden-pattern grep is the operative guard against pipes. It can NOT distinguish the explicit if-guard from raw errexit propagation — both exit with the script's own status; the guard exists for future code placed after the exec |
 | T10 | `run` mode pass → hook-mode push | push approves with run-count 1 (cross-pattern dedup — the headline acceptance) |
 | T11 | self-mutating script (touches a file during run) → push again | run-count 2 (pre≠post → not recorded) |
 | T12 | future-dated cache stamp | run-count increments (miss) |

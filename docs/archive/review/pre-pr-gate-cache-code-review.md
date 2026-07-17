@@ -157,3 +157,31 @@ verifiable-local; full bats suite + targeted red-proofs executed locally:
 | Sec F2 (TOCTOU on cache read) | Minor | Accepted — Anti-Deferral quantification above |
 | Test F2 (counter uniqueness) | Minor | Fixed (basename-derived) |
 | Pre-screen Minor (set -e guard) | Minor | Fixed in de398b7 (before expert launch) |
+
+---
+
+# Round 2 (fix verification)
+
+- Functionality: **No findings.** All five round-1 fixes verified (empirical
+  dispatch edge cases; sha256sum output-format compatibility confirmed — old
+  cache entries not spuriously invalidated; R43 comparison: both production
+  changes narrow, never widen).
+- Security: round-1 F1 fix verified (option-parsing class closed, xargs
+  batch-split safe, T3b sound); TOCTOU disposition accepted. **One Minor
+  residual**: `sha256sum -- -` still reads stdin (`--` ends option parsing,
+  not the stdin operand convention) — an untracked root-level file literally
+  named `-` stayed fingerprint-invisible.
+  **Resolution: Fixed.** Pipeline replaced with a null-delimited read loop
+  hashing `./$f` (unambiguous for every spelling, per-file failure aborts
+  non-zero → full run). T3c added; red-proven against an `xargs -- `-form
+  mutant (stale skip reproduced → T3c red). Plan C1 pipeline spec + C6
+  updated. Suite 51/51 green.
+- Testing: round-1 dispositions accepted (incl. fixed-as-documentation for
+  T9, with agreement that no observable-divergence test is required).
+  **One Minor**: the rescoped T9 claim was itself wrong — a pipe in the exec
+  path is masked by the wrapper's own `set -o pipefail` (stays green);
+  mutation-verified red cases are exit-status swallowing (`|| true`) and
+  status flattening.
+  **Resolution: Fixed.** Plan T9 row replaced with the expert's
+  mutation-verified wording. Process lesson recorded to orchestrator memory:
+  red-proof claims must be mutation-executed before being written.

@@ -348,9 +348,28 @@ write_counting_script() {
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   # Content change in the dash-named file MUST invalidate the cache. An
-  # implementation without `sha256sum --` lets sha256sum eat `--help` as an
+  # implementation without the ./-prefix lets sha256sum eat `--help` as an
   # option, the file drops out of the fingerprint, and this stays a hit.
   printf 'v2\n' > ./--help
+
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
+@test "T3c: untracked file literally named '-' is hashed as content, not read as stdin" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  printf 'v1\n' > ./-
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # GNU sha256sum treats a bare '-' operand as stdin even after '--'; the
+  # ./-prefix makes it a real file. Without it, content changes to ./- are
+  # fingerprint-invisible and this second push would stay a stale hit.
+  printf 'v2 totally different content\n' > ./-
 
   run run_hook Bash "git push origin main"
   [ "$(wc -l <"$counter")" -eq 2 ]
