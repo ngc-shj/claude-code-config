@@ -348,8 +348,10 @@ write_counting_script() {
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   # Content change in the dash-named file MUST invalidate the cache. An
-  # implementation without the ./-prefix lets sha256sum eat `--help` as an
-  # option, the file drops out of the fingerprint, and this stays a hit.
+  # implementation with neither `--` nor the ./-prefix lets sha256sum eat
+  # `--help` as an option, the file drops out of the fingerprint, and this
+  # stays a hit. (Dropping only `./` is masked by the retained `--`; that
+  # single-step mutant is T3c's to catch.)
   printf 'v2\n' > ./--help
 
   run run_hook Bash "git push origin main"

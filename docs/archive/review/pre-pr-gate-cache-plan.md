@@ -303,7 +303,7 @@ Fixture: pre-pr.sh test scripts append a line to `$TMPREPO/run-count` so
 | T1 | pass → identical tree → push again | approve, run-count stays 1 (cache hit), AND stderr breadcrumb substring `already passed for identical source state` present (N3 acceptance; mirrors the existing SKIP_PRE_PR_GATE breadcrumb test) |
 | T2 | pass → modify tracked file → push | run-count 2 (fingerprint miss) |
 | T3 | pass → add untracked file → push | run-count 2 |
-| T3b | pass with dash-prefixed untracked file (`--help`) → change its content → push | run-count 2 (Phase 3 finding: without the `./` prefix, dash-named files are parsed as sha256sum options and silently drop out of the fingerprint, violating F4/I1-2) |
+| T3b | pass with dash-prefixed untracked file (`--help`) → change its content → push | run-count 2 (Phase 3 finding, mutation-verified: with neither `--` nor the `./` prefix, dash-named files are parsed as sha256sum options and silently drop out of the fingerprint, violating F4/I1-2. Dropping only `./` is masked by the retained `--` — T3c, not T3b, turns red on that single-step mutation) |
 | T3c | pass with untracked file literally named `-` → change its content → push | run-count 2 (Phase 3 residual: `sha256sum -- -` still reads stdin — `--` ends option parsing but not the stdin operand convention; the `./` prefix closes the class) |
 | T4 | pass → commit → push | run-count 2 (HEAD changed) |
 | T5 | pass → backdate cache stamp to `now - 7200` (well beyond default TTL 3600) | run-count 2 (expired; wide margin tolerates backward clock steps) |

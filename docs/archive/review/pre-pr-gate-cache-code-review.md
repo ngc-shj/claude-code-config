@@ -185,3 +185,37 @@ verifiable-local; full bats suite + targeted red-proofs executed locally:
   **Resolution: Fixed.** Plan T9 row replaced with the expert's
   mutation-verified wording. Process lesson recorded to orchestrator memory:
   red-proof claims must be mutation-executed before being written.
+
+---
+
+# Round 3 (final fix verification)
+
+- Security: **No findings.** The `-` operand class is closed — adversarial
+  filename sweep (bare `-`, `--help`, newline-embedded, leading-space,
+  backslash, dangling/hostile symlinks, fifo absence) found no residual
+  fingerprint-invisible spelling. R43: every delta narrows or holds.
+  Recording instruction honored: the round-2 "format compatibility" claim
+  applies to the round-1→2 fix only — see the format-change note below.
+- Functionality: **1 Minor (resolved, no code change).** The read-loop fix
+  changes hash-input lines to `<hash>  ./name`, so fingerprints differ
+  across the round-2→3 upgrade for trees with ≥1 untracked file: any
+  pre-upgrade cache entry misses exactly once (full run, re-record) —
+  fail-safe, self-healing, unreleased branch. Recorded as deviation D3 with
+  the scope note that C1's "same tree → same hash" is a same-code-version
+  property. Stripping the prefix to restore byte-compatibility was rejected:
+  the prefixed operand IS the disambiguation.
+- Testing: **1 Minor (fixed).** The reworded T3b rationale attributed its
+  red to dropping `./` alone — mutation testing shows drop-`./`-only stays
+  green (retained `--` masks it; T3c catches that mutant); T3b's verified
+  red mutant is removing BOTH `--` and `./`. Plan row and test comment
+  replaced with the expert's mutation-verified matrix wording. (Recurrence
+  #3 of the unexecuted-red-proof-claim class — the memory rule now
+  explicitly covers rationale re-attributions during rewording, not just
+  new rows.)
+
+## Resolution Status (cumulative through round 3)
+
+All Critical/Major findings: fixed and red-proven. Open items: none.
+Accepted risks: Security F2 TOCTOU (round 1, Anti-Deferral quantified).
+Deviations: D1-D3 in pre-pr-gate-cache-deviation.md.
+Suite: 51/51 green (bats tests/check-pre-pr.bats).
