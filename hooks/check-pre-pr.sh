@@ -95,9 +95,13 @@ compute_fingerprint() {
   # sha256sum resolves the paths git prints (relative to the repo root),
   # so the final stage must run with cwd = repo_root regardless of the
   # caller's own cwd (I1-2: output depends only on repo content).
+  # `--` ends option parsing: an untracked file literally named `--help`
+  # (or any dash-prefixed name) must be hashed as a file, not parsed as a
+  # sha256sum option — otherwise its content silently drops out of the
+  # fingerprint and content changes stop invalidating the cache (F4/I1-2).
   untracked_hashes=$(git -C "$repo_root" ls-files --others --exclude-standard -z 2>/dev/null \
     | LC_ALL=C sort -z \
-    | (cd "$repo_root" && xargs -0 -r sha256sum)) || return 1
+    | (cd "$repo_root" && xargs -0 -r sha256sum --)) || return 1
   printf '%s\n%s\n%s' "$head_sha" "$tracked_diff" "$untracked_hashes" | sha256sum | awk '{print $1}'
 }
 
@@ -245,10 +249,13 @@ run_direct() {
   exit "$status"
 }
 
-if [ "${1:-}" = "run" ]; then
+if [ "${1:-}" = "run" ] && [ $# -eq 1 ]; then
   run_direct
   # run_direct always exits; nothing reaches here.
 elif [ $# -gt 0 ]; then
+  # Covers unknown first args AND `run <extra-arg>` — C4's signature is
+  # `run` with no other arguments; silently discarding extras would hide
+  # caller mistakes behind a normal-looking exit 0.
   printf 'Usage: check-pre-pr.sh [run]\n' >&2
   exit 2
 fi

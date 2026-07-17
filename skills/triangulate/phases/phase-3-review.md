@@ -498,7 +498,7 @@ in `settings.json` under `PreToolUse > Bash`) intercepts `git push` and
 `gh pr create` and re-runs `scripts/pre-pr.sh` when present. If Phase 2-4
 or Phase 3-6 missed a regression that the project's aggregate pre-PR
 script catches, the push is blocked at the harness layer with the
-script's output in the rejection reason. When the Step 3-7 direct run
+script's output in the rejection reason. When the Step 3-6 direct run
 above already passed on an identical source state, the hook skips the
 re-run via the shared pass-cache (stderr breadcrumb notes the skip). To
 bypass for one session (e.g., after manually verifying the script passes

@@ -24,7 +24,7 @@ teardown() {
   cd "$ORIG_PWD"
   # The run-count fixture lives OUTSIDE $TMPREPO (a counter inside the repo
   # would mutate the fingerprint and defeat cache-hit tests) — remove it too.
-  rm -f "$TMPREPO/../run-count-$$"
+  rm -f "$TMPREPO/../run-count-$(basename "$TMPREPO")"
   rm -rf "$TMPREPO"
 }
 
@@ -294,7 +294,7 @@ write_counting_script() {
 }
 
 @test "T1: pass, identical tree, push again -> cache hit (run-count stays 1, breadcrumb)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -309,7 +309,7 @@ write_counting_script() {
 }
 
 @test "T2: pass, modify tracked file, push -> cache miss (run-count 2)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -324,7 +324,7 @@ write_counting_script() {
 }
 
 @test "T3: pass, add untracked file, push -> cache miss (run-count 2)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -337,8 +337,27 @@ write_counting_script() {
   [ "$(wc -l <"$counter")" -eq 2 ]
 }
 
+@test "T3b: dash-prefixed untracked filename is hashed as content, not parsed as a sha256sum option" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  printf 'v1\n' > ./--help
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # Content change in the dash-named file MUST invalidate the cache. An
+  # implementation without `sha256sum --` lets sha256sum eat `--help` as an
+  # option, the file drops out of the fingerprint, and this stays a hit.
+  printf 'v2\n' > ./--help
+
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
 @test "T4: pass, commit, push -> cache miss (HEAD changed, run-count 2)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -354,7 +373,7 @@ write_counting_script() {
 }
 
 @test "T5: pass, backdate cache stamp beyond TTL -> cache miss (run-count 2)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -372,7 +391,7 @@ write_counting_script() {
 }
 
 @test "T6: PRE_PR_CACHE_TTL=0 -> two passing pushes both run, no cache file ever created" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -391,7 +410,7 @@ write_counting_script() {
 }
 
 @test "T7: failing script, same tree, push again -> block twice, run-count 2 (failures uncached)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 1'
   commit_baseline
 
@@ -405,7 +424,7 @@ write_counting_script() {
 }
 
 @test "T8a: malformed cache file content -> cache miss, no crash (run-count increments)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -422,7 +441,7 @@ write_counting_script() {
 }
 
 @test "T8b: symlinked cache file -> cache miss, no crash (run-count increments)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -450,7 +469,7 @@ write_counting_script() {
 }
 
 @test "T10: run mode pass, then hook-mode push -> push approves, run-count stays 1 (cross-pattern dedup)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -484,7 +503,7 @@ write_counting_script() {
 }
 
 @test "T12: future-dated cache stamp -> cache miss (run-count increments)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -519,6 +538,15 @@ write_counting_script() {
   [[ "$output" == *"Usage: check-pre-pr.sh [run]"* ]]
 }
 
+@test "T14b: run mode with extra arg -> exit 2, usage on stderr (C4: run takes no other args)" {
+  write_script '#!/bin/bash' 'exit 0'
+  commit_baseline
+
+  run bash -c 'bash "$1" run extra-arg 2>&1 </dev/null' _ "$SCRIPT"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage: check-pre-pr.sh [run]"* ]]
+}
+
 @test "T15: run mode outside any git repo, no CLAUDE_PROJECT_DIR -> exit 2, stderr note" {
   local outside
   outside=$(mktemp -d)
@@ -540,7 +568,7 @@ write_counting_script() {
 }
 
 @test "T18: PRE_PR_CACHE_TTL=999999999, stamp aged past the 86400 cap -> cache miss (cap enforced)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -558,7 +586,7 @@ write_counting_script() {
 }
 
 @test "T18b: PRE_PR_CACHE_TTL=999999999, stamp aged within the cap -> cache hit (run-count stays 1)" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -576,7 +604,7 @@ write_counting_script() {
 }
 
 @test "T19: PRE_PR_CACHE_TTL=abc with fresh matching cache -> no crash, skip occurs, fallback note" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 
@@ -590,7 +618,7 @@ write_counting_script() {
 }
 
 @test "T19b: PRE_PR_CACHE_TTL=08 (leading-zero base-10 trap), stamp aged 100s -> no crash, cache miss" {
-  local counter="$TMPREPO/../run-count-$$"
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
 

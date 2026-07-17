@@ -301,6 +301,7 @@ Fixture: pre-pr.sh test scripts append a line to `$TMPREPO/run-count` so
 | T1 | pass → identical tree → push again | approve, run-count stays 1 (cache hit), AND stderr breadcrumb substring `already passed for identical source state` present (N3 acceptance; mirrors the existing SKIP_PRE_PR_GATE breadcrumb test) |
 | T2 | pass → modify tracked file → push | run-count 2 (fingerprint miss) |
 | T3 | pass → add untracked file → push | run-count 2 |
+| T3b | pass with dash-prefixed untracked file (`--help`) → change its content → push | run-count 2 (Phase 3 finding: without `sha256sum --`, dash-named files are parsed as options and silently drop out of the fingerprint, violating F4/I1-2) |
 | T4 | pass → commit → push | run-count 2 (HEAD changed) |
 | T5 | pass → backdate cache stamp to `now - 7200` (well beyond default TTL 3600) | run-count 2 (expired; wide margin tolerates backward clock steps) |
 | T6 | PRE_PR_CACHE_TTL=0 → two passing pushes | run-count 2 (cache disabled, no skip, no record) |
@@ -308,12 +309,13 @@ Fixture: pre-pr.sh test scripts append a line to `$TMPREPO/run-count` so
 | T8a | malformed cache file content | run-count increments (miss), no crash |
 | T8b | symlinked cache file | run-count increments (miss), no crash |
 | T8c | cache file owned by another user | (documented as covered-by-code-review: `-O` check; not mechanically testable in unprivileged bats — creating a foreign-owned file requires root. Noted here so the gap is explicit, not silent) |
-| T9 | `run` mode: failing script | wrapper exit == script exit (non-zero), R44 red-proof |
+| T9 | `run` mode: failing script | wrapper exit == script exit (non-zero). R44 red-proof scope (Phase 3 clarification): the mutation this turns red on is a pipe/capture inserted into the exec path (pipe tail's 0 becomes the observed status). It can NOT distinguish the explicit if-guard from raw errexit propagation — bash's errexit termination code coincides with the failing command's code, so both implementations exit with the script's own status. The guard exists for future code placed after the exec, which is not observable today |
 | T10 | `run` mode pass → hook-mode push | push approves with run-count 1 (cross-pattern dedup — the headline acceptance) |
 | T11 | self-mutating script (touches a file during run) → push again | run-count 2 (pre≠post → not recorded) |
 | T12 | future-dated cache stamp | run-count increments (miss) |
 | T13 | `run` mode, no scripts/pre-pr.sh | exit 0, note printed |
 | T14 | `run` mode, unknown arg | exit 2, usage on stderr |
+| T14b | `run` mode with an extra argument (`run extra-arg`) | exit 2, usage on stderr (Phase 3 finding: I4-2's "no other args" is enforced, not silently discarded) |
 | T15 | `run` mode outside any git repo, no CLAUDE_PROJECT_DIR | exit 2, stderr `could not resolve repo root` (C4 unresolved-root contract) |
 | T16 | `run` mode (pinned — NOT hook mode): passing script deletes `.git` during its run | wrapper exit 0 AND the script's pass-through output present. The exit-0 assertion carries the RT7 red-proof: an unguarded post-run `compute_fingerprint`/`cache_record` under `set -euo pipefail` aborts the wrapper non-zero. ("No cache file recorded" is documented as a consequence, not asserted — the deleted `.git` makes it vacuous. Hook mode is NOT a valid home for this test: the hook exits 0 on every path, which would make the assertion vacuous.) |
 | T17 | skill-doc contract: phase-2/phase-3 docs invoke `check-pre-pr.sh run`; whole-file `! grep -E 'bash [^ ]*scripts/pre-pr\.sh'` on both phase docs (variant-tolerant: also catches `bash ./scripts/...`, quoted and `$VAR/`-prefixed spellings; mechanism: plain whole-file grep, NOT fence-aware parsing) | extends the existing "skill docs reference scripts/pre-pr.sh literally" doc-drift test (which stays green via remaining prose references). C5 constraint making the whole-file grep sound: the rewritten phase-doc prose must not contain any `bash …scripts/pre-pr.sh` invocation spelling — refer to "raw invocation of the script" or backtick the bare path instead |

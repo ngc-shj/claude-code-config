@@ -1,0 +1,159 @@
+# Code Review: pre-pr-gate-cache
+
+Date: 2026-07-17
+Review round: 1
+
+## Changes from Previous Round
+
+Initial review. Pre-pass: local LLM pre-screening raised one Minor
+(unguarded `(cd && bash script)` under `set -e` in run_direct) — fixed in
+de398b7 before expert launch. Ollama seed analyzers returned "No findings"
+for all three perspectives; every expert performed independent verification
+per the seed-trust advisory. Merge note: the three experts' json indexes
+share no file/line overlap (mechanical join empty), so the prose merge is a
+straight concatenation — Ollama merge-findings skipped as adding nothing
+over the json-join skeleton.
+
+## Functionality Findings
+
+**F1 — Minor — `check-pre-pr.sh run <extra-arg>` silently dispatched to
+run_direct, discarding extras (violates locked C4 "no other args in v1" /
+I4-2)**
+- hooks/check-pre-pr.sh:248 (dispatch). Verified empirically: `run extra-arg`
+  exited 0 with the no-op note instead of usage + exit 2.
+- **Resolution: Fixed.** Dispatch now requires `[ $# -eq 1 ]`; extras fall
+  through to usage + exit 2. T14b added and green.
+
+**F2 — Minor — phase-3-review.md safety-net paragraph said "Step 3-7 direct
+run" but the gate invocation lives in Step 3-6**
+- **Resolution: Fixed.** Wording corrected to "Step 3-6 direct run above".
+  (The plan's own prose used "Phase 3-7" — historical artifact, left as-is;
+  the shipped skill doc is what readers follow.)
+
+## Security Findings
+
+**F1 — Major — dash-prefixed untracked filenames parsed as sha256sum
+options, silently excluded from the fingerprint (cache-poisoning path;
+violates F4/I1-2)**
+- hooks/check-pre-pr.sh:98-100. Verified empirically by the expert: an
+  untracked file named `--help` made sha256sum print its help text (exit 0)
+  instead of hashing the file; content changes to such files no longer
+  invalidated the cache — a stale full-gate skip reachable by anyone with
+  ordinary worktree write access. escalate: false (same trust boundary as
+  editing scripts/pre-pr.sh itself; consequence is stale skip, not code
+  execution).
+- **Resolution: Fixed.** `xargs -0 -r sha256sum --` (explicit end-of-options)
+  with an in-code comment. T3b added (content change in `--help` → miss) and
+  red-proven against a no-`--` throwaway copy (stale skip reproduced → T3b
+  assertion red). Plan C6 updated.
+
+**F2 — Minor — TOCTOU window between cache_fresh's -L/-O validation and the
+`head` read — Accepted**
+- hooks/check-pre-pr.sh:148-152. A same-user actor can swap in a symlink
+  between the checks and the read.
+- **Anti-Deferral check**: acceptable risk.
+- **Justification**:
+  - Worst case: the read follows a symlink to an attacker-chosen file; the
+    content is then regex-gated (`^[0-9a-f]{64} [0-9]+$`) and must ALSO
+    byte-match the freshly computed fingerprint to cause a skip — an actor
+    who can arrange that already has `.git/` write access and can fabricate
+    a matching cache entry directly, or edit `scripts/pre-pr.sh` itself
+    (the plan's documented trust boundary; no new capability is added).
+  - Likelihood: low — requires a hostile same-user process racing a
+    millisecond window for a result it can obtain without the race.
+  - Cost to fix: an O_NOFOLLOW-style read is not expressible in POSIX
+    shell/coreutils without adding a python/perl dependency to a hook that
+    must stay dependency-light; the expert's own recommendation classifies
+    the fix as "likely overkill".
+- **Orchestrator sign-off**: acceptable-risk exception satisfied (three
+  values stated; defense-in-depth layers — regex gate + fingerprint match —
+  bound the blast radius to what the trust boundary already grants).
+
+**F3 — non-issue (recorded)** — `mv` onto a symlinked cache path replaces
+the symlink (rename semantics), it does not write through to the target.
+Verified; closes that line of inquiry.
+
+## Testing Findings
+
+**F1 — Major — T9's claimed red-proof does not distinguish the de398b7
+if-guard from raw errexit propagation**
+- tests/check-pre-pr.bats T9. Expert reconstructed the pre-de398b7
+  implementation and showed the wrapper exit code coincides with the
+  script's own under BOTH implementations (errexit terminates with the
+  failing command's status), across seven exit codes.
+- **Resolution: Fixed (documentation) / production change rejected with
+  reasoning.** The two implementations are observationally equivalent for
+  the exit-status contract — a test cannot (and need not) separate
+  observationally identical behaviors, and adding production output purely
+  to make the guard testable would be over-engineering. What WAS wrong is
+  the plan's claim that T9 red-proves "the de398b7 class": the mutation T9
+  actually turns red on is a pipe/capture inserted into the exec path (the
+  genuine R44 class). Plan T9 row rewritten to state the red-proof scope
+  precisely and to document the errexit-equivalence limitation. The guard
+  stays: it protects future code placed after the exec.
+
+**F2 — Minor [Adjacent] — `run-count-$$` fixture path shared across all
+@test cases in one bats invocation (latent parallel-run collision)**
+- **Resolution: Fixed.** Counter now derives from the per-test-unique
+  `$(basename "$TMPREPO")` at all 16 sites, including teardown cleanup.
+
+**F3 — non-issue (recorded)** — T16's "no cache file recorded" is correctly
+a documented consequence, not an assertion; verified consistent with plan.
+
+## Adjacent Findings
+
+- Testing F2 (fixture hygiene) — routed to orchestrator, fixed same round.
+
+## Quality Warnings
+
+None. All findings carried file:line + reproduced evidence (empirical
+verification transcripts in each expert's session).
+
+## Recurring Issue Check
+
+### Functionality expert
+- R1: pass (retro-state.sh patterns correctly reused — verified against
+  source); R3: pass (forbidden raw-invocation pattern absent from phase
+  docs, grep-verified); R34: pass; R41: pass (`run` capability genuinely
+  wired at both call sites; F1 was validation completeness, not an unbacked
+  path); R42: pass (member-set re-verified via the plan's rg — exactly the
+  3-row table); R43: pass (malformed/negative/oversized TTL all fall back
+  fail-safe, verified empirically); R44: pass (exit 47 propagated unchanged;
+  no pipe in either exec path); all other rules n/a for this diff.
+
+### Security expert
+- R31: n/a; R43: held (every cache-miss path falls through to a full run —
+  T2-T5, T7, T8a/T8b, T12, T18 green); R44: held (guarded if in run mode,
+  direct `if (...) > file; then` in hook mode, no intermediate filter);
+  RS1: n/a (fingerprint comparison is not a secret comparison); RS3: gap
+  found → Security F1 (the git-paths→sha256sum-argv boundary lacked `--`),
+  fixed this round; RS5: satisfied (TTL floored, normalized, capped, T18/
+  T18b/T19/T19b green); RS6: no new sink (jq -Rs escaping unchanged);
+  others n/a.
+
+### Testing expert
+- R44: investigated directly — implementation correct; the TEST's claimed
+  coverage was overstated → Testing F1, resolved as documentation fix with
+  scope-precise wording; RT7: T16 and T18/T18b mutation-tested by the
+  expert and confirmed genuinely red-capable; T9's red-proof rescoped (see
+  Testing F1); other R/RT rules: covered by the Phase 2 self-check baseline
+  per round framing (incremental verification, no rote re-run).
+
+## Environment Verification Report
+
+N/A — no environment constraints declared in Phase 1 (all acceptance paths
+verifiable-local; full bats suite + targeted red-proofs executed locally:
+`bats tests/` 756/756 pre-fix baseline, `bats tests/check-pre-pr.bats`
+50/50 post-fix).
+
+## Resolution Status
+
+| Finding | Severity | Status |
+|---------|----------|--------|
+| Sec F1 (sha256sum option-parse fingerprint gap) | Major | Fixed + T3b red-proven |
+| Test F1 (T9 red-proof overstated) | Major | Fixed (plan claim rescoped); production change rejected with test-evidence reasoning |
+| Func F1 (run extra-arg) | Minor | Fixed + T14b |
+| Func F2 (Step 3-7 → 3-6 wording) | Minor | Fixed |
+| Sec F2 (TOCTOU on cache read) | Minor | Accepted — Anti-Deferral quantification above |
+| Test F2 (counter uniqueness) | Minor | Fixed (basename-derived) |
+| Pre-screen Minor (set -e guard) | Minor | Fixed in de398b7 (before expert launch) |
