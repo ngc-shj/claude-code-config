@@ -219,3 +219,19 @@ All Critical/Major findings: fixed and red-proven. Open items: none.
 Accepted risks: Security F2 TOCTOU (round 1, Anti-Deferral quantified).
 Deviations: D1-D3 in pre-pr-gate-cache-deviation.md.
 Suite: 51/51 green (bats tests/check-pre-pr.bats).
+
+---
+
+# Round 4 (final confirmation)
+
+Documentation-only round-diff (d209179). **All three experts: No findings.**
+- Functionality: D3 disposition verified accurate; zero production change
+  confirmed mechanically; loop closed from this perspective.
+- Security: recording instruction implemented correctly; T3b re-attribution
+  security-consistent; no gate/fingerprint/cache/protocol surface changed.
+- Testing: every red-proof statement in the touched documentation now
+  traces to an executed mutant; RT7 clean.
+
+Termination condition met at round 4. Final gates: full bats suite 759/759
+(0 failures), no migration tool (n/a), scripts/pre-pr.sh absent in this
+repo (wrapper no-op verified, exit 0).
