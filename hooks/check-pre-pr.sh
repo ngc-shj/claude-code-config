@@ -220,9 +220,16 @@ run_direct() {
     exit 0
   fi
 
+  # Guarded `if` so a failing script does not trip `set -e` before the
+  # explicit status handling below — the wrapper's exit status must be the
+  # script's own via the deliberate `exit "$status"` path, not an errexit
+  # side effect.
   local status=0
-  (cd "$repo_root" && bash "$script" </dev/null)
-  status=$?
+  if (cd "$repo_root" && bash "$script" </dev/null); then
+    status=0
+  else
+    status=$?
+  fi
 
   if [ "$status" -eq 0 ]; then
     # Guarded so nothing here can alter the exit status or crash the
