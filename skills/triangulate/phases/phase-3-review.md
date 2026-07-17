@@ -400,9 +400,15 @@ bash ~/.claude/hooks/check-migrations.sh
 # Catches repo-specific gates (forbidden-pattern greps, count checks,
 # license-header validation, etc.) that the individual lint/test/build
 # commands above do not cover. No-op when the script is absent.
-if [ -x scripts/pre-pr.sh ]; then
-  bash scripts/pre-pr.sh || { echo "scripts/pre-pr.sh failed — fix before commit"; exit 1; }
-fi
+# Invoke via the cache-aware wrapper, never as a raw invocation of the
+# script: identical-source re-runs are skipped by the pass-cache
+# (PRE_PR_CACHE_TTL=0 forces a run), and a passing run here lets the
+# push-time hook skip the same source state. The cache is opt-in per
+# project (scripts/pre-pr.cache-paths declaration or exported
+# PRE_PR_CACHE_TTL / PRE_PR_CACHE_EXTRA_PATHS — see Step 2-4 item 3b);
+# without a declaration the gate always runs.
+bash ~/.claude/hooks/check-pre-pr.sh run \
+  || { echo "pre-PR gate did not pass — see output above; fix before commit"; exit 1; }
 
 # Commit only if ALL three pass
 git add -A
@@ -495,9 +501,11 @@ in `settings.json` under `PreToolUse > Bash`) intercepts `git push` and
 `gh pr create` and re-runs `scripts/pre-pr.sh` when present. If Phase 2-4
 or Phase 3-6 missed a regression that the project's aggregate pre-PR
 script catches, the push is blocked at the harness layer with the
-script's output in the rejection reason. To bypass for one session
-(e.g., after manually verifying the script passes outside the hook),
-export `SKIP_PRE_PR_GATE=1`.
+script's output in the rejection reason. When the Step 3-6 direct run
+above already passed on an identical source state, the hook skips the
+re-run via the shared pass-cache (stderr breadcrumb notes the skip). To
+bypass for one session (e.g., after manually verifying the script passes
+outside the hook), export `SKIP_PRE_PR_GATE=1`.
 
 Final report:
 ```
