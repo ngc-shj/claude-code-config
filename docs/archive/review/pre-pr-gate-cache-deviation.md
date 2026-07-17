@@ -77,3 +77,10 @@
   tracked delete, size cap). All are red against the pre-D4
   implementation by construction (each reproduces one demonstrated
   bypass/DoS).
+- Amendment (round 6): the "type-tagged line per path" grammar above is
+  NUL-framed (type tag and every field NUL-terminated, streamed straight
+  into the hasher — never through a command substitution, which drops
+  NULs). A newline-delimited grammar was proven forgeable via symlink
+  targets containing "\n"/"\t" (two distinct states → one fingerprint →
+  stale skip); NUL cannot appear in a git path or readlink output, so the
+  framing is injective. Red-proven by T28.

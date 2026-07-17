@@ -287,3 +287,41 @@ construction — each encodes one of the reproduced bypass/DoS scenarios
 Contract amendments recorded as deviation D4 (C1 fingerprint composition,
 C2 opt-in TTL resolution). Suite after fixes: 59/59 green
 (bats tests/check-pre-pr.bats).
+
+---
+
+# Round 6 (adversarial verification of the round-5 fixes, Security expert)
+
+- (a) All three original attack reproductions re-run against the fixed
+  hook: clean-filter change → runs; declared ignored change → runs;
+  symlink to /dev/zero → completes instantly. Fixed.
+- (b) **New Major found and fixed same round**: the fingerprint listing
+  grammar was non-injective — `L`/`D`/`O` records interpolated unescaped
+  paths/symlink targets into a newline-delimited format, so a symlink
+  target embedding `"\nL ./c\td"` forged a record and collided two
+  distinct worktree states into one fingerprint (stale skip; proven
+  end-to-end by the expert, fingerprints byte-identical).
+  **Resolution: Fixed.** All records NUL-framed (type tag + every field
+  NUL-terminated; NUL is unconstructible in git paths and readlink
+  output → injective), streamed directly into sha256sum (bash command
+  substitution drops NULs and would collapse the framing — documented
+  in-code). T28 added and red-proven against the newline-grammar
+  implementation (stale skip reproduced → red). escalate: false (requires
+  worktree write access — inside the documented trust boundary — and the
+  cache is opt-in).
+- (b-adjacent) **Minor (fixed)**: declaration entries are literal paths,
+  not globs — a `secrets/*.env` entry silently under-covered its targets.
+  Now documented in the helper header, and a nonexistent entry containing
+  glob metacharacters emits a stderr warning. T29 added.
+- Other adversarial checks clean: declaration path traversal (adds inputs
+  only, same-trust), opt-in not forgeable below the gate-script trust
+  level, `_declared_extra_paths_z` fail-safe under set -euo pipefail,
+  TTL-gated fingerprint skip correct in both directions, size cap / exec
+  bit / delete markers correct.
+- (c) R43: every round-5/6 delta narrows or holds; the opt-in flip is a
+  hard narrowing of the default.
+- (d) Injectivity: DISPROVEN for the newline grammar (the Major above);
+  HOLDS for the NUL-framed grammar (`F` sub-grammar was already injective
+  via sha256sum self-escaping; now uniform).
+
+Suite after round 6: 61/61 (bats tests/check-pre-pr.bats).

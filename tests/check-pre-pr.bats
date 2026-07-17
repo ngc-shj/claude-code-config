@@ -807,3 +807,38 @@ write_counting_script() {
   [ "$(wc -l <"$counter")" -eq 2 ]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 }
+
+@test "T28: symlink target embedding record-forging bytes cannot collide two distinct states (NUL-framed grammar)" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  # State A: two untracked symlinks a->b, c->d. Record a pass.
+  ln -s b a
+  ln -s d c
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # State B: delete c, retarget a so its target embeds what a forged
+  # newline-delimited record for c would look like. Under the old
+  # newline/tab grammar both states produced the identical listing and
+  # this second push was a stale HIT (proven collision, round 6).
+  rm c
+  ln -sfn "$(printf 'b\nL ./c\td')" a
+
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
+@test "T29: nonexistent glob-metacharacter declaration entry warns (entries are literal, not globs)" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf 'secrets/*.env\n' > scripts/pre-pr.cache-paths
+  commit_baseline
+
+  run bash -c 'printf "%s" "$1" | bash "$2" 2>&1' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" == *"does not exist — entries are literal paths, globs are not expanded"* ]]
+}

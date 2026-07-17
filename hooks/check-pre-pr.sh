@@ -121,21 +121,30 @@ _cache_max_file_bytes() {
 # caller: a bare dash-prefixed name (`--help`) would be parsed as a
 # sha256sum option and a file literally named `-` would be read as stdin —
 # either way that content would silently drop out of the fingerprint.
+# Record grammar: every record is NUL-framed — a type tag and each field
+# terminated by NUL. Paths and symlink targets CANNOT contain NUL, so no
+# field can forge a delimiter and the listing is injective (round-6
+# finding: with newline-delimited records, a symlink target containing
+# "\nL ./c\td" forged a whole record and collided two distinct states
+# into one fingerprint → stale skip). NUL framing makes that collision
+# unconstructible. Callers must stream this straight into the hasher —
+# bash command substitution DROPS NUL bytes and would collapse the frame.
 _hash_path() {
-  local p="$1" target size xbit
+  local p="$1" target size xbit content_hash
   if [ -L "$p" ]; then
     target=$(readlink -- "$p") || return 1
-    printf 'L %s\t%s\n' "$p" "$target"
+    printf 'L\0%s\0%s\0' "$p" "$target"
   elif [ -f "$p" ]; then
     size=$(wc -c <"$p" 2>/dev/null) || return 1
     [ "$size" -le "$(_cache_max_file_bytes)" ] || return 1
     xbit='-'
     [ -x "$p" ] && xbit='x'
-    { printf 'F %s ' "$xbit" && sha256sum -- "$p"; } || return 1
+    content_hash=$(sha256sum -- "$p") || return 1
+    printf 'F\0%s\0%s\0%s\0' "$xbit" "${content_hash%% *}" "$p"
   elif [ ! -e "$p" ]; then
-    printf 'D %s\n' "$p"
+    printf 'D\0%s\0' "$p"
   else
-    printf 'O %s\n' "$p"
+    printf 'O\0%s\0' "$p"
   fi
 }
 
@@ -146,8 +155,12 @@ _hash_path() {
 #     (.env, generated state, scanner DBs) — that is the point: the
 #     project declares what its pre-PR gate reads beyond the tree.
 #   - PRE_PR_CACHE_EXTRA_PATHS env — newline-separated, same format.
-# Declarations are same-trust as scripts/pre-pr.sh itself (repo content /
-# operator env); they add fingerprint inputs, never remove any.
+# Entries are LITERAL paths — no glob expansion. A `secrets/*.env` entry
+# matches nothing and would silently under-cover the files it was meant
+# to protect, so a nonexistent entry containing glob metacharacters gets
+# a stderr warning. Declarations are same-trust as scripts/pre-pr.sh
+# itself (repo content / operator env); they add fingerprint inputs,
+# never remove any.
 _declared_extra_paths_z() {
   local repo_root="$1" line
   {
@@ -160,6 +173,13 @@ _declared_extra_paths_z() {
     fi
   } 2>/dev/null | while IFS= read -r line; do
     case "$line" in ''|'#'*) continue ;; esac
+    case "$line" in
+      *[\*\?\[]*)
+        if [ ! -e "$repo_root/$line" ] && [ ! -L "$repo_root/$line" ]; then
+          printf 'check-pre-pr: declared cache path %s does not exist — entries are literal paths, globs are not expanded\n' "$line" >&2
+        fi
+        ;;
+    esac
     printf '%s\0' "$line"
   done
   return 0
@@ -191,22 +211,27 @@ _cache_declared() {
 # never from git's filtered view. Inputs: HEAD sha, every tracked path,
 # every untracked non-ignored path, every declared extra path.
 compute_fingerprint() {
-  local repo_root="$1" head_sha listing
+  local repo_root="$1" head_sha fp
   head_sha=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null) || return 1
   # The hashing loop runs with cwd = repo_root regardless of the caller's
   # own cwd (I1-2: output depends only on repo content). sort -zu merges
   # the three NUL-separated sources deterministically and drops duplicate
-  # paths (a declared extra that is also tracked hashes once).
-  listing=$(
-    { git -C "$repo_root" ls-files -z 2>/dev/null \
-        && git -C "$repo_root" ls-files --others --exclude-standard -z 2>/dev/null \
-        && _declared_extra_paths_z "$repo_root"; } \
-      | LC_ALL=C sort -zu \
-      | (cd "$repo_root" && while IFS= read -r -d '' f; do
-          _hash_path "./$f" || exit 1
-        done)
+  # paths (a declared extra that is also tracked hashes once). The
+  # NUL-framed records stream STRAIGHT into sha256sum — they must never
+  # pass through a command substitution, which drops NUL bytes and would
+  # collapse the injective framing (see _hash_path).
+  fp=$(
+    { printf '%s\0' "$head_sha"
+      { git -C "$repo_root" ls-files -z 2>/dev/null \
+          && git -C "$repo_root" ls-files --others --exclude-standard -z 2>/dev/null \
+          && _declared_extra_paths_z "$repo_root"; } \
+        | LC_ALL=C sort -zu \
+        | (cd "$repo_root" && while IFS= read -r -d '' f; do
+            _hash_path "./$f" || exit 1
+          done)
+    } | sha256sum | awk '{print $1}'
   ) || return 1
-  printf '%s\n%s' "$head_sha" "$listing" | sha256sum | awk '{print $1}'
+  printf '%s' "$fp"
 }
 
 # cache_path <repo_root>
