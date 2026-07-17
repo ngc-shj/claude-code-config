@@ -325,3 +325,25 @@ C2 opt-in TTL resolution). Suite after fixes: 59/59 green
   via sha256sum self-escaping; now uniform).
 
 Suite after round 6: 61/61 (bats tests/check-pre-pr.bats).
+
+---
+
+# Round 7 (external security review round 2, relayed by the operator)
+
+**F1 [High] — directory inputs mapped to a constant `O` marker, hiding
+their contents from the fingerprint (stale-skip bypass).** Two paths
+reproduced locally before fixing: a declared ignored directory
+(`.gate/state` change stayed a hit) and a submodule gitlink (`sub/gate.state`
+dirt stayed a hit despite the super-repo reporting `M sub`).
+- **Resolution: Fixed — fail closed.** `_hash_path` now returns non-zero on
+  any directory (`[ -d ]`), aborting fingerprinting → full run. Directories
+  (including submodule gitlinks) are deliberately not recursively hashed
+  (a submodule is a second fingerprint engine); a repo whose gate reads
+  inside one simply does not get caching, the safe direction. T30/T31 added,
+  both red-proven against the round-6 `O`-grammar implementation.
+
+The reviewer confirmed the five prior fixes (default-off, real-content
+hash, ignored-file declaration, symlink non-follow, NUL framing) remain
+sound. This was the last cache-integrity class.
+
+Suite after round 7: 63/63 (bats tests/check-pre-pr.bats).

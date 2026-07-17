@@ -84,3 +84,26 @@
   targets containing "\n"/"\t" (two distinct states → one fingerprint →
   stale skip); NUL cannot appear in a git path or readlink output, so the
   framing is injective. Red-proven by T28.
+
+## D5 — directory / submodule-gitlink inputs fail closed (2026-07-18, external security review round 2)
+
+- The round-6 `_hash_path` mapped every non-regular, non-symlink, existing
+  entry to a single `O` marker — including DIRECTORIES. A directory's
+  contents were therefore never in the fingerprint. Two bypasses reproduced
+  before fixing: (1) a declared IGNORED directory (`scripts/pre-pr.cache-paths`
+  naming `.gate/`) whose `.gate/state` changed SAFE→UNSAFE stayed a cache
+  hit; (2) a git submodule gitlink — a directory in the worktree — dirtied
+  via `sub/gate.state` stayed a hit even though the super-repo reported
+  `M sub`.
+- Fix: `_hash_path` now detects `[ -d "$p" ]` and returns non-zero →
+  compute_fingerprint aborts → no fingerprint → full run (fail closed).
+  Directories are NOT recursively hashed by design: a submodule is its own
+  repo with its own ignore rules, dirty/untracked state, and nested
+  submodules — enumerating it correctly is a second fingerprint engine, out
+  of scope. Consequence: a repo whose pre-PR gate reads inside a submodule
+  or a declared directory does not get caching (safe direction). `git
+  ls-files` never yields a plain tracked directory (only gitlinks); the
+  other directory source is a declared-path entry.
+- Tests: T30 (declared ignored dir → never cached, change never skipped),
+  T31 (submodule gitlink → never cached, submodule dirt never skips). Both
+  red-proven against the round-6 `O`-grammar hook.

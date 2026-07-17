@@ -842,3 +842,51 @@ write_counting_script() {
   [[ "$output" == *'"decision": "approve"'* ]]
   [[ "$output" == *"does not exist — entries are literal paths, globs are not expanded"* ]]
 }
+
+@test "T30: declared ignored DIRECTORY -> fingerprinting aborts (fail closed), gate runs every push" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '.gate\n' > .gitignore
+  printf '.gate\n' > scripts/pre-pr.cache-paths
+  mkdir .gate && printf 'SAFE\n' > .gate/state
+  commit_baseline
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  # A directory contributes no recursive content hash; failing closed means
+  # the second push cannot be a stale hit even on an unchanged tree.
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 2 ]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  # And a real change under the declared dir is likewise never skipped.
+  printf 'UNSAFE\n' > .gate/state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 3 ]
+}
+
+@test "T31: submodule gitlink -> fingerprinting aborts (fail closed), submodule dirt never skips the gate" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  local sub="$TMPREPO/../sub-$(basename "$TMPREPO")"
+  rm -rf "$sub"
+  git init -q "$sub"
+  ( cd "$sub" && git config user.email t@t && git config user.name t \
+      && printf 'SAFE\n' > gate.state && git add -A && git commit -qm subinit )
+
+  write_counting_script "$counter" 'exit 0'
+  git -c protocol.file.allow=always submodule add -q "$sub" sub 2>/dev/null
+  commit_baseline
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  # gitlink is a dir in the worktree -> fingerprint aborts -> never cached.
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  # Dirtying the submodule's working tree must not produce a stale skip.
+  printf 'UNSAFE\n' > sub/gate.state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+
+  rm -rf "$sub"
+}

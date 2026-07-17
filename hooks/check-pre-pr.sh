@@ -44,11 +44,15 @@
 #     can hide worktree changes), symlinks contribute their target string
 #     WITHOUT being followed (a hostile symlink to /dev/zero cannot hang
 #     the hook), fifo/socket/device contribute a type marker, missing
-#     paths a deletion marker. Regular files above
-#     PRE_PR_CACHE_MAX_FILE_BYTES (default 100 MiB) abort fingerprinting.
-#     Any failure yields no fingerprint, which is always treated as a
-#     cache miss (full run) — the cache can only narrow the gate, never
-#     widen it.
+#     paths a deletion marker. A DIRECTORY (a declared path that is a dir,
+#     or a submodule gitlink) aborts fingerprinting — its contents are not
+#     recursively hashed, so caching a repo whose gate reads inside a
+#     submodule or declared directory would be a stale-skip bypass;
+#     failing closed (no fingerprint -> full run) is the safe direction.
+#     Regular files above PRE_PR_CACHE_MAX_FILE_BYTES (default 100 MiB)
+#     also abort. Any failure yields no fingerprint, which is always
+#     treated as a cache miss (full run) — the cache can only narrow the
+#     gate, never widen it.
 #   - Cache file: `$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass`,
 #     one line `<sha256-hex> <epoch-seconds>`, written atomically
 #     (mktemp in the same dir + mv). Only trusted (regular, non-symlink,
@@ -134,6 +138,20 @@ _hash_path() {
   if [ -L "$p" ]; then
     target=$(readlink -- "$p") || return 1
     printf 'L\0%s\0%s\0' "$p" "$target"
+  elif [ -d "$p" ]; then
+    # A directory (a declared path that is a dir, or a submodule gitlink
+    # which appears as a dir in the worktree) whose CONTENTS are not
+    # recursively hashed would let changes under it slip past the
+    # fingerprint entirely — a stale-skip bypass. We deliberately do NOT
+    # recurse here (a submodule is its own repo with its own ignore rules,
+    # dirty/untracked state, and nested submodules — enumerating it
+    # correctly is a second fingerprint engine). Instead fail closed: no
+    # fingerprint -> full run. A repo whose pre-PR gate reads inside a
+    # submodule or a declared directory simply does not get caching, which
+    # is the safe direction. (git ls-files never yields a plain tracked
+    # directory, only gitlinks; declared-path directories are the other
+    # source.)
+    return 1
   elif [ -f "$p" ]; then
     size=$(wc -c <"$p" 2>/dev/null) || return 1
     [ "$size" -le "$(_cache_max_file_bytes)" ] || return 1
