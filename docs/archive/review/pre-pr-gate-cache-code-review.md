@@ -235,3 +235,55 @@ Documentation-only round-diff (d209179). **All three experts: No findings.**
 Termination condition met at round 4. Final gates: full bats suite 759/759
 (0 failures), no migration tool (n/a), scripts/pre-pr.sh absent in this
 repo (wrapper no-op verified, exit 0).
+
+---
+
+# Round 5 (external security review, relayed by the operator)
+
+Three findings against `origin/main...HEAD`; all three reproduced locally
+before any change (clean-filter diff = 0 bytes on real content change;
+`.gate-state` absent from `ls-files --others --exclude-standard`;
+`sha256sum` on a symlink to /dev/zero → timeout 124).
+
+**F1 [High] — clean/textconv filters hide tracked-content changes from
+`git diff HEAD` → stale cache hit on a changed tree.**
+- **Resolution: Fixed.** `git diff` removed from the fingerprint entirely.
+  Tracked paths are hashed from real worktree state (bytes + exec bit +
+  type + symlink target) via the new lstat-first `_hash_path`. T23 asserts
+  a clean-filtered tracked file's content change invalidates while the
+  filtered diff is verifiably empty.
+
+**F2 [High] — ignored files a gate reads are excluded from the fingerprint
+→ gate bypass (.env, generated gate state, scanner DBs, deps, env).**
+- **Resolution: Fixed — cache is now OPT-IN (all three remedies the
+  reviewer offered, combined).** Default TTL is 0 (gate always runs).
+  Enabling requires an explicit assertion that the gate's inputs are
+  covered: exported PRE_PR_CACHE_TTL (operator opt-in), or a declaration —
+  `scripts/pre-pr.cache-paths` file / exported PRE_PR_CACHE_EXTRA_PATHS,
+  whose entries (which may be ignored files) become fingerprint inputs and
+  whose presence (even empty = "tree only") enables the default 3600.
+  Malformed TTL now falls back to unset (declaration-dependent), not to
+  3600. T20 (default-off), T21 (declaration enables), T22 (declared
+  ignored file's change invalidates), T19 reworked.
+
+**F3 [Medium] — untracked symlink to /dev/zero hangs the hook up to the
+1800 s timeout.**
+- **Resolution: Fixed.** `_hash_path` is lstat-first: symlinks contribute
+  their target string and are never followed; fifo/socket/device are never
+  opened; regular files above PRE_PR_CACHE_MAX_FILE_BYTES (default
+  100 MiB) abort fingerprinting (no fingerprint → full run, bounding
+  worst-case latency). T24 (timeout-guarded no-hang + retarget
+  invalidates), T25 (exec-bit flip invalidates — shrinks the old
+  permission-bit blind spot), T26 (tracked delete invalidates), T27
+  (size cap → never cached).
+
+**Non-security note** — trailing blank line at EOF of the deviation log:
+fixed.
+
+Red-proof note: T20-T27 are red against the pre-round-5 implementation by
+construction — each encodes one of the reproduced bypass/DoS scenarios
+(the reproductions WERE the red observations, run before the fix).
+
+Contract amendments recorded as deviation D4 (C1 fingerprint composition,
+C2 opt-in TTL resolution). Suite after fixes: 59/59 green
+(bats tests/check-pre-pr.bats).

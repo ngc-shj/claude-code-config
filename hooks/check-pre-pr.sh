@@ -20,27 +20,43 @@
 #   - Fail: block with the captured output (tail-limited) in the reason.
 #   - No script present: approve (no-op for projects without the convention).
 #
-# Pass-cache: a successful run's source-state fingerprint (HEAD sha +
-# tracked diff + untracked file hashes) is recorded to a file inside the
-# repo's git dir. A later invocation against a byte-identical tree within
-# TTL skips re-running the script entirely (stderr breadcrumb explains the
-# skip). This is what lets the /triangulate skill's direct `run`-mode
-# invocation, `git push`, and `gh pr create` collapse into a single
-# execution when nothing changed between them.
-#   - Fingerprint = sha256(`git rev-parse HEAD` + `git diff --no-ext-diff
-#     HEAD` + sorted per-file sha256 of untracked non-ignored files). Any
-#     git/hash failure yields no fingerprint, which is always treated as a
+# Pass-cache (OPT-IN): a successful run's source-state fingerprint is
+# recorded to a file inside the repo's git dir. A later invocation against
+# a byte-identical state within TTL skips re-running the script entirely
+# (stderr breadcrumb explains the skip). This is what lets the /triangulate
+# skill's direct `run`-mode invocation, `git push`, and `gh pr create`
+# collapse into a single execution when nothing changed between them.
+#   - OPT-IN (external security review, 2026-07-17): an arbitrary
+#     scripts/pre-pr.sh may read inputs the tree fingerprint cannot see
+#     (ignored files like .env / generated gate state, dependencies,
+#     environment). Caching is therefore OFF by default; it activates only
+#     when (a) PRE_PR_CACHE_TTL is exported as a positive integer, or
+#     (b) the project declares its extra gate inputs — a
+#     `scripts/pre-pr.cache-paths` file (one repo-relative path per line;
+#     may name ignored files; empty = "gate reads tree only") or an
+#     exported PRE_PR_CACHE_EXTRA_PATHS (newline-separated, same format)
+#     — which enables the default TTL 3600. Opting in asserts the gate's
+#     inputs are covered by tree + declared extras.
+#   - Fingerprint = sha256 over HEAD sha + one type-tagged line per path
+#     (every tracked path, every untracked non-ignored path, every
+#     declared extra path): regular files contribute exec-bit + REAL
+#     worktree byte hash (never git's clean/textconv-filtered view, which
+#     can hide worktree changes), symlinks contribute their target string
+#     WITHOUT being followed (a hostile symlink to /dev/zero cannot hang
+#     the hook), fifo/socket/device contribute a type marker, missing
+#     paths a deletion marker. Regular files above
+#     PRE_PR_CACHE_MAX_FILE_BYTES (default 100 MiB) abort fingerprinting.
+#     Any failure yields no fingerprint, which is always treated as a
 #     cache miss (full run) — the cache can only narrow the gate, never
 #     widen it.
 #   - Cache file: `$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass`,
 #     one line `<sha256-hex> <epoch-seconds>`, written atomically
 #     (mktemp in the same dir + mv). Only trusted (regular, non-symlink,
 #     owned by the current user) cache files are honored.
-#   - PRE_PR_CACHE_TTL (seconds): controls freshness. Default 3600 when
-#     unset or not a non-negative integer (a stderr note fires on a
-#     malformed value so a mistyped disable-intent is not silently
-#     dropped). Effective TTL is capped at 86400 (24h) regardless of the
-#     requested value. TTL=0 disables both skip and record.
+#   - PRE_PR_CACHE_TTL (seconds): freshness window when opted in.
+#     Effective TTL is capped at 86400 (24h). TTL=0 disables both skip
+#     and record. A malformed value is treated as unset (stderr note) and
+#     falls back to the declaration-dependent default.
 #   - Recording only happens when the fingerprint computed AFTER a passing
 #     run equals the one computed BEFORE it (mutation guard) — pre-pr
 #     scripts that run formatters/codegen and leave the tree different are
@@ -83,29 +99,114 @@ set -euo pipefail
 
 # --- shared: fingerprint + cache (used by both hook mode and `run` mode) ---
 
+# _cache_max_file_bytes -> stdout: per-file size cap for fingerprint
+# hashing. A regular file above the cap aborts fingerprinting (no
+# fingerprint -> full run), bounding worst-case hook latency against huge
+# build artifacts. Env override exists primarily as a test seam.
+_cache_max_file_bytes() {
+  local raw="${PRE_PR_CACHE_MAX_FILE_BYTES:-104857600}"
+  [[ "$raw" =~ ^[0-9]+$ ]] || raw=104857600
+  printf '%s' "$((10#$raw))"
+}
+
+# _hash_path <./path>
+# Emit one type-tagged fingerprint line for a path, lstat-first: symlinks
+# are NEVER followed (their target STRING is the content — a hostile
+# symlink to /dev/zero must not hang the hook), non-regular non-symlink
+# entries (fifo/socket/device) contribute a type marker and are never
+# opened, and a missing path (tracked-but-deleted, or a declared extra
+# that does not exist) contributes a deletion marker so its
+# appearance/disappearance changes the fingerprint. Regular files
+# contribute exec-bit + content hash. Paths are `./`-prefixed by the
+# caller: a bare dash-prefixed name (`--help`) would be parsed as a
+# sha256sum option and a file literally named `-` would be read as stdin —
+# either way that content would silently drop out of the fingerprint.
+_hash_path() {
+  local p="$1" target size xbit
+  if [ -L "$p" ]; then
+    target=$(readlink -- "$p") || return 1
+    printf 'L %s\t%s\n' "$p" "$target"
+  elif [ -f "$p" ]; then
+    size=$(wc -c <"$p" 2>/dev/null) || return 1
+    [ "$size" -le "$(_cache_max_file_bytes)" ] || return 1
+    xbit='-'
+    [ -x "$p" ] && xbit='x'
+    { printf 'F %s ' "$xbit" && sha256sum -- "$p"; } || return 1
+  elif [ ! -e "$p" ]; then
+    printf 'D %s\n' "$p"
+  else
+    printf 'O %s\n' "$p"
+  fi
+}
+
+# _declared_extra_paths_z <repo_root>
+# Emit declared extra fingerprint inputs, NUL-separated. Sources:
+#   - <repo_root>/scripts/pre-pr.cache-paths — one repo-relative path per
+#     line; blank lines and #-comments skipped. May name IGNORED files
+#     (.env, generated state, scanner DBs) — that is the point: the
+#     project declares what its pre-PR gate reads beyond the tree.
+#   - PRE_PR_CACHE_EXTRA_PATHS env — newline-separated, same format.
+# Declarations are same-trust as scripts/pre-pr.sh itself (repo content /
+# operator env); they add fingerprint inputs, never remove any.
+_declared_extra_paths_z() {
+  local repo_root="$1" line
+  {
+    if [ -f "$repo_root/scripts/pre-pr.cache-paths" ]; then
+      cat "$repo_root/scripts/pre-pr.cache-paths"
+      printf '\n'
+    fi
+    if [ -n "${PRE_PR_CACHE_EXTRA_PATHS:-}" ]; then
+      printf '%s\n' "$PRE_PR_CACHE_EXTRA_PATHS"
+    fi
+  } 2>/dev/null | while IFS= read -r line; do
+    case "$line" in ''|'#'*) continue ;; esac
+    printf '%s\0' "$line"
+  done
+  return 0
+}
+
+# _cache_declared <repo_root>
+# Exit 0 iff the project or operator declared cache inputs. Setting
+# PRE_PR_CACHE_EXTRA_PATHS to the empty string, or shipping an empty
+# scripts/pre-pr.cache-paths, is a valid declaration meaning "my pre-PR
+# gate reads nothing beyond the tracked + untracked tree".
+_cache_declared() {
+  local repo_root="$1"
+  [ -n "${PRE_PR_CACHE_EXTRA_PATHS+x}" ] && return 0
+  [ -f "$repo_root/scripts/pre-pr.cache-paths" ] && return 0
+  return 1
+}
+
 # compute_fingerprint <repo_root>
 # stdout: 64-char lowercase hex sha256 on success; empty + non-zero exit on
-# any failure (not a repo, unborn HEAD, unreadable file, etc). Callers MUST
-# guard the call (`fp=$(compute_fingerprint "$ROOT") || fp=""`) since this
-# runs under `set -euo pipefail`.
+# any failure (not a repo, unborn HEAD, unreadable/oversized file, etc).
+# Callers MUST guard the call (`fp=$(compute_fingerprint "$ROOT") || fp=""`)
+# since this runs under `set -euo pipefail`.
+#
+# Real-content fingerprint (external security review, 2026-07-17): `git
+# diff` output passes through .gitattributes clean/textconv filters, which
+# can hide worktree changes the filters normalize away — while pre-pr.sh
+# reads the REAL worktree bytes. Tracked paths are therefore hashed from
+# their actual worktree state (bytes + exec bit + type + symlink target),
+# never from git's filtered view. Inputs: HEAD sha, every tracked path,
+# every untracked non-ignored path, every declared extra path.
 compute_fingerprint() {
-  local repo_root="$1" head_sha tracked_diff untracked_hashes
+  local repo_root="$1" head_sha listing
   head_sha=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null) || return 1
-  tracked_diff=$(LC_ALL=C git -C "$repo_root" diff --no-ext-diff HEAD 2>/dev/null) || return 1
-  # sha256sum resolves the paths git prints (relative to the repo root),
-  # so the final stage must run with cwd = repo_root regardless of the
-  # caller's own cwd (I1-2: output depends only on repo content).
-  # Each path is prefixed with `./` before reaching sha256sum: a bare
-  # dash-prefixed name (`--help`) would be parsed as an option and a file
-  # literally named `-` would be read as stdin (/dev/null under xargs) —
-  # either way that file's content silently drops out of the fingerprint
-  # and content changes stop invalidating the cache (F4/I1-2). `./name` is
-  # unambiguous for every spelling; any per-file hash failure aborts the
-  # pipeline non-zero (fail-safe: no fingerprint → full run).
-  untracked_hashes=$(git -C "$repo_root" ls-files --others --exclude-standard -z 2>/dev/null \
-    | LC_ALL=C sort -z \
-    | (cd "$repo_root" && while IFS= read -r -d '' f; do sha256sum -- "./$f" || exit 1; done)) || return 1
-  printf '%s\n%s\n%s' "$head_sha" "$tracked_diff" "$untracked_hashes" | sha256sum | awk '{print $1}'
+  # The hashing loop runs with cwd = repo_root regardless of the caller's
+  # own cwd (I1-2: output depends only on repo content). sort -zu merges
+  # the three NUL-separated sources deterministically and drops duplicate
+  # paths (a declared extra that is also tracked hashes once).
+  listing=$(
+    { git -C "$repo_root" ls-files -z 2>/dev/null \
+        && git -C "$repo_root" ls-files --others --exclude-standard -z 2>/dev/null \
+        && _declared_extra_paths_z "$repo_root"; } \
+      | LC_ALL=C sort -zu \
+      | (cd "$repo_root" && while IFS= read -r -d '' f; do
+          _hash_path "./$f" || exit 1
+        done)
+  ) || return 1
+  printf '%s\n%s' "$head_sha" "$listing" | sha256sum | awk '{print $1}'
 }
 
 # cache_path <repo_root>
@@ -117,19 +218,39 @@ cache_path() {
   printf '%s/claude-pre-pr-pass' "$git_dir"
 }
 
-# _cache_ttl -> stdout: effective TTL (base-10 normalized, capped at 86400).
-# Malformed PRE_PR_CACHE_TTL falls back to the default 3600 with a stderr
-# note (tuning-knob failure, not a cache-integrity failure — N1).
+# _cache_ttl <repo_root> -> stdout: effective TTL (base-10 normalized,
+# capped at 86400).
+#
+# Opt-in model (external security review, 2026-07-17): an arbitrary
+# scripts/pre-pr.sh may read inputs the tree fingerprint cannot see —
+# ignored files (.env, generated gate state, scanner DBs), installed
+# dependencies, environment. Caching therefore activates only on explicit
+# opt-in:
+#   - PRE_PR_CACHE_TTL set to a positive integer (operator opt-in), or
+#   - a declaration exists (scripts/pre-pr.cache-paths file or exported
+#     PRE_PR_CACHE_EXTRA_PATHS, possibly empty) -> default 3600.
+# Otherwise TTL is 0 and the gate always runs. Opting in asserts the
+# gate's inputs are covered by tree + declared extras. Malformed
+# PRE_PR_CACHE_TTL is treated as unset (stderr note), which falls back to
+# the declaration-dependent default — never a wider window than intended.
 _cache_ttl() {
-  local raw="${PRE_PR_CACHE_TTL:-3600}" ttl
-  if [[ "$raw" =~ ^[0-9]+$ ]]; then
-    # Base-10 normalize immediately: the regex above accepts leading zeros
-    # (e.g. "08"), which bash treats as invalid base-8 literals in
-    # arithmetic/[[ ]] contexts and would abort the hook under `set -e`.
-    ttl=$((10#$raw))
-  else
-    printf 'check-pre-pr: PRE_PR_CACHE_TTL='\''%s'\'' is not a non-negative integer; using default 3600\n' "$raw" >&2
-    ttl=3600
+  local repo_root="$1" raw="${PRE_PR_CACHE_TTL:-}" ttl=''
+  if [ -n "$raw" ]; then
+    if [[ "$raw" =~ ^[0-9]+$ ]]; then
+      # Base-10 normalize immediately: the regex accepts leading zeros
+      # (e.g. "08"), which bash treats as invalid base-8 literals in
+      # arithmetic/[[ ]] contexts and would abort the hook under `set -e`.
+      ttl=$((10#$raw))
+    else
+      printf 'check-pre-pr: PRE_PR_CACHE_TTL='\''%s'\'' is not a non-negative integer; treating as unset\n' "$raw" >&2
+    fi
+  fi
+  if [ -z "$ttl" ]; then
+    if _cache_declared "$repo_root"; then
+      ttl=3600
+    else
+      ttl=0
+    fi
   fi
   if [ "$ttl" -gt 86400 ]; then
     ttl=86400
@@ -148,7 +269,7 @@ CACHE_HIT_AGE=""
 cache_fresh() {
   local repo_root="$1" fingerprint="$2" path ttl now line entry_fp entry_stamp age
 
-  ttl=$(_cache_ttl)
+  ttl=$(_cache_ttl "$repo_root")
   [ "$ttl" -gt 0 ] || return 1
 
   path=$(cache_path "$repo_root") || return 1
@@ -177,7 +298,7 @@ cache_fresh() {
 # hook). No-op when TTL=0.
 cache_record() {
   local repo_root="$1" fingerprint="$2" path dir tmp ttl
-  ttl=$(_cache_ttl) || return 0
+  ttl=$(_cache_ttl "$repo_root") || return 0
   [ "$ttl" -gt 0 ] || return 0
   path=$(cache_path "$repo_root" 2>/dev/null) || return 0
   dir=$(dirname "$path") || return 0
@@ -220,8 +341,12 @@ run_direct() {
     exit 0
   fi
 
-  local fp_pre
-  fp_pre=$(compute_fingerprint "$repo_root") || fp_pre=""
+  # Skip the (whole-tree) fingerprint computation entirely when caching is
+  # not opted in — the default-off path must add no per-push cost.
+  local fp_pre=""
+  if [ "$(_cache_ttl "$repo_root")" -gt 0 ]; then
+    fp_pre=$(compute_fingerprint "$repo_root") || fp_pre=""
+  fi
   if [ -n "$fp_pre" ] && cache_fresh "$repo_root" "$fp_pre"; then
     cache_breadcrumb "$CACHE_HIT_AGE"
     exit 0
@@ -331,7 +456,12 @@ if [ ! -x "$SCRIPT" ]; then
   exit 0
 fi
 
-FP_PRE=$(compute_fingerprint "$REPO_ROOT") || FP_PRE=""
+# Skip the (whole-tree) fingerprint computation entirely when caching is
+# not opted in — the default-off path must add no per-push cost.
+FP_PRE=""
+if [ "$(_cache_ttl "$REPO_ROOT")" -gt 0 ]; then
+  FP_PRE=$(compute_fingerprint "$REPO_ROOT") || FP_PRE=""
+fi
 if [ -n "$FP_PRE" ] && cache_fresh "$REPO_ROOT" "$FP_PRE"; then
   cache_breadcrumb "$CACHE_HIT_AGE"
   echo '{"decision": "approve"}'

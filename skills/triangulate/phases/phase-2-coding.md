@@ -213,6 +213,13 @@ bash ~/.claude/hooks/check-migrations.sh
 # the wrapper is a no-op when the script is absent. Exit status is the
 # script's own on real runs (2 = gate never ran: usage error or
 # unresolved repo root).
+# The cache is OPT-IN per project: it activates only when the project
+# declares its extra gate inputs in scripts/pre-pr.cache-paths (one
+# repo-relative path per line; may name ignored files like .env; empty
+# file = "gate reads tree only") or the operator exports
+# PRE_PR_CACHE_TTL / PRE_PR_CACHE_EXTRA_PATHS. Without a declaration the
+# gate always runs — an arbitrary aggregate script may depend on inputs
+# the tree fingerprint cannot see.
 bash ~/.claude/hooks/check-pre-pr.sh run \
   || { echo "pre-PR gate did not pass — see output above; fix before proceeding"; exit 1; }
 

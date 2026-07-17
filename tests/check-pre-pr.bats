@@ -18,6 +18,11 @@ setup() {
   # Keep git's upward repo discovery inside the tmp tree (matters once
   # .git is deleted mid-test, e.g. T16 — an outer repo must never leak in).
   export GIT_CEILING_DIRECTORIES="$(dirname "$TMPREPO")"
+  # The pass-cache is opt-in (off unless PRE_PR_CACHE_TTL is exported or
+  # the project declares cache inputs). Cache-behavior tests opt in here;
+  # the default-off contract itself is covered by T20/T21, which unset or
+  # override this.
+  export PRE_PR_CACHE_TTL=3600
 }
 
 teardown() {
@@ -624,7 +629,7 @@ write_counting_script() {
   [ "$(wc -l <"$counter")" -eq 1 ]
 }
 
-@test "T19: PRE_PR_CACHE_TTL=abc with fresh matching cache -> no crash, skip occurs, fallback note" {
+@test "T19: PRE_PR_CACHE_TTL=abc with fresh matching cache -> no crash, treated as unset (cache off, runs), note" {
   local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
@@ -632,10 +637,12 @@ write_counting_script() {
   run run_hook Bash "git push origin main"
   [[ "$output" == *'"decision": "approve"'* ]]
 
+  # Malformed TTL = unset; with no declaration present that means cache
+  # OFF (opt-in model), so the gate runs despite the fresh cache entry.
   run env PRE_PR_CACHE_TTL=abc bash -c 'bash "$1" 2>&1' _ "$SCRIPT" <<<"$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')"
   [[ "$output" == *'"decision": "approve"'* ]]
-  [[ "$output" == *"is not a non-negative integer; using default 3600"* ]]
-  [ "$(wc -l <"$counter")" -eq 1 ]
+  [[ "$output" == *"is not a non-negative integer; treating as unset"* ]]
+  [ "$(wc -l <"$counter")" -eq 2 ]
 }
 
 @test "T19b: PRE_PR_CACHE_TTL=08 (leading-zero base-10 trap), stamp aged 100s -> no crash, cache miss" {
@@ -654,4 +661,149 @@ write_counting_script() {
 
   run env PRE_PR_CACHE_TTL=08 bash -c 'bash "$1"' _ "$SCRIPT" <<<"$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')"
   [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
+# ============================================================
+# OPT-IN MODEL + REAL-CONTENT FINGERPRINT (external security review)
+# ============================================================
+
+@test "T20: default-off — no TTL export, no declaration -> two passing pushes both run, no cache file" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 2 ]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+}
+
+@test "T21: declaration file (empty scripts/pre-pr.cache-paths) opts in with default TTL -> second push skips" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  : > scripts/pre-pr.cache-paths
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+}
+
+@test "T22: declared IGNORED extra path — content change invalidates the cache" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '.gate-state\n' > .gitignore
+  printf '.gate-state\n' > scripts/pre-pr.cache-paths
+  printf 'SAFE\n' > .gate-state
+  commit_baseline
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # The ignored file is excluded from git listings; only the declaration
+  # brings it into the fingerprint. Without the declaration mechanism this
+  # change would be invisible and the stale pass would keep skipping.
+  printf 'UNSAFE\n' > .gate-state
+
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
+@test "T23: clean-filtered tracked file — worktree content change invalidates despite empty git diff" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '*.dat filter=squash\n' > .gitattributes
+  git config filter.squash.clean 'tr -d "[:alnum:]"'
+  printf 'SAFE\n' > gate.dat
+  commit_baseline
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  printf 'UNSAFE\n' > gate.dat
+  # Sanity: the change is invisible to git's filtered diff — the
+  # fingerprint must catch it from the real worktree bytes instead.
+  [ "$(LC_ALL=C git diff --no-ext-diff HEAD -- gate.dat | wc -c)" -eq 0 ]
+
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
+@test "T24: untracked symlink to /dev/zero — no hang; retargeting the symlink invalidates" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  ln -s /dev/zero zerolink
+
+  # timeout is the hang detector: pre-fix, sha256sum followed the symlink
+  # and read /dev/zero forever (exit 124 here instead of a decision).
+  run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # The symlink's TARGET STRING is fingerprint content.
+  ln -sfn /dev/null zerolink
+
+  run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
+@test "T25: exec-bit flip on a tracked file invalidates the cache" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf 'payload\n' > tool.sh
+  commit_baseline
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  chmod +x tool.sh
+
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
+@test "T26: deleting a tracked file invalidates the cache" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf 'data\n' > victim.txt
+  commit_baseline
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  rm victim.txt
+
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
+@test "T27: regular file above the size cap -> fingerprinting aborts, gate runs every time, nothing cached" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf 'this content is longer than ten bytes\n' > big.bin
+  commit_baseline
+
+  run env PRE_PR_CACHE_MAX_FILE_BYTES=10 bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  run env PRE_PR_CACHE_MAX_FILE_BYTES=10 bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 2 ]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 }

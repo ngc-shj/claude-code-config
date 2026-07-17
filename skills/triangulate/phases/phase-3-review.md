@@ -403,7 +403,10 @@ bash ~/.claude/hooks/check-migrations.sh
 # Invoke via the cache-aware wrapper, never as a raw invocation of the
 # script: identical-source re-runs are skipped by the pass-cache
 # (PRE_PR_CACHE_TTL=0 forces a run), and a passing run here lets the
-# push-time hook skip the same source state.
+# push-time hook skip the same source state. The cache is opt-in per
+# project (scripts/pre-pr.cache-paths declaration or exported
+# PRE_PR_CACHE_TTL / PRE_PR_CACHE_EXTRA_PATHS — see Step 2-4 item 3b);
+# without a declaration the gate always runs.
 bash ~/.claude/hooks/check-pre-pr.sh run \
   || { echo "pre-PR gate did not pass — see output above; fix before commit"; exit 1; }
 
