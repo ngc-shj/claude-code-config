@@ -368,3 +368,26 @@ The reviewer confirmed the directory/submodule fixes (D5) are sound and
 that this was the last special-file class in that branch.
 
 Suite after round 8: 64/64 (bats tests/check-pre-pr.bats).
+
+---
+
+# Round 9 (external security review round 3 follow-up — two minor cleanups)
+
+Reviewer confirmed round 8's FIFO/socket/device fail-closed fix is sound
+and found no new security issue. Two non-security cleanups:
+
+- **Test env-dependence (Minor).** T32 unconditionally created a Unix
+  socket, so a sandbox that denies AF_UNIX bind (EPERM) failed the whole
+  test (63/64 in the reviewer's full run). **Fixed:** split into T32
+  (declared FIFO → fail-closed, always runs — no socket needed) and T32b
+  (FIFO→socket type-swap → never skips), with T32b calling a
+  `make_unix_socket` helper that `skip`s when bind is not permitted. The
+  fail-closed guarantee is now covered unconditionally; only the type-swap
+  refinement is environment-gated.
+- **Stale comment (Minor).** The `_hash_path` header still said special
+  files "contribute a type marker" while the implementation fails closed.
+  **Fixed:** header rewritten to a per-branch list stating FIFO/socket/
+  device and directories fail closed and that no `O` record is emitted.
+
+Suite after round 9: 65/65 (bats tests/check-pre-pr.bats; T32b self-skips
+where AF_UNIX bind is denied).

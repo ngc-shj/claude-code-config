@@ -891,7 +891,7 @@ write_counting_script() {
   rm -rf "$sub"
 }
 
-@test "T32: special file (FIFO / socket) -> fingerprinting aborts (fail closed); a FIFO->socket swap never skips the gate" {
+@test "T32: declared FIFO -> fingerprinting aborts (fail closed), never cached" {
   local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   printf 'gate-node\n' > .gitignore
@@ -899,16 +899,41 @@ write_counting_script() {
   mkfifo gate-node
   commit_baseline
 
-  # A declared FIFO must not be cacheable: no fingerprint -> full run, and
-  # the cache file is never written.
+  # A declared FIFO must not be cacheable: no fingerprint -> full run, the
+  # cache file is never written, and two passes both run.
   run run_hook Bash "git push origin main"
   [[ "$output" == *'"decision": "approve"'* ]]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
 
-  # Swapping the FIFO for a socket (a type change a gate testing [ -p ]
-  # would reject) must not produce a stale skip.
+# make_unix_socket <path> — bind an AF_UNIX socket at <path>, or skip the
+# calling test when the sandbox forbids it (some CI/runner sandboxes deny
+# AF_UNIX bind with EPERM). Isolated to its own test so the FIFO
+# fail-closed check above always runs.
+make_unix_socket() {
+  python3 - "$1" <<'PY' 2>/dev/null || return 1
+import socket, sys
+socket.socket(socket.AF_UNIX).bind(sys.argv[1])
+PY
+}
+
+@test "T32b: FIFO->socket type swap never produces a stale skip" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf 'gate-node\n' > .gitignore
+  printf 'gate-node\n' > scripts/pre-pr.cache-paths
+  mkfifo gate-node
+  commit_baseline
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+
+  # Swap the FIFO for a socket — a type change a gate testing [ -p ] would
+  # reject. Skip only if the sandbox forbids AF_UNIX bind.
   rm gate-node
-  python3 -c 'import socket; socket.socket(socket.AF_UNIX).bind("gate-node")'
+  make_unix_socket "$PWD/gate-node" || skip "AF_UNIX socket bind not permitted in this environment"
   run run_hook Bash "git push origin main"
   [ "$(wc -l <"$counter")" -eq 2 ]
 }

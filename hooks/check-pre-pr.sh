@@ -115,17 +115,25 @@ _cache_max_file_bytes() {
 }
 
 # _hash_path <./path>
-# Emit one type-tagged fingerprint line for a path, lstat-first: symlinks
-# are NEVER followed (their target STRING is the content — a hostile
-# symlink to /dev/zero must not hang the hook), non-regular non-symlink
-# entries (fifo/socket/device) contribute a type marker and are never
-# opened, and a missing path (tracked-but-deleted, or a declared extra
-# that does not exist) contributes a deletion marker so its
-# appearance/disappearance changes the fingerprint. Regular files
-# contribute exec-bit + content hash. Paths are `./`-prefixed by the
-# caller: a bare dash-prefixed name (`--help`) would be parsed as a
-# sha256sum option and a file literally named `-` would be read as stdin —
-# either way that content would silently drop out of the fingerprint.
+# Emit one NUL-framed fingerprint record for a path, lstat-first, or fail
+# closed (return non-zero -> caller aborts the whole fingerprint -> full
+# run) for anything whose state a marker cannot faithfully capture:
+#   - symlink -> `L` record: target STRING, NEVER followed (a hostile
+#     symlink to /dev/zero must not hang the hook).
+#   - directory (incl. submodule gitlink) -> FAIL CLOSED: contents are not
+#     recursively hashed, so caching would hide changes under it.
+#   - regular file -> `F` record: exec-bit + content hash (files above the
+#     size cap fail closed).
+#   - missing path (tracked-but-deleted, or a declared extra that does not
+#     exist) -> `D` record, so its appearance/disappearance changes the
+#     fingerprint.
+#   - FIFO / socket / device -> FAIL CLOSED: a marker cannot represent
+#     dynamic content or a type swap a gate inspects (`[ -p ]`/`[ -S ]`),
+#     and opening one to hash could block. No `O` record is ever emitted.
+# Paths are `./`-prefixed by the caller: a bare dash-prefixed name
+# (`--help`) would be parsed as a sha256sum option and a file literally
+# named `-` would be read as stdin — either way that content would
+# silently drop out of the fingerprint.
 # Record grammar: every record is NUL-framed — a type tag and each field
 # terminated by NUL. Paths and symlink targets CANNOT contain NUL, so no
 # field can forge a delimiter and the listing is injective (round-6
