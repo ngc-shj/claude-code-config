@@ -410,3 +410,34 @@ All contracts locked after plan-review round 5 (all experts: No findings).
   stable tree, passes, caches. Second-order convergence, no false skip.
 - S5: User suspects a stale skip (e.g. node_modules changed):
   `PRE_PR_CACHE_TTL=0 git push ...` forces a run for that invocation.
+
+## Implementation Checklist
+
+Impact analysis (Step 2-1) results:
+
+- Files to modify:
+  1. `hooks/check-pre-pr.sh` — C1 (compute_fingerprint), C2 (cache_path /
+     cache_fresh / cache_record), C3 (hook-mode integration), C4 (`run`
+     mode). Header comment updated (incl. line 18 raw-invocation wording,
+     per C5 non-members note).
+  2. `skills/triangulate/phases/phase-2-coding.md` (~line 208-210) — C5
+     rewrite to wrapper invocation + one-sentence cache note.
+  3. `skills/triangulate/phases/phase-3-review.md` (~line 403-405) — C5
+     rewrite; ~line 493-495 safety-net paragraph gains the skip clause.
+  4. `tests/check-pre-pr.bats` — C6 rows T1-T19b, `run_direct` helper,
+     `GIT_CEILING_DIRECTORIES` in setup(), extended skill-doc contract test.
+- Symbol-collision check: `compute_fingerprint` / `cache_fresh` /
+  `cache_record` / `claude-pre-pr-pass` appear nowhere in hooks/ or tests/
+  (clean namespace).
+- Reuse (R1): atomic write pattern (mktemp + mv) mirrors retro-state.sh
+  `_write_state`; trust checks mirror retro-state.sh `_trusted_file`
+  (regular, non-symlink, `-O`). build-codebase-fingerprint.sh is unrelated
+  (symbol-frequency, not content hash) — do not reuse.
+- Existing tests impacted: "skill docs reference scripts/pre-pr.sh
+  literally" (stays green via prose references — verified in review R4);
+  all existing pass/block tests exercise the fingerprint-failure → full-run
+  path for free (unborn-HEAD tmp repos).
+- CI gate parity (Step 2-1 item 7): no `.github/workflows` — no CI gates to
+  diff; this repo's local gate is `bats tests/`. No deferred-parity entries.
+- This repo has no `scripts/pre-pr.sh` of its own — the hook's no-op path
+  covers it; nothing to run at Phase 2-4 item 3b.

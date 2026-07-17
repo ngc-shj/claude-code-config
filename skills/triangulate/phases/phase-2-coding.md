@@ -205,9 +205,16 @@ bash ~/.claude/hooks/check-migrations.sh
 # file and inspect afterwards. Piping a gate through head/tail/grep
 # makes the pipe tail's status the observed one, and a real failure
 # reads as green.
-if [ -x scripts/pre-pr.sh ]; then
-  bash scripts/pre-pr.sh || { echo "scripts/pre-pr.sh failed — fix before proceeding"; exit 1; }
-fi
+#
+# Invoke via the cache-aware wrapper, never as a raw invocation of the
+# script: identical-source re-runs are skipped by the pass-cache
+# (PRE_PR_CACHE_TTL=0 forces a run), a passing run records the source
+# fingerprint so the push/PR-create hook can skip the same state, and
+# the wrapper is a no-op when the script is absent. Exit status is the
+# script's own on real runs (2 = gate never ran: usage error or
+# unresolved repo root).
+bash ~/.claude/hooks/check-pre-pr.sh run \
+  || { echo "pre-PR gate did not pass — see output above; fix before proceeding"; exit 1; }
 
 # 4. R35 mechanical gate (manual-test artifact for production-deployed components).
 # This was previously a manual review obligation; it is now a runnable gate.
