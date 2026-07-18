@@ -1010,3 +1010,81 @@ PY
   run run_hook Bash "git push origin main"
   [ "$(wc -l <"$counter")" -eq 4 ]
 }
+
+# ============================================================
+# Unreadable declaration -> fail closed (external security review)
+# ============================================================
+
+@test "T36: unreadable TEAM declaration -> cache OFF (gate runs, nothing cached), never a stale skip" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '.gate-state\n' > .gitignore
+  printf 'SAFE\n' > .gate-state
+  printf '.gate-state\n' > scripts/pre-pr.cache-paths
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  chmod 000 scripts/pre-pr.cache-paths
+
+  # Existing-but-unreadable declaration must NOT opt caching in, and no
+  # cache is ever written. (For a TRACKED team declaration the fingerprint's
+  # own read of the file would also fail closed, so this end-to-end
+  # assertion is defense-in-depth for team; T37 is the red-proof for the
+  # reachable-in-practice case, the git-dir personal declaration that the
+  # fingerprint does not otherwise read. The `-r` guard in _cache_declared
+  # is what makes both explicit rather than incidental.)
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  printf 'UNSAFE\n' > .gate-state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+
+  chmod 644 scripts/pre-pr.cache-paths
+}
+
+@test "T37: unreadable PERSONAL declaration -> cache OFF (gate runs, nothing cached), never a stale skip" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '.gate-state\n' > .gitignore
+  printf 'SAFE\n' > .gate-state
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  local decl
+  decl="$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+  printf '.gate-state\n' > "$decl"
+  chmod 000 "$decl"
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  printf 'UNSAFE\n' > .gate-state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+
+  chmod 644 "$decl"
+}
+
+@test "T38: readable team decl opts in; the -r check is scoped to the declaration file, not the tree" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  : > scripts/pre-pr.cache-paths
+  # An unrelated unreadable file that is NOT a declaration and NOT part of
+  # the fingerprint (ignored) must not disable caching — the -r guard keys
+  # only off the declaration paths. (A tracked/untracked unreadable file
+  # would legitimately fail the fingerprint on its own; that is a separate,
+  # already-covered path — here we isolate the declaration -r scoping.)
+  printf 'unrelated-000\n' > .gitignore
+  printf 'secret\n' > unrelated-000
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  chmod 000 unrelated-000
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  chmod 644 unrelated-000
+}

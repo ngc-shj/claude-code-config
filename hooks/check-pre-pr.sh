@@ -225,22 +225,31 @@ _personal_decl_file() {
 # files it was meant to protect, so a nonexistent entry containing glob
 # metacharacters gets a stderr warning. Declarations are same-trust as
 # scripts/pre-pr.sh itself (repo content / git dir / operator env).
+#
+# FAIL CLOSED on an unreadable declaration (external security review,
+# 2026-07-18): a declaration file that exists but cannot be read (mode 000,
+# I/O error) MUST NOT be silently treated as an empty declaration — that
+# would drop its declared paths from the fingerprint and re-open the exact
+# stale-skip bypass the declaration exists to close. Any read failure exits
+# non-zero, which propagates through compute_fingerprint's `&&` chain (and
+# `set -o pipefail`) to abort the whole fingerprint -> full run.
 _declared_extra_paths_z() {
-  local repo_root="$1" line personal
+  local repo_root="$1" line personal team
+  team="$repo_root/scripts/pre-pr.cache-paths"
   personal=$(_personal_decl_file "$repo_root" 2>/dev/null || true)
   {
-    if [ -f "$repo_root/scripts/pre-pr.cache-paths" ]; then
-      cat "$repo_root/scripts/pre-pr.cache-paths"
+    if [ -e "$team" ]; then
+      cat -- "$team" || return 1
       printf '\n'
     fi
-    if [ -n "$personal" ] && [ -f "$personal" ]; then
-      cat "$personal"
+    if [ -n "$personal" ] && [ -e "$personal" ]; then
+      cat -- "$personal" || return 1
       printf '\n'
     fi
     if [ -n "${PRE_PR_CACHE_EXTRA_PATHS:-}" ]; then
       printf '%s\n' "$PRE_PR_CACHE_EXTRA_PATHS"
     fi
-  } 2>/dev/null | while IFS= read -r line; do
+  } | while IFS= read -r line; do
     case "$line" in ''|'#'*) continue ;; esac
     case "$line" in
       *[\*\?\[]*)
@@ -251,20 +260,26 @@ _declared_extra_paths_z() {
     esac
     printf '%s\0' "$line"
   done
-  return 0
 }
 
 # _cache_declared <repo_root>
 # Exit 0 iff the project or operator declared cache inputs via any of the
 # three sources. An empty file or empty PRE_PR_CACHE_EXTRA_PATHS is a valid
 # declaration meaning "my pre-PR gate reads nothing beyond the tracked +
-# untracked tree".
+# untracked tree". A declaration file that EXISTS but is UNREADABLE is NOT
+# a valid opt-in (`-r`, not just `-f`): treating it as one would enable the
+# cache while _declared_extra_paths_z fails to hash its contents — the same
+# fail-open the fingerprint side now guards against. An existing-but-
+# unreadable declaration therefore reads as cache-OFF (gate always runs).
 _cache_declared() {
-  local repo_root="$1" personal
+  # Assign `team` on its own line: a single `local a=$1 b=$a/...` statement
+  # evaluates b's initializer before a is bound, tripping `set -u`.
+  local repo_root="$1" personal team
+  team="$repo_root/scripts/pre-pr.cache-paths"
   [ -n "${PRE_PR_CACHE_EXTRA_PATHS+x}" ] && return 0
-  [ -f "$repo_root/scripts/pre-pr.cache-paths" ] && return 0
+  [ -f "$team" ] && [ -r "$team" ] && return 0
   personal=$(_personal_decl_file "$repo_root" 2>/dev/null || true)
-  [ -n "$personal" ] && [ -f "$personal" ] && return 0
+  [ -n "$personal" ] && [ -f "$personal" ] && [ -r "$personal" ] && return 0
   return 1
 }
 
