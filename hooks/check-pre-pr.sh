@@ -31,11 +31,17 @@
 #     (ignored files like .env / generated gate state, dependencies,
 #     environment). Caching is therefore OFF by default; it activates only
 #     when (a) PRE_PR_CACHE_TTL is exported as a positive integer, or
-#     (b) the project declares its extra gate inputs — a
-#     `scripts/pre-pr.cache-paths` file (one repo-relative path per line;
-#     may name ignored files; empty = "gate reads tree only") or an
-#     exported PRE_PR_CACHE_EXTRA_PATHS (newline-separated, same format)
-#     — which enables the default TTL 3600. Opting in asserts the gate's
+#     (b) any of three declaration sources is present, which enables the
+#     default TTL 3600. The declaration sources are UNIONED — each only
+#     ADDS fingerprint inputs, so combining them can only narrow the gate:
+#       * scripts/pre-pr.cache-paths — TEAM declaration, committed to the
+#         worktree and shared with all contributors;
+#       * <git-common-dir>/pre-pr.cache-paths — PERSONAL declaration inside
+#         the repo's git dir (git-managed-out, no .gitignore care, spans
+#         linked worktrees);
+#       * exported PRE_PR_CACHE_EXTRA_PATHS — transient.
+#     Each file/var holds one repo-relative path per line (may name ignored
+#     files; empty = "gate reads tree only"). Opting in asserts the gate's
 #     inputs are covered by tree + declared extras.
 #   - Fingerprint = sha256 over HEAD sha + one type-tagged line per path
 #     (every tracked path, every untracked non-ignored path, every
@@ -183,30 +189,104 @@ _hash_path() {
   fi
 }
 
+# _personal_decl_file <repo_root>
+# stdout: absolute path to the per-repo PERSONAL declaration file, inside
+# the repo's shared git dir; non-zero exit when the git dir cannot be
+# resolved. Uses --git-common-dir (not --absolute-git-dir) so a single
+# personal declaration applies to the whole repo including all linked
+# worktrees, not just the worktree the push happens from.
+_personal_decl_file() {
+  local repo_root="$1" common_dir
+  common_dir=$(git -C "$repo_root" rev-parse --git-common-dir 2>/dev/null) || return 1
+  # --git-common-dir may be relative to repo_root (e.g. ".git"); resolve it.
+  case "$common_dir" in
+    /*) : ;;
+    *) common_dir="$repo_root/$common_dir" ;;
+  esac
+  printf '%s/pre-pr.cache-paths' "$common_dir"
+}
+
 # _declared_extra_paths_z <repo_root>
-# Emit declared extra fingerprint inputs, NUL-separated. Sources:
-#   - <repo_root>/scripts/pre-pr.cache-paths — one repo-relative path per
-#     line; blank lines and #-comments skipped. May name IGNORED files
-#     (.env, generated state, scanner DBs) — that is the point: the
-#     project declares what its pre-PR gate reads beyond the tree.
-#   - PRE_PR_CACHE_EXTRA_PATHS env — newline-separated, same format.
-# Entries are LITERAL paths — no glob expansion. A `secrets/*.env` entry
-# matches nothing and would silently under-cover the files it was meant
-# to protect, so a nonexistent entry containing glob metacharacters gets
-# a stderr warning. Declarations are same-trust as scripts/pre-pr.sh
-# itself (repo content / operator env); they add fingerprint inputs,
-# never remove any.
+# Emit declared extra fingerprint inputs, NUL-separated. Three declaration
+# sources, UNIONED (each only ADDS fingerprint inputs, never removes any,
+# so combining them can only narrow the gate — never widen it):
+#   - <repo_root>/scripts/pre-pr.cache-paths — TEAM declaration, committed
+#     to the worktree and shared with all contributors.
+#   - <git-common-dir>/pre-pr.cache-paths — PERSONAL declaration, inside
+#     the repo's git dir: git-managed-out, no .gitignore care, per-repo
+#     (spans linked worktrees). Lets an individual opt in without touching
+#     the tracked tree.
+#   - PRE_PR_CACHE_EXTRA_PATHS env — transient, newline-separated.
+# Each file is one repo-relative path per line; blank lines and #-comments
+# skipped. Paths may name IGNORED files (.env, generated state, scanner
+# DBs) — that is the point: the project/user declares what its pre-PR gate
+# reads beyond the tree. Entries are LITERAL paths — no glob expansion. A
+# `secrets/*.env` entry matches nothing and would silently under-cover the
+# files it was meant to protect, so a nonexistent entry containing glob
+# metacharacters gets a stderr warning. Declarations are same-trust as
+# scripts/pre-pr.sh itself (repo content / git dir / operator env).
+#
+# FAIL CLOSED on an unreadable declaration (external security review,
+# 2026-07-18): a declaration file that exists but cannot be read (mode 000,
+# I/O error) MUST NOT be silently treated as an empty declaration — that
+# would drop its declared paths from the fingerprint and re-open the exact
+# stale-skip bypass the declaration exists to close. Any read failure exits
+# non-zero, which propagates through compute_fingerprint's `&&` chain (and
+# `set -o pipefail`) to abort the whole fingerprint -> full run.
+#
+# The declaration file ITSELF is read lstat-first, mirroring _hash_path
+# (external security review round 2, 2026-07-18): a declaration that is a
+# symlink (e.g. to /dev/zero), FIFO, socket, device, or directory would
+# hang or misbehave under a blind `cat` — and this runs inside
+# compute_fingerprint BEFORE any cache-off short-circuit, so the _cache_
+# declared -f/-r check cannot prevent it. Only a regular, non-symlink,
+# readable file within the size cap is `cat`'d; anything else fails closed.
+
+# _usable_decl_file <path>
+# Exit 0 iff <path> is a plain regular file (NOT a symlink — checked first
+# so a symlink is never followed) that is readable. This is the single
+# predicate both the opt-in check (_cache_declared) and the content read
+# (_cat_decl_file) key off, so they never disagree about what counts as a
+# valid declaration: a symlink/FIFO/socket/device/directory declaration is
+# neither a valid opt-in nor something we open.
+_usable_decl_file() {
+  local f="$1"
+  [ -L "$f" ] && return 1          # never follow a symlink declaration
+  [ -f "$f" ] || return 1          # regular file only (excludes FIFO/dir/dev)
+  [ -r "$f" ]                      # readable
+}
+
+# _cat_decl_file <path>
+# Emit the declaration file's contents iff it is usable (see
+# _usable_decl_file) and within the size cap. Otherwise return non-zero
+# WITHOUT opening it, so a symlink/FIFO/socket/device/directory/oversized
+# declaration aborts the fingerprint instead of hanging or silently
+# contributing nothing.
+_cat_decl_file() {
+  local f="$1" size
+  _usable_decl_file "$f" || return 1
+  size=$(wc -c <"$f" 2>/dev/null) || return 1
+  [ "$size" -le "$(_cache_max_file_bytes)" ] || return 1
+  cat -- "$f"
+}
+
 _declared_extra_paths_z() {
-  local repo_root="$1" line
+  local repo_root="$1" line personal team
+  team="$repo_root/scripts/pre-pr.cache-paths"
+  personal=$(_personal_decl_file "$repo_root" 2>/dev/null || true)
   {
-    if [ -f "$repo_root/scripts/pre-pr.cache-paths" ]; then
-      cat "$repo_root/scripts/pre-pr.cache-paths"
+    if [ -e "$team" ] || [ -L "$team" ]; then
+      _cat_decl_file "$team" || return 1
+      printf '\n'
+    fi
+    if [ -n "$personal" ] && { [ -e "$personal" ] || [ -L "$personal" ]; }; then
+      _cat_decl_file "$personal" || return 1
       printf '\n'
     fi
     if [ -n "${PRE_PR_CACHE_EXTRA_PATHS:-}" ]; then
       printf '%s\n' "$PRE_PR_CACHE_EXTRA_PATHS"
     fi
-  } 2>/dev/null | while IFS= read -r line; do
+  } | while IFS= read -r line; do
     case "$line" in ''|'#'*) continue ;; esac
     case "$line" in
       *[\*\?\[]*)
@@ -217,18 +297,27 @@ _declared_extra_paths_z() {
     esac
     printf '%s\0' "$line"
   done
-  return 0
 }
 
 # _cache_declared <repo_root>
-# Exit 0 iff the project or operator declared cache inputs. Setting
-# PRE_PR_CACHE_EXTRA_PATHS to the empty string, or shipping an empty
-# scripts/pre-pr.cache-paths, is a valid declaration meaning "my pre-PR
-# gate reads nothing beyond the tracked + untracked tree".
+# Exit 0 iff the project or operator declared cache inputs via any of the
+# three sources. An empty file or empty PRE_PR_CACHE_EXTRA_PATHS is a valid
+# declaration meaning "my pre-PR gate reads nothing beyond the tracked +
+# untracked tree". A declaration that EXISTS but is not a usable regular
+# readable file (unreadable mode 000, or a symlink / FIFO / socket / device
+# / directory) is NOT a valid opt-in — treating it as one would enable the
+# cache while _declared_extra_paths_z fails closed on its contents. The
+# SAME _usable_decl_file predicate gates both opt-in and fingerprint, so
+# they never disagree; such a declaration reads as cache-OFF (gate runs).
 _cache_declared() {
-  local repo_root="$1"
+  # Assign `team` on its own line: a single `local a=$1 b=$a/...` statement
+  # evaluates b's initializer before a is bound, tripping `set -u`.
+  local repo_root="$1" personal team
+  team="$repo_root/scripts/pre-pr.cache-paths"
   [ -n "${PRE_PR_CACHE_EXTRA_PATHS+x}" ] && return 0
-  [ -f "$repo_root/scripts/pre-pr.cache-paths" ] && return 0
+  _usable_decl_file "$team" && return 0
+  personal=$(_personal_decl_file "$repo_root" 2>/dev/null || true)
+  [ -n "$personal" ] && _usable_decl_file "$personal" && return 0
   return 1
 }
 
@@ -287,8 +376,9 @@ cache_path() {
 # dependencies, environment. Caching therefore activates only on explicit
 # opt-in:
 #   - PRE_PR_CACHE_TTL set to a positive integer (operator opt-in), or
-#   - a declaration exists (scripts/pre-pr.cache-paths file or exported
-#     PRE_PR_CACHE_EXTRA_PATHS, possibly empty) -> default 3600.
+#   - a declaration exists (team scripts/pre-pr.cache-paths, personal
+#     <git-common-dir>/pre-pr.cache-paths, or exported
+#     PRE_PR_CACHE_EXTRA_PATHS, any possibly empty) -> default 3600.
 # Otherwise TTL is 0 and the gate always runs. Opting in asserts the
 # gate's inputs are covered by tree + declared extras. Malformed
 # PRE_PR_CACHE_TTL is treated as unset (stderr note), which falls back to

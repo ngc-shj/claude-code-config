@@ -937,3 +937,238 @@ PY
   run run_hook Bash "git push origin main"
   [ "$(wc -l <"$counter")" -eq 2 ]
 }
+
+# ============================================================
+# PERSONAL / TEAM / ENV declaration sources (union)
+# ============================================================
+
+@test "T33: personal declaration (.git/pre-pr.cache-paths) opts in without touching the worktree" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  # Empty personal declaration inside the git dir — not a tracked file.
+  : > "$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+  # The declaration file lives in .git, so it never shows up as a worktree change.
+  [ -z "$(git status --porcelain)" ]
+}
+
+@test "T34: personal declaration naming an IGNORED file — its content change invalidates the cache" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '.gate-state\n' > .gitignore
+  printf 'SAFE\n' > .gate-state
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  printf '.gate-state\n' > "$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # Non-vacuity guard: an UNCHANGED tree must actually skip (proves the
+  # personal declaration opted caching IN, not that caching is simply off).
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # Now the declared ignored file's content change must invalidate.
+  printf 'UNSAFE\n' > .gate-state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
+@test "T35: team + personal declarations are UNIONED — both declared ignored files invalidate" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '.team-state\n.me-state\n' > .gitignore
+  printf 'TEAM_SAFE\n' > .team-state
+  printf 'ME_SAFE\n' > .me-state
+  printf '.team-state\n' > scripts/pre-pr.cache-paths
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  printf '.me-state\n' > "$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # A change to the TEAM-declared file invalidates.
+  printf 'TEAM_UNSAFE\n' > .team-state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+
+  # Back to the recorded state, then change the PERSONAL-declared file.
+  printf 'TEAM_SAFE\n' > .team-state
+  run run_hook Bash "git push origin main"   # re-records TEAM_SAFE/ME_SAFE
+  printf 'ME_UNSAFE\n' > .me-state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 4 ]
+}
+
+# ============================================================
+# Unreadable declaration -> fail closed (external security review)
+# ============================================================
+
+@test "T36: unreadable TEAM declaration -> cache OFF (gate runs, nothing cached), never a stale skip" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '.gate-state\n' > .gitignore
+  printf 'SAFE\n' > .gate-state
+  printf '.gate-state\n' > scripts/pre-pr.cache-paths
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  chmod 000 scripts/pre-pr.cache-paths
+
+  # Existing-but-unreadable declaration must NOT opt caching in, and no
+  # cache is ever written. (For a TRACKED team declaration the fingerprint's
+  # own read of the file would also fail closed, so this end-to-end
+  # assertion is defense-in-depth for team; T37 is the red-proof for the
+  # reachable-in-practice case, the git-dir personal declaration that the
+  # fingerprint does not otherwise read. The `-r` guard in _cache_declared
+  # is what makes both explicit rather than incidental.)
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  printf 'UNSAFE\n' > .gate-state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+
+  chmod 644 scripts/pre-pr.cache-paths
+}
+
+@test "T37: unreadable PERSONAL declaration -> cache OFF (gate runs, nothing cached), never a stale skip" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '.gate-state\n' > .gitignore
+  printf 'SAFE\n' > .gate-state
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  local decl
+  decl="$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+  printf '.gate-state\n' > "$decl"
+  chmod 000 "$decl"
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  printf 'UNSAFE\n' > .gate-state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+
+  chmod 644 "$decl"
+}
+
+@test "T38: readable team decl opts in; the -r check is scoped to the declaration file, not the tree" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  : > scripts/pre-pr.cache-paths
+  # An unrelated unreadable file that is NOT a declaration and NOT part of
+  # the fingerprint (ignored) must not disable caching — the -r guard keys
+  # only off the declaration paths. (A tracked/untracked unreadable file
+  # would legitimately fail the fingerprint on its own; that is a separate,
+  # already-covered path — here we isolate the declaration -r scoping.)
+  printf 'unrelated-000\n' > .gitignore
+  printf 'secret\n' > unrelated-000
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  chmod 000 unrelated-000
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  chmod 644 unrelated-000
+}
+
+# ============================================================
+# Declaration file itself is a special file -> no hang, fail closed
+# (external security review round 2)
+# ============================================================
+
+@test "T39: personal declaration = symlink to /dev/zero -> no hang, cache OFF, gate runs" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  local decl
+  decl="$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+  ln -s /dev/zero "$decl"
+
+  # timeout is the hang detector: a blind `cat` on the symlink would read
+  # /dev/zero forever (the hook's real budget is 1800s).
+  run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  rm -f "$decl"
+}
+
+@test "T40: personal declaration = FIFO -> no hang, cache OFF, gate runs" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  local decl
+  decl="$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+  mkfifo "$decl"
+
+  run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  rm -f "$decl"
+}
+
+@test "T41: team declaration = directory -> no hang, cache OFF, gate runs" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  mkdir scripts/pre-pr.cache-paths   # a directory where a file is expected
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+
+  run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+}
+
+# NOTE: T42 is a regression GUARD for a deliberate narrowing (symlink
+# declarations are no longer a valid opt-in), not a red-proof of the hang
+# fix — the pre-fix hook happened to also not cache this exact case, so it
+# does not go red against main. T39/T40 are the red-proofs for the hang.
+@test "T42: personal declaration = symlink to a REGULAR file -> not a valid opt-in (symlink rejected), gate runs" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  local decl target
+  decl="$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+  target="$(git rev-parse --git-common-dir)/decl-target"
+  : > "$target"          # empty regular file
+  ln -s "$target" "$decl"
+
+  # A symlink declaration is rejected even when its target is a plain
+  # regular file — opt-in and fingerprint both key off _usable_decl_file,
+  # which never follows a symlink. Two pushes both run.
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  rm -f "$decl" "$target"
+}
