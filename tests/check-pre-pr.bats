@@ -937,3 +937,76 @@ PY
   run run_hook Bash "git push origin main"
   [ "$(wc -l <"$counter")" -eq 2 ]
 }
+
+# ============================================================
+# PERSONAL / TEAM / ENV declaration sources (union)
+# ============================================================
+
+@test "T33: personal declaration (.git/pre-pr.cache-paths) opts in without touching the worktree" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  # Empty personal declaration inside the git dir — not a tracked file.
+  : > "$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+  # The declaration file lives in .git, so it never shows up as a worktree change.
+  [ -z "$(git status --porcelain)" ]
+}
+
+@test "T34: personal declaration naming an IGNORED file — its content change invalidates the cache" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '.gate-state\n' > .gitignore
+  printf 'SAFE\n' > .gate-state
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  printf '.gate-state\n' > "$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # Non-vacuity guard: an UNCHANGED tree must actually skip (proves the
+  # personal declaration opted caching IN, not that caching is simply off).
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # Now the declared ignored file's content change must invalidate.
+  printf 'UNSAFE\n' > .gate-state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+}
+
+@test "T35: team + personal declarations are UNIONED — both declared ignored files invalidate" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  printf '.team-state\n.me-state\n' > .gitignore
+  printf 'TEAM_SAFE\n' > .team-state
+  printf 'ME_SAFE\n' > .me-state
+  printf '.team-state\n' > scripts/pre-pr.cache-paths
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  printf '.me-state\n' > "$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$(wc -l <"$counter")" -eq 1 ]
+
+  # A change to the TEAM-declared file invalidates.
+  printf 'TEAM_UNSAFE\n' > .team-state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+
+  # Back to the recorded state, then change the PERSONAL-declared file.
+  printf 'TEAM_SAFE\n' > .team-state
+  run run_hook Bash "git push origin main"   # re-records TEAM_SAFE/ME_SAFE
+  printf 'ME_UNSAFE\n' > .me-state
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 4 ]
+}
