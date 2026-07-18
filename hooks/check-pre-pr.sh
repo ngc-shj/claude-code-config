@@ -233,17 +233,54 @@ _personal_decl_file() {
 # stale-skip bypass the declaration exists to close. Any read failure exits
 # non-zero, which propagates through compute_fingerprint's `&&` chain (and
 # `set -o pipefail`) to abort the whole fingerprint -> full run.
+#
+# The declaration file ITSELF is read lstat-first, mirroring _hash_path
+# (external security review round 2, 2026-07-18): a declaration that is a
+# symlink (e.g. to /dev/zero), FIFO, socket, device, or directory would
+# hang or misbehave under a blind `cat` — and this runs inside
+# compute_fingerprint BEFORE any cache-off short-circuit, so the _cache_
+# declared -f/-r check cannot prevent it. Only a regular, non-symlink,
+# readable file within the size cap is `cat`'d; anything else fails closed.
+
+# _usable_decl_file <path>
+# Exit 0 iff <path> is a plain regular file (NOT a symlink — checked first
+# so a symlink is never followed) that is readable. This is the single
+# predicate both the opt-in check (_cache_declared) and the content read
+# (_cat_decl_file) key off, so they never disagree about what counts as a
+# valid declaration: a symlink/FIFO/socket/device/directory declaration is
+# neither a valid opt-in nor something we open.
+_usable_decl_file() {
+  local f="$1"
+  [ -L "$f" ] && return 1          # never follow a symlink declaration
+  [ -f "$f" ] || return 1          # regular file only (excludes FIFO/dir/dev)
+  [ -r "$f" ]                      # readable
+}
+
+# _cat_decl_file <path>
+# Emit the declaration file's contents iff it is usable (see
+# _usable_decl_file) and within the size cap. Otherwise return non-zero
+# WITHOUT opening it, so a symlink/FIFO/socket/device/directory/oversized
+# declaration aborts the fingerprint instead of hanging or silently
+# contributing nothing.
+_cat_decl_file() {
+  local f="$1" size
+  _usable_decl_file "$f" || return 1
+  size=$(wc -c <"$f" 2>/dev/null) || return 1
+  [ "$size" -le "$(_cache_max_file_bytes)" ] || return 1
+  cat -- "$f"
+}
+
 _declared_extra_paths_z() {
   local repo_root="$1" line personal team
   team="$repo_root/scripts/pre-pr.cache-paths"
   personal=$(_personal_decl_file "$repo_root" 2>/dev/null || true)
   {
-    if [ -e "$team" ]; then
-      cat -- "$team" || return 1
+    if [ -e "$team" ] || [ -L "$team" ]; then
+      _cat_decl_file "$team" || return 1
       printf '\n'
     fi
-    if [ -n "$personal" ] && [ -e "$personal" ]; then
-      cat -- "$personal" || return 1
+    if [ -n "$personal" ] && { [ -e "$personal" ] || [ -L "$personal" ]; }; then
+      _cat_decl_file "$personal" || return 1
       printf '\n'
     fi
     if [ -n "${PRE_PR_CACHE_EXTRA_PATHS:-}" ]; then
@@ -266,20 +303,21 @@ _declared_extra_paths_z() {
 # Exit 0 iff the project or operator declared cache inputs via any of the
 # three sources. An empty file or empty PRE_PR_CACHE_EXTRA_PATHS is a valid
 # declaration meaning "my pre-PR gate reads nothing beyond the tracked +
-# untracked tree". A declaration file that EXISTS but is UNREADABLE is NOT
-# a valid opt-in (`-r`, not just `-f`): treating it as one would enable the
-# cache while _declared_extra_paths_z fails to hash its contents — the same
-# fail-open the fingerprint side now guards against. An existing-but-
-# unreadable declaration therefore reads as cache-OFF (gate always runs).
+# untracked tree". A declaration that EXISTS but is not a usable regular
+# readable file (unreadable mode 000, or a symlink / FIFO / socket / device
+# / directory) is NOT a valid opt-in — treating it as one would enable the
+# cache while _declared_extra_paths_z fails closed on its contents. The
+# SAME _usable_decl_file predicate gates both opt-in and fingerprint, so
+# they never disagree; such a declaration reads as cache-OFF (gate runs).
 _cache_declared() {
   # Assign `team` on its own line: a single `local a=$1 b=$a/...` statement
   # evaluates b's initializer before a is bound, tripping `set -u`.
   local repo_root="$1" personal team
   team="$repo_root/scripts/pre-pr.cache-paths"
   [ -n "${PRE_PR_CACHE_EXTRA_PATHS+x}" ] && return 0
-  [ -f "$team" ] && [ -r "$team" ] && return 0
+  _usable_decl_file "$team" && return 0
   personal=$(_personal_decl_file "$repo_root" 2>/dev/null || true)
-  [ -n "$personal" ] && [ -f "$personal" ] && [ -r "$personal" ] && return 0
+  [ -n "$personal" ] && _usable_decl_file "$personal" && return 0
   return 1
 }
 

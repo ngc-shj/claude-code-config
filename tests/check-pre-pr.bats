@@ -1088,3 +1088,87 @@ PY
 
   chmod 644 unrelated-000
 }
+
+# ============================================================
+# Declaration file itself is a special file -> no hang, fail closed
+# (external security review round 2)
+# ============================================================
+
+@test "T39: personal declaration = symlink to /dev/zero -> no hang, cache OFF, gate runs" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  local decl
+  decl="$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+  ln -s /dev/zero "$decl"
+
+  # timeout is the hang detector: a blind `cat` on the symlink would read
+  # /dev/zero forever (the hook's real budget is 1800s).
+  run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  rm -f "$decl"
+}
+
+@test "T40: personal declaration = FIFO -> no hang, cache OFF, gate runs" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  local decl
+  decl="$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+  mkfifo "$decl"
+
+  run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  rm -f "$decl"
+}
+
+@test "T41: team declaration = directory -> no hang, cache OFF, gate runs" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  mkdir scripts/pre-pr.cache-paths   # a directory where a file is expected
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+
+  run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"decision": "approve"'* ]]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+}
+
+# NOTE: T42 is a regression GUARD for a deliberate narrowing (symlink
+# declarations are no longer a valid opt-in), not a red-proof of the hang
+# fix — the pre-fix hook happened to also not cache this exact case, so it
+# does not go red against main. T39/T40 are the red-proofs for the hang.
+@test "T42: personal declaration = symlink to a REGULAR file -> not a valid opt-in (symlink rejected), gate runs" {
+  local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
+  write_counting_script "$counter" 'exit 0'
+  commit_baseline
+  unset PRE_PR_CACHE_TTL
+  local decl target
+  decl="$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
+  target="$(git rev-parse --git-common-dir)/decl-target"
+  : > "$target"          # empty regular file
+  ln -s "$target" "$decl"
+
+  # A symlink declaration is rejected even when its target is a plain
+  # regular file — opt-in and fingerprint both key off _usable_decl_file,
+  # which never follows a symlink. Two pushes both run.
+  run run_hook Bash "git push origin main"
+  [[ "$output" == *'"decision": "approve"'* ]]
+  run run_hook Bash "git push origin main"
+  [ "$(wc -l <"$counter")" -eq 2 ]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
+
+  rm -f "$decl" "$target"
+}
