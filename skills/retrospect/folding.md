@@ -64,6 +64,16 @@ skip — a noisy hook is worse than none.
    (`bash check-<slug>.sh [base-ref]`); `set -u`; operate on `git diff <base>...HEAD`;
    graceful exit 0 outside a git repo or when tools are missing; project-specific
    extension via `EXTRA_*` env vars, never hardcoded project identifiers.
+   **When the hook CLASSIFIES code** (is this a real test/guard/caller?), text/regex
+   matching is false-green-able by construction (comments, labels, strings) — climb the
+   binding ladder to the rung the stated guarantee needs: text < AST node existence <
+   import-symbol binding < execution binding < framework binding. AST classifiers bind
+   identifiers to import-origin symbols (never name text), verify matched nodes execute
+   (not merely exist), allowlist accepted variant forms (never denylist known-bad),
+   derive case coverage from the language grammar of the targeted construct (one fixture
+   per production), and fail the gate closed on classifier error — no text fallback.
+   Reserve plain grep for fail-LOUD uses (literal counts whose drift breaks CI visibly).
+   See RT7 rule-details shape (f).
 2. Author `tests/check-<slug>.bats` per repo conventions (jq-built inputs or fixture
    trees in `$BATS_TEST_TMPDIR`; red fixtures DERIVED from the hook's check list — one per
    check, each proven able to fail).
