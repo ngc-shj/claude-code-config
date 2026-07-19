@@ -77,7 +77,7 @@ Launch the same three roles in parallel as the plan review.
 
 **Round 1 (incremental verification on top of Phase 2 self-R-check baseline):**
 
-Note: Phase 2 Step 2-5 already ran a focused R1-R44 (+ RS*/RT*) self-check. Round 1 here
+Note: Phase 2 Step 2-5 already ran a focused R1-R46 (+ RS*/RT*) self-check. Round 1 here
 is therefore incremental verification on top of that baseline — surface novel findings
 outside the Recurring Issue Checklist, cross-cutting issues, and any R-rule miss the
 self-check pass overlooked. Do NOT redo the rote R-check pass that Phase 2 already
@@ -87,7 +87,7 @@ for issues those outputs missed.
 ```
 You are a [role name].
 Review the code on the current branch from a [perspective] perspective.
-Phase 2 already ran a focused R1-R44 self-check; treat this round as incremental
+Phase 2 already ran a focused R1-R46 self-check; treat this round as incremental
 verification, surfacing novel issues and any R-rule miss the self-check overlooked.
 
 Scope: [In-scope items for this expert]
@@ -111,7 +111,7 @@ Ollama seed findings (your perspective only — verify each, do not re-report as
      Insert: "Seed unavailable or truncated — perform full-diff review. Read `git diff main...HEAD` directly for this perspective."
 
  (b) File ends with sentinel AND contains exactly `No findings` followed by the sentinel:
-     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R44 Recurring Issue Check using targeted greps."
+     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R46 Recurring Issue Check using targeted greps."
 
  (c) File ends with sentinel AND contains finding entries:
      Insert the finding entries verbatim (stripping only the trailing `## END-OF-ANALYSIS` line).
@@ -308,11 +308,11 @@ Review round: [nth]
 ## Recurring Issue Check
 ### Functionality expert
 - R1: [status]
-- ... (R1-R44)
+- ... (R1-R46)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R44)
+- ... (R1-R46)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
@@ -322,7 +322,7 @@ Review round: [nth]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R44)
+- ... (R1-R46)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
