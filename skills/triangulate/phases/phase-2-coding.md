@@ -370,7 +370,7 @@ a clean baseline:
 
 ### Step 2-5: Self-R-Check (Mini Sub-agent Pass)
 
-Before declaring Phase 2 complete, run a focused R-check pass with the same three sub-agents used in Phase 3, but with a narrowed prompt that targets ONLY the Recurring Issue Checklist (R1-R44 + RS*/RT*). Phase 3's Round 1 historically surfaces a large number of findings because Phase 2 has not yet run any R-check — pulling the first R-check into Phase 2 lets Phase 3 act as incremental verification rather than first-pass discovery.
+Before declaring Phase 2 complete, run a focused R-check pass with the same three sub-agents used in Phase 3, but with a narrowed prompt that targets ONLY the Recurring Issue Checklist (R1-R46 + RS*/RT*). Phase 3's Round 1 historically surfaces a large number of findings because Phase 2 has not yet run any R-check — pulling the first R-check into Phase 2 lets Phase 3 act as incremental verification rather than first-pass discovery.
 
 **Pre-step: mechanical R3 propagation check**. Run `bash ~/.claude/hooks/check-propagation.sh [base-ref]` (default base: `main`) before launching the sub-agents. The hook surfaces three categories of unpropagated diff-wide changes — symbol renames (Minor, advisory), constant value changes (Major), and string literal changes (Major). Address its findings or annotate them as deliberate skips before the sub-agent pass; this front-loads the easy R3 wins so the sub-agents can focus on the AST-level R3 cases (signature changes, type renames) the regex tool cannot detect.
 
@@ -417,9 +417,9 @@ You are a [role name] performing a focused self-check of the Phase 2 implementat
 against the Recurring Issue Checklist ONLY.
 
 Scope (rules to check):
-- Functionality expert: R1-R44
-- Security expert: R1-R44 + RS1-RS6
-- Testing expert: R1-R44 + RT1-RT9
+- Functionality expert: R1-R46
+- Security expert: R1-R46 + RS1-RS6
+- Testing expert: R1-R46 + RT1-RT9
 
 Out of scope: novel findings outside the Recurring Issue Checklist — those are Phase 3's
 responsibility, not this self-check.

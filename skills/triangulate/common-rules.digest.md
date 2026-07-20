@@ -56,6 +56,8 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R42 | Class-membership derivation (anchoring on a supplied list) | Major by default; Critical when an omitted member leaves a security control fail-open |
 | R43 | Fix-induced security-boundary widening (fail-safe precedence) | Major; Critical when added recipients receive credentials, key/session material, decrypted secrets, or privileged operations |
 | R44 | Gate exit status read through a pipeline | Major (Critical when the masked gate guards a security invariant) |
+| R45 | Repo-wide gate/analyzer scaling super-linearly with the scanned set | Major (Critical when the timeout disables a security gate in CI, i.e. the gate never runs) |
+| R46 | Scope-blind binding resolution in a security analyzer | Critical when the misresolved binding makes a security control read a fake as legitimate (fail-open); Major otherwise |
 | RS1 | Timing-safe comparison | Critical |
 | RS2 | Rate limiter on new routes | Major |
 | RS3 | Input validation at boundaries | Major |
