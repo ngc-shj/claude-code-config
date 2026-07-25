@@ -17,12 +17,18 @@ setup() {
   # Stage a minimal SCRIPT_DIR layout matching install.sh expectations.
   cp "$REPO_DIR/install.sh" "$STAGING/install.sh"
   chmod +x "$STAGING/install.sh"
-  cp "$REPO_DIR/CLAUDE.md" "$STAGING/CLAUDE.md"
+  mkdir -p "$STAGING/global"
+  cp "$REPO_DIR/global/CLAUDE.md" "$STAGING/global/CLAUDE.md"
+  cp "$REPO_DIR/global/RTK.md" "$STAGING/global/RTK.md"
   cp "$REPO_DIR/settings.json" "$STAGING/settings.json"
   mkdir -p "$STAGING/hooks"
   # Copy at least one hook so the for-loop executes.
   cp "$REPO_DIR/hooks/block-sensitive-files.sh" "$STAGING/hooks/"
-  # Skip skills/ and rules/ for speed — they are independent of M8 tests.
+  # rules/common/ is auto-injected into every session, so its delivery is
+  # asserted below; language overlays are load-on-demand and not staged.
+  mkdir -p "$STAGING/rules/common"
+  cp "$REPO_DIR"/rules/common/*.md "$STAGING/rules/common/"
+  # Skip skills/ for speed — independent of the tests here.
 }
 
 teardown() {
@@ -202,4 +208,52 @@ teardown() {
   run jq -e '.hooks.SessionStart[0].hooks[0].command | test("session-retrospect-check")' \
     "$TEST_HOME/.claude/settings.json"
   [ "$status" -eq 0 ]
+}
+
+@test "install: CLAUDE.md is delivered to ~/.claude/CLAUDE.md" {
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Installed CLAUDE.md"* ]]
+  [ -f "$TEST_HOME/.claude/CLAUDE.md" ]
+  diff "$STAGING/global/CLAUDE.md" "$TEST_HOME/.claude/CLAUDE.md"
+}
+
+@test "repo root CLAUDE.md does not duplicate the global one" {
+  # A root CLAUDE.md is auto-loaded as this repo's project instructions on
+  # top of the installed global copy. Keeping the global content out of it
+  # is what prevents every line loading twice in sessions opened here.
+  ! diff -q "$REPO_DIR/CLAUDE.md" "$REPO_DIR/global/CLAUDE.md" >/dev/null
+  # The heaviest global-only sections must not reappear at the root.
+  ! grep -q '^## Model Routing Strategy' "$REPO_DIR/CLAUDE.md"
+  ! grep -q '^### Privacy posture' "$REPO_DIR/CLAUDE.md"
+  ! grep -q '^@RTK.md' "$REPO_DIR/CLAUDE.md"
+}
+
+@test "install: CLAUDE.md carries the Rules Layer pointer to rules/" {
+  # The only reference tying the model to ~/.claude/rules/ is prose in
+  # CLAUDE.md — no hook or settings entry injects it. Losing this section
+  # silently severs the rules layer, so assert it survives installation.
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  grep -q '^## Rules Layer' "$TEST_HOME/.claude/CLAUDE.md"
+  grep -q 'rules/common/' "$TEST_HOME/.claude/CLAUDE.md"
+}
+
+@test "install: RTK.md is delivered so the @RTK.md import in CLAUDE.md resolves" {
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  grep -q '^@RTK.md' "$TEST_HOME/.claude/CLAUDE.md"
+  [ -f "$TEST_HOME/.claude/RTK.md" ]
+}
+
+@test "install: rules/common/ files install without paths: frontmatter" {
+  # No paths: is what keeps common/ auto-injected in every session. Adding
+  # one would silently drop the baseline rules out of context.
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  for f in coding-style testing security; do
+    [ -f "$TEST_HOME/.claude/rules/common/$f.md" ]
+    run grep -c '^paths:' "$TEST_HOME/.claude/rules/common/$f.md"
+    [ "$output" -eq 0 ]
+  done
 }
