@@ -20,6 +20,7 @@ setup() {
   mkdir -p "$STAGING/global"
   cp "$REPO_DIR/global/CLAUDE.md" "$STAGING/global/CLAUDE.md"
   cp "$REPO_DIR/global/RTK.md" "$STAGING/global/RTK.md"
+  cp "$REPO_DIR/global/model-routing.md" "$STAGING/global/model-routing.md"
   cp "$REPO_DIR/settings.json" "$STAGING/settings.json"
   mkdir -p "$STAGING/hooks"
   # Copy at least one hook so the for-loop executes.
@@ -224,8 +225,8 @@ teardown() {
   # is what prevents every line loading twice in sessions opened here.
   ! diff -q "$REPO_DIR/CLAUDE.md" "$REPO_DIR/global/CLAUDE.md" >/dev/null
   # The heaviest global-only sections must not reappear at the root.
-  ! grep -q '^## Model Routing Strategy' "$REPO_DIR/CLAUDE.md"
-  ! grep -q '^### Privacy posture' "$REPO_DIR/CLAUDE.md"
+  ! grep -q '^## Model Routing' "$REPO_DIR/CLAUDE.md"
+  ! grep -q 'Privacy posture' "$REPO_DIR/CLAUDE.md"
   ! grep -q '^@RTK.md' "$REPO_DIR/CLAUDE.md"
 }
 
@@ -239,11 +240,31 @@ teardown() {
   grep -q 'rules/common/' "$TEST_HOME/.claude/CLAUDE.md"
 }
 
-@test "install: RTK.md is delivered so the @RTK.md import in CLAUDE.md resolves" {
+@test "install: every reference file CLAUDE.md points at is delivered" {
+  # CLAUDE.md cites these by path rather than @-importing them, keeping them
+  # out of the always-loaded context. A missing file makes the pointer dangle
+  # silently — the failure mode RTK.md already shipped with once.
   run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
   [ "$status" -eq 0 ]
-  grep -q '^@RTK.md' "$TEST_HOME/.claude/CLAUDE.md"
-  [ -f "$TEST_HOME/.claude/RTK.md" ]
+  while IFS= read -r ref; do
+    [ -f "$TEST_HOME/.claude/$ref" ] || {
+      echo "CLAUDE.md cites ~/.claude/$ref but install did not deliver it"
+      return 1
+    }
+  done < <(grep -oE '~/\.claude/[A-Za-z0-9_.-]+\.md' "$TEST_HOME/.claude/CLAUDE.md" \
+             | sed 's|~/\.claude/||' | sort -u)
+}
+
+@test "install: CLAUDE.md keeps heavy reference detail out of the always-loaded prompt" {
+  # Progressive disclosure: the model table and RTK audit live in cited files,
+  # not inline. Re-inlining them silently doubles the per-session cost.
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  ! grep -q '^@RTK.md' "$TEST_HOME/.claude/CLAUDE.md"
+  ! grep -q 'gpt-oss:120b' "$TEST_HOME/.claude/CLAUDE.md"
+  ! grep -q 'telemetry' "$TEST_HOME/.claude/CLAUDE.md"
+  grep -q 'model-routing.md' "$TEST_HOME/.claude/CLAUDE.md"
+  grep -q 'RTK.md' "$TEST_HOME/.claude/CLAUDE.md"
 }
 
 @test "install: rules/common/ files install without paths: frontmatter" {
