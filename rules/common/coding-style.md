@@ -10,35 +10,24 @@ These principles apply to every language. Language-specific rules in `rules/{lan
 
 ## Simplicity first
 
-- KISS — pick the dumbest solution that works.
-- DRY — extract only after the third duplication; premature abstraction costs more than repetition.
-- YAGNI — do not add parameters, hooks, or extension points for hypothetical future needs.
+Pick the dumbest solution that works. Repetition is cheaper than the wrong abstraction, so let a pattern prove itself before extracting it, and build for the requirements you have rather than the ones you can imagine.
 
-## File and function size
+## Structure
 
-- Prefer files under 300 lines. Split when a file exceeds 500 lines.
-- Prefer functions under 40 lines. A function that does not fit on one screen is usually doing two things.
-- Nesting depth of 3 is the soft cap. Flatten with early return or extraction.
+Write code that reads like the surrounding code: match its naming, idiom, and file organization. A file or function that has outgrown a single idea is the signal to split — size is the symptom, not the rule. Deep nesting usually means a guard clause or an extracted helper is missing.
 
 ## Naming
 
-- Names describe purpose, not type (`users`, not `userArray`).
-- Boolean identifiers read as predicates (`isReady`, `hasItems`).
-- Avoid abbreviations unless they are domain-standard (`cfg`, `req`, `ctx` are fine).
+Names describe purpose, not type (`users`, not `userArray`), and booleans read as predicates (`isReady`, `hasItems`). Abbreviate only where the short form is the domain's own vocabulary (`cfg`, `req`, `ctx`).
 
 ## Comments
 
-- Default to writing none. Good names and structure are primary documentation.
-- Write a comment only when the *why* is non-obvious: a workaround, a hidden constraint, a counter-intuitive decision.
-- Never write comments that restate the code or reference the current task (`// fix for issue #123`).
+Match the comment density of the surrounding code. A comment earns its place when it records something the code cannot show — a constraint, a workaround, a decision that looks wrong until you know why. Restating the code, or narrating the change you just made, is noise the moment the PR merges.
 
 ## Error handling
 
-- Fail fast at system boundaries (user input, external APIs, env config).
-- Do not add try/catch to silence errors. If a failure is recoverable, state the recovery explicitly.
-- Never swallow errors with empty catch blocks.
+Fail fast at system boundaries: user input, external APIs, environment config. When you catch, catch to recover, and make the recovery explicit — a swallowed error trades a loud failure now for a silent one later, at a distance from its cause.
 
 ## Immutability
 
-- Treat data as immutable by default. Mutate only when the language idiom requires it (see language-specific rules).
-- Prefer pure functions. Side effects belong at the edges of the system.
+Treat data as immutable and functions as pure by default, keeping side effects at the edges of the system. Mutate where the language idiom expects it (see language-specific rules).

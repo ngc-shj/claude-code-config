@@ -6,39 +6,16 @@ scope: all source files
 
 # Common Security
 
-Extends the Safety section in CLAUDE.md with concrete patterns to check during edits and reviews.
+Extends the Safety section in CLAUDE.md. Most of this is judgment; the few absolutes are marked, because those are the cases where a plausible exception is how the breach happens.
 
-## Secrets
+**Never commit a credential** — keys, tokens, passwords, connection strings. Read them from the environment or a secrets manager; keep `.env` gitignored. A pushed secret is compromised, so rotate it — deleting the commit does not un-publish it.
 
-- Never hardcode API keys, tokens, passwords, private keys, connection strings.
-- Read secrets from environment variables or a secrets manager. Local dev uses `.env`, which must be gitignored.
-- If a secret is committed, rotate it immediately — removing the commit is not enough.
+Validate untrusted data at the boundary where it enters (HTTP handlers, CLI parsers, message consumers), and treat it as checked past that point. Where the schema is the contract, reject unknown fields; bound the size of anything you store, log, or compare.
 
-## Input validation
+Injection is user data reaching an engine that interprets it as code. **Never build SQL by concatenation** — parameterize. Prefer native APIs over a shell, passing arguments as a list. Escape HTML by default; raw insertion needs a comment saying why it is safe.
 
-- Validate at the boundary: HTTP handlers, CLI arg parsers, message consumers.
-- Reject unknown fields rather than silently ignoring them when the schema is authoritative.
-- Length-cap every user-supplied string before logging, storing, or comparing.
+Authorize in the handler that touches the data, not only at the gateway — gateways get bypassed, refactored, or reused for a second entry point. **Do not write your own crypto.** Rate-limit authentication paths and log failures with enough context to spot abuse, without logging what was attempted.
 
-## Injection
+Every dependency is code you now own: pin versions, read lock file changes, check CVEs before a major upgrade. A ten-line utility is usually cheaper to own than to import.
 
-- SQL — use parameterized queries or a query builder. Never concatenate user input into SQL.
-- Shell — prefer language-native APIs over spawning a shell. If you must shell out, pass args as an array, not a single string.
-- HTML — escape by default. Raw HTML insertion requires a comment explaining why it is safe.
-
-## Authentication and authorization
-
-- Check authorization on every handler that touches user data, not only at the gateway.
-- Do not roll your own crypto. Use the platform's vetted library.
-- Rate-limit authentication endpoints. Log failures with enough context to detect abuse.
-
-## Dependency hygiene
-
-- Pin versions. Review lock file changes in PRs.
-- Do not add a dependency for something that is 10 lines of code.
-- Audit for known CVEs before upgrading major versions.
-
-## Logging
-
-- Never log secrets, tokens, session IDs, or full request bodies.
-- Log user identifiers by ID, not email or name, when possible.
+Logs get shipped, indexed, and read by people never meant to see the payload. Keep secrets, tokens, session IDs, and full request bodies out; prefer opaque user IDs over names or emails.
