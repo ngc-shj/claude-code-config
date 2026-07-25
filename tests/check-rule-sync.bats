@@ -13,6 +13,14 @@ bats_require_minimum_version 1.5.0
 SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/check-rule-sync.sh"
 REPO_SKILL_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/skills/triangulate"
 
+# In-place sed that works on both BSD (macOS) and GNU sed: `sed -i` wants a
+# mandatory suffix arg on BSD and rejects one on GNU, so edit via a temp file.
+sed_i() {
+  local script="$1" file="$2" tmp
+  tmp="$(mktemp)"
+  sed "$script" "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
 # Build a minimal, fully consistent fixture skill dir (R1-R3 / RS1-RS2 /
 # RT1-RT2) that passes every check. Tests then break exactly one sync
 # point each.
@@ -100,7 +108,7 @@ EOF
 }
 
 @test "drift: referenced mandatory rule detail is missing" {
-  sed -i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"references missing mandatory detail: rule-details/R1.md"* ]]
@@ -116,7 +124,7 @@ EOF
 
 @test "drift: mandatory rule detail pattern must match table" {
   mkdir -p "$FIX/rule-details"
-  sed -i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
   printf '%s\n' '# R1 — Wrong pattern' '' '| R1 | Wrong pattern | Procedure | Major |' > "$FIX/rule-details/R1.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
@@ -128,14 +136,14 @@ EOF
 # ============================================================
 
 @test "drift (1a): gap in table IDs (R2 row removed)" {
-  sed -i '/^| R2 |/d' "$FIX/common-rules.md"
+  sed_i '/^| R2 |/d' "$FIX/common-rules.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT:"*"gap — ID 2 missing"* ]]
 }
 
 @test "drift (1b): duplicate table ID (extra R2 row appended to table)" {
-  sed -i 's/^| R3 | Gamma | check c (full set R1-R3) | Major |$/| R3 | Gamma | check c (full set R1-R3) | Major |\n| R2 | Beta again | check b2 | Major |/' \
+  sed_i 's/^| R3 | Gamma | check c (full set R1-R3) | Major |$/| R3 | Gamma | check c (full set R1-R3) | Major |\n| R2 | Beta again | check b2 | Major |/' \
     "$FIX/common-rules.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
@@ -143,35 +151,35 @@ EOF
 }
 
 @test "drift (2): template block missing an R line" {
-  sed -i '/^- R3 (Gamma): \[status\]$/d' "$FIX/common-rules.md"
+  sed_i '/^- R3 (Gamma): \[status\]$/d' "$FIX/common-rules.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT:"*"template block"* ]]
 }
 
 @test "drift (3): stale range string in SKILL.md (R1-R2 vs table max R3)" {
-  sed -i 's/R1-R3/R1-R2/' "$FIX/SKILL.md"
+  sed_i 's/R1-R3/R1-R2/' "$FIX/SKILL.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT: SKILL.md: stale range R1-R2"* ]]
 }
 
 @test "drift (3): stale RS range string in phase-2" {
-  sed -i 's/RS1-RS2/RS1-RS1/' "$FIX/phases/phase-2-coding.md"
+  sed_i 's/RS1-RS2/RS1-RS1/' "$FIX/phases/phase-2-coding.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT: phase-2-coding.md: stale range RS1-RS1"* ]]
 }
 
 @test "drift (4): missing RT status line in phase-1" {
-  sed -i '/^- RT2: \[status\]$/d' "$FIX/phases/phase-1-plan.md"
+  sed_i '/^- RT2: \[status\]$/d' "$FIX/phases/phase-1-plan.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT: phase-1-plan.md: template line '- RT2: [status]' missing"* ]]
 }
 
 @test "drift (4): missing RS status line in phase-3" {
-  sed -i '/^- RS2: \[status\]$/d' "$FIX/phases/phase-3-review.md"
+  sed_i '/^- RS2: \[status\]$/d' "$FIX/phases/phase-3-review.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT: phase-3-review.md: template line '- RS2: [status]' missing"* ]]
@@ -251,7 +259,7 @@ EOF
 }
 
 @test "error: unparsable rule table exits 2" {
-  sed -i '/^| R/d' "$FIX/common-rules.md"
+  sed_i '/^| R/d' "$FIX/common-rules.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 2 ]
 }

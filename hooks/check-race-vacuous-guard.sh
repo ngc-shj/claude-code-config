@@ -87,11 +87,17 @@ git rev-parse --quiet --verify "$BASE_REF" >/dev/null 2>&1 || {
   exit 1
 }
 
+# Word boundaries for the awk patterns below. `\y` is a gawk extension and
+# `\b` is backspace in POSIX ERE, so neither works in the BSD awk macOS
+# ships — spell both boundaries out as explicit character classes.
+AWK_WORD_START='(^|[^A-Za-z0-9_])'
+AWK_WORD_END='([^A-Za-z0-9_]|$)'
+
 # Concurrency primitive patterns (v1: JS/TS focus). When a test block
 # contains any of these, treat as race-style.
-CONCURRENCY_RE='Promise[.](all|allSettled|race|any)\b|\bPromise[.]all\b'
+CONCURRENCY_RE="Promise[.](all|allSettled|race|any)${AWK_WORD_END}|${AWK_WORD_START}Promise[.]all${AWK_WORD_END}"
 [ -n "${EXTRA_CONCURRENCY_RE:-}" ] && CONCURRENCY_RE="${CONCURRENCY_RE}|${EXTRA_CONCURRENCY_RE}"
-CONCURRENCY_RE="${CONCURRENCY_RE//\\b/\\\\y}"
+CONCURRENCY_RE="${CONCURRENCY_RE//\\b/$AWK_WORD_START}"
 CONCURRENCY_RE="${CONCURRENCY_RE//\\./[.]}"
 CONCURRENCY_RE="${CONCURRENCY_RE//\\(/[(]}"
 
@@ -100,7 +106,7 @@ CONCURRENCY_RE="${CONCURRENCY_RE//\\(/[(]}"
 # are RT4-relevant in principle but admit too many FPs at the line level.
 CARDINALITY_RE='[.](toBe|toEqual|toStrictEqual)[(][[:space:]]*0[[:space:]]*[)]'
 [ -n "${EXTRA_CARDINALITY_RE:-}" ] && CARDINALITY_RE="${CARDINALITY_RE}|${EXTRA_CARDINALITY_RE}"
-CARDINALITY_RE="${CARDINALITY_RE//\\b/\\\\y}"
+CARDINALITY_RE="${CARDINALITY_RE//\\b/$AWK_WORD_START}"
 CARDINALITY_RE="${CARDINALITY_RE//\\./[.]}"
 CARDINALITY_RE="${CARDINALITY_RE//\\(/[(]}"
 
@@ -110,7 +116,7 @@ CARDINALITY_RE="${CARDINALITY_RE//\\(/[(]}"
 #   - `.toBeTruthy()` (weaker but accepted)
 GUARD_RE='[.](toBeGreaterThan|toBeGreaterThanOrEqual)[(][[:space:]]*[0-9]+|[.]not[.](toBe|toEqual|toStrictEqual)[(][[:space:]]*0[[:space:]]*[)]|[.]toBeTruthy[(][[:space:]]*[)]'
 [ -n "${EXTRA_GUARD_RE:-}" ] && GUARD_RE="${GUARD_RE}|${EXTRA_GUARD_RE}"
-GUARD_RE="${GUARD_RE//\\b/\\\\y}"
+GUARD_RE="${GUARD_RE//\\b/$AWK_WORD_START}"
 GUARD_RE="${GUARD_RE//\\./[.]}"
 GUARD_RE="${GUARD_RE//\\(/[(]}"
 
@@ -239,7 +245,10 @@ while IFS= read -r f; do
 
       if (!in_block) {
         # Detect `it(` or `test(` block start at this line.
-        if (match(stripped, /\<(it|test)([.](only|skip|each|todo|concurrent))?[[:space:]]*\(/)) {
+        # `\<` is gawk-only; BSD awk (macOS) silently matches nothing, so no
+        # test block would ever be recognized. paren_delta only counts parens
+        # from RSTART, so the extra leading character is harmless.
+        if (match(stripped, /(^|[^A-Za-z0-9_])(it|test)([.](only|skip|each|todo|concurrent))?[[:space:]]*\(/)) {
           in_block = 1
           block_start = lineno
           block_body = raw
