@@ -14,7 +14,7 @@ _AST_TS_PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _AST_TS_RUNNER="$_AST_TS_PLUGIN_DIR/../lib/ast-runner.js"
 _AST_TS_NODE_MODULES="$_AST_TS_PLUGIN_DIR/../lib/node_modules"
 
-AST_LANG_EXTENSIONS[ts_js]='ts tsx js jsx mjs cjs'
+ast_reg_set EXTENSIONS ts_js 'ts tsx js jsx mjs cjs'
 
 # Returns 0 if the runtime is available, 1 otherwise. Callers use this to
 # decide whether to skip AST analysis silently and let regex fallbacks run.
@@ -24,36 +24,36 @@ ast_ts_js_available() {
   [ -d "$_AST_TS_NODE_MODULES/typescript" ] || return 1
   return 0
 }
-AST_LANG_AVAILABLE_FN[ts_js]='ast_ts_js_available'
+ast_reg_set AVAILABLE_FN ts_js 'ast_ts_js_available'
 
 ast_ts_js_extract_signatures() {
   local file="$1"
   NODE_PATH="$_AST_TS_NODE_MODULES" node "$_AST_TS_RUNNER" extract-signatures "$file"
 }
-AST_LANG_EXTRACT_SIGNATURES_FN[ts_js]='ast_ts_js_extract_signatures'
+ast_reg_set EXTRACT_SIGNATURES_FN ts_js 'ast_ts_js_extract_signatures'
 
 ast_ts_js_diff_signatures() {
   local base_file="$1"
   local head_file="$2"
   ast_diff_signatures_via_extract ast_ts_js_extract_signatures "$base_file" "$head_file"
 }
-AST_LANG_DIFF_SIGNATURES_FN[ts_js]='ast_ts_js_diff_signatures'
+ast_reg_set DIFF_SIGNATURES_FN ts_js 'ast_ts_js_diff_signatures'
 
 ast_ts_js_extract_enums() {
   local file="$1"
   NODE_PATH="$_AST_TS_NODE_MODULES" node "$_AST_TS_RUNNER" extract-enums "$file"
 }
-AST_LANG_EXTRACT_ENUMS_FN[ts_js]='ast_ts_js_extract_enums'
+ast_reg_set EXTRACT_ENUMS_FN ts_js 'ast_ts_js_extract_enums'
 
 ast_ts_js_diff_enums() {
   local base_file="$1"
   local head_file="$2"
   ast_diff_enums_via_extract ast_ts_js_extract_enums "$base_file" "$head_file"
 }
-AST_LANG_DIFF_ENUMS_FN[ts_js]='ast_ts_js_diff_enums'
+ast_reg_set DIFF_ENUMS_FN ts_js 'ast_ts_js_diff_enums'
 
 ast_ts_js_find_references_batch() {
   local input_json_file="$1"
   NODE_PATH="$_AST_TS_NODE_MODULES" node "$_AST_TS_RUNNER" find-references-batch "$input_json_file"
 }
-AST_LANG_FIND_REFERENCES_BATCH_FN[ts_js]='ast_ts_js_find_references_batch'
+ast_reg_set FIND_REFERENCES_BATCH_FN ts_js 'ast_ts_js_find_references_batch'

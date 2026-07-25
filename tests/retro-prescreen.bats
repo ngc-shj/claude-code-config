@@ -41,9 +41,12 @@ write_config() {
   # jq-edited from the shipped C5 example so schema drift breaks tests
   # instead of hiding (RT3). Forwards all args to jq, so callers may pass
   # --arg/--argjson before the filter, e.g. write_config --arg r "$repo" '...'.
+  # Negative array subscripts are bash 4.3+; macOS ships 3.2, so index the
+  # last element explicitly.
   local args=("$@")
-  local filter="${args[-1]}"
-  unset 'args[-1]'
+  local last=$(( ${#args[@]} - 1 ))
+  local filter="${args[$last]}"
+  unset "args[$last]"
   jq "${args[@]}" "$filter" "$REPO_ROOT/retrospect.config.json.example" > "$CONFIG"
 }
 

@@ -10,7 +10,10 @@ claude-code-config/
 ├── .gitignore                     # Ignore .DS_Store, *.bak, etc.
 ├── LICENSE                        # MIT License
 ├── README.md                      # This file
-├── CLAUDE.md                      # Global behavior rules + model routing strategy
+├── CLAUDE.md                      # Notes for working *in this repo* (not installed)
+├── global/
+│   ├── CLAUDE.md                  # Global behavior rules + model routing strategy
+│   └── RTK.md                     # RTK command reference (@-imported by CLAUDE.md)
 ├── settings.json                  # Permissions + hooks configuration
 ├── install.sh                     # Installer script
 ├── retrospect.config.json.example # Retrospective-mining config template (opt-in)
@@ -531,7 +534,12 @@ Layered coding-style / testing / security guidance, consulted when editing match
 
 Currently shipped: `typescript/`, `python/`, `golang/`. Extend by dropping a new `rules/{lang}/` directory with at least `coding-style.md` and a `paths:` frontmatter.
 
-Rules are referenced, not auto-injected — Claude reads them via the directive in `CLAUDE.md` when the file type matches.
+Loading differs by layer, and the `paths:` frontmatter is what decides it:
+
+- `rules/common/*.md` declare no `paths:`, so nothing scopes them — they are auto-injected into every session and count against the context budget permanently (~1,200 tokens). Keep them short.
+- `rules/{lang}/*.md` declare `paths:`, so they stay out of context until Claude reads them for a matching file.
+
+Adding a `paths:` frontmatter to a `common/` file would move it out of the always-loaded set — which is why the baseline rules deliberately have none.
 
 ## Installation
 
@@ -548,7 +556,7 @@ cd claude-code-config
 bash install.sh
 ```
 
-The installer overwrites `CLAUDE.md`, hooks, skills, and rules — this repo is the source of truth and `git` history is the rollback mechanism, so no `.bak` files are kept for them. Any stale `.bak` under `~/.claude/{hooks,skills,rules}/` from earlier installs is removed on the next run (stale skill backups otherwise load as shadow skills).
+The installer overwrites `~/.claude/CLAUDE.md` (from `global/`), hooks, skills, and rules — this repo is the source of truth and `git` history is the rollback mechanism, so no `.bak` files are kept for them. Any stale `.bak` under `~/.claude/{hooks,skills,rules}/` from earlier installs is removed on the next run (stale skill backups otherwise load as shadow skills).
 
 `settings.json` is the exception: it is **merged** into any existing live file rather than overwritten, so user-managed top-level keys the template does not own (e.g. `mcpServers`) survive. `permissions` and `hooks` are template-owned and replaced wholesale, so a stale user sub-key or unmanaged hook event in the live file does not leak through. A non-object/garbage live file is backed up and replaced instead of merged. A timestamped `settings.json.bak.<ts>` (mode 600) is written first. Backups are not auto-pruned — purge old ones periodically.
 
@@ -583,7 +591,8 @@ When both backends are reachable, the OpenAI backend is auto-preferred; pin with
 | Source              | Destination                   |
 | ------------------- | ----------------------------- |
 | `settings.json`     | `~/.claude/settings.json`     |
-| `CLAUDE.md`         | `~/.claude/CLAUDE.md`         |
+| `global/CLAUDE.md`  | `~/.claude/CLAUDE.md`         |
+| `global/RTK.md`     | `~/.claude/RTK.md`            |
 | `hooks/*.sh`        | `~/.claude/hooks/`            |
 | `skills/*/SKILL.md` | `~/.claude/skills/*/SKILL.md` |
 | `rules/*/*.md`      | `~/.claude/rules/*/*.md`      |
@@ -595,7 +604,7 @@ never writes into it and never installs `retrospect.config.json` (user-created, 
 ## Customization
 
 - Edit `settings.json` to adjust permission rules and hooks
-- Edit `CLAUDE.md` to change global behavior rules and model routing
+- Edit `global/CLAUDE.md` to change global behavior rules and model routing. The root `CLAUDE.md` is *not* installed — it holds notes for working in this repo, and duplicating global content there would load it twice in sessions opened here
 - Add/remove hook scripts in `hooks/`
 - Add/remove skills in `skills/`
 - Add language-specific rules in `rules/{lang}/` — each file carries a `paths:` frontmatter indicating which file globs it applies to

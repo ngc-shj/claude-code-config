@@ -60,17 +60,23 @@ drift() {
 # the current shell) and leaves the max in CONTIG_MAX.
 CONTIG_MAX=0
 check_contiguous() {
-  local label="$1" list="$2" n i
-  local -A seen=()
+  # macOS ships bash 3.2, which has no associative arrays: track seen IDs
+  # as a delimited string instead so this gate runs on a stock system.
+  local label="$1" list="$2" n i seen=" "
   CONTIG_MAX=0
   while IFS= read -r n; do
     [ -n "$n" ] || continue
-    [ -n "${seen[$n]:-}" ] && drift "$label: duplicate ID $n"
-    seen[$n]=1
+    case "$seen" in *" $n "*) drift "$label: duplicate ID $n" ;; esac
+    seen="$seen$n "
     [ "$n" -gt "$CONTIG_MAX" ] && CONTIG_MAX="$n"
   done <<< "$list"
-  for ((i = 1; i <= CONTIG_MAX; i++)); do
-    [ -z "${seen[$i]:-}" ] && drift "$label: gap — ID $i missing from sequence 1..$CONTIG_MAX"
+  i=1
+  while [ "$i" -le "$CONTIG_MAX" ]; do
+    case "$seen" in
+      *" $i "*) ;;
+      *) drift "$label: gap — ID $i missing from sequence 1..$CONTIG_MAX" ;;
+    esac
+    i=$((i + 1))
   done
   return 0
 }
@@ -177,10 +183,14 @@ if [ -n "$ext_line" ] || [ -n "$ext_actual" ]; then
       | sed -E 's/.*full procedures on //; s/\. .*//' \
       | grep -oE 'R[0-9]+(-R[0-9]+)?' \
       | { while IFS= read -r tok; do
+            # Patterns are opened with '(' — bash 3.2 (stock on macOS)
+            # miscounts parens for a bare `pat)` inside $( ).
             case "$tok" in
-              *-*) a="${tok%%-*}"; a="${a#R}"; b="${tok##*-}"; b="${b#R}"
-                   for ((i = a; i <= b; i++)); do echo "$i"; done ;;
-              *)   echo "${tok#R}" ;;
+              (*-*) a="${tok%%-*}"; a="${a#R}"; b="${tok##*-}"; b="${b#R}"
+                    i="$a"
+                    while [ "$i" -le "$b" ]; do echo "$i"; i=$((i + 1)); done
+                    ;;
+              (*)   echo "${tok#R}" ;;
             esac
           done; } | sort -n -u)
     if [ "$ext_listed" != "$ext_actual" ]; then

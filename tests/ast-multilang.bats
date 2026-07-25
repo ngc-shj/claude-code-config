@@ -17,7 +17,10 @@ run_ast() {
   local op="$1"
   local file_a="$2"
   local file_b="${3:-}"
-  bash -lc "
+  # Deliberately NOT a login shell: sourcing the user's profile leaks its
+  # stderr into $output and breaks the assertions below. Nothing here needs
+  # profile-provided PATH entries.
+  bash -c "
     set -euo pipefail
     source '$AST_LIB'
     case '$op' in
@@ -191,7 +194,7 @@ class Repo {
 }
 EOF
 
-  run env AST_JAVA_BUILD_DIR="$java_build" AST_JAVA_LIB_DIR="$java_lib" bash -lc "
+  run env AST_JAVA_BUILD_DIR="$java_build" AST_JAVA_LIB_DIR="$java_lib" bash -c "
     set -euo pipefail
     source '$AST_LIB'
     ast_extract_signatures '$WORK/Base.java'
@@ -200,7 +203,7 @@ EOF
   [[ "$output" == *'"name":"find"'* ]]
   [[ "$output" == *'"owner":"Repo"'* ]]
 
-  run env AST_JAVA_BUILD_DIR="$java_build" AST_JAVA_LIB_DIR="$java_lib" bash -lc "
+  run env AST_JAVA_BUILD_DIR="$java_build" AST_JAVA_LIB_DIR="$java_lib" bash -c "
     set -euo pipefail
     source '$AST_LIB'
     ast_diff_enums '$WORK/Base.java' '$WORK/Head.java'

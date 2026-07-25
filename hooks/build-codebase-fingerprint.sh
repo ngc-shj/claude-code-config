@@ -105,10 +105,10 @@ trap "rm -rf '$_FP_TMPDIR'" EXIT
 
 # --- Trusted root resolution (same pattern as scan-shared-utils.sh) ---
 TRUSTED_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-TRUSTED_ROOT=$(realpath -e -- "$TRUSTED_ROOT" 2>/dev/null || echo "$TRUSTED_ROOT")
+TRUSTED_ROOT=$( (cd -P -- "$TRUSTED_ROOT" 2>/dev/null && pwd -P) || echo "$TRUSTED_ROOT")
 
 if [ -n "${1:-}" ]; then
-  ROOT_ABS=$(realpath -e -- "$1" 2>/dev/null) || {
+  ROOT_ABS=$( (cd -P -- "$1" 2>/dev/null && pwd -P)) || {
     echo "Error: path '$1' does not exist or is not accessible" >&2
     exit 1
   }

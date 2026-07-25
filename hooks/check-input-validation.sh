@@ -133,11 +133,19 @@ HTTP_MUT_RE='^(handle)?(POST|PUT|PATCH|DELETE)$'
 # Codebases that rely on these can add via EXTRA_VALIDATION_PRIMITIVES.
 VALIDATION_PRIMITIVES_RE='[.](parse|safeParse)[[:space:]]*[(]|\bz[.](object|string|number|boolean|array|union|literal|enum|nativeEnum|infer|date|bigint|tuple|record|map|optional|nullable)\b|\bJoi[.](object|string|number|boolean|array|alternatives|symbol|date|any)\b|\bYup[.](object|string|number|boolean|array|date)\b|\bv[.](object|string|number|boolean|array|parse|safeParse)\b|\bt[.](type|partial|interface|exact|union|intersection|readonly)\b|@(IsString|IsNumber|IsBoolean|IsArray|IsEmail|IsOptional|IsEnum|IsUUID|IsDateString|IsObject|IsDate|IsNotEmpty|MinLength|MaxLength|Matches|Min|Max|Length|ValidateNested|Type)[(]'
 [ -n "${EXTRA_VALIDATION_PRIMITIVES:-}" ] && VALIDATION_PRIMITIVES_RE="${VALIDATION_PRIMITIVES_RE}|${EXTRA_VALIDATION_PRIMITIVES}"
-# gawk treats `\b` in regex as a backspace character, not a word boundary.
-# Rewrite to gawk's `\y` word boundary. The replacement must be `\\y`
-# (literally 2 backslashes + y) so awk's string-unescape produces `\y`
-# in the regex. Plus silence other gawk escape warnings (`\.`, `\(`).
-VALIDATION_PRIMITIVES_RE="${VALIDATION_PRIMITIVES_RE//\\b/\\\\y}"
+# awk treats `\b` in a regex as backspace, not a word boundary. gawk offers
+# `\y`, but the BSD awk that ships with macOS supports neither and silently
+# matches nothing — which would disable this gate outright. Spell the
+# boundary out as a character class, replacing trailing `\b` first so a
+# token at end-of-line still matches.
+_awk_word_bounds() {
+  local re="$1"
+  re="${re//\\b\|/([^A-Za-z0-9_]|\$)|}"    # trailing \b before an alternation
+  case "$1" in *'\b') re="${re%\\b}([^A-Za-z0-9_]|\$)" ;; esac  # trailing at end
+  re="${re//\\b/(^|[^A-Za-z0-9_])}"        # everything left is a leading \b
+  printf '%s' "$re"
+}
+VALIDATION_PRIMITIVES_RE="$(_awk_word_bounds "$VALIDATION_PRIMITIVES_RE")"
 VALIDATION_PRIMITIVES_RE="${VALIDATION_PRIMITIVES_RE//\\./[.]}"
 VALIDATION_PRIMITIVES_RE="${VALIDATION_PRIMITIVES_RE//\\(/[(]}"
 
@@ -147,7 +155,7 @@ VALIDATION_PRIMITIVES_RE="${VALIDATION_PRIMITIVES_RE//\\(/[(]}"
 # coercions, not validation.
 VALIDATION_SKIP_RE='\b(JSON|Date|Number|URL|Url|querystring|qs|path|process|crypto|jwt|JWT)[.](parse|safeParse|parseInt|parseFloat)\b|\bparseInt[(]|\bparseFloat[(]'
 [ -n "${EXTRA_NON_VALIDATION_PRIMITIVES:-}" ] && VALIDATION_SKIP_RE="${VALIDATION_SKIP_RE}|${EXTRA_NON_VALIDATION_PRIMITIVES}"
-VALIDATION_SKIP_RE="${VALIDATION_SKIP_RE//\\b/\\\\y}"
+VALIDATION_SKIP_RE="$(_awk_word_bounds "$VALIDATION_SKIP_RE")"
 VALIDATION_SKIP_RE="${VALIDATION_SKIP_RE//\\./[.]}"
 VALIDATION_SKIP_RE="${VALIDATION_SKIP_RE//\\(/[(]}"
 
@@ -334,10 +342,10 @@ while IFS= read -r f; do
 
       # Class-name latch: when a `class X` token appears, remember it; at
       # next `{` we push it onto the scope stack at the current depth.
-      if (match(stripped, /\<class[[:space:]]+([A-Z_][A-Za-z0-9_]*)/) ||
-          match(stripped, /\<interface[[:space:]]+([A-Z_][A-Za-z0-9_]*)/) ||
-          match(stripped, /\<impl[[:space:]]+([A-Z_][A-Za-z0-9_]*)/) ||
-          match(stripped, /\<object[[:space:]]+([A-Z_][A-Za-z0-9_]*)/)) {
+      if (match(stripped, /(^|[^A-Za-z0-9_])class[[:space:]]+([A-Z_][A-Za-z0-9_]*)/) ||
+          match(stripped, /(^|[^A-Za-z0-9_])interface[[:space:]]+([A-Z_][A-Za-z0-9_]*)/) ||
+          match(stripped, /(^|[^A-Za-z0-9_])impl[[:space:]]+([A-Z_][A-Za-z0-9_]*)/) ||
+          match(stripped, /(^|[^A-Za-z0-9_])object[[:space:]]+([A-Z_][A-Za-z0-9_]*)/)) {
         # Extract the captured name (awk lacks RSTART for groups; re-extract).
         tmp = substr(stripped, RSTART, RLENGTH)
         sub(/^[^[:space:]]+[[:space:]]+/, "", tmp)
@@ -715,7 +723,9 @@ awk -F'\t' '
 # For files with mutation count == 1 AND a route filename, verify the
 # parent dir is a leaf verb dir via filesystem inspection. Cache per
 # parent_dir to avoid repeating find.
-declare -A _CED_LEAF_CACHE 2>/dev/null || true
+# bash 3.2 (stock on macOS) has no associative arrays; memoize in a
+# newline-delimited "dir\tverdict" string instead.
+_CED_LEAF_CACHE=""
 while IFS=$'\t' read -r ucount file; do
   [ "$ucount" = "1" ] || continue
   case "$file" in
@@ -724,7 +734,7 @@ while IFS=$'\t' read -r ucount file; do
   esac
   parent=$(dirname "$file")
   [ -d "$parent" ] || continue
-  cached="${_CED_LEAF_CACHE[$parent]:-}"
+  cached=$(printf '%s' "$_CED_LEAF_CACHE" | awk -F'\t' -v d="$parent" '$1==d {print $2; exit}')
   if [ -z "$cached" ]; then
     if [ -n "$(find "$parent" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -n 1)" ]; then
       cached=0
@@ -736,7 +746,8 @@ while IFS=$'\t' read -r ucount file; do
     else
       cached=1
     fi
-    _CED_LEAF_CACHE[$parent]="$cached"
+    _CED_LEAF_CACHE="$_CED_LEAF_CACHE$(printf '%s\t%s\n' "$parent" "$cached")
+"
   fi
   [ "$cached" = "1" ] || continue
   echo "$file" >> "$PROMOTABLE"
@@ -806,11 +817,18 @@ awk -F'\t' '
   END {
     findings = 0
     nk = 0
-    for (k in grp_val_count) keys[nk++] = k
+    # asort() is a gawk builtin; BSD awk (macOS) aborts with "calling
+    # undefined function". Fill 1-based (the read loop below starts at 1)
+    # and insertion-sort in place for the same deterministic ordering.
+    for (k in grp_val_count) keys[++nk] = k
     for (k in inv_new_count) {
-      if (!(k in grp_val_count)) keys[nk++] = k
+      if (!(k in grp_val_count)) keys[++nk] = k
     }
-    asort(keys)
+    for (si = 2; si <= nk; si++) {
+      sv = keys[si]
+      for (sj = si - 1; sj >= 1 && keys[sj] > sv; sj--) keys[sj + 1] = keys[sj]
+      keys[sj + 1] = sv
+    }
     for (i = 1; i <= nk; i++) {
       k = keys[i]
       if (!(k in grp_val_count)) continue

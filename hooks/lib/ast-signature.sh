@@ -18,13 +18,28 @@
 if [ -z "${_AST_SIGNATURE_SOURCED:-}" ]; then
   _AST_SIGNATURE_SOURCED=1
 
-  declare -gA AST_LANG_EXTENSIONS
-  declare -gA AST_LANG_AVAILABLE_FN
-  declare -gA AST_LANG_EXTRACT_SIGNATURES_FN
-  declare -gA AST_LANG_DIFF_SIGNATURES_FN
-  declare -gA AST_LANG_EXTRACT_ENUMS_FN
-  declare -gA AST_LANG_DIFF_ENUMS_FN
-  declare -gA AST_LANG_FIND_REFERENCES_BATCH_FN
+  # macOS ships bash 3.2, which has neither `declare -g` nor associative
+  # arrays. Back the plugin registry with plain variables named
+  # `_AST_REG_<TABLE>__<lang>` and keep a registered-language list, so the
+  # plugins' `TABLE[lang]=value` calls become `ast_reg_set TABLE lang value`.
+  _AST_LANGS=""
+
+  # ast_reg_set <table> <lang> <value>
+  ast_reg_set() {
+    case " $_AST_LANGS " in
+      *" $2 "*) ;;
+      *) _AST_LANGS="$_AST_LANGS$2 " ;;
+    esac
+    eval "_AST_REG_$1__$2=\$3"
+  }
+
+  # ast_reg_get <table> <lang> → value on stdout (empty when unset)
+  ast_reg_get() {
+    eval "printf '%s' \"\${_AST_REG_$1__$2:-}\""
+  }
+
+  # ast_reg_langs → registered language keys, space-separated
+  ast_reg_langs() { printf '%s' "$_AST_LANGS"; }
 
   _AST_LANGS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/ast-langs"
 
@@ -42,7 +57,11 @@ fi
 # to implement extract-* in their native parser/runtime; diff-* stays
 # language-agnostic as long as the emitted schema matches the contract above.
 _ast_write_json_tmp() {
-  mktemp "${TMPDIR:-/tmp}/ast-signature.XXXXXX.json"
+  # BSD mktemp (macOS) only substitutes a trailing run of X's — a template
+  # like `.XXXXXX.json` is echoed back verbatim without creating anything,
+  # so two calls collide on the same path. Keep the X's last; the `.json`
+  # suffix is cosmetic and nothing here dispatches on it.
+  mktemp "${TMPDIR:-/tmp}/ast-signature.XXXXXX"
 }
 
 ast_diff_signatures_via_extract() {
@@ -114,7 +133,7 @@ ast_diff_signatures_via_extract() {
                   {
                     changes: ["param-count"],
                     details: ["params \($baseLen) → \($headLen)"],
-                    major:
+                    major: (
                       if $headLen > $baseLen then
                         ($headSig.params[$baseLen:]
                           | map((.optional | not) and (.hasDefault | not) and (.rest | not))
@@ -122,6 +141,7 @@ ast_diff_signatures_via_extract() {
                       else
                         false
                       end
+                    )
                   }
                 else
                   ([
@@ -232,10 +252,10 @@ ast_diff_enums_via_extract() {
 ast_lang_for_file() {
   local file="$1"
   local ext="${file##*.}"
-  ext="${ext,,}"
+  ext="$(printf "%s" "$ext" | tr "[:upper:]" "[:lower:]")"
   local lang e
-  for lang in "${!AST_LANG_EXTENSIONS[@]}"; do
-    for e in ${AST_LANG_EXTENSIONS[$lang]}; do
+  for lang in $(ast_reg_langs); do
+    for e in $(ast_reg_get EXTENSIONS "$lang"); do
       if [ "$e" = "$ext" ]; then
         echo "$lang"
         return 0
@@ -250,7 +270,7 @@ ast_available() {
   local file="$1"
   local lang
   lang=$(ast_lang_for_file "$file") || return 1
-  local fn="${AST_LANG_AVAILABLE_FN[$lang]:-}"
+  local fn="$(ast_reg_get AVAILABLE_FN "$lang")"
   [ -n "$fn" ] || return 1
   "$fn"
 }
@@ -261,9 +281,9 @@ ast_extract_signatures() {
   local file="$1"
   local lang
   lang=$(ast_lang_for_file "$file") || return 1
-  local avail_fn="${AST_LANG_AVAILABLE_FN[$lang]:-}"
+  local avail_fn="$(ast_reg_get AVAILABLE_FN "$lang")"
   [ -n "$avail_fn" ] && "$avail_fn" || return 1
-  local fn="${AST_LANG_EXTRACT_SIGNATURES_FN[$lang]:-}"
+  local fn="$(ast_reg_get EXTRACT_SIGNATURES_FN "$lang")"
   [ -n "$fn" ] || return 1
   "$fn" "$file"
 }
@@ -277,9 +297,9 @@ ast_diff_signatures() {
   local head_file="$2"
   local lang
   lang=$(ast_lang_for_file "$head_file") || return 1
-  local avail_fn="${AST_LANG_AVAILABLE_FN[$lang]:-}"
+  local avail_fn="$(ast_reg_get AVAILABLE_FN "$lang")"
   [ -n "$avail_fn" ] && "$avail_fn" || return 1
-  local fn="${AST_LANG_DIFF_SIGNATURES_FN[$lang]:-}"
+  local fn="$(ast_reg_get DIFF_SIGNATURES_FN "$lang")"
   [ -n "$fn" ] || return 1
   "$fn" "$base_file" "$head_file"
 }
@@ -290,9 +310,9 @@ ast_extract_enums() {
   local file="$1"
   local lang
   lang=$(ast_lang_for_file "$file") || return 1
-  local avail_fn="${AST_LANG_AVAILABLE_FN[$lang]:-}"
+  local avail_fn="$(ast_reg_get AVAILABLE_FN "$lang")"
   [ -n "$avail_fn" ] && "$avail_fn" || return 1
-  local fn="${AST_LANG_EXTRACT_ENUMS_FN[$lang]:-}"
+  local fn="$(ast_reg_get EXTRACT_ENUMS_FN "$lang")"
   [ -n "$fn" ] || return 1
   "$fn" "$file"
 }
@@ -304,9 +324,9 @@ ast_diff_enums() {
   local head_file="$2"
   local lang
   lang=$(ast_lang_for_file "$head_file") || return 1
-  local avail_fn="${AST_LANG_AVAILABLE_FN[$lang]:-}"
+  local avail_fn="$(ast_reg_get AVAILABLE_FN "$lang")"
   [ -n "$avail_fn" ] && "$avail_fn" || return 1
-  local fn="${AST_LANG_DIFF_ENUMS_FN[$lang]:-}"
+  local fn="$(ast_reg_get DIFF_ENUMS_FN "$lang")"
   [ -n "$fn" ] || return 1
   "$fn" "$base_file" "$head_file"
 }
@@ -330,9 +350,9 @@ ast_find_references_batch() {
   [ -z "$sample_decl" ] && return 1
   local lang
   lang=$(ast_lang_for_file "$sample_decl") || return 1
-  local avail_fn="${AST_LANG_AVAILABLE_FN[$lang]:-}"
+  local avail_fn="$(ast_reg_get AVAILABLE_FN "$lang")"
   [ -n "$avail_fn" ] && "$avail_fn" || return 1
-  local fn="${AST_LANG_FIND_REFERENCES_BATCH_FN[$lang]:-}"
+  local fn="$(ast_reg_get FIND_REFERENCES_BATCH_FN "$lang")"
   [ -n "$fn" ] || return 1
   "$fn" "$input_json_file"
 }

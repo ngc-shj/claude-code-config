@@ -96,6 +96,26 @@ _resolve_contained() {
 }
 
 # Emit an empty machine document for a degraded/error path.
+# Emit a `find` predicate that selects files newer than an ISO-8601 cursor.
+# BSD find (macOS) rejects `-newermt <iso>` outright — and because the call
+# sites redirect stderr, the parse error surfaces as "no files matched"
+# rather than a failure. Materialize a reference file with the cursor mtime
+# and use `-newer`, which GNU and BSD both accept. Echoes the reference path;
+# caller passes it to -newer and removes it when done.
+_mtime_ref_file() {
+  local iso="$1" ref epoch
+  ref=$(mktemp) || return 1
+  # date -j -f: BSD; date -d: GNU. Fall back to epoch 0 on either failure so
+  # the scan degrades to "everything is new", never to "nothing matched".
+  epoch=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$iso" +%s 2>/dev/null) \
+    || epoch=$(date -u -d "$iso" +%s 2>/dev/null) \
+    || epoch=0
+  touch -t "$(date -j -u -f %s "$epoch" +%Y%m%d%H%M.%S 2>/dev/null \
+              || date -u -d "@$epoch" +%Y%m%d%H%M.%S 2>/dev/null \
+              || echo 197001010000.00)" "$ref" 2>/dev/null
+  printf '%s' "$ref"
+}
+
 _json_empty() {
   local source="$1" deferred="${2:-false}"
   jq -nc --arg s "$source" --argjson d "$([ "$deferred" = "true" ] && echo true || echo false)" \
@@ -235,7 +255,9 @@ cmd_artifacts() {
       else
         candidates=$(jq -c --arg p "$resolved" '. + [{path: $p, summary: null}]' <<<"$candidates")
       fi
-    done < <(find "$glob_dir" -maxdepth 1 -name "$glob_pat" -newermt "$repo_hw" -print0 2>/dev/null)
+    done < <(hw_ref=$(_mtime_ref_file "$repo_hw"); \
+             find "$glob_dir" -maxdepth 1 -name "$glob_pat" -newer "$hw_ref" -print0 2>/dev/null; \
+             rm -f "$hw_ref")
 
     hw_map=$(jq -c --arg r "$repo" --arg v "$repo_max" '. + {($r): $v}' <<<"$hw_map")
   done <<<"$repos"
@@ -451,7 +473,9 @@ cmd_transcripts() {
       [ $(( now_epoch - f_epoch )) -lt 300 ] && continue
     fi
     files+=("$f")
-  done < <(find "$root" -name '*.jsonl' -newermt "$cursor" -print0 2>/dev/null)
+  done < <(cur_ref=$(_mtime_ref_file "$cursor"); \
+           find "$root" -name '*.jsonl' -newer "$cur_ref" -print0 2>/dev/null; \
+           rm -f "$cur_ref")
 
   if [ "${#files[@]}" -eq 0 ]; then
     if [ "$as_json" -eq 1 ]; then

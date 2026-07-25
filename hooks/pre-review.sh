@@ -25,12 +25,15 @@ MAX_INPUT_CHARS=$(( MAX_INPUT_TOKENS * 3 ))
 # (or ~/.ssh/id_rsa, etc.) would have the contents forwarded to Ollama and
 # reflected back through the review output, creating an exfiltration channel.
 TRUSTED_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-TRUSTED_ROOT=$(realpath -e -- "$TRUSTED_ROOT" 2>/dev/null || echo "$TRUSTED_ROOT")
+TRUSTED_ROOT=$( (cd -P -- "$TRUSTED_ROOT" 2>/dev/null && pwd -P) || echo "$TRUSTED_ROOT")
 
 case "$MODE" in
   plan)
     if [ -n "${PLAN_FILE:-}" ] && [ -f "$PLAN_FILE" ]; then
-      plan_abs=$(realpath -e -- "$PLAN_FILE" 2>/dev/null || echo "")
+      # `realpath -e` is GNU-only. Resolve the containing directory instead,
+      # which works on BSD/macOS too, and re-attach the basename.
+      plan_abs=$( d=$(cd -P -- "$(dirname -- "$PLAN_FILE")" 2>/dev/null && pwd -P) \
+                  && printf '%s/%s' "$d" "$(basename -- "$PLAN_FILE")" )
       if [ -z "$plan_abs" ]; then
         echo "Warning: PLAN_FILE='$PLAN_FILE' could not be resolved. Falling back to stdin." >&2
         CONTENT=$(cat)

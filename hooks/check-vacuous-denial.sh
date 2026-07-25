@@ -102,9 +102,15 @@ git rev-parse --quiet --verify "$BASE_REF" >/dev/null 2>&1 || {
 # rejects. 401 is intentionally excluded — an unauthenticated 401 rarely
 # pairs with a guarded mutation worth asserting against, and including it
 # inflates false positives on plain auth tests.
+# Leading word boundary for the awk patterns below. `\y` is a gawk extension
+# and `\b` means backspace in POSIX ERE, so neither works in the BSD awk that
+# ships with macOS — spell the boundary out as an explicit character class.
+# Every `\b` in these patterns is leading-position, so one form suffices.
+AWK_WORD_START='(^|[^A-Za-z0-9_])'
+
 DENIAL_STATUS_RE='[.](toBe|toEqual|toStrictEqual)[(][[:space:]]*(403|429|503)[[:space:]]*[)]'
 [ -n "${EXTRA_DENIAL_STATUS_RE:-}" ] && DENIAL_STATUS_RE="${DENIAL_STATUS_RE}|${EXTRA_DENIAL_STATUS_RE}"
-DENIAL_STATUS_RE="${DENIAL_STATUS_RE//\\b/\\\\y}"
+DENIAL_STATUS_RE="${DENIAL_STATUS_RE//\\b/$AWK_WORD_START}"
 DENIAL_STATUS_RE="${DENIAL_STATUS_RE//\\./[.]}"
 DENIAL_STATUS_RE="${DENIAL_STATUS_RE//\\(/[(]}"
 
@@ -138,17 +144,17 @@ MUTATION_VERB_RE="[.]${MUTATION_VERB}[A-Za-z0-9]*[(]|\\bmock[A-Za-z0-9]*${MUTATI
 # invokes a mutating handler (POST/PUT/PATCH/DELETE) — or no recognizable
 # handler call at all — it stays a candidate.
 READ_HANDLER_RE='\b(GET|HEAD|OPTIONS)[(]'
-READ_HANDLER_RE="${READ_HANDLER_RE//\\b/\\\\y}"
+READ_HANDLER_RE="${READ_HANDLER_RE//\\b/$AWK_WORD_START}"
 READ_HANDLER_RE="${READ_HANDLER_RE//\\(/[(]}"
 MUTATING_HANDLER_RE='\b(POST|PUT|PATCH|DELETE)[(]'
-MUTATING_HANDLER_RE="${MUTATING_HANDLER_RE//\\b/\\\\y}"
+MUTATING_HANDLER_RE="${MUTATING_HANDLER_RE//\\b/$AWK_WORD_START}"
 MUTATING_HANDLER_RE="${MUTATING_HANDLER_RE//\\(/[(]}"
 
 # Negative call assertion (the guard we want present): the mutation spy
 # was asserted NOT to have run.
 NEGATIVE_RE='[.]not[.]toHaveBeenCalled[(]|[.]toHaveBeenCalledTimes[(][[:space:]]*0[[:space:]]*[)]|[.]not[.]toHaveBeenCalledWith[(]'
 [ -n "${EXTRA_NEGATIVE_RE:-}" ] && NEGATIVE_RE="${NEGATIVE_RE}|${EXTRA_NEGATIVE_RE}"
-NEGATIVE_RE="${NEGATIVE_RE//\\b/\\\\y}"
+NEGATIVE_RE="${NEGATIVE_RE//\\b/$AWK_WORD_START}"
 NEGATIVE_RE="${NEGATIVE_RE//\\./[.]}"
 NEGATIVE_RE="${NEGATIVE_RE//\\(/[(]}"
 
@@ -278,7 +284,11 @@ while IFS= read -r f; do
       stripped = strip(raw)
 
       if (!in_block) {
-        if (match(stripped, /\<(it|test)([.](only|skip|each|todo|concurrent))?[[:space:]]*\(/)) {
+        # `\<` is a GNU awk word boundary; BSD awk (macOS) does not support it
+        # and silently matches nothing, so no test block is ever recognized.
+        # The class below may consume one leading character — harmless, since
+        # paren_delta only counts parens from RSTART onward.
+        if (match(stripped, /(^|[^A-Za-z0-9_])(it|test)([.](only|skip|each|todo|concurrent))?[[:space:]]*\(/)) {
           in_block = 1
           block_start = lineno
           block_body = raw

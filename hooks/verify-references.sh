@@ -39,7 +39,10 @@ done
 
 # Canonicalize ROOT once. Missing ROOT is a configuration error, not a
 # recoverable condition for a single ref — fail closed.
-ROOT_ABS=$(realpath -e -- "$ROOT" 2>/dev/null) || {
+# `realpath -e` is GNU-only; macOS realpath rejects it outright, which made
+# every ROOT look inaccessible. `cd -P && pwd -P` resolves symlinks on both
+# and still fails when the directory is missing.
+ROOT_ABS=$(cd -P -- "$ROOT" 2>/dev/null && pwd -P) || {
   echo "Error: ROOT '$ROOT' does not exist or is not accessible" >&2
   exit 1
 }
@@ -93,7 +96,12 @@ while IFS= read -r ref; do
     candidate="$ROOT_ABS/$path"
   fi
 
-  full_abs=$(realpath -m -- "$candidate" 2>/dev/null) || full_abs=""
+  # `realpath -m` (resolve even when the last component is absent) is GNU-only.
+  # Resolve the parent directory — which must exist for the file to be real —
+  # and re-attach the basename, so a missing file still yields a canonical
+  # path to run the containment check against.
+  full_abs=$( d=$(cd -P -- "$(dirname -- "$candidate")" 2>/dev/null && pwd -P) \
+              && printf '%s/%s' "$d" "$(basename -- "$candidate")" ) || full_abs=""
   if [ -z "$full_abs" ]; then
     OUTPUT="${OUTPUT}MISSING      ${ref}
 "
