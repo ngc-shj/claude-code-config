@@ -70,14 +70,14 @@ claude-code-config/
 
 ```text
 ┌──────────────────────────────────────────────────┐
-│  Claude Opus 4.8 (Main Orchestrator)             │
+│  Claude Opus 5 (Main Orchestrator)               │
 │  Complex design, planning, final decisions       │
 └──┬────────────────┬─────────────────┬────────────┘
    │                │                 │
    ▼                ▼                 ▼
 ┌────────┐  ┌─────────────┐  ┌──────────────────┐
 │Sonnet  │  │gpt-oss:120b │  │gpt-oss:20b       │
-│4.6     │  │(local)      │  │(local)           │
+│5       │  │(local)      │  │(local)           │
 │        │  │             │  │                  │
 │Explore │  │Code review  │  │Commit msg check  │
 │Implement│ │pre-screening│  │Quick validation  │
@@ -89,8 +89,9 @@ claude-code-config/
 
 | Model | Role | Use case |
 | --- | --- | --- |
-| Claude Opus 4.8 | Main orchestrator | Architecture, planning, final decisions |
-| Claude Sonnet 4.6 | Sub-agent | Exploration, implementation, testing |
+| Claude Opus 5 | Main orchestrator | Architecture, planning, final decisions |
+| Claude Sonnet 5 | Sub-agent | Exploration, implementation, testing |
+| Claude Fable 5 | Hardest problems | Demanding reasoning, long-horizon agentic work (above Opus pricing) |
 | gpt-oss:120b | Local pre-screening | Code review, security analysis (before Claude) |
 | gpt-oss:20b | Local quick checks | Commit messages, lint, format, classification |
 

@@ -72,17 +72,19 @@ else
   echo "  Installed settings.json"
 fi
 
-# Install CLAUDE.md and the files it @-imports. These live under global/
-# rather than the repo root: a root CLAUDE.md would be auto-loaded as this
-# repo's *project* instructions on top of the installed global copy,
+# Install CLAUDE.md and the reference files it points at. These live under
+# global/ rather than the repo root: a root CLAUDE.md would be auto-loaded as
+# this repo's *project* instructions on top of the installed global copy,
 # duplicating every line in each session opened here.
 cp "$SCRIPT_DIR/global/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
 rm -f "$CLAUDE_DIR/CLAUDE.md.bak"
 echo "  Installed CLAUDE.md"
-# RTK.md must land alongside it or the trailing `@RTK.md` import resolves
-# to nothing.
-cp "$SCRIPT_DIR/global/RTK.md" "$CLAUDE_DIR/RTK.md"
-echo "  Installed RTK.md"
+# CLAUDE.md cites these by path instead of @-importing them, so they stay out
+# of the always-loaded context. Each must exist or the pointer dangles.
+for ref in RTK.md model-routing.md; do
+  cp "$SCRIPT_DIR/global/$ref" "$CLAUDE_DIR/$ref"
+  echo "  Installed $ref"
+done
 
 # Install hooks
 if [ -d "$SCRIPT_DIR/hooks" ]; then
