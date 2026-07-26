@@ -45,7 +45,8 @@ Overlays override the baseline where the language idiom differs (e.g. Go mutabil
 
 Keep orchestration and judgment on Claude; push mechanical, repetitive, or privacy-sensitive work to a local LLM through the hooks, which read files directly and cost no Claude tokens. `~/.claude/hooks/pre-review.sh` is the usual pre-screening entry point.
 
-Reach for a sub-agent when a task is large, self-contained, and parallelisable — a wide multi-file investigation, say. Anything you can finish in a handful of tool calls is cheaper done yourself, and one capable agent beats several.
+Reach for a sub-agent on large, self-contained, parallelisable work — a wide multi-file investigation, say. A few tool calls is cheaper done yourself, and one capable agent beats several.
+<!-- Wording reviewed against skills/triangulate R21; reword only after re-reading it. -->
 Delegate a whole slice of work, not the checking of work already done.
 
 Full model table, backend dispatch, and routing rules: `~/.claude/model-routing.md`.

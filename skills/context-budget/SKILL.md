@@ -129,7 +129,7 @@ Context Budget Report
 
 推定オーバーヘッド合計: 約 XX,XXX tokens
 コンテキストウィンドウ: {{context_window}}
-実効残量: 約 XXX,XXX tokens (XX%)
+実効残量: 約 XXX,XXX tokens (XX%)   ← {{context_window}} が不明なら省略
 
 内訳:
 | Component  | Count | Tokens  |
