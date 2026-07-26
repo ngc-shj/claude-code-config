@@ -102,6 +102,19 @@ while IFS= read -r ref; do
   # path to run the containment check against.
   full_abs=$( d=$(cd -P -- "$(dirname -- "$candidate")" 2>/dev/null && pwd -P) \
               && printf '%s/%s' "$d" "$(basename -- "$candidate")" ) || full_abs=""
+  # Parent-only resolution leaves a SYMLINK LEAF unresolved: a link inside ROOT
+  # whose target is outside canonicalizes to its own in-ROOT path and passes
+  # containment. Resolve the leaf too when it is a symlink; `cd -P` on its
+  # dirname is the same both-platform idiom used above (macOS realpath rejects
+  # the GNU-only flags). A dangling link keeps the unresolved path and falls
+  # through to the MISSING classification below.
+  if [ -n "$full_abs" ] && [ -L "$full_abs" ]; then
+    link_target=$(readlink -- "$full_abs")
+    [[ "$link_target" = /* ]] || link_target="$(dirname -- "$full_abs")/$link_target"
+    resolved=$( d=$(cd -P -- "$(dirname -- "$link_target")" 2>/dev/null && pwd -P) \
+                && printf '%s/%s' "$d" "$(basename -- "$link_target")" ) || resolved=""
+    [ -n "$resolved" ] && full_abs="$resolved"
+  fi
   if [ -z "$full_abs" ]; then
     OUTPUT="${OUTPUT}MISSING      ${ref}
 "
@@ -110,8 +123,8 @@ while IFS= read -r ref; do
   fi
 
   # Containment: canonical path must sit under ROOT_ABS. Catches directory
-  # traversal (../), absolute-path escapes, and symlink redirection in a
-  # single check.
+  # traversal (../), absolute-path escapes, and — given the leaf resolution
+  # above — symlink redirection, in a single check.
   case "$full_abs/" in
     "$ROOT_ABS/"*) : ;;
     *)
