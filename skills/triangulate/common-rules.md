@@ -72,13 +72,14 @@ If accidentally on main, create a new branch before continuing work.
 | Expert | Default model | Escalation |
 |--------|--------------|------------|
 | Functionality expert | Sonnet | — |
-| Security expert | Sonnet | Opus (when `escalate: true` is flagged) |
+| Security expert | Sonnet | Opus (when `escalate: true` is flagged), then Fable (only if Opus leaves it unresolved) |
 | Testing expert | Sonnet | — |
 
 **Escalation mechanism** (Security expert only):
 1. **Detection**: After Security expert (Sonnet) returns findings, check each Critical finding for `escalate: true` flag. As a safety net, the orchestrator should also independently assess whether any Critical finding warrants escalation, even if `escalate: false` is reported
 2. **Re-run**: If any `escalate: true` is present, re-launch Security expert with `model: "opus"`, passing the same input (Round 1: full plan/code; Round 2+: current round's diff and previous findings) plus the Sonnet findings as additional context
-3. **Merge**: Opus findings are merged with Sonnet findings (not replaced). Findings are considered "overlapping" when they share the same root cause (same file, same vulnerability type). Opus takes precedence for overlapping Critical findings; Sonnet's non-overlapping Major/Minor findings are preserved
+3. **Second escalation**: Only when the Opus re-run still cannot settle a Critical finding — it reports the finding as unresolved, or its own analysis is self-contradictory — re-launch with `model: "fable"`. Fable costs roughly twice Opus per token, so a finding Opus resolved either way (confirmed or dismissed) does **not** qualify; disagreement between Sonnet and Opus is not by itself grounds either, since Opus takes precedence per the merge rule below
+4. **Merge**: Findings from a higher tier are merged with the lower tier's (not replaced). Findings are considered "overlapping" when they share the same root cause (same file, same vulnerability type). For overlapping Critical findings the highest tier that ran takes precedence (Fable over Opus over Sonnet); non-overlapping Major/Minor findings from every tier are preserved
 
 ### Handling [Adjacent] Findings
 
