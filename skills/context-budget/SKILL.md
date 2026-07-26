@@ -128,7 +128,7 @@ Context Budget Report
 =====================
 
 推定オーバーヘッド合計: 約 XX,XXX tokens
-コンテキストウィンドウ: 1M tokens
+コンテキストウィンドウ: {{context_window}}
 実効残量: 約 XXX,XXX tokens (XX%)
 
 内訳:
@@ -150,6 +150,8 @@ Top 3 最適化:
 
 潜在削減量: 約 XX,XXX tokens (現オーバーヘッドの XX%)
 ```
+
+Replace `{{context_window}}` with the running session's own window (Opus 5 is 1M; other models differ). Nothing in the shell can report it — `settings.json` carries no model key — so it comes from your session context, not a command. When you cannot establish it, write `不明` and omit the 実効残量 line rather than dividing by a guessed denominator: that percentage is the number the user acts on.
 
 Verbose mode (`--verbose` or "詳細" requested): additionally print the per-file table from Step 1, the full MCP tool list with per-tool schema size estimates, and side-by-side overlap between redundant components.
 

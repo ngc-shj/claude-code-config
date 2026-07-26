@@ -250,6 +250,23 @@ teardown() {
   grep -q '^## Proposing options' "$TEST_HOME/.claude/CLAUDE.md"
 }
 
+@test "install: CLAUDE.md carries the Opus 5 output-length and delegation guidance" {
+  # Anthropic documents that Opus 5 answers longer, writes longer files, and
+  # delegates more readily than prior models — none of which effort settings fix,
+  # so the correction has to be prompt text. It only reaches a session through the
+  # installed copy, hence a delivery assertion rather than a source grep.
+  #
+  # The delegation sentence is asserted verbatim: it is one qualifier away from
+  # reading as "skip verifying subagent work", which would silently undercut the
+  # triangulate R21 obligation on every session. Pinning the reviewed wording is
+  # what keeps a future reword from drifting past review.
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  grep -q '^## Output length' "$TEST_HOME/.claude/CLAUDE.md"
+  grep -qF 'Delegate a whole slice of work, not the checking of work already done.' \
+    "$TEST_HOME/.claude/CLAUDE.md"
+}
+
 @test "install: every reference file CLAUDE.md points at is delivered" {
   # CLAUDE.md cites these by path rather than @-importing them, keeping them
   # out of the always-loaded context. A missing file makes the pointer dangle
