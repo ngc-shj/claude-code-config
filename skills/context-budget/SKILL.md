@@ -128,7 +128,7 @@ Context Budget Report
 =====================
 
 推定オーバーヘッド合計: 約 XX,XXX tokens
-コンテキストモデル: Claude Sonnet (200K window)
+コンテキストウィンドウ: 1M tokens
 実効残量: 約 XXX,XXX tokens (XX%)
 
 内訳:
@@ -159,4 +159,4 @@ Verbose mode (`--verbose` or "詳細" requested): additionally print the per-fil
 - **Agent descriptions always load** — even agents never invoked in a session contribute their description to every Task call.
 - **Hooks are free** — they execute but do not consume context. Prefer hooks over skills when the work is deterministic shell logic.
 - **Audit after each additive change** — run this skill after adding a skill, rule, agent, or MCP server to catch creep early.
-- **200K is not usable space** — reserve at least 40% for conversation and tool output. Overhead above 30% of the window starts degrading quality.
+- **The window is not usable space** — reserve at least 40% for conversation and tool output. Overhead above 30% of the window starts degrading quality.
