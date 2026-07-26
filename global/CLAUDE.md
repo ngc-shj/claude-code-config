@@ -5,6 +5,12 @@
 - Communicate with the user in Japanese
 - Code comments, commit messages, documentation, and branch names in English
 
+## Output length
+
+Match length to what the task needs, in replies and in files you write. Cover the
+substance without padding — no filler sections, restated summaries, or boilerplate.
+When a skill or the user asks for a specific format, that request wins.
+
 ## Coding Style
 
 Write code that reads like the surrounding code — match its naming, idiom, and comment density. Leave unchanged code alone: do not retrofit comments, docstrings, or type annotations onto lines the task did not touch.
@@ -38,6 +44,10 @@ Overlays override the baseline where the language idiom differs (e.g. Go mutabil
 ## Model Routing
 
 Keep orchestration and judgment on Claude; push mechanical, repetitive, or privacy-sensitive work to a local LLM through the hooks, which read files directly and cost no Claude tokens. `~/.claude/hooks/pre-review.sh` is the usual pre-screening entry point.
+
+Reach for a sub-agent on large, self-contained, parallelisable work — a wide multi-file investigation, say. A few tool calls is cheaper done yourself, and one capable agent beats several.
+<!-- Wording reviewed against skills/triangulate R21; reword only after re-reading it. -->
+Delegate a whole slice of work, not the checking of work already done.
 
 Full model table, backend dispatch, and routing rules: `~/.claude/model-routing.md`.
 
