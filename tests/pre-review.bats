@@ -56,6 +56,36 @@ teardown() {
   [[ "$output" != *"$(cat /etc/hostname 2>/dev/null)"* || -z "$(cat /etc/hostname 2>/dev/null)" ]]
 }
 
+@test "PLAN_FILE=symlink inside repo pointing outside: rejected, contents not read" {
+  # The containment case compares a canonical path, but parent-only resolution
+  # leaves the symlink LEAF unresolved, so a link inside the repo resolves to
+  # its own in-repo path and passes — then its target's contents are read and
+  # reflected into the review output (the exfiltration channel the hook's
+  # header warns about).
+  REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  echo "exfiltrated-secret-marker" > "$BATS_TEST_TMPDIR/outside-target.md"
+  ln -sf "$BATS_TEST_TMPDIR/outside-target.md" "$REPO_ROOT/.pre-review-symlink-test.md"
+  run bash -c "echo '' | PLAN_FILE='$REPO_ROOT/.pre-review-symlink-test.md' bash '$SCRIPT' plan"
+  rm -f "$REPO_ROOT/.pre-review-symlink-test.md"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"outside TRUSTED_ROOT"* ]]
+  [[ "$output" != *"exfiltrated-secret-marker"* ]]
+}
+
+@test "PLAN_FILE=symlink CHAIN inside repo pointing outside: rejected, contents not read" {
+  # Two links planted inside the repo: A -> B (both inside) -> target outside.
+  # A one-hop resolution clears this because A's immediate target is in-repo.
+  REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  echo "chained-secret-marker" > "$BATS_TEST_TMPDIR/outside-chain-target.md"
+  ln -sf "$BATS_TEST_TMPDIR/outside-chain-target.md" "$REPO_ROOT/.pre-review-hop2.md"
+  ln -sf "$REPO_ROOT/.pre-review-hop2.md" "$REPO_ROOT/.pre-review-hop1.md"
+  run bash -c "echo '' | PLAN_FILE='$REPO_ROOT/.pre-review-hop1.md' bash '$SCRIPT' plan"
+  rm -f "$REPO_ROOT/.pre-review-hop1.md" "$REPO_ROOT/.pre-review-hop2.md"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"outside TRUSTED_ROOT"* ]]
+  [[ "$output" != *"chained-secret-marker"* ]]
+}
+
 @test "PLAN_FILE unset: falls back to stdin normally (backwards compat)" {
   # Feed a small plan via stdin. Script will attempt Ollama call (mocked to fail)
   # and exit gracefully — we just confirm no containment warning fires.

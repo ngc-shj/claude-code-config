@@ -104,17 +104,31 @@ while IFS= read -r ref; do
               && printf '%s/%s' "$d" "$(basename -- "$candidate")" ) || full_abs=""
   # Parent-only resolution leaves a SYMLINK LEAF unresolved: a link inside ROOT
   # whose target is outside canonicalizes to its own in-ROOT path and passes
-  # containment. Resolve the leaf too when it is a symlink; `cd -P` on its
-  # dirname is the same both-platform idiom used above (macOS realpath rejects
-  # the GNU-only flags). A dangling link keeps the unresolved path and falls
-  # through to the MISSING classification below.
-  if [ -n "$full_abs" ] && [ -L "$full_abs" ]; then
-    link_target=$(readlink -- "$full_abs")
+  # containment. Chase the ENTIRE chain, re-resolving the containing directory
+  # at every hop — a single readlink only catches a one-hop escape, and two
+  # links planted inside ROOT (A -> B, both inside -> target outside) slip past
+  # it because A's immediate target still sits inside. Same shape and 40-hop cap
+  # as `_containment_check` in retro-prescreen.sh, which closed this exact hole.
+  # `cd -P` is the both-platform idiom used above (macOS realpath rejects the
+  # GNU-only flags). A dangling link resolves the same way — only its target's
+  # parent must exist — so one pointing outside ROOT reports OUT-OF-ROOT and one
+  # inside falls through to MISSING below. A cycle (A -> B -> A) never stops
+  # being a symlink, so the cap ends the walk; the path left behind is the
+  # in-ROOT link itself, which the existence check below rejects as MISSING —
+  # the safe direction, since a link that cannot be resolved is never accepted
+  # as a real file. No `--` on readlink: the argument is always absolute (built
+  # from `pwd -P`), so it can never be read as an option, and BSD readlink
+  # rejects `--`.
+  hops=0
+  while [ -n "$full_abs" ] && [ -L "$full_abs" ] && [ "$hops" -lt 40 ]; do
+    link_target=$(readlink "$full_abs") || break
     [[ "$link_target" = /* ]] || link_target="$(dirname -- "$full_abs")/$link_target"
     resolved=$( d=$(cd -P -- "$(dirname -- "$link_target")" 2>/dev/null && pwd -P) \
                 && printf '%s/%s' "$d" "$(basename -- "$link_target")" ) || resolved=""
-    [ -n "$resolved" ] && full_abs="$resolved"
-  fi
+    [ -z "$resolved" ] && break
+    full_abs="$resolved"
+    hops=$((hops + 1))
+  done
   if [ -z "$full_abs" ]; then
     OUTPUT="${OUTPUT}MISSING      ${ref}
 "
@@ -123,8 +137,9 @@ while IFS= read -r ref; do
   fi
 
   # Containment: canonical path must sit under ROOT_ABS. Catches directory
-  # traversal (../), absolute-path escapes, and — given the leaf resolution
-  # above — symlink redirection, in a single check.
+  # traversal (../), absolute-path escapes, and — given the chain resolution
+  # above, at any depth up to the hop cap — symlink redirection, in a single
+  # check.
   case "$full_abs/" in
     "$ROOT_ABS/"*) : ;;
     *)

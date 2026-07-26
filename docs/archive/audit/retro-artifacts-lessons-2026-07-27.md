@@ -47,8 +47,10 @@ completion" primitive is a throttle only and its return value must be discarded.
 status value a supervised child can itself produce may be branched on as a
 control/bookkeeping signal — a sentinel that collides with a real exit code fails open.
 
-**Disposition.** `Extends-R44`. Grep evidence: `wait -n|per-unit|identity` = 0 hits in
-`common-rules.md` and `rule-details/`; R44's text is scoped to pipeline aggregates.
+**Disposition.** `Extends-R44`. Grep evidence: `\bwait -n\b|\bper-unit\b` = 0 hits in
+`common-rules.md` and `rule-details/`. The broader `identity` = 8 hits, all unrelated
+senses ("service identity", "exploitable identity") — none about attributing a status to
+the unit that produced it. R44's text is scoped to pipeline aggregates.
 Considered R21 (subagent completion vs verification — different actor), R38 (async state
 machine — no transient-state wedge), R45 (scaling — adjacent context only).
 Provenance: `pre-pr-parallelization-review.md` — Functionality F1/F2, probe table under
@@ -81,8 +83,10 @@ member-set from the ROLE (what can silently disable a control), not from a path 
 the harness that runs all the gates is the most privileged member and is routinely
 outside the naming convention that defines membership.
 
-**Disposition.** `Extends-R42`. Grep evidence: `manifest|set-equality|set equality|
-executed.*set` = 0 hits in `common-rules.md` and `rule-details/`. R42's existing
+**Disposition.** `Extends-R42`. Grep evidence: `set-equality|set equality` = 0 hits in
+`common-rules.md` and `rule-details/`. `manifest` = 8 hits, all unrelated senses
+("package manifest", "Kubernetes manifest", "downloaded manifest") — none about a
+runner's declared check set. R42's existing
 fingerprint/attestation sub-clause covers deriving a skip-attestation's input class from
 the real read surface; the runner's own executed-member-set as a first-class asserted
 class is the same discipline, unstated. Considered R44 (status reading, not membership),

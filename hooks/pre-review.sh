@@ -34,6 +34,25 @@ case "$MODE" in
       # which works on BSD/macOS too, and re-attach the basename.
       plan_abs=$( d=$(cd -P -- "$(dirname -- "$PLAN_FILE")" 2>/dev/null && pwd -P) \
                   && printf '%s/%s' "$d" "$(basename -- "$PLAN_FILE")" )
+      # Parent-only resolution leaves a SYMLINK LEAF unresolved, so a link
+      # inside the repo pointing outside canonicalizes to its own in-root path
+      # and passes the containment case below — the contents are then read and
+      # reflected into the review output, which is the exfiltration channel the
+      # header warns about. Chase the whole chain (a one-hop check is defeated
+      # by two links planted inside the repo), same 40-hop-capped shape as
+      # `_containment_check` in retro-prescreen.sh. A path still unresolved
+      # after the cap keeps its in-root value and is refused by the `-f` test
+      # in the caller, never read.
+      plan_hops=0
+      while [ -n "$plan_abs" ] && [ -L "$plan_abs" ] && [ "$plan_hops" -lt 40 ]; do
+        plan_link=$(readlink "$plan_abs") || break
+        [[ "$plan_link" = /* ]] || plan_link="$(dirname -- "$plan_abs")/$plan_link"
+        plan_resolved=$( d=$(cd -P -- "$(dirname -- "$plan_link")" 2>/dev/null && pwd -P) \
+                         && printf '%s/%s' "$d" "$(basename -- "$plan_link")" ) || plan_resolved=""
+        [ -z "$plan_resolved" ] && break
+        plan_abs="$plan_resolved"
+        plan_hops=$((plan_hops + 1))
+      done
       if [ -z "$plan_abs" ]; then
         echo "Warning: PLAN_FILE='$PLAN_FILE' could not be resolved. Falling back to stdin." >&2
         CONTENT=$(cat)
