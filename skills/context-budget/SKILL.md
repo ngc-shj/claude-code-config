@@ -151,7 +151,7 @@ Top 3 最適化:
 潜在削減量: 約 XX,XXX tokens (現オーバーヘッドの XX%)
 ```
 
-Replace `{{context_window}}` with the running session's own window (Opus 5 is 1M; other models differ). Nothing in the shell can report it — `settings.json` carries no model key — so it comes from your session context, not a command. When you cannot establish it, write `不明` and omit the 実効残量 line rather than dividing by a guessed denominator: that percentage is the number the user acts on.
+Replace `{{context_window}}` with the running session's own window. Opus 4.6+, Sonnet 4.6+, Fable 5, and Mythos 5 are 1M; Sonnet 4.5 and earlier, and Haiku, are 200K — so the tier alone does not tell you, and neither does the model family. Nothing in the shell can report it either: `settings.json` carries no model key. It comes from your session context, not a command. When you cannot establish it, write `不明` and omit the 実効残量 line rather than dividing by a guessed denominator: that percentage is the number the user acts on.
 
 Verbose mode (`--verbose` or "詳細" requested): additionally print the per-file table from Step 1, the full MCP tool list with per-tool schema size estimates, and side-by-side overlap between redundant components.
 
