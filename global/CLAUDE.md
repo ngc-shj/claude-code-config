@@ -17,6 +17,15 @@ Commit and push only when asked. Prefer a new commit over amending one that alre
 
 Read a file before editing it, and prefer editing an existing file over creating one. Never commit secrets — `.env` files, credentials, API keys.
 
+## Proposing options
+
+When presenting more than one way forward, lead with the recommendation and the
+axis that decides it — what each option costs, breaks, or rules out. An option
+is not understood until you can name what the alternative silently satisfied
+that it does not: an import that resolves, a file the installer still copies, a
+contract nothing in the local diff shows. When that cannot be named yet, say so
+and go find it rather than presenting the options as equivalent.
+
 ## Rules Layer
 
 Detailed coding-style, testing, and security guidance lives under `~/.claude/rules/`:

@@ -240,6 +240,16 @@ teardown() {
   grep -q 'rules/common/' "$TEST_HOME/.claude/CLAUDE.md"
 }
 
+@test "install: CLAUDE.md carries the option-proposal guidance" {
+  # skills/triangulate/common-rules.md already encodes this lesson, but it
+  # loads only during a review — the failure it prevents happens earlier, when
+  # options are first proposed. Delivery has to be always-on to reach that
+  # moment, so assert it survives installation.
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  grep -q '^## Proposing options' "$TEST_HOME/.claude/CLAUDE.md"
+}
+
 @test "install: every reference file CLAUDE.md points at is delivered" {
   # CLAUDE.md cites these by path rather than @-importing them, keeping them
   # out of the always-loaded context. A missing file makes the pointer dangle
