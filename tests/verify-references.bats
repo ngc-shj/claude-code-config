@@ -174,12 +174,34 @@ teardown() {
   rm -f "$ROOT_DIR/src/rel-inside.ts"
 }
 
+@test "symlink chain longer than the hop cap: fails closed, no metadata leak" {
+  # The cap stops the walk on an in-ROOT link, so containment passes — and the
+  # kernel then follows the remaining hops for `-f` and `wc -l`, leaking the
+  # outside file's line count. Only refusing the reference outright closes it.
+  # The cycle case does NOT cover this: a cycle is dangling, so `-f` fails and
+  # the leftover path looks safe.
+  mkdir -p "$ROOT_DIR/../outside-deep"
+  printf '1\n2\n3\n4\n5\n6\n7\n' > "$ROOT_DIR/../outside-deep/secret.ts"
+  ln -sf "$ROOT_DIR/../outside-deep/secret.ts" "$ROOT_DIR/src/L40.ts"
+  for i in $(seq 39 -1 0); do
+    ln -sf "$ROOT_DIR/src/L$((i + 1)).ts" "$ROOT_DIR/src/L$i.ts"
+  done
+  run bash -c "printf 'src/L0.ts:1\nsrc/L0.ts:999\n' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  rm -rf "$ROOT_DIR/../outside-deep"
+  rm -f "$ROOT_DIR"/src/L*.ts
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"OK "* ]]
+  [[ "$output" != *"file has "* ]]
+}
+
 @test "symlink cycle: terminates and fails closed as MISSING" {
   # A -> B -> A never stops being a symlink; the hop cap must end the walk and
   # refuse the path rather than spinning or accepting the in-ROOT link itself.
   ln -sf "$ROOT_DIR/src/cycB.ts" "$ROOT_DIR/src/cycA.ts"
   ln -sf "$ROOT_DIR/src/cycA.ts" "$ROOT_DIR/src/cycB.ts"
-  run bash -c "echo 'src/cycA.ts:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  # `timeout` so a missing cap reports RED here instead of wedging the suite —
+  # an unbounded walk would otherwise hang CI rather than fail it.
+  run bash -c "echo 'src/cycA.ts:1' | timeout 30 bash '$SCRIPT' --root '$ROOT_DIR'"
   [ "$status" -eq 0 ]
   [[ "$output" == *"MISSING"* ]]
   [[ "$output" != *"OK "* ]]
@@ -207,17 +229,18 @@ teardown() {
   rm -f "$ROOT_DIR/src/dangle-in.ts"
 }
 
-@test "symlink to a directory outside ROOT: reported as OUT-OF-ROOT" {
-  # The leaf resolves to a directory; containment must still reject it, and the
-  # non-regular-file path must not leak metadata.
+@test "reference THROUGH a symlinked directory escaping ROOT: reported as OUT-OF-ROOT" {
+  # A symlinked DIRECTORY component mid-path, not a symlink leaf: the escape
+  # happens during the parent-directory `cd -P`, before the leaf loop runs.
+  # Distinct from the leaf cases — the referenced basename is a regular file.
   mkdir -p "$ROOT_DIR/../outside-dir"
   echo "secret" > "$ROOT_DIR/../outside-dir/secret.ts"
-  ln -sf "$ROOT_DIR/../outside-dir/secret.ts" "$ROOT_DIR/src/dirlink.ts"
-  run bash -c "echo 'src/dirlink.ts:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  ln -sf "$ROOT_DIR/../outside-dir" "$ROOT_DIR/src/dirlink"
+  run bash -c "echo 'src/dirlink/secret.ts:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OUT-OF-ROOT"* ]]
   [[ "$output" != *"file has "* ]]
-  rm -rf "$ROOT_DIR/../outside-dir" "$ROOT_DIR/src/dirlink.ts"
+  rm -rf "$ROOT_DIR/../outside-dir" "$ROOT_DIR/src/dirlink"
 }
 
 @test "symlink inside ROOT: reported as OK" {

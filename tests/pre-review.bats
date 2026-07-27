@@ -70,6 +70,14 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"outside TRUSTED_ROOT"* ]]
   [[ "$output" != *"exfiltrated-secret-marker"* ]]
+  # Refusal must be specific to the escape, not a hook that refuses everything:
+  # an in-repo symlink to an in-repo file is still accepted.
+  ln -sf "$REPO_ROOT/CLAUDE.md" "$REPO_ROOT/.pre-review-inside-link.md"
+  run bash -c "echo '' | PLAN_FILE='$REPO_ROOT/.pre-review-inside-link.md' bash '$SCRIPT' plan"
+  rm -f "$REPO_ROOT/.pre-review-inside-link.md"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"outside TRUSTED_ROOT"* ]]
+  [[ "$output" != *"could not be resolved"* ]]
 }
 
 @test "PLAN_FILE=symlink CHAIN inside repo pointing outside: rejected, contents not read" {

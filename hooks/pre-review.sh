@@ -40,9 +40,7 @@ case "$MODE" in
       # reflected into the review output, which is the exfiltration channel the
       # header warns about. Chase the whole chain (a one-hop check is defeated
       # by two links planted inside the repo), same 40-hop-capped shape as
-      # `_containment_check` in retro-prescreen.sh. A path still unresolved
-      # after the cap keeps its in-root value and is refused by the `-f` test
-      # in the caller, never read.
+      # `_containment_check` in retro-prescreen.sh.
       plan_hops=0
       while [ -n "$plan_abs" ] && [ -L "$plan_abs" ] && [ "$plan_hops" -lt 40 ]; do
         plan_link=$(readlink "$plan_abs") || break
@@ -53,6 +51,19 @@ case "$MODE" in
         plan_abs="$plan_resolved"
         plan_hops=$((plan_hops + 1))
       done
+      # Cap exhausted with a link still in hand: FAIL CLOSED, same reasoning as
+      # verify-references.sh. The leftover path is in-repo so the containment
+      # case below would PASS, and `cat` follows the remaining hops in the
+      # kernel — our resolver stopping does not stop the syscall. NOTE this
+      # branch is not reachable by a test on Linux: ELOOP is also 40, so the
+      # caller's `-f "$PLAN_FILE"` already fails and we never enter the loop.
+      # It is kept as defense-in-depth for platforms with a higher ELOOP limit,
+      # and because relying on the platform to enforce our containment is what
+      # made the equivalent branch look removable in verify-references.sh —
+      # where the chain IS reachable and the leak was real.
+      if [ -n "$plan_abs" ] && [ -L "$plan_abs" ] && [ "$plan_hops" -ge 40 ]; then
+        plan_abs=""
+      fi
       if [ -z "$plan_abs" ]; then
         echo "Warning: PLAN_FILE='$PLAN_FILE' could not be resolved. Falling back to stdin." >&2
         CONTENT=$(cat)

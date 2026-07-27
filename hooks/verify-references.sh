@@ -112,13 +112,9 @@ while IFS= read -r ref; do
   # `cd -P` is the both-platform idiom used above (macOS realpath rejects the
   # GNU-only flags). A dangling link resolves the same way — only its target's
   # parent must exist — so one pointing outside ROOT reports OUT-OF-ROOT and one
-  # inside falls through to MISSING below. A cycle (A -> B -> A) never stops
-  # being a symlink, so the cap ends the walk; the path left behind is the
-  # in-ROOT link itself, which the existence check below rejects as MISSING —
-  # the safe direction, since a link that cannot be resolved is never accepted
-  # as a real file. No `--` on readlink: the argument is always absolute (built
-  # from `pwd -P`), so it can never be read as an option, and BSD readlink
-  # rejects `--`.
+  # inside falls through to MISSING below. No `--` on readlink: the argument is
+  # always absolute (built from `pwd -P`), so it can never be read as an option,
+  # and BSD readlink rejects `--`.
   hops=0
   while [ -n "$full_abs" ] && [ -L "$full_abs" ] && [ "$hops" -lt 40 ]; do
     link_target=$(readlink "$full_abs") || break
@@ -129,6 +125,17 @@ while IFS= read -r ref; do
     full_abs="$resolved"
     hops=$((hops + 1))
   done
+  # Cap exhausted with a symlink still in hand: FAIL CLOSED. Leaving the
+  # partially-resolved path is not safe, and the downstream existence check does
+  # NOT save us — it only appears to for a cycle, which is dangling so `-f`
+  # fails. When a chain longer than the cap ends at a REAL file outside ROOT,
+  # the walk stops on an in-ROOT link, containment passes, and `-f`/`wc` let the
+  # KERNEL follow the remaining hops to the outside file — our resolver stopping
+  # does not stop the syscall. That reopens the size oracle, so the reference
+  # must be refused outright.
+  if [ -n "$full_abs" ] && [ -L "$full_abs" ] && [ "$hops" -ge 40 ]; then
+    full_abs=""
+  fi
   if [ -z "$full_abs" ]; then
     OUTPUT="${OUTPUT}MISSING      ${ref}
 "

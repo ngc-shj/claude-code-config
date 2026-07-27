@@ -1,6 +1,6 @@
 # Code Review: retro-2026-07-27 (artifacts-source fold)
 Date: 2026-07-27
-Review round: 1
+Review round: 2
 
 ## Changes from Previous Round
 Initial review. Branch `retro/2026-07-27-gate-harness-recipient-scope`: four mined
@@ -147,6 +147,108 @@ boundary. Promoted to a Critical finding and fixed in this round.
 ### T3 [Minor] Obligation 14 illustrative spelling
 - Action: none. Assessed and rejected — obligation 13 omits it too, and the requirement
   has no canonical per-framework spelling. Recorded here so the assessment is not redone.
+
+---
+
+# Round 2
+
+## Changes from Previous Round
+Round 1's fixes verified by two experts (security, testing). The chain fix itself holds,
+but Round 1's *removal* of the hop-cap fail-closed block was found to be a real security
+regression — both experts flagged it independently as Critical, refuting the orchestrator's
+Round 1 reasoning.
+
+## Round 2 Findings
+
+**R2-1 / S3 [Critical] The hop-cap removal reopened the metadata leak** —
+`hooks/verify-references.sh`. Round 1 removed the fail-closed block because a mutation
+"showed it pinned nothing". That mutation only covered the CYCLE case, which is dangling,
+so `-f` fails and the leftover path looks safe. When a chain LONGER than the cap ends at a
+**real existing file outside ROOT**, the walk stops on an in-ROOT link, containment passes,
+and `-f`/`wc -l` let the KERNEL follow the remaining hops. Executed proof: a 41-link chain
+reported `OK` and leaked the outside file's true line count (7).
+
+This is R42 clause ①b in the orchestrator's own work — the escape-vector class was closed
+at one axis (cycle) when the axis had another member (chain-to-real-file) — and R43, since
+a fail-closed predicate was removed on a *testing* argument rather than a security one.
+
+**R2-3 / S4 [Major] No test bounded the hop cap** — the untested boundary was exactly where
+the defect lived. RT7 shape (c).
+
+**R2-4 [Major] The cycle test hangs rather than fails when the cap is removed** — a wedged
+CI is a worse failure mode than a red.
+
+**R2-5 [Major] Test 22 was misnamed and duplicated test 16** — its fixture linked to a
+regular file that merely sat in an outside directory; `[ -d ]` on the link was false. It
+red iff test 16 red, so it added no coverage.
+
+**R2-6 [Minor] The same false cap rationale was propagated into `pre-review.sh`** — safe
+there only incidentally, via kernel ELOOP.
+
+**R2-7 [Minor] The new pre-review tests stayed green under a refuse-everything mutation** —
+they asserted refusal but never that a legitimate plan is still accepted.
+
+Testing expert also verified all four Round 1 red-proof claims by executing them: each
+reproduced exactly, reddening the claimed tests and no others. It corrected one Round 1
+self-assessment: the cycle test IS pinnable (by a mutation accepting symlinks at the
+existence check), contrary to the orchestrator's note.
+
+## Round 2 Resolution Status
+
+### R2-1 / S3 [Critical] Cap fail-open
+- Action: restored the fail-closed block and rewrote the comment to state the real
+  mechanism — that the downstream existence check does NOT save us, because the kernel
+  follows the remaining hops even after our resolver stops.
+- Modified file: `hooks/verify-references.sh:105-131`
+- Red-proof (executed): removing the restored block reds test 19. The Round 1 mistake was
+  mutating only against a cycle; this mutation uses a chain to a real outside file.
+
+### R2-3 [Major] Untested cap boundary
+- Action: added `symlink chain longer than the hop cap: fails closed, no metadata leak`,
+  building a 41-link chain to a real outside file and asserting neither `OK ` nor
+  `file has ` appears.
+- Modified file: `tests/verify-references.bats:175-193`
+
+### R2-4 [Major] Cycle test hangs instead of failing
+- Action: wrapped the invocation in `timeout 30` so a missing cap reds here rather than
+  wedging the suite.
+- Modified file: `tests/verify-references.bats:198-201`
+
+### R2-5 [Major] Misnamed duplicate test
+- Action: rewritten as `reference THROUGH a symlinked directory escaping ROOT` — the
+  fixture now links a DIRECTORY and references a regular file inside it, so the escape
+  happens during the parent `cd -P`, before the leaf loop.
+- Modified file: `tests/verify-references.bats:213-225`
+- Red-proof (executed): breaking the parent canonicalization reds tests 13 and 23; the
+  test no longer red-iff-16.
+
+### R2-6 [Minor] False rationale propagated to pre-review.sh
+- Action: added the fail-closed cap block there too and corrected the comment. The comment
+  now states plainly that this branch is **not reachable by a test on Linux** (ELOOP is
+  also 40, so the caller's `-f` fails before the loop runs) and is kept as defense-in-depth
+  for platforms with a higher limit.
+- Modified file: `hooks/pre-review.sh:47-73`
+- Mutation result (executed): removing the block reds NO test — recorded as an accepted,
+  documented residual rather than a claimed proof. Relying on the platform to enforce our
+  containment is what made the equivalent branch look removable in `verify-references.sh`,
+  where the chain IS reachable and the leak was real.
+
+### R2-7 [Minor] Pre-review tests could not detect over-refusal
+- Action: added an accept-path assertion — an in-repo symlink to an in-repo file must
+  still be read.
+- Modified file: `tests/pre-review.bats:70-77`
+- Red-proof (executed): a refuse-everything mutation now reds tests 29 and 32; previously
+  only the pre-existing test 32 caught it.
+
+### R2-8 / S4 [Minor] Remaining untested variants
+- Action: none. Mixed relative/absolute chains, symlinked intermediate parents, and target
+  names with spaces/newlines were all verified correct by execution during review but left
+  untested. Recorded here so the assessment is not redone; each is a Minor coverage nit
+  with no reachable defect.
+
+## Round 2 Gates
+- `bash ~/.claude/hooks/check-rule-sync.sh` → exit 0
+- `bats tests/` → exit 0, **800/800** passing
 
 ## Environment Verification Report
 N/A — no environment constraints declared (config-only repo; bats is the full harness and
