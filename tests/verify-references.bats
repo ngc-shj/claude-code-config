@@ -7,15 +7,20 @@ bats_require_minimum_version 1.5.0
 SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/verify-references.sh"
 
 setup() {
-  export ROOT_DIR
-  ROOT_DIR="$(mktemp -d)"
+  export ROOT_DIR SANDBOX_DIR
+  # ROOT is nested one level inside the sandbox, so tests needing a path
+  # OUTSIDE ROOT can use "$ROOT_DIR/.." without reaching into shared /tmp —
+  # teardown then reclaims those fixtures too, even when a test fails before
+  # its own cleanup line.
+  SANDBOX_DIR="$(mktemp -d)"
+  ROOT_DIR="$SANDBOX_DIR/root"
   mkdir -p "$ROOT_DIR/src" "$ROOT_DIR/lib"
   printf 'a\nb\nc\nd\ne\n' > "$ROOT_DIR/src/foo.ts"     # 5 lines
   printf '%s\n' one two three > "$ROOT_DIR/lib/bar.py"    # 3 lines
 }
 
 teardown() {
-  rm -rf "$ROOT_DIR"
+  rm -rf "$SANDBOX_DIR"
 }
 
 @test "empty stdin: reports total=0" {
@@ -237,10 +242,20 @@ teardown() {
   echo "secret" > "$ROOT_DIR/../outside-dir/secret.ts"
   ln -sf "$ROOT_DIR/../outside-dir" "$ROOT_DIR/src/dirlink"
   run bash -c "echo 'src/dirlink/secret.ts:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  rm -rf "$ROOT_DIR/../outside-dir" "$ROOT_DIR/src/dirlink"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OUT-OF-ROOT"* ]]
   [[ "$output" != *"file has "* ]]
-  rm -rf "$ROOT_DIR/../outside-dir" "$ROOT_DIR/src/dirlink"
+}
+
+@test "--root / : paths under the filesystem root are not all refused" {
+  # `pwd -P` yields "/" for the filesystem root, which makes the containment
+  # pattern "//"* — matching nothing, so every path is refused including ones
+  # genuinely inside ROOT. Fails closed, but wrong.
+  run bash -c "echo '$ROOT_DIR/src/foo.ts:1' | bash '$SCRIPT' --root /"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+  [[ "$output" != *"OUT-OF-ROOT"* ]]
 }
 
 @test "symlink inside ROOT: reported as OK" {

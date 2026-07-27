@@ -46,6 +46,11 @@ ROOT_ABS=$(cd -P -- "$ROOT" 2>/dev/null && pwd -P) || {
   echo "Error: ROOT '$ROOT' does not exist or is not accessible" >&2
   exit 1
 }
+# `pwd -P` returns "/" for the filesystem root, which would make the containment
+# pattern below "//"* — matching nothing, so every path is refused including
+# ones genuinely under ROOT. Empty it so the pattern reads "/"*. Over-refusal is
+# the safe direction, but it is still wrong.
+[ "$ROOT_ABS" = "/" ] && ROOT_ABS=""
 
 INPUT=$(cat)
 if [ -z "$INPUT" ]; then

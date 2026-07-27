@@ -26,6 +26,10 @@ MAX_INPUT_CHARS=$(( MAX_INPUT_TOKENS * 3 ))
 # reflected back through the review output, creating an exfiltration channel.
 TRUSTED_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 TRUSTED_ROOT=$( (cd -P -- "$TRUSTED_ROOT" 2>/dev/null && pwd -P) || echo "$TRUSTED_ROOT")
+# "/" would make the containment pattern below "//"*, matching nothing and
+# refusing every path — reachable by running outside a git repo from "/".
+# Over-refusal is the safe direction, but still wrong; empty it so it reads "/"*.
+[ "$TRUSTED_ROOT" = "/" ] && TRUSTED_ROOT=""
 
 case "$MODE" in
   plan)

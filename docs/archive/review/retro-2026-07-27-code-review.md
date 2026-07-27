@@ -1,6 +1,6 @@
 # Code Review: retro-2026-07-27 (artifacts-source fold)
 Date: 2026-07-27
-Review round: 2
+Review round: 3 (final)
 
 ## Changes from Previous Round
 Initial review. Branch `retro/2026-07-27-gate-harness-recipient-scope`: four mined
@@ -249,6 +249,80 @@ existence check), contrary to the orchestrator's note.
 ## Round 2 Gates
 - `bash ~/.claude/hooks/check-rule-sync.sh` → exit 0
 - `bats tests/` → exit 0, **800/800** passing
+
+---
+
+# Round 3
+
+## Changes from Previous Round
+Combined security + testing verification of round 2's fixes. The Critical is confirmed
+closed and every round-2 finding verified resolved. Two Minor findings, both real, both
+fixed here.
+
+## Verification of Round 2 (all executed)
+
+- **Cap boundary swept at 1, 2, 38, 39, 40, 41, 45, 60 links**, chains terminating at a
+  real file both inside and outside ROOT. No `OK` and no `file has ` for any outside
+  target at any length; in-ROOT chains up to 40 links still resolve to `OK`, so there is
+  no over-refusal. **40 links is the last fully-resolved case**; 41 exhausts the cap and
+  refuses. The loop admits hops 0..39 and the check fires at `>= 40` — the two conditions
+  abut exactly, no gap and no double-count.
+- **Test 19 is not a false-positive trap**: raising the cap 40 → 100 (a safe change) keeps
+  the suite green, because the test asserts the outcome (no acceptance, no metadata), not
+  the mechanism.
+- **`timeout 30` converts the hang into a red** — measured `rc=124` at 30s; the test reds
+  rather than wedging.
+- **Test 23 is no longer a duplicate** — breaking the parent canonicalization reds test 23
+  alone, with test 16 green.
+- Independently confirmed the mixed relative/absolute, symlinked-intermediate-parent,
+  symlinked-component-in-absolute-target, and newline-filename variants all classify
+  correctly (round 2's R2-8 accepted residual).
+
+One correction to round 2's record: the round-2 note named the wrong mutation as proof for
+the pre-review accept-path assertions. A refuse-everything mutation reds the test at its
+pre-existing assertion (bats aborts on first failure), so the new assertions are never
+reached. A narrower mutation — over-refuse only in-root symlinks, leaving the escape
+message intact — reds at the new assertion and no other test catches it. The assertions do
+unique work; only the stated proof was imprecise.
+
+## Round 3 Findings and Resolution
+
+### R3-1 [Minor] `ROOT_ABS="/"` refuses every path
+- `pwd -P` returns `/` for the filesystem root, making the containment pattern `"//"*`,
+  which matches nothing — so `--root /` refuses paths that are genuinely inside ROOT.
+  Fails closed, hence Minor, but wrong. The same shape existed in `pre-review.sh` when
+  `TRUSTED_ROOT` is `/` (reachable by running outside a git repo from `/`).
+- Action: normalize `/` to empty in both hooks so the pattern reads `"/"*`.
+- Modified files: `hooks/verify-references.sh:45-54`, `hooks/pre-review.sh:27-32`
+- Red-proof (executed): reverting the normalization reds the new test 24
+  (`--root / : paths under the filesystem root are not all refused`).
+
+### R3-2 [Minor] Test fixtures leaked into shared `/tmp` on failure
+- `ROOT_DIR` was `mktemp -d` directly under `/tmp`, so every `"$ROOT_DIR/.."` fixture
+  (the outside-ROOT targets) landed in shared `/tmp` under fixed, guessable names, and
+  `teardown` removed only `ROOT_DIR`. Test 23 also cleaned up *after* its assertions, so a
+  failing run leaked `/tmp/outside-dir`.
+- Action: nested ROOT one level inside a per-test sandbox (`SANDBOX_DIR/root`) so
+  `"$ROOT_DIR/.."` stays inside the sandbox and `teardown` reclaims it regardless of
+  outcome; moved test 23's cleanup above its assertions to match test 19.
+- Modified file: `tests/verify-references.bats:9-24, 244-249`
+- Verified (executed): with test 23 forced to fail, shared `/tmp` stays clean.
+
+### R3-3 [Minor] TOCTOU between resolution and read
+- Action: none. Structurally present — the read is by path rather than a retained fd — but
+  exploiting it needs a local attacker with write access to ROOT racing a ~10ms window,
+  which is outside the threat model of a helper fed LLM output (the attacker model is
+  content, not concurrent filesystem writes). Recorded so the assessment is not redone.
+
+## Round 3 Gates
+- `bash ~/.claude/hooks/check-rule-sync.sh` → exit 0
+- `bats tests/` → exit 0, **801/801** passing
+
+## Termination
+
+Round 3's findings were both Minor, inside round 2's fix scope, and touched no security
+boundary — the Step 3-8 tightening-only skip applies, so no round 4. Both were fixed in
+place and re-gated.
 
 ## Environment Verification Report
 N/A — no environment constraints declared (config-only repo; bats is the full harness and
