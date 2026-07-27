@@ -7,15 +7,20 @@ bats_require_minimum_version 1.5.0
 SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/verify-references.sh"
 
 setup() {
-  export ROOT_DIR
-  ROOT_DIR="$(mktemp -d)"
+  export ROOT_DIR SANDBOX_DIR
+  # ROOT is nested one level inside the sandbox, so tests needing a path
+  # OUTSIDE ROOT can use "$ROOT_DIR/.." without reaching into shared /tmp —
+  # teardown then reclaims those fixtures too, even when a test fails before
+  # its own cleanup line.
+  SANDBOX_DIR="$(mktemp -d)"
+  ROOT_DIR="$SANDBOX_DIR/root"
   mkdir -p "$ROOT_DIR/src" "$ROOT_DIR/lib"
   printf 'a\nb\nc\nd\ne\n' > "$ROOT_DIR/src/foo.ts"     # 5 lines
   printf '%s\n' one two three > "$ROOT_DIR/lib/bar.py"    # 3 lines
 }
 
 teardown() {
-  rm -rf "$ROOT_DIR"
+  rm -rf "$SANDBOX_DIR"
 }
 
 @test "empty stdin: reports total=0" {
@@ -143,6 +148,114 @@ teardown() {
   [[ "$output" == *"OUT-OF-ROOT"* ]]
   [[ "$output" != *"file has "* ]]
   rm -f "$ROOT_DIR/../outside-secret.txt" "$ROOT_DIR/src/link.ts"
+}
+
+@test "symlink CHAIN escaping ROOT: reported as OUT-OF-ROOT" {
+  # Two links planted inside ROOT: A -> B (both inside) -> target outside.
+  # A one-hop resolution clears this because A's immediate target still sits
+  # inside ROOT — the escape only shows up when the whole chain is chased.
+  echo "outside-content-line1" > "$ROOT_DIR/../outside-chained.txt"
+  ln -sf "$ROOT_DIR/../outside-chained.txt" "$ROOT_DIR/src/hop2.ts"
+  ln -sf "$ROOT_DIR/src/hop2.ts" "$ROOT_DIR/src/hop1.ts"
+  run bash -c "echo 'src/hop1.ts:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OUT-OF-ROOT"* ]]
+  [[ "$output" != *"file has "* ]]
+  rm -f "$ROOT_DIR/../outside-chained.txt" "$ROOT_DIR/src/hop2.ts" "$ROOT_DIR/src/hop1.ts"
+}
+
+@test "relative symlink target resolving inside ROOT: reported as OK" {
+  # Relative target (no leading /) exercises the dirname-join branch, which the
+  # absolute-target cases never reach. The target must be a real IN-ROOT file:
+  # an escaping relative target would report OUT-OF-ROOT even with the join
+  # broken, because a bare relative path then resolves against the working
+  # directory (also outside ROOT) — so only the in-ROOT direction distinguishes
+  # a working join from a broken one.
+  ln -sf "foo.ts" "$ROOT_DIR/src/rel-inside.ts"
+  run bash -c "echo 'src/rel-inside.ts:2' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+  [[ "$output" != *"MISSING"* ]]
+  rm -f "$ROOT_DIR/src/rel-inside.ts"
+}
+
+@test "symlink chain longer than the hop cap: fails closed, no metadata leak" {
+  # The cap stops the walk on an in-ROOT link, so containment passes — and the
+  # kernel then follows the remaining hops for `-f` and `wc -l`, leaking the
+  # outside file's line count. Only refusing the reference outright closes it.
+  # The cycle case does NOT cover this: a cycle is dangling, so `-f` fails and
+  # the leftover path looks safe.
+  mkdir -p "$ROOT_DIR/../outside-deep"
+  printf '1\n2\n3\n4\n5\n6\n7\n' > "$ROOT_DIR/../outside-deep/secret.ts"
+  ln -sf "$ROOT_DIR/../outside-deep/secret.ts" "$ROOT_DIR/src/L40.ts"
+  for i in $(seq 39 -1 0); do
+    ln -sf "$ROOT_DIR/src/L$((i + 1)).ts" "$ROOT_DIR/src/L$i.ts"
+  done
+  run bash -c "printf 'src/L0.ts:1\nsrc/L0.ts:999\n' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  rm -rf "$ROOT_DIR/../outside-deep"
+  rm -f "$ROOT_DIR"/src/L*.ts
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"OK "* ]]
+  [[ "$output" != *"file has "* ]]
+}
+
+@test "symlink cycle: terminates and fails closed as MISSING" {
+  # A -> B -> A never stops being a symlink; the hop cap must end the walk and
+  # refuse the path rather than spinning or accepting the in-ROOT link itself.
+  ln -sf "$ROOT_DIR/src/cycB.ts" "$ROOT_DIR/src/cycA.ts"
+  ln -sf "$ROOT_DIR/src/cycA.ts" "$ROOT_DIR/src/cycB.ts"
+  # `timeout` so a missing cap reports RED here instead of wedging the suite —
+  # an unbounded walk would otherwise hang CI rather than fail it.
+  run bash -c "echo 'src/cycA.ts:1' | timeout 30 bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"MISSING"* ]]
+  [[ "$output" != *"OK "* ]]
+  [[ "$output" != *"file has "* ]]
+  rm -f "$ROOT_DIR/src/cycA.ts" "$ROOT_DIR/src/cycB.ts"
+}
+
+@test "dangling symlink pointing outside ROOT: reported as OUT-OF-ROOT" {
+  # Target does not exist but its parent does, so the chain still canonicalizes
+  # to an out-of-ROOT path — containment decides it, not existence.
+  ln -sf "$ROOT_DIR/../outside-absent.txt" "$ROOT_DIR/src/dangle-out.ts"
+  run bash -c "echo 'src/dangle-out.ts:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OUT-OF-ROOT"* ]]
+  [[ "$output" != *"file has "* ]]
+  rm -f "$ROOT_DIR/src/dangle-out.ts"
+}
+
+@test "dangling symlink pointing inside ROOT: reported as MISSING" {
+  # Contained but absent — passes containment, fails the existence check.
+  ln -sf "$ROOT_DIR/src/never-created.ts" "$ROOT_DIR/src/dangle-in.ts"
+  run bash -c "echo 'src/dangle-in.ts:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"MISSING"* ]]
+  rm -f "$ROOT_DIR/src/dangle-in.ts"
+}
+
+@test "reference THROUGH a symlinked directory escaping ROOT: reported as OUT-OF-ROOT" {
+  # A symlinked DIRECTORY component mid-path, not a symlink leaf: the escape
+  # happens during the parent-directory `cd -P`, before the leaf loop runs.
+  # Distinct from the leaf cases — the referenced basename is a regular file.
+  mkdir -p "$ROOT_DIR/../outside-dir"
+  echo "secret" > "$ROOT_DIR/../outside-dir/secret.ts"
+  ln -sf "$ROOT_DIR/../outside-dir" "$ROOT_DIR/src/dirlink"
+  run bash -c "echo 'src/dirlink/secret.ts:1' | bash '$SCRIPT' --root '$ROOT_DIR'"
+  rm -rf "$ROOT_DIR/../outside-dir" "$ROOT_DIR/src/dirlink"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OUT-OF-ROOT"* ]]
+  [[ "$output" != *"file has "* ]]
+}
+
+@test "--root / : paths under the filesystem root are not all refused" {
+  # `pwd -P` yields "/" for the filesystem root, which makes the containment
+  # pattern "//"* — matching nothing, so every path is refused including ones
+  # genuinely inside ROOT. Fails closed, but wrong.
+  run bash -c "echo '$ROOT_DIR/src/foo.ts:1' | bash '$SCRIPT' --root /"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+  [[ "$output" != *"OUT-OF-ROOT"* ]]
 }
 
 @test "symlink inside ROOT: reported as OK" {

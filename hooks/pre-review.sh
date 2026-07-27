@@ -26,6 +26,10 @@ MAX_INPUT_CHARS=$(( MAX_INPUT_TOKENS * 3 ))
 # reflected back through the review output, creating an exfiltration channel.
 TRUSTED_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 TRUSTED_ROOT=$( (cd -P -- "$TRUSTED_ROOT" 2>/dev/null && pwd -P) || echo "$TRUSTED_ROOT")
+# "/" would make the containment pattern below "//"*, matching nothing and
+# refusing every path — reachable by running outside a git repo from "/".
+# Over-refusal is the safe direction, but still wrong; empty it so it reads "/"*.
+[ "$TRUSTED_ROOT" = "/" ] && TRUSTED_ROOT=""
 
 case "$MODE" in
   plan)
@@ -34,6 +38,36 @@ case "$MODE" in
       # which works on BSD/macOS too, and re-attach the basename.
       plan_abs=$( d=$(cd -P -- "$(dirname -- "$PLAN_FILE")" 2>/dev/null && pwd -P) \
                   && printf '%s/%s' "$d" "$(basename -- "$PLAN_FILE")" )
+      # Parent-only resolution leaves a SYMLINK LEAF unresolved, so a link
+      # inside the repo pointing outside canonicalizes to its own in-root path
+      # and passes the containment case below — the contents are then read and
+      # reflected into the review output, which is the exfiltration channel the
+      # header warns about. Chase the whole chain (a one-hop check is defeated
+      # by two links planted inside the repo), same 40-hop-capped shape as
+      # `_containment_check` in retro-prescreen.sh.
+      plan_hops=0
+      while [ -n "$plan_abs" ] && [ -L "$plan_abs" ] && [ "$plan_hops" -lt 40 ]; do
+        plan_link=$(readlink "$plan_abs") || break
+        [[ "$plan_link" = /* ]] || plan_link="$(dirname -- "$plan_abs")/$plan_link"
+        plan_resolved=$( d=$(cd -P -- "$(dirname -- "$plan_link")" 2>/dev/null && pwd -P) \
+                         && printf '%s/%s' "$d" "$(basename -- "$plan_link")" ) || plan_resolved=""
+        [ -z "$plan_resolved" ] && break
+        plan_abs="$plan_resolved"
+        plan_hops=$((plan_hops + 1))
+      done
+      # Cap exhausted with a link still in hand: FAIL CLOSED, same reasoning as
+      # verify-references.sh. The leftover path is in-repo so the containment
+      # case below would PASS, and `cat` follows the remaining hops in the
+      # kernel — our resolver stopping does not stop the syscall. NOTE this
+      # branch is not reachable by a test on Linux: ELOOP is also 40, so the
+      # caller's `-f "$PLAN_FILE"` already fails and we never enter the loop.
+      # It is kept as defense-in-depth for platforms with a higher ELOOP limit,
+      # and because relying on the platform to enforce our containment is what
+      # made the equivalent branch look removable in verify-references.sh —
+      # where the chain IS reachable and the leak was real.
+      if [ -n "$plan_abs" ] && [ -L "$plan_abs" ] && [ "$plan_hops" -ge 40 ]; then
+        plan_abs=""
+      fi
       if [ -z "$plan_abs" ]; then
         echo "Warning: PLAN_FILE='$PLAN_FILE' could not be resolved. Falling back to stdin." >&2
         CONTENT=$(cat)

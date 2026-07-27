@@ -46,6 +46,11 @@ ROOT_ABS=$(cd -P -- "$ROOT" 2>/dev/null && pwd -P) || {
   echo "Error: ROOT '$ROOT' does not exist or is not accessible" >&2
   exit 1
 }
+# `pwd -P` returns "/" for the filesystem root, which would make the containment
+# pattern below "//"* — matching nothing, so every path is refused including
+# ones genuinely under ROOT. Empty it so the pattern reads "/"*. Over-refusal is
+# the safe direction, but it is still wrong.
+[ "$ROOT_ABS" = "/" ] && ROOT_ABS=""
 
 INPUT=$(cat)
 if [ -z "$INPUT" ]; then
@@ -102,6 +107,40 @@ while IFS= read -r ref; do
   # path to run the containment check against.
   full_abs=$( d=$(cd -P -- "$(dirname -- "$candidate")" 2>/dev/null && pwd -P) \
               && printf '%s/%s' "$d" "$(basename -- "$candidate")" ) || full_abs=""
+  # Parent-only resolution leaves a SYMLINK LEAF unresolved: a link inside ROOT
+  # whose target is outside canonicalizes to its own in-ROOT path and passes
+  # containment. Chase the ENTIRE chain, re-resolving the containing directory
+  # at every hop — a single readlink only catches a one-hop escape, and two
+  # links planted inside ROOT (A -> B, both inside -> target outside) slip past
+  # it because A's immediate target still sits inside. Same shape and 40-hop cap
+  # as `_containment_check` in retro-prescreen.sh, which closed this exact hole.
+  # `cd -P` is the both-platform idiom used above (macOS realpath rejects the
+  # GNU-only flags). A dangling link resolves the same way — only its target's
+  # parent must exist — so one pointing outside ROOT reports OUT-OF-ROOT and one
+  # inside falls through to MISSING below. No `--` on readlink: the argument is
+  # always absolute (built from `pwd -P`), so it can never be read as an option,
+  # and BSD readlink rejects `--`.
+  hops=0
+  while [ -n "$full_abs" ] && [ -L "$full_abs" ] && [ "$hops" -lt 40 ]; do
+    link_target=$(readlink "$full_abs") || break
+    [[ "$link_target" = /* ]] || link_target="$(dirname -- "$full_abs")/$link_target"
+    resolved=$( d=$(cd -P -- "$(dirname -- "$link_target")" 2>/dev/null && pwd -P) \
+                && printf '%s/%s' "$d" "$(basename -- "$link_target")" ) || resolved=""
+    [ -z "$resolved" ] && break
+    full_abs="$resolved"
+    hops=$((hops + 1))
+  done
+  # Cap exhausted with a symlink still in hand: FAIL CLOSED. Leaving the
+  # partially-resolved path is not safe, and the downstream existence check does
+  # NOT save us — it only appears to for a cycle, which is dangling so `-f`
+  # fails. When a chain longer than the cap ends at a REAL file outside ROOT,
+  # the walk stops on an in-ROOT link, containment passes, and `-f`/`wc` let the
+  # KERNEL follow the remaining hops to the outside file — our resolver stopping
+  # does not stop the syscall. That reopens the size oracle, so the reference
+  # must be refused outright.
+  if [ -n "$full_abs" ] && [ -L "$full_abs" ] && [ "$hops" -ge 40 ]; then
+    full_abs=""
+  fi
   if [ -z "$full_abs" ]; then
     OUTPUT="${OUTPUT}MISSING      ${ref}
 "
@@ -110,8 +149,9 @@ while IFS= read -r ref; do
   fi
 
   # Containment: canonical path must sit under ROOT_ABS. Catches directory
-  # traversal (../), absolute-path escapes, and symlink redirection in a
-  # single check.
+  # traversal (../), absolute-path escapes, and — given the chain resolution
+  # above, at any depth up to the hop cap — symlink redirection, in a single
+  # check.
   case "$full_abs/" in
     "$ROOT_ABS/"*) : ;;
     *)

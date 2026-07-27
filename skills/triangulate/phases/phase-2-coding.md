@@ -204,7 +204,16 @@ bash ~/.claude/hooks/check-migrations.sh
 # OWN exit status — run it unpiped as below, or redirect output to a
 # file and inspect afterwards. Piping a gate through head/tail/grep
 # makes the pipe tail's status the observed one, and a real failure
-# reads as green.
+# reads as green. When gates are dispatched CONCURRENTLY, read each
+# status from a per-unit handle keyed by that unit's identity: a
+# "wait for any completion" primitive names no unit, so binding its
+# return value to the dispatch loop's index attributes the right
+# status to the wrong gate. And when the diff RESTRUCTURES a harness
+# that runs N gates (parallelism, early exit, dispatch reordering),
+# assert the executed-label set against a checked-in manifest and
+# red-prove that dropping one gate from dispatch reds the harness
+# (R42 executed-member-set) — a pass/fail COUNT is invariant under a
+# silently un-dispatched gate, so it cannot detect one.
 #
 # Invoke via the cache-aware wrapper, never as a raw invocation of the
 # script: identical-source re-runs are skipped by the pass-cache
