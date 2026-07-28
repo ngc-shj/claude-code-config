@@ -21,7 +21,12 @@
 #   5. no file references a rule ID above the declared max
 #   6. the "full procedures on ..." pointer sentence lists exactly the
 #      rules that have an Extended-obligations section header
-#   7. the generated compact digest matches the source table (when present)
+#   7. the generated compact digest matches the source table
+#   8. the phase manifest: each phase file's front matter agrees with its
+#      '### Step' headings (counted outside code fences), its terminator is
+#      unique / correctly numbered / last with no lookalike above it, and
+#      SKILL.md declares the manifest keys and terminator stems that every
+#      other comparison here is made against
 #
 # Usage: bash check-rule-sync.sh [triangulate-skill-dir]
 #   The default dir resolves to ../skills/triangulate relative to this
@@ -37,17 +42,29 @@ SKILL_DIR="${1:-$SCRIPT_DIR/../skills/triangulate}"
 
 COMMON="$SKILL_DIR/common-rules.md"
 SKILL="$SKILL_DIR/SKILL.md"
+# The digest is named in SKILL.md's loading protocol as the FIRST read and its
+# terminator as a truncation signal, so its absence is a broken pointer, not an
+# optional-file case. Checks 7 and the digest-terminator comparison guard on
+# `-f` for historical reasons; making it a preflight member is what stops
+# "delete the file" passing clean while "corrupt the file" reds.
+DIGEST="$SKILL_DIR/common-rules.digest.md"
 PHASE1="$SKILL_DIR/phases/phase-1-plan.md"
 PHASE2="$SKILL_DIR/phases/phase-2-coding.md"
 PHASE3="$SKILL_DIR/phases/phase-3-review.md"
 ALL_FILES=("$COMMON" "$SKILL" "$PHASE1" "$PHASE2" "$PHASE3")
 
-for f in "${ALL_FILES[@]}"; do
+for f in "${ALL_FILES[@]}" "$DIGEST"; do
   if [ ! -f "$f" ]; then
     echo "Error: missing file: $f" >&2
     exit 2
   fi
 done
+# The digest is required to EXIST (above) but deliberately stays out of
+# ALL_FILES, which is the scan list for the range-string and dangling-reference
+# checks. Its content is generated, and check 7 verifies it byte-for-byte
+# against a regeneration — a stronger guarantee than grepping it. Scanning it
+# would also flag the generator's own boilerplate example (`rg '^\| (R1|R3|RS2|RT4) \|'`)
+# as a dangling reference in any skill dir whose table stops below RT4.
 
 # The phases directory is a check-#8 precondition, and it is verified HERE so
 # that a missing one exits 2 before any drift accumulates. Check #8 itself
@@ -57,6 +74,20 @@ if [ ! -d "$SKILL_DIR/phases" ]; then
   echo "Error: missing directory: $SKILL_DIR/phases" >&2
   exit 2
 fi
+
+# Checks 3 and 5 scan a fixed list while check 8 sweeps the phases directory.
+# Left as-is, a phase file added later would get manifest and terminator
+# checking but escape range-string and dangling-reference checking — the same
+# member set derived two different ways inside one linter. Append the extras so
+# both derivations agree. The three named files stay required, so the
+# missing-file preflight above keeps its exit-2 contract.
+for extra_phase in "$SKILL_DIR"/phases/phase-*.md; do
+  [ -e "$extra_phase" ] || continue
+  case "$extra_phase" in
+    "$PHASE1"|"$PHASE2"|"$PHASE3") ;;
+    *) ALL_FILES+=("$extra_phase") ;;
+  esac
+done
 
 fail=0
 drift() {
@@ -210,7 +241,6 @@ fi
 
 # --- 7. generated digest matches the source table ---
 
-DIGEST="$SKILL_DIR/common-rules.digest.md"
 GENERATOR="$SCRIPT_DIR/generate-triangulate-rule-digest.sh"
 if [ -f "$DIGEST" ]; then
   if [ ! -f "$GENERATOR" ]; then
@@ -279,6 +309,11 @@ fi
 grep -q '`Read`' "$SKILL" || drift "SKILL.md: loading protocol missing 'Read' — readers must be told which tool delivers a whole file"
 [ -n "$STEM_PHASE" ] || drift "SKILL.md: loading protocol declares no phase-file terminator stem"
 [ -n "$STEM_DIGEST" ] || drift "SKILL.md: loading protocol declares no digest terminator stem"
+# The third extracted field needs the same guard as the two stems. Without it an
+# empty key list makes the 8i loop iterate once on "" and check nothing, so
+# SKILL.md could stop naming any manifest key — and stop telling the reader to
+# reconcile against them — with the gate still green.
+[ -n "$SKILL_KEYS" ] || drift "SKILL.md: loading protocol names no front-matter manifest keys"
 grep -q '^### Step' "$SKILL" && drift "SKILL.md: contains a '### Step' enumeration — the step manifest belongs in the phase file's front matter, not here"
 
 # Digest terminator, compared against the stem SKILL.md declares (not a literal).
@@ -325,18 +360,25 @@ for pf in "$SKILL_DIR"/phases/phase-*.md; do
     fi
   fi
 
-  # Fence-aware step-heading scan. The anchor tolerates leading whitespace
-  # because these files already contain indented fences (list-item code
-  # blocks); a column-0-only toggle would leave their contents scanned as live
-  # prose, so a real step heading moved into one would keep every count correct
-  # while the instruction disappeared.
-  if [ "$(awk '/^[[:space:]]*```/ { n++ } END { print (n % 2) }' "$pf")" != "0" ]; then
+  # Fence-aware step-heading scan. Both anchors allow the SAME 0-3 leading
+  # spaces, deliberately:
+  #   - fences, because these files already contain indented ones (list-item
+  #     code blocks) and a column-0-only toggle would scan their contents as
+  #     live prose, hiding a step heading moved into one;
+  #   - headings, because 1-3 spaces still render as a heading a reader will
+  #     execute, so a column-0-only heading anchor lets one be hidden from the
+  #     manifest by indenting it a single space.
+  # At 4+ spaces the line is an indented code block, not a fence — recognising
+  # one there is the fail-OPEN direction, because two such literal backtick
+  # lines desync the toggle with even parity and every column-0 line between
+  # them is skipped. Ignoring them can only over-count headings, which reds.
+  if [ "$(awk '/^ ? ? ?```/ { n++ } END { print (n % 2) }' "$pf")" != "0" ]; then
     drift "$base: unbalanced code fence at EOF — the '### Step' scan cannot be trusted"
   fi
   heading_ids=$(awk '
-    /^[[:space:]]*```/ { fence = 1 - fence; next }
+    /^ ? ? ?```/ { fence = 1 - fence; next }
     fence { next }
-    /^### Step [0-9]+-[0-9]+[a-z]?/ {
+    /^ ? ? ?### Step [0-9]+-[0-9]+[a-z]?/ {
       if (match($0, /[0-9]+-[0-9]+[a-z]?/)) print substr($0, RSTART, RLENGTH)
     }
   ' "$pf")

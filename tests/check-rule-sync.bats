@@ -31,11 +31,13 @@ append_body() {
     'index($0, "## " stem "-") == 1 { print ins } { print }' "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
-# Single source for the tokens the fixture and the linter must agree on, so a
-# rename is one edit rather than a dozen retyped literals (RT3).
+# Single source for the terminator stems, which the fixture builder, the
+# append helper and the staged-layout tests all need to agree on (RT3). The
+# front-matter KEY names are deliberately not hoisted: the two places they
+# appear — the fixture's declaration line and the 8i rename fixture — must be
+# able to disagree, since making them disagree is exactly what 8i tests.
 TERM_STEM="END-OF-PHASE"
 DIGEST_STEM="END-OF-DIGEST"
-FM_KEYS="step_ids core"
 
 # Build one fixture phase file: manifest, three steps, an INDENTED fenced decoy
 # (a step-shaped heading that must not be counted), the R/RS/RT template lines
@@ -134,6 +136,16 @@ EOF
     '- RS2: [status]' \
     '- RT1: [status]' \
     '- RT2: [status]'
+
+  regen_digest
+}
+
+# SKILL.md names the digest as the first read, so the linter now requires it.
+# Any test that mutates common-rules.md must regenerate, or check 7's staleness
+# comparison fires on top of whatever that test is actually probing.
+regen_digest() {
+  bash "$(dirname "$SCRIPT")/generate-triangulate-rule-digest.sh" \
+    "$FIX/common-rules.md" "$FIX/common-rules.digest.md" >/dev/null
 }
 
 # ============================================================
@@ -154,6 +166,7 @@ EOF
 
 @test "drift: referenced mandatory rule detail is missing" {
   sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  regen_digest
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"references missing mandatory detail: rule-details/R1.md"* ]]
@@ -182,6 +195,7 @@ EOF
 
 @test "drift (1a): gap in table IDs (R2 row removed)" {
   sed_i '/^| R2 |/d' "$FIX/common-rules.md"
+  regen_digest
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT:"*"gap — ID 2 missing"* ]]
@@ -190,6 +204,7 @@ EOF
 @test "drift (1b): duplicate table ID (extra R2 row appended to table)" {
   sed_i 's/^| R3 | Gamma | check c (full set R1-R3) | Major |$/| R3 | Gamma | check c (full set R1-R3) | Major |\n| R2 | Beta again | check b2 | Major |/' \
     "$FIX/common-rules.md"
+  regen_digest
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT:"*"duplicate ID 2"* ]]
@@ -197,6 +212,7 @@ EOF
 
 @test "drift (2): template block missing an R line" {
   sed_i '/^- R3 (Gamma): \[status\]$/d' "$FIX/common-rules.md"
+  regen_digest
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT:"*"template block"* ]]
@@ -266,6 +282,7 @@ Procedure text.
 
 Procedure text.
 EOF
+  regen_digest
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT:"*"pointer lists R{1} but Extended-obligations headers are R{1,2}"* ]]
@@ -288,6 +305,7 @@ Procedure text.
 
 Procedure text.
 EOF
+  regen_digest
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK: R1-R3 / RS1-RS2 / RT1-RT2"* ]]
@@ -489,6 +507,68 @@ EOF
   # I29: with no stem, the terminator checks short-circuit rather than matching
   # every line through an empty-needle containment test.
   [[ "$output" != *"resembles a terminator"* ]]
+}
+
+@test "drift (8j.3): SKILL.md declares no digest terminator stem" {
+  # Distinct from 8j.2 (phase stem) and from the staged-layout test, which
+  # RENAMES the digest stem and so leaves it non-empty. Removing it is the only
+  # mutation that reaches this clause.
+  sed_i 's/, `END-OF-DIGEST` (the digest)//' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SKILL.md: loading protocol declares no digest terminator stem"* ]]
+}
+
+@test "drift (8i): SKILL.md names no manifest keys at all" {
+  # The empty case, not the renamed one. Without its own guard the 8i loop
+  # iterates once on the empty string, checks nothing, and reports clean while
+  # SKILL.md has stopped telling readers what to reconcile against.
+  sed_i 's/Manifest keys: `step_ids:`, `core:`\./Manifest keys: none./' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SKILL.md: loading protocol names no front-matter manifest keys"* ]]
+}
+
+@test "drift (8g): core carries no step ID at all" {
+  # The 8g fixture mutates core to a WRONG id and takes the else branch; this
+  # takes the guard branch. `core: prose` is a well-formed `key: value`, so
+  # 8a.3 does not backstop it.
+  sed_i 's/^core: .*/core: plan review by three experts, no substitute/' \
+    "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: core does not begin with a step ID"* ]]
+}
+
+@test "drift (I15): a step heading indented by one space is still counted" {
+  # The heading anchor allows the same 0-3 spaces the fence anchor does. A
+  # column-0-only anchor would let a step be hidden from the manifest by
+  # indenting it a single space, while a reader still sees a heading.
+  sed_i 's/^### Step 1-3: Third$/ ### Step 1-3: Third/' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+  [[ "$output" == OK:* ]]
+}
+
+@test "drift (I15): backticks inside an indented code block do not desync the fence toggle" {
+  # A 4-space-indented backtick line is literal text, not a fence. Treating it
+  # as one lets two such lines flip the toggle with even parity and hide every
+  # heading between them — fail-open. Ignoring them can only over-count, which
+  # reds, so this asserts the hidden heading IS counted.
+  sed_i 's|^### Step 1-3: Third$|    ```\n### Step 1-8: hidden\n    ```\n### Step 1-3: Third|' \
+    "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: front matter declares 3 steps but file has 4 '### Step' headings"* ]]
+}
+
+@test "error: a deleted digest exits 2 rather than passing clean" {
+  # SKILL.md names the digest as the first read and its terminator as the
+  # truncation signal. Before it joined the preflight, deleting the file passed
+  # clean while corrupting it reds — the fail direction inverted.
+  rm "$FIX/common-rules.digest.md"
+  run -2 --separate-stderr bash "$SCRIPT" "$FIX"
+  [[ "$stderr" == *"missing file"*"common-rules.digest.md"* ]]
 }
 
 @test "drift (8j.4): SKILL.md carries a step enumeration of its own" {

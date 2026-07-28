@@ -160,6 +160,42 @@ run_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
+# The guarded set is install.sh's write set. skills/ and rules/ are installed by
+# byte-for-byte the same `rm -rf "$dest"; cp -r` loop, and RTK.md /
+# model-routing.md are copied alongside CLAUDE.md — covering one and not the
+# others is the class-membership miss this suite exists to make loud.
+@test "deny: ~/.claude/rules/<name>/... (absolute HOME path)" {
+  run run_hook Edit "$HOME/.claude/rules/common/security.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: literal ~/.claude/rules/<name>/... (un-expanded tilde)" {
+  run run_hook Edit "~/.claude/rules/common/security.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: ~/.claude/hooks/lib/<name> regardless of extension" {
+  # install.sh rm -rf's and re-copies hooks/lib/ wholesale, and ast-runner.js
+  # is the AST engine the detection hooks call — a .sh-only arm left the most
+  # tripwire-adjacent file in the tree editable.
+  run run_hook Edit "$HOME/.claude/hooks/lib/ast-runner.js"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: ~/.claude/RTK.md and model-routing.md (CLAUDE.md's cited refs)" {
+  run run_hook Edit "$HOME/.claude/RTK.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+  run run_hook Edit "$HOME/.claude/model-routing.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "approve: ~/.claude/projects/<slug>/memory/*.md is not install-managed" {
+  # Auto-memory is written by the running session and never overwritten by
+  # install.sh; a guard that swept the whole of ~/.claude would break it.
+  run run_hook Edit "$HOME/.claude/projects/some-slug/memory/feedback_example.md"
+  [[ "$output" == *'"decision": "approve"'* ]]
+}
+
 @test "deny: literal ~/.claude/skills/<name>/... (un-expanded tilde)" {
   run run_hook Edit "~/.claude/skills/triangulate/phases/phase-3-review.md"
   [[ "$output" == *'"decision":"block"'* ]]

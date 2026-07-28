@@ -110,8 +110,14 @@ Both were re-ablated afterwards and each now fails exactly its own fixture and n
 
 ## D9 — Observed isolation matrix vs the plan's prediction
 
-All 21 clauses are ablation-proven. Cells where the observed "also fails" set differs from the
-plan's prediction:
+**Correction (see D12): the "all clauses ablation-proven" claim below was wrong when written.** The
+first ablation pass covered the clauses the plan's matrix named and did not enumerate the clauses
+the *implementation* actually contains, so three branches it never listed went unexamined. The
+statement is left in place with this correction rather than quietly edited, because the failure
+mode — proving the set you wrote down instead of the set that exists — is the same one R42 names.
+
+Of the clauses that pass covered, cells where the observed "also fails" set differs from the plan's
+prediction:
 
 - `sweep` fails when **8a.1** is ablated, because the stray `phase-4-extra.md` asserts 8a.1's
   message. This is inherent: the sweep fixture proves the *directory sweep*, not a clause of its
@@ -162,5 +168,54 @@ matches). Two fired:
   than silently dismissed, and left unfixed: teaching the hook to treat a bats file as a gate
   surface is a change to a shared detector with its own blast radius, unrelated to this branch.
   `TODO(phase-file-load-integrity): check-orphaned-checks.sh has no gate surface for repos whose gate is the local test suite`.
+
+## D12 — Phase 2 self-R-check findings, all fixed in-phase
+
+The three mini sub-agents ran against the committed implementation. Eight findings, all accepted
+and fixed before Phase 3 rather than carried. Five were established by execution.
+
+**Fail-open paths in the linter (security expert, all executed):**
+
+- **Indentation asymmetry.** The fence anchor tolerated leading whitespace while the heading anchor
+  was column-0 only, so a `### Step` indented by a single space still rendered as a heading a reader
+  executes but was invisible to the count. Both anchors now allow the same 0-3 spaces.
+- **Fence desync via indented code blocks.** `^[[:space:]]*` counted backtick lines inside 4-space
+  indented code blocks as fences; two of them flip the toggle with even parity, so the balance
+  tripwire stayed silent and every heading between them was skipped. Both anchors are now
+  CommonMark-strict (`^ {0,3}`). Ignoring an indent-4 backtick line can only *over*-count headings,
+  which reds — the fail-closed direction.
+- **`SKILL_KEYS` had no emptiness guard** while both terminator stems did, so a declaration line
+  naming zero manifest keys made 8i iterate once on the empty string and check nothing.
+- **Deleting `common-rules.digest.md` passed clean** while corrupting it reds — the fail direction
+  inverted on the file SKILL.md names as the *first* read. It is now a preflight member (exit 2).
+  It stays out of `ALL_FILES`, which is the scan list for the range/dangling checks: its content is
+  generated and verified byte-for-byte by check 7, and scanning it would flag the generator's own
+  boilerplate example as a dangling reference in any skill dir whose table stops below RT4. This
+  reopens D1's fixture problem, closed by generating a digest in `setup()` and regenerating it in
+  every test that mutates the fixture's `common-rules.md`.
+- **The `~/.claude/` guard's member set was re-derived from `install.sh`'s write set** rather than
+  extended by the one path that came up. Added: `rules/` (same `rm -rf; cp -r` shape as `skills/`,
+  and `rules/common/*.md` is auto-injected into every session), `RTK.md`, `model-routing.md`, and
+  `hooks/` without the `.sh` restriction — `install.sh` re-copies `hooks/lib/` wholesale, and
+  `ast-runner.js` is the AST engine the detection hooks call.
+
+**Three more clauses with no red-proof (testing expert, ablation-verified):**
+
+- `8j.3` (SKILL.md declares no *digest* stem) — `8j.2` removes the phase stem and the staged test
+  *renames* the digest stem, so neither reached it.
+- `8g`'s empty-`core_id` branch — the `8g` fixture supplies a wrong ID and takes the else branch.
+- The `SKILL_KEYS` guard added above, which arrived without a fixture of its own.
+
+Each now has an isolating fixture, and each was re-ablated: neutralising the clause fails exactly
+its own test and nothing else. The two anchor changes were ablated the same way by reverting the
+anchor rather than the drift call.
+
+**Also fixed:** `FM_KEYS` was a hoisted constant with zero references under a comment claiming a
+property it did not provide (removed, with the real reason the key names are *not* hoisted); the
+linter's header enumerated checks 1-7 and never gained an 8; checks 3 and 5 scanned a hardcoded
+file list while check 8 swept the phases directory, so a future `phase-4-*.md` would have been
+manifest-checked but escaped range/dangling checking.
+
+Full suite after all of it: **847 tests, 0 failures.**
 
 ## END-OF-DEVIATION-LOG
