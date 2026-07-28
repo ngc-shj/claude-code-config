@@ -317,4 +317,36 @@ fence in particular is the same class the branch is about — a control that rea
 thing and calls it the set — and it survived every pass that enumerated *evasions I had thought of*
 rather than *the grammar the format actually defines*.
 
+## D16 — Lexical `..` collapsing ran before symlink resolution
+
+Reported in a second pre-merge security review and reproduced before fixing.
+
+`a/b/../c` equals `a/c` only when `b` is a real directory. Through a symlink, `..` names the parent
+of the **target**, so collapsing it lexically first rewrites the path to a different file. The
+normalization added in D15 did exactly that, and it turned a guarded path into an approve:
+
+```
+/tmp/review/skill-link -> ~/.claude/skills
+input:  /tmp/review/skill-link/../hooks/block-sensitive-files.sh
+kernel: ~/.claude/hooks/block-sensitive-files.sh      (verified with cd -P)
+hook:   approve
+```
+
+A symlinked `$HOME` had the mirror problem: `CANON_PATH` is fully resolved while the arms held the
+symlinked spelling, so every resolved path missed.
+
+**Fixed**: physical resolution now runs on `ABS_PATH` — the un-collapsed absolute form — because
+`cd -P` resolves each component in order and gets `..`-after-symlink right for free. `LEX_PATH`
+survives only for the string arms, where a literal `~/...` can never be resolved and lexical
+cleanup is the only tool available; that caveat is stated at its use site. `CLAUDE_HOME_PHYS`
+resolves the guarded root and is matched alongside the raw form. Both halves are red-proven by
+ablation: restoring the `LEX_PATH` input fails the directory-symlink fixture, and dropping
+`CLAUDE_HOME_PHYS` fails the symlinked-`HOME` fixture — each and only its own.
+
+**Process note worth keeping.** The first attempt at this fix rewrote the whole resolution block
+and silently discarded the leaf-symlink chain chasing and relative-path absolutization that a
+later commit had already added — work that was in the file but not in my context. It was caught
+because two of that commit's tests went red. The lesson is the one this branch is otherwise about:
+the tests were the only thing that knew the file contained something I had not read.
+
 ## END-OF-DEVIATION-LOG

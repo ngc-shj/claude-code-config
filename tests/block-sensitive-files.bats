@@ -445,6 +445,29 @@ run_bash_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
+@test "deny: a directory symlink crossed by .. lands back inside the guarded tree" {
+  # `a/b/../c` is `a/c` only when b is a real directory. Through a symlink, `..`
+  # names the parent of the TARGET — so a link to ~/.claude/skills plus `..`
+  # resolves into ~/.claude/hooks. Collapsing `..` lexically before resolving
+  # sent this somewhere else entirely and approved the write.
+  ln -sfn "$HOME/.claude/skills" "$BATS_TEST_TMPDIR/skill-link"
+  run run_hook Edit "$BATS_TEST_TMPDIR/skill-link/../hooks/block-sensitive-files.sh"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: a physical path under a symlinked HOME" {
+  # CANON_PATH is fully resolved, so the guarded root has to be resolved too —
+  # otherwise the arms hold the symlinked spelling, the path holds the real one,
+  # and every resolved path misses.
+  real="$BATS_TEST_TMPDIR/home-real"
+  mkdir -p "$real/.claude/hooks"
+  ln -sfn "$real" "$BATS_TEST_TMPDIR/home-link"
+  input=$(jq -nc --arg p "$real/.claude/hooks/x.sh" \
+    '{tool_name:"Edit", tool_input:{file_path:$p}}')
+  run env HOME="$BATS_TEST_TMPDIR/home-link" bash -c "printf '%s' '$input' | bash '$SCRIPT'"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
 @test "approve: symlink pointing somewhere harmless" {
   # Chain resolution must not over-block: a link to an unguarded file stays
   # editable.

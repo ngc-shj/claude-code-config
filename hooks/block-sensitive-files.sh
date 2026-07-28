@@ -214,10 +214,20 @@ LEX_PATH=$(printf '%s' "$ABS_PATH" | awk '
   }')
 [ -n "$LEX_PATH" ] || LEX_PATH="$ABS_PATH"
 
+# Physical resolution runs on ABS_PATH, NOT on the lexically-collapsed form.
+# `a/b/../c` equals `a/c` only when `b` is a real directory: if `b` is a
+# symlink, `..` names the parent of its TARGET, so collapsing first rewrites
+# the path to a different file. Reproduced — a link to `~/.claude/skills`
+# followed by `..` resolves into `~/.claude/hooks`, while the collapsed form
+# pointed at the link's own parent and approved the write. `cd -P` gets this
+# right for free because the kernel resolves each component in order, so the
+# un-collapsed path is both the correct input and the simpler one. LEX_PATH
+# stays in use for the string arms below, where a literal `~/...` can never be
+# resolved and lexical cleanup is the only tool available.
 CANON_PATH=""
-case "$LEX_PATH" in
+case "$ABS_PATH" in
   /*)
-    _dir="$LEX_PATH"; _tail=""
+    _dir="$ABS_PATH"; _tail=""
     while [ -n "$_dir" ] && [ "$_dir" != "/" ] && [ ! -d "$_dir" ]; do
       _tail="$(basename -- "$_dir")${_tail:+/$_tail}"
       _dir="$(dirname -- "$_dir")"
@@ -253,6 +263,15 @@ esac
 # nothing meaningful; fall back to the raw path so the arms still see something.
 [ -n "$CANON_PATH" ] || CANON_PATH="$FILE_PATH"
 
+# The guarded root has to be physical too. CANON_PATH is fully resolved, so a
+# symlinked $HOME (or a symlinked ~/.claude) leaves the arms holding one
+# spelling and the path holding the other, and every resolved path misses.
+# Both forms are matched below, since the tool may report either.
+CLAUDE_HOME_PHYS="$CLAUDE_HOME"
+if _res="$(cd -P -- "$CLAUDE_HOME" 2>/dev/null && pwd -P)"; then
+  CLAUDE_HOME_PHYS="${_res%/}"
+fi
+
 case "$LEX_PATH" in
   "$CLAUDE_HOME/hooks/"*|"$CLAUDE_HOME/settings.json"|"$CLAUDE_HOME/CLAUDE.md"|"$CLAUDE_HOME/rules/"*|"$CLAUDE_HOME/RTK.md"|"$CLAUDE_HOME/model-routing.md")
     emit_block "Blocked: editing harness config under ~/.claude/ directly. The repo claude-code-config is the source of truth — edit there and run \`bash ./install.sh\`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."
@@ -276,11 +295,12 @@ esac
 # `case "$FILE_PATH$CANON_PATH"` so each arm stays a plain literal a reader can
 # check against install.sh's write set.
 case "$CANON_PATH" in
-  "$CLAUDE_HOME/hooks/"*|"$CLAUDE_HOME/settings.json"|"$CLAUDE_HOME/CLAUDE.md"|"$CLAUDE_HOME/rules/"*|"$CLAUDE_HOME/RTK.md"|"$CLAUDE_HOME/model-routing.md")
+  "$CLAUDE_HOME/hooks/"*|"$CLAUDE_HOME/settings.json"|"$CLAUDE_HOME/CLAUDE.md"|"$CLAUDE_HOME/rules/"*|"$CLAUDE_HOME/RTK.md"|"$CLAUDE_HOME/model-routing.md"|\
+  "$CLAUDE_HOME_PHYS/hooks/"*|"$CLAUDE_HOME_PHYS/settings.json"|"$CLAUDE_HOME_PHYS/CLAUDE.md"|"$CLAUDE_HOME_PHYS/rules/"*|"$CLAUDE_HOME_PHYS/RTK.md"|"$CLAUDE_HOME_PHYS/model-routing.md")
     emit_block "Blocked: editing harness config under ~/.claude/ directly (path resolves under the installed harness). The repo claude-code-config is the source of truth — edit there and run \`bash ./install.sh\`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."
     exit 0
     ;;
-  "$CLAUDE_HOME/skills/"*)
+  "$CLAUDE_HOME/skills/"*|"$CLAUDE_HOME_PHYS/skills/"*)
     emit_block "$SKILLS_BLOCK_REASON"
     exit 0
     ;;
