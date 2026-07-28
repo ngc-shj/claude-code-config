@@ -21,6 +21,54 @@ sed_i() {
   sed "$script" "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
+# Phase files now end with a terminator that MUST stay last, so `>>` is no
+# longer a body append: it would land after the terminator and trip the
+# not-last and lookalike clauses in addition to whatever the test is probing.
+append_body() {
+  local file="$1" line="$2" tmp
+  tmp="$(mktemp)"
+  awk -v ins="$line" -v stem="$TERM_STEM" \
+    'index($0, "## " stem "-") == 1 { print ins } { print }' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+# Single source for the tokens the fixture and the linter must agree on, so a
+# rename is one edit rather than a dozen retyped literals (RT3).
+TERM_STEM="END-OF-PHASE"
+DIGEST_STEM="END-OF-DIGEST"
+FM_KEYS="step_ids core"
+
+# Build one fixture phase file: manifest, three steps, an INDENTED fenced decoy
+# (a step-shaped heading that must not be counted), the R/RS/RT template lines
+# the other checks read, and the terminator as the final line.
+write_phase() {
+  local n="$1" path="$2" title="$3"
+  shift 3
+  cat > "$path" <<EOF
+---
+phase: $n
+title: "$title"
+steps: 3
+step_ids: $n-1, $n-2, $n-3
+core: $n-1 — fixture core step; no substitute
+---
+
+## $title
+
+### Step $n-1: First
+
+### Step $n-2: Second
+
+### Step $n-3: Third
+
+  \`\`\`markdown
+### Step $n-9: fenced decoy — must not be counted
+  \`\`\`
+
+EOF
+  printf '%s\n' "$@" >> "$path"
+  printf '\n## %s-%s\n' "$TERM_STEM" "$n" >> "$path"
+}
+
 # Build a minimal, fully consistent fixture skill dir (R1-R3 / RS1-RS2 /
 # RT1-RT2) that passes every check. Tests then break exactly one sync
 # point each.
@@ -58,37 +106,34 @@ setup() {
 - [Expert-specific checks as applicable: Security adds RS1-RS2; Testing adds RT1-RT2]
 EOF
 
-  cat > "$FIX/SKILL.md" <<'EOF'
+  cat > "$FIX/SKILL.md" <<EOF
 # Fixture skill
 Recurring issue check reference (R1-R3, RS1-RS2, RT1-RT2).
+
+Read phase files whole-file with the \`Read\` tool; confirm the terminator before acting.
+Manifest keys: \`step_ids:\`, \`core:\`. Terminator stems: \`$TERM_STEM\` (phase files), \`$DIGEST_STEM\` (the digest).
 EOF
 
-  cat > "$FIX/phases/phase-1-plan.md" <<'EOF'
-## Plan review template
-- R1: [status]
-- ... (R1-R3)
-- RS1: [status]
-- RS2: [status]
-- RT1: [status]
-- RT2: [status]
-EOF
+  write_phase 1 "$FIX/phases/phase-1-plan.md" "Plan review template" \
+    '- R1: [status]' \
+    '- ... (R1-R3)' \
+    '- RS1: [status]' \
+    '- RS2: [status]' \
+    '- RT1: [status]' \
+    '- RT2: [status]'
 
-  cat > "$FIX/phases/phase-2-coding.md" <<'EOF'
-## Coding template
-- Functionality expert: R1-R3
-- Security expert: R1-R3 + RS1-RS2
-- Testing expert: R1-R3 + RT1-RT2
-EOF
+  write_phase 2 "$FIX/phases/phase-2-coding.md" "Coding template" \
+    '- Functionality expert: R1-R3' \
+    '- Security expert: R1-R3 + RS1-RS2' \
+    '- Testing expert: R1-R3 + RT1-RT2'
 
-  cat > "$FIX/phases/phase-3-review.md" <<'EOF'
-## Review template
-- R1: [status]
-- ... (R1-R3)
-- RS1: [status]
-- RS2: [status]
-- RT1: [status]
-- RT2: [status]
-EOF
+  write_phase 3 "$FIX/phases/phase-3-review.md" "Review template" \
+    '- R1: [status]' \
+    '- ... (R1-R3)' \
+    '- RS1: [status]' \
+    '- RS2: [status]' \
+    '- RT1: [status]' \
+    '- RT2: [status]'
 }
 
 # ============================================================
@@ -186,14 +231,14 @@ EOF
 }
 
 @test "drift (4): status line above table max in phase-1" {
-  printf -- '- RT3: [status]\n' >> "$FIX/phases/phase-1-plan.md"
+  append_body "$FIX/phases/phase-1-plan.md" '- RT3: [status]'
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT:"*"RT3 exceeds table max RT2"* ]]
 }
 
 @test "drift (5): dangling reference above max (R99 in phase-2)" {
-  printf 'See also R99 for details.\n' >> "$FIX/phases/phase-2-coding.md"
+  append_body "$FIX/phases/phase-2-coding.md" 'See also R99 for details.'
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"DRIFT: phase-2-coding.md: reference to undeclared rule R99"* ]]
@@ -246,6 +291,266 @@ EOF
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK: R1-R3 / RS1-RS2 / RT1-RT2"* ]]
+}
+
+# ============================================================
+# DRIFT cases — check #8, phase manifest (one fixture per clause)
+#
+# Mutation targets are pinned where the choice decides the outcome: `8e-sub`
+# substitutes the LAST id so it cannot collide with `core`, `fence` relocates
+# the LAST step for the same reason, and `8h-dup` inserts after the first `## `
+# heading so it does not disturb the title comparison.
+# ============================================================
+
+@test "drift (8a.1): front matter opening delimiter removed" {
+  sed_i '1d' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: malformed front matter block (line 1 is not '---')"* ]]
+}
+
+@test "drift (8a.2): front matter closing delimiter removed" {
+  sed_i '7d' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: malformed front matter block (closing '---'"* ]]
+}
+
+@test "drift (8a.3): front matter key with an empty value" {
+  sed_i 's/^core: .*/core:/' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: malformed front matter block (not 'key: value'"* ]]
+}
+
+@test "drift (8b): extra key in the front matter block" {
+  sed_i 's/^phase: 1$/phase: 1\nextra: x/' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: front matter key set is [core,extra,phase,step_ids,steps,title]"* ]]
+}
+
+@test "drift (8c): declared phase disagrees with the filename" {
+  sed_i 's/^phase: 1$/phase: 9/' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: front matter declares phase 9 but filename says 1"* ]]
+}
+
+@test "drift (8d): declared step count disagrees with the headings" {
+  sed_i 's/^steps: 3$/steps: 4/' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: front matter declares 4 steps but file has 3 '### Step' headings"* ]]
+}
+
+@test "drift (8e): step_ids member disagrees with the headings" {
+  sed_i 's/^step_ids: 1-1, 1-2, 1-3$/step_ids: 1-1, 1-2, 1-9/' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: step_ids [1-1, 1-2, 1-9] does not match headings [1-1, 1-2, 1-3]"* ]]
+}
+
+@test "drift (8e): step_ids order disagrees with the headings" {
+  # A permutation is the unique mutation that reds an ordered comparison and
+  # stays green under a sorted-set one. Keeps 1-1 first so `core` still resolves.
+  sed_i 's/^step_ids: 1-1, 1-2, 1-3$/step_ids: 1-1, 1-3, 1-2/' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: step_ids [1-1, 1-3, 1-2] does not match headings [1-1, 1-2, 1-3]"* ]]
+}
+
+@test "drift (8f): declared title disagrees with the first heading" {
+  sed_i 's/^title: .*/title: "Wrong title"/' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: title 'Wrong title' does not match heading 'Plan review template'"* ]]
+}
+
+@test "drift (8g): core names a step that is neither declared nor actually present" {
+  # 1-9 exists ONLY inside the fenced decoy, so this single mutation exercises
+  # both halves of 8g — membership in step_ids, and resolution to a heading the
+  # fence-aware scan actually counted. Both are asserted: without the second
+  # assertion the resolution half has no mutation that reds it.
+  sed_i 's/^core: 1-1/core: 1-9/' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: core names step 1-9, which is not in step_ids"* ]]
+  [[ "$output" == *"phase-1-plan.md: core names step 1-9, which is not a counted '### Step' heading"* ]]
+}
+
+@test "drift (I15): an unbalanced code fence is refused rather than scanned" {
+  # A lone fence line leaves the toggle stuck, so every heading after it is
+  # silently skipped. Inserted before the terminator, after all three steps, so
+  # the count is unchanged and this fires on the desync itself.
+  append_body "$FIX/phases/phase-1-plan.md" '```'
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: unbalanced code fence at EOF"* ]]
+}
+
+@test "drift (I15): a real step heading hidden inside an indented fence is not counted" {
+  sed_i 's|^### Step 1-3: Third$|  ```markdown\n### Step 1-3: Third\n  ```|' \
+    "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: front matter declares 3 steps but file has 2 '### Step' headings"* ]]
+}
+
+@test "drift (I15): the fixture's fenced decoy is counted once its fences are removed" {
+  # The inverse direction of the fixture above, and the reason the base fixture
+  # carries a decoy at all: without it every pass test is invariant under fence
+  # awareness, so nothing distinguishes a fence-aware linter from a naive one.
+  sed_i '/^  ```markdown$/d; /^  ```$/d' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: front matter declares 3 steps but file has 4 '### Step' headings"* ]]
+}
+
+@test "drift (8h.1): a second exact terminator mid-file" {
+  sed_i 's|^## Plan review template$|## Plan review template\n\n## END-OF-PHASE-1|' \
+    "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: terminator '## END-OF-PHASE-<N>' appears 2 times, expected exactly 1"* ]]
+}
+
+@test "drift (8h.1): terminator missing entirely" {
+  sed_i '/^## END-OF-PHASE-1$/d' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: terminator '## END-OF-PHASE-<N>' appears 0 times, expected exactly 1"* ]]
+}
+
+@test "drift (8h.2): terminator number disagrees with the filename" {
+  sed_i 's/^## END-OF-PHASE-1$/## END-OF-PHASE-7/' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: terminator declares 7 but filename says 1"* ]]
+}
+
+@test "drift (8h.3): terminator is not the last non-empty line" {
+  printf 'a trailing note\n' >> "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: terminator is not the last non-empty line"* ]]
+}
+
+@test "drift (8h.4): a reader-invisible terminator lookalike mid-file" {
+  # Indented, trailing space, and a zero-width space inside the stem: all three
+  # render identically to the real terminator and all three survive an anchored
+  # match. This is why the uniqueness scan reduces to alphanumerics instead of
+  # enumerating known evasions.
+  sed_i 's|^## Plan review template$|## Plan review template\n  ## END\xe2\x80\x8b-OF-PHASE-1 |' \
+    "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: line"*"resembles a terminator a truncated read would trust"* ]]
+}
+
+@test "drift (I13): the terminator stem comes from SKILL.md, not a literal in the linter" {
+  # Changing the stem in SKILL.md alone reds only if the linter derives it. A
+  # hardcoded implementation stays green here — which is the whole point.
+  sed_i 's/`END-OF-PHASE`/`END-OF-STAGE`/' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"terminator '## END-OF-STAGE-<N>' appears 0 times"* ]]
+}
+
+@test "drift (8i): SKILL.md names a front-matter key the phase files do not carry" {
+  sed_i 's/`step_ids:`/`step_names:`/' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: SKILL.md references front-matter key 'step_names' which is absent"* ]]
+}
+
+@test "pass (8i): a backticked key token outside the declaration line is not a manifest key" {
+  # The only fixture that distinguishes a declaration-line-scoped extractor from
+  # a whole-file one. Without the scope, this injects a phantom key and fires
+  # 8i on all three GOOD phase files.
+  printf 'Rules may declare `paths:` frontmatter elsewhere.\n' >> "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+  [[ "$output" == OK:* ]]
+}
+
+@test "drift (8j.1): SKILL.md does not name the Read tool" {
+  sed_i 's/the `Read` tool/the appropriate tool/' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SKILL.md: loading protocol missing 'Read'"* ]]
+}
+
+@test "drift (8j.2): SKILL.md declares no phase-file terminator stem" {
+  sed_i 's/`END-OF-PHASE` (phase files), //' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SKILL.md: loading protocol declares no phase-file terminator stem"* ]]
+  # I29: with no stem, the terminator checks short-circuit rather than matching
+  # every line through an empty-needle containment test.
+  [[ "$output" != *"resembles a terminator"* ]]
+}
+
+@test "drift (8j.4): SKILL.md carries a step enumeration of its own" {
+  printf '### Step 1-1: duplicated manifest\n' >> "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SKILL.md: contains a '### Step' enumeration"* ]]
+}
+
+@test "drift (8j): SKILL.md loses its declaration line entirely" {
+  sed_i '/^Manifest keys:/d' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SKILL.md: loading protocol is missing its 'Manifest keys:"* ]]
+}
+
+@test "drift (I7): a new phase file is swept in without a linter edit" {
+  # The only assertion that distinguishes the directory sweep from a hard-coded
+  # PHASE1/PHASE2/PHASE3 triple: every other fixture mutates a file the triple
+  # already names.
+  printf '# stray\n' > "$FIX/phases/phase-4-extra.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-4-extra.md: malformed front matter block (line 1 is not '---')"* ]]
+}
+
+# ============================================================
+# Installed-layout twin — zero-argument default resolution
+#
+# `install.sh` produces ~/.claude as a cp -r twin of the repo, and no test
+# reached the self-relative default (check-rule-sync.sh's `${1:-...}`) before
+# this. Staged under BATS_TEST_TMPDIR rather than run against the real
+# ~/.claude, which would mutate live config. BOTH hooks are staged: the real
+# skill dir ships a digest, and with the generator absent check #7 drifts.
+# ============================================================
+
+stage_installed_layout() {
+  STAGE="$BATS_TEST_TMPDIR/inst"
+  mkdir -p "$STAGE/hooks" "$STAGE/skills"
+  cp "$SCRIPT" "$STAGE/hooks/check-rule-sync.sh"
+  cp "$(dirname "$SCRIPT")/generate-triangulate-rule-digest.sh" "$STAGE/hooks/"
+  cp -r "$REPO_SKILL_DIR" "$STAGE/skills/"
+}
+
+@test "installed layout: zero-argument default resolution is drift-free" {
+  stage_installed_layout
+  cd "$BATS_TEST_TMPDIR"
+  run bash "$STAGE/hooks/check-rule-sync.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == OK:* ]]
+}
+
+@test "installed layout: the digest terminator is compared against SKILL.md's declared stem" {
+  # The digest half of the single-source property. $FIX carries no digest (check
+  # #7 is guarded on its presence), so this is the layout where the comparison
+  # is observable at all.
+  stage_installed_layout
+  sed_i 's/`END-OF-DIGEST`/`END-OF-INDEX`/' "$STAGE/skills/triangulate/SKILL.md"
+  cd "$BATS_TEST_TMPDIR"
+  run bash "$STAGE/hooks/check-rule-sync.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"common-rules.digest.md: last line is '## END-OF-DIGEST', expected '## END-OF-INDEX'"* ]]
 }
 
 # ============================================================

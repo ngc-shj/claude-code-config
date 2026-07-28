@@ -70,13 +70,34 @@ esac
 # the only sanctioned way to disable a hook locally without modifying
 # the repo. See block-destructive-docker.sh's reason message for the
 # canonical override workflow.
+#
+# Normalize $HOME once, for every arm below: a trailing slash in $HOME
+# (e.g. HOME=/home/user/) would otherwise turn "$HOME/.claude/..." into
+# "…//.claude/…", which never matches the single-slash path the tool
+# reports, so the guard silently fails open. ${HOME:?} turns an unset
+# $HOME into a stated precondition instead of a mid-case crash under
+# `set -euo pipefail`.
+CLAUDE_HOME="${HOME:?}"; CLAUDE_HOME="${CLAUDE_HOME%/}/.claude"
+# One copy, used by both the expanded and the literal-tilde arm. The two
+# harness-config arms below carry deliberately different wording, but an
+# identical message duplicated across arms drifts silently — and only the arm a
+# fixture happens to exercise would catch it.
+SKILLS_BLOCK_REASON="Blocked: editing an installed skill under ~/.claude/skills/ directly. If this skill is repo-managed, edit it in the claude-code-config repo and run \`bash ./install.sh\`. If it has no repo source (install.sh only removes and re-copies the skills it manages, so an unmanaged skill survives every install untouched), add it to the repo's skills/ directory, or exempt it via ~/.claude/settings.local.json."
 case "$FILE_PATH" in
-  "$HOME/.claude/hooks/"*.sh|"$HOME/.claude/settings.json"|"$HOME/.claude/CLAUDE.md")
+  "$CLAUDE_HOME/hooks/"*.sh|"$CLAUDE_HOME/settings.json"|"$CLAUDE_HOME/CLAUDE.md")
     emit_block "Blocked: editing harness config under ~/.claude/ directly. The repo claude-code-config is the source of truth — edit there and run \`bash ./install.sh\`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."
+    exit 0
+    ;;
+  "$CLAUDE_HOME/skills/"*)
+    emit_block "$SKILLS_BLOCK_REASON"
     exit 0
     ;;
   "~/.claude/hooks/"*.sh|"~/.claude/settings.json"|"~/.claude/CLAUDE.md")
     emit_block "Blocked: editing harness config under ~/.claude/ directly. Edit the repo claude-code-config and run \`bash ./install.sh\`. Use ~/.claude/settings.local.json for local overrides."
+    exit 0
+    ;;
+  "~/.claude/skills/"*)
+    emit_block "$SKILLS_BLOCK_REASON"
     exit 0
     ;;
 esac

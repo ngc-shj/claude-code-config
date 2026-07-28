@@ -1,3 +1,11 @@
+---
+phase: 1
+title: "Phase 1: Plan Creation, Review & Commit"
+steps: 7
+step_ids: 1-1, 1-2, 1-3, 1-4, 1-5, 1-6, 1-7
+core: 1-4 — plan review by three expert sub-agents launched in parallel; inline self-review by the orchestrator is not a substitute
+---
+
 ## Phase 1: Plan Creation, Review & Commit
 
 ### Step 1-1: Determine Plan Name and Branch Name
@@ -360,4 +368,4 @@ Review rounds: [n]
 Next step: Proceeding to Phase 2 (Coding)
 ```
 
----
+## END-OF-PHASE-1

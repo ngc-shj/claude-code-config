@@ -49,6 +49,15 @@ for f in "${ALL_FILES[@]}"; do
   fi
 done
 
+# The phases directory is a check-#8 precondition, and it is verified HERE so
+# that a missing one exits 2 before any drift accumulates. Check #8 itself
+# contains no `exit`: an exit inside it would discard a fail=1 already set by
+# checks 1-7, reporting real rule-ID drift as "missing/unparsable".
+if [ ! -d "$SKILL_DIR/phases" ]; then
+  echo "Error: missing directory: $SKILL_DIR/phases" >&2
+  exit 2
+fi
+
 fail=0
 drift() {
   printf 'DRIFT: %s\n' "$1"
@@ -239,13 +248,200 @@ if [ -d "$SKILL_DIR/rule-details" ]; then
   done
 fi
 
+# --- 8. phase manifest: front matter declares what a complete read contains ---
+#
+# A phase file read only in part is otherwise undetectable: nothing in it says
+# how many steps it has, and nothing marks its end. This check makes the two
+# facts a truncated reader needs — the step manifest at byte 0 and a terminator
+# at the tail — machine-guaranteed accurate, so the SKILL.md obligation to use
+# them cannot be reading stale or absent metadata.
+#
+# SKILL.md is the single author of the terminator stems and of the front-matter
+# key names it tells readers to reconcile against; everything here compares
+# against the EXTRACTED values, never a literal, so a rename in the phase files
+# and this script together still reds against a stale SKILL.md.
+
+# 8j (per-run): SKILL.md's loading protocol.
+SKILL_KEYS=""
+STEM_PHASE=""
+STEM_DIGEST=""
+DECL_LINE=$(grep -m1 '^Manifest keys:' "$SKILL" || true)
+if [ -z "$DECL_LINE" ]; then
+  drift "SKILL.md: loading protocol is missing its 'Manifest keys: ... Terminator stems: ...' declaration line"
+else
+  # Extraction is scoped to the declaration line, not the whole file: a
+  # backticked `key:` token anywhere else in SKILL.md would otherwise inject a
+  # phantom key and fire 8i on every good phase file.
+  SKILL_KEYS=$(printf '%s\n' "$DECL_LINE" | grep -o '`[a-z_]\{1,\}:`' | tr -d '`:' | sort -u)
+  STEM_PHASE=$(printf '%s\n' "$DECL_LINE" | sed -nE 's/.*`(END-OF-[A-Z]+)` \(phase files\).*/\1/p')
+  STEM_DIGEST=$(printf '%s\n' "$DECL_LINE" | sed -nE 's/.*`(END-OF-[A-Z]+)` \(the digest\).*/\1/p')
+fi
+grep -q '`Read`' "$SKILL" || drift "SKILL.md: loading protocol missing 'Read' — readers must be told which tool delivers a whole file"
+[ -n "$STEM_PHASE" ] || drift "SKILL.md: loading protocol declares no phase-file terminator stem"
+[ -n "$STEM_DIGEST" ] || drift "SKILL.md: loading protocol declares no digest terminator stem"
+grep -q '^### Step' "$SKILL" && drift "SKILL.md: contains a '### Step' enumeration — the step manifest belongs in the phase file's front matter, not here"
+
+# Digest terminator, compared against the stem SKILL.md declares (not a literal).
+if [ -n "$STEM_DIGEST" ] && [ -f "$DIGEST" ]; then
+  digest_last=$(sed '/^[[:space:]]*$/d' "$DIGEST" | tail -1)
+  if [ "$digest_last" != "## $STEM_DIGEST" ]; then
+    drift "common-rules.digest.md: last line is '$digest_last', expected '## $STEM_DIGEST'"
+  fi
+fi
+
+# Read a key's value out of a phase file's front-matter window.
+fm_get() {
+  # $1 file, $2 closing-delimiter line number, $3 key
+  sed -n "2,$(($2 - 1))p" "$1" | sed -nE "s/^$3: (.*)$/\1/p" | head -n 1
+}
+
+for pf in "$SKILL_DIR"/phases/phase-*.md; do
+  # Unreachable by construction: the preflight above exits 2 when any of the
+  # three named phase files is missing, so this glob always matches. Retained
+  # as defence-in-depth against a future refactor that drops those paths from
+  # ALL_FILES — not among the mutation-proven gates.
+  [ -e "$pf" ] || continue
+  base=$(basename "$pf")
+  file_n=$(printf '%s\n' "$base" | sed -nE 's/^phase-([0-9]+)-.*/\1/p')
+
+  # 8a — front-matter block structure. 8a.1 gates 8a.2 gates 8a.3, and any 8a
+  # failure gates 8b-8g and 8i: there is no parsed window to report from.
+  fm_ok=1
+  close=""
+  if [ "$(sed -n '1p' "$pf")" != "---" ]; then
+    drift "$base: malformed front matter block (line 1 is not '---')"
+    fm_ok=0
+  else
+    close=$(awk 'NR > 1 && /^---$/ { print NR; exit }' "$pf")
+    if [ -z "$close" ] || [ "$close" -gt 10 ]; then
+      drift "$base: malformed front matter block (closing '---' ${close:-not found} — must be within the first 10 lines)"
+      fm_ok=0
+    else
+      bad=$(sed -n "2,$((close - 1))p" "$pf" | grep -vE '^[a-z_]+: .+$' | head -n 1)
+      if [ -n "$bad" ]; then
+        drift "$base: malformed front matter block (not 'key: value': $bad)"
+        fm_ok=0
+      fi
+    fi
+  fi
+
+  # Fence-aware step-heading scan. The anchor tolerates leading whitespace
+  # because these files already contain indented fences (list-item code
+  # blocks); a column-0-only toggle would leave their contents scanned as live
+  # prose, so a real step heading moved into one would keep every count correct
+  # while the instruction disappeared.
+  if [ "$(awk '/^[[:space:]]*```/ { n++ } END { print (n % 2) }' "$pf")" != "0" ]; then
+    drift "$base: unbalanced code fence at EOF — the '### Step' scan cannot be trusted"
+  fi
+  heading_ids=$(awk '
+    /^[[:space:]]*```/ { fence = 1 - fence; next }
+    fence { next }
+    /^### Step [0-9]+-[0-9]+[a-z]?/ {
+      if (match($0, /[0-9]+-[0-9]+[a-z]?/)) print substr($0, RSTART, RLENGTH)
+    }
+  ' "$pf")
+  heading_count=$(printf '%s' "$heading_ids" | grep -c . || true)
+  heading_joined=$(printf '%s\n' "$heading_ids" | grep . | tr '\n' ',' | sed 's/,$//; s/,/, /g')
+
+  if [ "$fm_ok" -eq 1 ]; then
+    # 8b — exact key set, no missing and no extra.
+    keys_have=$(sed -n "2,$((close - 1))p" "$pf" | sed -nE 's/^([a-z_]+):.*/\1/p' | sort | tr '\n' ',' | sed 's/,$//')
+    keys_want=$(printf '%s\n' core phase step_ids steps title | sort | tr '\n' ',' | sed 's/,$//')
+    [ "$keys_have" = "$keys_want" ] || \
+      drift "$base: front matter key set is [$keys_have], expected [$keys_want]"
+
+    fm_phase=$(fm_get "$pf" "$close" phase)
+    fm_title=$(fm_get "$pf" "$close" title)
+    fm_steps=$(fm_get "$pf" "$close" steps)
+    fm_ids=$(fm_get "$pf" "$close" step_ids)
+    fm_core=$(fm_get "$pf" "$close" core)
+
+    # 8c — declared phase vs the filename. Only 8c and 8h bind to the
+    # filename's <N>; 8d/8e use the generic ID grammar, so mutating `phase:`
+    # cannot cascade into them.
+    [ "$fm_phase" = "$file_n" ] || \
+      drift "$base: front matter declares phase $fm_phase but filename says $file_n"
+
+    # 8d / 8e — declared step count and ID list vs the out-of-fence headings.
+    [ "$fm_steps" = "$heading_count" ] || \
+      drift "$base: front matter declares $fm_steps steps but file has $heading_count '### Step' headings"
+    ids_norm=$(printf '%s\n' "$fm_ids" | sed 's/[[:space:]]*,[[:space:]]*/, /g; s/^[[:space:]]*//; s/[[:space:]]*$//')
+    [ "$ids_norm" = "$heading_joined" ] || \
+      drift "$base: step_ids [$ids_norm] does not match headings [$heading_joined]"
+
+    # 8f — declared title vs the first heading after the block.
+    head_title=$(awk -v start="$((close + 1))" 'NR >= start && /^## / { sub(/^## /, ""); print; exit }' "$pf")
+    title_norm=$(printf '%s\n' "$fm_title" | sed 's/^"//; s/"$//')
+    [ "$title_norm" = "$head_title" ] || \
+      drift "$base: title '$title_norm' does not match heading '$head_title'"
+
+    # 8g — core names a step that is both declared and actually present.
+    core_id=$(printf '%s\n' "$fm_core" | sed -nE 's/^[[:space:]]*([0-9]+-[0-9]+[a-z]?).*/\1/p')
+    if [ -z "$core_id" ]; then
+      drift "$base: core does not begin with a step ID"
+    else
+      printf '%s\n' "$ids_norm" | tr ',' '\n' | sed 's/[[:space:]]//g' | grep -qx "$core_id" \
+        || drift "$base: core names step $core_id, which is not in step_ids"
+      printf '%s\n' "$heading_ids" | grep -qx "$core_id" \
+        || drift "$base: core names step $core_id, which is not a counted '### Step' heading"
+    fi
+
+    # 8i — every key SKILL.md tells readers to reconcile against must exist.
+    while IFS= read -r k; do
+      [ -n "$k" ] || continue
+      printf '%s\n' "$keys_have" | tr ',' '\n' | grep -qx "$k" \
+        || drift "$base: SKILL.md references front-matter key '$k' which is absent"
+    done <<< "$SKILL_KEYS"
+  fi
+
+  # 8h — the terminator. Runs unconditionally: its inputs are the filename and
+  # the stem from SKILL.md, not the parsed window, and it is the clause a
+  # partial reader actually depends on. Skipped only when no stem was declared
+  # (I29) — with an empty stem the loose scan below would match every line.
+  if [ -n "$STEM_PHASE" ]; then
+    term_count=$(grep -c "^## $STEM_PHASE-[0-9]\{1,\}$" "$pf" || true)
+    if [ "$term_count" -ne 1 ]; then
+      drift "$base: terminator '## $STEM_PHASE-<N>' appears $term_count times, expected exactly 1"
+    else
+      term_line=$(grep "^## $STEM_PHASE-[0-9]\{1,\}$" "$pf")
+      term_n=${term_line##*-}
+      [ "$term_n" = "$file_n" ] || \
+        drift "$base: terminator declares $term_n but filename says $file_n"
+      [ "$(sed '/^[[:space:]]*$/d' "$pf" | tail -1)" = "$term_line" ] || \
+        drift "$base: terminator is not the last non-empty line"
+    fi
+    # Loose lookalike scan. Strict anchoring is right for presence and wrong
+    # for uniqueness: the entity that must not be fooled is a model reading
+    # rendered markdown, and a trailing space, a three-space indent, a unicode
+    # dash or a zero-width space all render identically while defeating an
+    # anchored match. Reducing to alphanumerics closes the class rather than
+    # enumerating the evasions. Strict-form lines are excluded so 8h.1 and
+    # 8h.3 stay separately provable.
+    stem_red=$(printf '%s' "$STEM_PHASE" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')
+    last_ne=$(awk 'NF { n = NR } END { print n + 0 }' "$pf")
+    decoy=$(awk -v stem="$stem_red" -v lastne="$last_ne" -v strict="^## $STEM_PHASE-[0-9]+$" '
+      NR == lastne { next }
+      $0 ~ strict { next }
+      {
+        s = tolower($0)
+        gsub(/[^a-z0-9]/, "", s)
+        if (index(s, stem) > 0) { print NR; exit }
+      }
+    ' "$pf")
+    [ -z "$decoy" ] || \
+      drift "$base: line $decoy resembles a terminator a truncated read would trust"
+  fi
+done
+
 if [ "$fail" -ne 0 ]; then
   echo ""
   echo "Rule-ID drift detected. Sync points: common-rules.md table + template"
   echo "block, the Extended-obligations pointer sentence, phase-1/phase-3"
   echo "'- RSn/RTn: [status]' lines, and every 'R1-Rn'/'RS1-RSn'/'RT1-RTn'"
-  echo "range string in the five checked files, common-rules.digest.md, and"
-  echo "mandatory rule-details references/files/ID-pattern identities."
+  echo "range string in the five checked files, common-rules.digest.md,"
+  echo "mandatory rule-details references/files/ID-pattern identities, and the"
+  echo "phase manifest (front matter vs '### Step' headings, terminators, and"
+  echo "SKILL.md's declaration of the keys and stems readers rely on)."
   exit 1
 fi
 

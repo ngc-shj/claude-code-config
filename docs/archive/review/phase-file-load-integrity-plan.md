@@ -806,4 +806,53 @@ of the generated file — one `echo` **after** the awk pass, inside the existing
 
 ---
 
+## Implementation Checklist
+
+Derived in Phase 2 Step 2-1. Every location that must change, every existing helper that must be
+reused, every pattern that must hold across sites.
+
+### Files to modify (complete set)
+
+| File | Contract | Change |
+|---|---|---|
+| `skills/triangulate/phases/phase-1-plan.md` | C1, C2 | front matter (7 steps); trailing `---` → `## END-OF-PHASE-1` |
+| `skills/triangulate/phases/phase-2-coding.md` | C1, C2 | front matter (5 steps); trailing `---` → `## END-OF-PHASE-2` |
+| `skills/triangulate/phases/phase-3-review.md` | C1, C2 | front matter (9 steps); trailing `---` → `## END-OF-PHASE-3` |
+| `skills/triangulate/SKILL.md` | C3 | loading-protocol clause + declaration line; amend `:45` |
+| `hooks/check-rule-sync.sh` | C4 | check #8 (8a.1-8j.4); phases dir added to the preflight; trailer text |
+| `tests/check-rule-sync.bats` | C5 | fixture repair; 24 fixtures; staged zero-arg run; `>>` → insert-before-terminator at `:189`/`:196` |
+| `hooks/block-sensitive-files.sh` | C6 | `$HOME` normalization for all arms; two skills arms; skills-specific message |
+| `tests/block-sensitive-files.bats` | C6 | 5 fixtures |
+| `hooks/generate-triangulate-rule-digest.sh` | C7 | emit `## END-OF-DIGEST` after the awk pass |
+| `skills/triangulate/common-rules.digest.md` | C7 | regenerated (I27) |
+| `tests/triangulate-rule-digest.bats` | C7 | presence / position / uniqueness assertions |
+
+### Shared utilities that MUST be reused (no new helpers)
+
+- `drift()` — `check-rule-sync.sh:53-56`. Every check-#8 message goes through it; no new reporting path.
+- `check_contiguous()` / `check_ranges()` — existing; not needed by check #8 but the style to match.
+- `emit_block()` — `block-sensitive-files.sh:23-26`. JSON-encodes the reason via `jq -Rs`; C6 adds a case arm, never a second emit path.
+- `run_hook()` — `tests/block-sensitive-files.bats`. All five C6 fixtures use it.
+- `sed_i()` — `tests/check-rule-sync.bats:18-22`. BSD/GNU-portable in-place edit; every fixture mutation uses it.
+- The staged-layout pattern at `tests/triangulate-rule-digest.bats:22-33` — the model for C5's zero-argument run.
+- `$FIX` fixture builder in `setup()` — extended, not replaced.
+
+### Patterns that must hold across all sites
+
+- bash 3.2 / BSD-sed portable: no `mapfile`/`readarray`/`declare -A`/`sed -i` (I18).
+- No `exit` of any status inside check #8 (I17).
+- Every new bats assertion pairs `status` with a specific `DRIFT:` substring (I19).
+- Terminator stems and front-matter key names come from `setup()` variables in tests (RT3), and from `SKILL.md` in the linter (I13).
+
+### Impact analysis results
+
+- **Duplicate implementations**: the only parallel copy is the installed `~/.claude/` tree, produced by `install.sh`'s `cp -r`. Repo is the source of truth; C5's staged run covers the twin (RT9). No other duplication.
+- **R42 member sets**: `skills/triangulate/phases/*.md` = 3 files (`ls`-derived, matches I7). `~/.claude/skills/*` = 10 dirs vs 9 in the repo; the extra (`improve`) is C6's unmanaged-skill case.
+- **All-test-tree enumeration (R19)**: `tests/` is the single test root — no co-located or e2e trees. Files referencing the changed hooks: `tests/check-rule-sync.bats`, `tests/block-sensitive-files.bats`, `tests/triangulate-rule-digest.bats`, `tests/install.bats` (skills staging only).
+- **CI gate parity (Step 2-1 item 7)**: **no CI exists** (`.github/` absent) and **no local pre-PR script exists** (`scripts/`, `Makefile`, `Justfile` all absent). The parity diff is therefore vacuous rather than skipped: the gate set is exactly `bats tests/`, run locally. No deferred-parity entry is needed; this is recorded so a future reader does not mistake absence of the diff for an omission.
+- **Baseline**: `bats tests/check-rule-sync.bats tests/block-sensitive-files.bats tests/triangulate-rule-digest.bats` = 45 passed, 0 failed, before any change (green-before).
+- **Storage-backend / migration / ORM sub-steps**: N/A — config-only repo, no datastore.
+
+---
+
 ## END-OF-PLAN

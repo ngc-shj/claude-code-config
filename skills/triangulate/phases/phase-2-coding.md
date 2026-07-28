@@ -1,3 +1,11 @@
+---
+phase: 2
+title: "Phase 2: Coding"
+steps: 5
+step_ids: 2-1, 2-2, 2-3, 2-4, 2-5
+core: 2-5 — focused recurring-rule self-check by three sub-agents before the phase reports complete; skipping it moves first-pass discovery into Phase 3
+---
+
 ## Phase 2: Coding
 
 ### Step 2-1: Review the Plan and Analyze Impact (Mandatory)
@@ -485,4 +493,4 @@ Deviations from plan: [yes/no] (log: ./docs/archive/review/[plan-name]-deviation
 Next step: Proceeding to Phase 3 (Code Review)
 ```
 
----
+## END-OF-PHASE-2

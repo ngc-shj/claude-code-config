@@ -148,3 +148,54 @@ run_hook() {
   run bash -c "printf '%s' '$input' | bash '$SCRIPT'"
   [[ "$output" == *'"decision": "approve"'* ]]
 }
+
+# ============================================================
+# Installed skill perimeter (C6) — ~/.claude/skills/ is not a mirror of
+# the repo's skills/, so editing the installed copy directly must be
+# blocked the same way ~/.claude/hooks|settings.json|CLAUDE.md are.
+# ============================================================
+
+@test "deny: ~/.claude/skills/<name>/... (absolute HOME path)" {
+  run run_hook Edit "$HOME/.claude/skills/triangulate/phases/phase-3-review.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: literal ~/.claude/skills/<name>/... (un-expanded tilde)" {
+  run run_hook Edit "~/.claude/skills/triangulate/phases/phase-3-review.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: ~/.claude/skills/<name>/SKILL.md for a skill with no repo source names the unmanaged case" {
+  # install.sh only removes/re-copies the skill directories it is about to
+  # write (skills/*/ in the repo), so a skill absent from the repo (e.g.
+  # "improve") survives every install untouched. Reusing the repo-managed
+  # "edit there and run install.sh" message would be unfollowable guidance
+  # here, so the skills arm must say so explicitly — asserting only that a
+  # block occurred would not distinguish this branch from fixture 1's.
+  run run_hook Edit "$HOME/.claude/skills/improve/SKILL.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+  echo "$output" | grep -qF "If it has no repo source (install.sh only removes and re-copies the skills it manages, so an unmanaged skill survives every install untouched), add it to the repo's skills/ directory, or exempt it via ~/.claude/settings.local.json."
+}
+
+@test "approve: repo's own skills/ directory stays editable (not ~/.claude/skills/)" {
+  # The whole "edit the repo, run install.sh" workflow — and this fix's own
+  # implementation — depends on the repo copy never being caught by the
+  # ~/.claude/skills/ arms above.
+  local repo_root
+  repo_root="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  run run_hook Edit "$repo_root/skills/triangulate/phases/phase-3-review.md"
+  [[ "$output" == *'"decision": "approve"'* ]]
+}
+
+@test "deny: ~/.claude/skills/... still blocked when HOME has a trailing slash" {
+  # Regression for the fail-open bug: without normalizing $HOME, a
+  # trailing-slash HOME turns "$HOME/.claude/..." into "…//.claude/…",
+  # which never matches the single-slash path the tool reports, and the
+  # guard silently approves instead of blocking. None of the fixtures
+  # above can see this failure mode since they inherit the ambient $HOME.
+  local input
+  input=$(jq -nc --arg n "Edit" --arg p "$HOME/.claude/skills/triangulate/phases/phase-3-review.md" \
+    '{tool_name:$n, tool_input:{file_path:$p}}')
+  run bash -c "HOME='$HOME/' bash '$SCRIPT'" <<< "$input"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
