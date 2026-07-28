@@ -9,20 +9,20 @@ implementation and are recorded below with their reasoning intact.
 ## D1 — The digest-stem fixture lives in the staged installed layout, not in `$FIX`
 
 - **Plan (C5, C7 / I28)**: add a generated `common-rules.digest.md` to the bats fixture tree so the
-  `END-OF-DIGEST` stem equality has a fixture home, "which also brings check #7 under fixture
+  `END-OF-DIGEST` stem equality has a fixture home, "which also brings check 7 under fixture
   coverage for the first time". The plan named the staged `inst/` layout as the acceptable
   alternative.
 - **Built**: no digest in `$FIX`; the stem-equality assertion is the staged-layout test
   `installed layout: the digest terminator is compared against SKILL.md's declared stem`.
 - **Why**: adding a digest to `$FIX` destabilises five existing tests. `check-rule-sync.sh`'s check
-  #7 regenerates the digest from `$FIX/common-rules.md` and compares byte-for-byte, but several
+  check 7 regenerates the digest from `$FIX/common-rules.md` and compares byte-for-byte, but several
   existing fixtures *mutate* `common-rules.md` (delete an R row, append an Extended-obligations
   block). Those tests would gain an unrelated "digest is stale" drift line — and one of them,
   `pass: extended-obligations pointer with range form matches headers`, asserts **status 0** and
   would have failed outright. Turning five single-purpose fixtures into multi-trip ones to give one
   assertion a home is the wrong trade; the staged layout already carries the real digest and both
   hooks, so the assertion is stronger there (it runs against the real generated artifact, not a
-  synthetic one). Check #7 remains without fixture coverage — pre-existing, unchanged by this work,
+  synthetic one). Check 7 remains without fixture coverage — pre-existing, unchanged by this work,
   and now covered indirectly by the staged run.
 
 ## D2 — `decoy-off` replaced by a red-provable inverse fixture
@@ -141,5 +141,26 @@ plan's prediction:
   rather than claimed. The live install remains the user's normal post-merge step.
 - Incidental confirmation: the staged tree has nine skills, the live tree ten. The extra is
   `improve`, the unmanaged skill C6's message branch exists for.
+
+## D11 — Mechanical pre-step dispositions (Phase 2 Step 2-5)
+
+Eleven mechanical hooks were run against `main`. Nine were clean or not applicable (no source
+files, no deployment artifacts, no suppressions, no timing-sensitive comparisons, no new production
+exports, no concurrency tests, no dispatch sites, no propagation candidates, no hardcoded-reuse
+matches). Two fired:
+
+- **R30 (markdown autolink footguns)** — six `#7` / `#8` tokens in the plan, review and deviation
+  documents, referring to linter check numbers. On GitHub these autolink to issues/PRs. **Fixed**:
+  rewritten without the `#`. Not a case for Anti-Deferral rule 5 ("fix the check, not the
+  artifact") — these are ordinary prose, not documentation *of* the forbidden pattern.
+- **RT7b (orphaned check script)** — `hooks/check-rule-sync.sh` reported as "referenced only in
+  non-gate files". **Not a finding here, with reasoning**: the hook's gate-surface list is CI
+  configs, Makefiles, package.json and pre-commit/pre-pr aggregates — none of which this repo has.
+  The authoritative gate in this repo *is* `bats tests/`, and `tests/check-rule-sync.bats` runs the
+  linter against the live skill directory asserting exit 0, so the check genuinely cannot rot
+  unnoticed. The hook cannot know that a bats file is the gate when no CI exists. Recorded rather
+  than silently dismissed, and left unfixed: teaching the hook to treat a bats file as a gate
+  surface is a change to a shared detector with its own blast radius, unrelated to this branch.
+  `TODO(phase-file-load-integrity): check-orphaned-checks.sh has no gate surface for repos whose gate is the local test suite`.
 
 ## END-OF-DEVIATION-LOG

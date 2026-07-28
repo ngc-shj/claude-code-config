@@ -349,10 +349,10 @@ the repo's own idiom for this concern, cf. `tests/install.bats:285-295`.)
 - Consumer B reads the three obligations and gates its phase-completion report on them. Every
   field it must then read (`step_ids`, `core`) is in C1's locked shape; the terminator stem comes
   from this clause. I11/I13 keep that true over time.
-- Consumer F — `check-rule-sync.sh` checks #3/#4/#5/#6. Verified inert: the added clause, the
+- Consumer F — `check-rule-sync.sh` checks 3, 4, 5 and 6. Verified inert: the added clause, the
   front matter, and both terminators contain no `R`/`RS`/`RT`-plus-digit token.
 
-### C4 — `hooks/check-rule-sync.sh` check #8: phase manifest
+### C4 — `hooks/check-rule-sync.sh` check 8: phase manifest
 
 **Signature**: no new script, no new argument, no new exit code. A block before the `fail`
 trailer, emitting `DRIFT: ...` through the existing `drift()` helper.
@@ -416,7 +416,7 @@ fixture, three of its four properties — including I12, the invariant that just
   tripwire, fail-closed).
 - I16 — **fail-closed comes from the preflight, and is recorded as such**: the loop at
   `check-rule-sync.sh:45-50` exits 2 when any of `ALL_FILES` is missing, and `ALL_FILES` names the
-  three phase files, so check #8's glob can never be empty. The literal-glob guard
+  three phase files, so check 8's glob can never be empty. The literal-glob guard
   (`[ -e "$f" ] || continue`) is retained as defence-in-depth with an inline
   "unreachable by construction" comment and is **not** listed among the mutation-proven gates. The
   phases directory is added to that preflight. **Removing the three phase paths from `ALL_FILES`
@@ -431,7 +431,7 @@ fixture, three of its four properties — including I12, the invariant that just
 
 - `pattern: mapfile|readarray|declare -A|sed -i` — reason: breaks stock-macOS bash 3.2 / BSD sed.
   (No trailing space: `sed -i.bak` and `sed -i''` must match.)
-- *(Conceptual, verified by reading the block)*: any `exit` inside check #8 — see I17.
+- *(Conceptual, verified by reading the block)*: any `exit` inside check 8 — see I17.
 
 **Acceptance criteria**
 
@@ -478,7 +478,7 @@ exit-2 tests short-circuit at the preflight.
   either way). (`phase-3-review.md:430` already carries `### [Finding number] …` inside a fenced
   template, so a step-shaped fenced line is one edit away.)
 - `$FIX` gains a **`common-rules.digest.md`**, generated in `setup()` from the fixture's own
-  `common-rules.md`. Two reasons: check #7 currently never executes in any fixture test
+  `common-rules.md`. Two reasons: check 7 currently never executes in any fixture test
   (`check-rule-sync.sh:206` guards it with `[ -f "$DIGEST" ]` and `$FIX` has no digest), and
   without a fixture digest the `END-OF-DIGEST` stem's equality (I13/I28) has no fixture home —
   C7's assertions all live in `tests/triangulate-rule-digest.bats` and compare against a literal.
@@ -493,7 +493,7 @@ exit-2 tests short-circuit at the preflight.
 - `$FIX/SKILL.md` gains a minimal loading-protocol clause naming `Read`, `` `step_ids:` ``,
   `` `core:` ``, `END-OF-PHASE`, `END-OF-DIGEST`. Without it 8j fires on every test and — worse —
   8i **degrades open**: its derived key set is empty, so it checks nothing and reports PASS.
-  Verified safe against check #5's dangling-rule grep: none of those tokens contains `R`/`RS`/`RT`
+  Verified safe against check 5's dangling-rule grep: none of those tokens contains `R`/`RS`/`RT`
   followed by a digit.
 - The terminator stem and key names are hoisted into `setup()` variables (RT3).
 
@@ -549,7 +549,7 @@ Staging both is required, not incidental: r2 executed r1's single-hook version a
 with `DRIFT: common-rules.digest.md exists but digest generator is missing`
 (`check-rule-sync.sh:204-212`). It is also the fidelity-correct shape — the installed layout
 contains both hooks (RT9). Do not "fix" it by deleting the digest from the staged copy; that
-silently drops check #7 from the installed-layout run.
+silently drops check 7 from the installed-layout run.
 
 **Invariants**
 
@@ -649,7 +649,7 @@ Anti-Deferral 30-minute rule.
 every rule selection. It has no terminator, and its tail is R44-R46, **RS1-RS6**, RT1-RT9. A
 truncated read silently deletes the security and testing recurring-rule sets from the routing
 index, and the Recurring Issue Check then reports clean over R1-R43 only. r1 scoped this out
-because check #7 already verifies the digest against the source table — a category error: check #7
+because check 7 already verifies the digest against the source table — a category error: check 7
 verifies bytes *on disk*, while this plan's thesis is that on-disk correctness says nothing about
 what the reader received. Under R42 this is the highest-value member of the "read whole,
 pointer-loaded" class.
@@ -665,7 +665,7 @@ of the generated file — one `echo` **after** the awk pass, inside the existing
   0 on the committed digest and 1 after deleting its last line.
 - I26: **position is a separate property and needs its own assertion.** `cmp -s` pins the digest
   to whatever the generator emits — including a terminator emitted in the wrong place. Move the
-  `echo` above the awk pass and the terminator lands mid-file: `cmp` still matches, check #7 stays
+  `echo` above the awk pass and the terminator lands mid-file: `cmp` still matches, check 7 stays
   green, and a reader truncated past line 10 sees `## END-OF-DIGEST` and certifies a partial read
   as complete. That is the M1 bug reproduced in the digest, in the same revision that removed
   `end:` from the phase files to fix it. So: on a freshly generated digest, assert the last
@@ -700,7 +700,7 @@ of the generated file — one `echo` **after** the awk pass, inside the existing
 | C1 | Phase-file front matter — five keys, literal values for three files | locked |
 | C2 | Phase-file terminator: unique, last, structurally decoy-resistant; trailing `---` removed | locked |
 | C3 | SKILL.md clause (≤ 12 lines) + canonical declaration line + `:45` amendment | locked |
-| C4 | `check-rule-sync.sh` check #8, clauses 8a.1-8j.4, fence-aware incl. indented, dependency gating, no `exit` | locked |
+| C4 | `check-rule-sync.sh` check 8, clauses 8a.1-8j.4, fence-aware incl. indented, dependency gating, no `exit` | locked |
 | C5 | Fixture repair (3 steps + per-file fenced decoy + SKILL.md clause + digest + `>>` fix) + 24 fixtures + staged zero-arg run | locked |
 | C6 | `block-sensitive-files.sh`: `$HOME` normalized for all arms, `~/.claude/skills/` guarded with a skills-specific message + 5 fixtures | locked |
 | C7 | Digest terminator emitted last + presence/position/uniqueness assertions + stem equality via `$FIX` | locked |
@@ -819,7 +819,7 @@ reused, every pattern that must hold across sites.
 | `skills/triangulate/phases/phase-2-coding.md` | C1, C2 | front matter (5 steps); trailing `---` → `## END-OF-PHASE-2` |
 | `skills/triangulate/phases/phase-3-review.md` | C1, C2 | front matter (9 steps); trailing `---` → `## END-OF-PHASE-3` |
 | `skills/triangulate/SKILL.md` | C3 | loading-protocol clause + declaration line; amend `:45` |
-| `hooks/check-rule-sync.sh` | C4 | check #8 (8a.1-8j.4); phases dir added to the preflight; trailer text |
+| `hooks/check-rule-sync.sh` | C4 | check 8 (8a.1-8j.4); phases dir added to the preflight; trailer text |
 | `tests/check-rule-sync.bats` | C5 | fixture repair; 24 fixtures; staged zero-arg run; `>>` → insert-before-terminator at `:189`/`:196` |
 | `hooks/block-sensitive-files.sh` | C6 | `$HOME` normalization for all arms; two skills arms; skills-specific message |
 | `tests/block-sensitive-files.bats` | C6 | 5 fixtures |
@@ -829,8 +829,8 @@ reused, every pattern that must hold across sites.
 
 ### Shared utilities that MUST be reused (no new helpers)
 
-- `drift()` — `check-rule-sync.sh:53-56`. Every check-#8 message goes through it; no new reporting path.
-- `check_contiguous()` / `check_ranges()` — existing; not needed by check #8 but the style to match.
+- `drift()` — `check-rule-sync.sh:53-56`. Every check-8 message goes through it; no new reporting path.
+- `check_contiguous()` / `check_ranges()` — existing; not needed by check 8 but the style to match.
 - `emit_block()` — `block-sensitive-files.sh:23-26`. JSON-encodes the reason via `jq -Rs`; C6 adds a case arm, never a second emit path.
 - `run_hook()` — `tests/block-sensitive-files.bats`. All five C6 fixtures use it.
 - `sed_i()` — `tests/check-rule-sync.bats:18-22`. BSD/GNU-portable in-place edit; every fixture mutation uses it.
@@ -840,7 +840,7 @@ reused, every pattern that must hold across sites.
 ### Patterns that must hold across all sites
 
 - bash 3.2 / BSD-sed portable: no `mapfile`/`readarray`/`declare -A`/`sed -i` (I18).
-- No `exit` of any status inside check #8 (I17).
+- No `exit` of any status inside check 8 (I17).
 - Every new bats assertion pairs `status` with a specific `DRIFT:` substring (I19).
 - Terminator stems and front-matter key names come from `setup()` variables in tests (RT3), and from `SKILL.md` in the linter (I13).
 

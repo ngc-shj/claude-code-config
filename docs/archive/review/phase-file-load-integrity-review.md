@@ -133,8 +133,8 @@ wired to `Edit|Write|MultiEdit` only, so a Bash redirect bypasses it even for co
 recorded as `SC5` — it is a property of the existing hook, not of this change.
 
 **M7 [Major] SC2 defers `common-rules.digest.md`, which *is* read whole and whose truncated tail is the entire RS/RT rule set**
-SC2's justification ("verified against the source table by check #7") answers a different
-question: check #7 verifies bytes on disk, while the plan's whole thesis is that on-disk
+SC2's justification ("verified against the source table by check 7") answers a different
+question: check 7 verifies bytes on disk, while the plan's whole thesis is that on-disk
 correctness says nothing about what the reader received. `SKILL.md:22` and the digest's own
 line 4 direct the reader to read it whole. Its tail is R44–R46, **RS1–RS6**, RT1–RT9 — a
 truncated read silently deletes the security and testing checklists and the Recurring Issue
@@ -147,7 +147,7 @@ gains the red fixture. R42 class-membership: this is the highest-value member of
 
 **M14 [Major] [convergent: functionality+security+testing] I8's empty-glob fail-closed branch is unreachable**
 The preflight at `check-rule-sync.sh:45-50` exits 2 if any of the three phase files is missing,
-and it runs before check #8, so the glob can never be empty. The file's neighbouring idiom
+and it runs before check 8, so the glob can never be empty. The file's neighbouring idiom
 (`[ -e "$f" ] || continue`) is the fail-*open* form an implementer would copy while believing
 I8 is satisfied.
 *Resolution*: **Accepted — fixed in Round 1.** I8 restated: fail-closed derives from the
@@ -215,7 +215,7 @@ new phase file is silently unchecked.
 missing front matter block` drift line. It is the only assertion that red-proves I8.
 
 **M12 [Major] The mutation-proof obligation is stated at the wrong granularity**
-"Before the corresponding linter check is written" is ambiguous between check #8 as a whole and
+"Before the corresponding linter check is written" is ambiguous between check 8 as a whole and
 each sub-check; under the whole-block reading all fixtures pass-when-they-should-fail
 simultaneously and the observation carries no per-sub-check information. It would not have
 surfaced M1, M2 or M10.
@@ -293,7 +293,7 @@ reasoning about them.
 - R42 (Class-membership derivation): [Finding F8] — re-derived from `find skills -type f`: the in-scope class `skills/triangulate/phases/*.md` is exactly {`phase-1-plan.md`, `phase-2-coding.md`, `phase-3-review.md`}, matching I5, and C4's directory sweep correctly generalizes past the fixed `PHASE1/PHASE2/PHASE3` triple. The wider "pointer-loaded skill sub-file" class is miscounted (21, not 20) and `skills/agent-review/schemas/review-output.schema.json` is neither in scope nor scoped out by ID.
 - R43 (Fix-induced security-boundary widening): [N/A — no security boundary is moved]
 - R44 (Gate exit status read through a lossy or identity-less channel): [Checked — no issue for the gate itself] — C4 keeps the 0/1/2 exit contract and the plan's acceptance runs `bash hooks/check-rule-sync.sh` unpiped. Note the plan's *subject* is a lossy read channel, which is the R44 concern applied to content rather than status; F3 covers that.
-- R45 (Repo-wide gate scaling super-linearly): [Checked — no issue] — check #8 iterates 3–4 files with a constant number of `sed`/`grep` passes each.
+- R45 (Repo-wide gate scaling super-linearly): [Checked — no issue] — check 8 iterates 3–4 files with a constant number of `sed`/`grep` passes each.
 - R46 (Scope-blind binding resolution in a security analyzer): [N/A — not a security analyzer]
 
 ### Security expert
@@ -307,7 +307,7 @@ reasoning about them.
 - R7 (E2E selector breakage): [N/A — no E2E layer]
 - R8 (UI pattern inconsistency): [N/A]
 - R9 (Transaction boundary for fire-and-forget): [N/A]
-- R10 (Circular module dependency): [Checked — no issue; check #8 adds no new inter-file dependency]
+- R10 (Circular module dependency): [Checked — no issue; check 8 adds no new inter-file dependency]
 - R11 (Display group ≠ subscription group): [N/A]
 - R12 (Enum/action group coverage gap): [Checked — 8a-8g cover the six declared keys; the gap is the *unlisted* uniqueness check, reported as F2]
 - R13 (Re-entrant dispatch loop): [N/A]
@@ -340,7 +340,7 @@ reasoning about them.
 - R40 (Cross-boundary serialization vs strict consumer): [Checked — Consumers C/D/E verified: `install.sh:227-235` copies `cp -r` verbatim, the skill loader reads front matter from `SKILL.md` only, and the digest generator reads `common-rules.md` only. The plan's inertness claim holds]
 - R41 (Declared capability without a working backing path): [Finding F2, F9 — C2 declares a uniqueness constraint and C3 declares four acceptance criteria, none of which has a backing check in C4's 8a-8g or a fixture in C5]
 - R42 (Class-membership derivation): [Finding F5 — the in-scope member set (3 phase files) is correctly code-derived, but the deferred class in SC2 omits `common-rules.digest.md`, the one whole-file-read member whose truncated tail is RS1-RS6]
-- R43 (Fix-induced security-boundary widening): [Checked — no issue; check #8 adds no recipient, permission, or path grant. `settings.json` is unchanged, verified]
+- R43 (Fix-induced security-boundary widening): [Checked — no issue; check 8 adds no recipient, permission, or path grant. `settings.json` is unchanged, verified]
 - R44 (Gate exit status read through a lossy channel): [Finding F8 — an `exit 2` in the new block would replace an accumulated `fail=1` from checks 1-7, and only `exit 0` is forbidden]
 - R45 (Gate scaling super-linearly with the scanned set): [N/A — the sweep is 3 files of ≤ 524 lines; no timeout risk]
 - R46 (Scope-blind binding resolution in a security analyzer): [Finding F3 — 8d/8e resolve `### Step` headings without fence scope, so a fenced decoy reads as a legitimate step (fail-open). Note: R46's own rubric rates this Critical when a fake reads as legitimate; I have rated F3 **Major** because it does not meet this review's Critical bar (RCE / auth bypass / injection / data exposure). Implementers may reasonably treat it as Critical under R46]
@@ -517,7 +517,7 @@ Staging only `hooks/check-rule-sync.sh` plus the real skill dir produces
 `DRIFT: common-rules.digest.md exists but digest generator is missing` and exit 1
 (`check-rule-sync.sh:204-212`), because the real skill dir ships the digest. The tempting repairs
 are both wrong: asserting `status -ne 2` hides it, and deleting the digest from the staged copy
-silently drops check #7 from the installed-layout run — the opposite of what N3 asks for.
+silently drops check 7 from the installed-layout run — the opposite of what N3 asks for.
 *Resolution*: **Accepted — fixed in revision 3.** C5 stages **both** hooks, which is also the
 fidelity-correct shape since the installed layout contains both (RT9).
 
@@ -550,7 +550,7 @@ tokens, so 8j would fire on every test and 8i would **degrade open** — an empt
 checks nothing and reports PASS, with its own fixture inert.
 *Resolution*: **Accepted — fixed in revision 3.** C5's fixture repair now covers `$FIX/SKILL.md`,
 and revision 3 records that the derived key set in the fixture is `{step_ids, core}`. Verified safe
-against check #5's dangling-rule grep.
+against check 5's dangling-rule grep.
 
 **N15 [Major] 8a/8b overlapped on empty values and I4's no-extra-key clause had no fixture** (Test F5)
 C1 assigned the empty-value pattern to 8b while 8a's line-shape rule rejects it first, so the 8b
@@ -660,7 +660,7 @@ Round 1's per-expert sections are preserved above. Round 2's, verbatim, follow.
 - R2: [Checked — materially improved since r1; dropping `end:` removes one of the four homes of the token, and C5 hoists the remaining fixture copies into `setup()` variables (RT3)]
 - R3: [Finding F10, F11 — the `END-OF-ANALYSIS` discipline is propagated in the right anchored form for presence, but the uniqueness half was not given its own; and fence awareness is propagated to column-0 fences only, missing the 12 indented fences already in these files]
 - R4-R9: [N/A — no dispatch surface / no transactional store / no deletes / no E2E / no UI / no async dispatch]
-- R10: [Checked — no issue; C7 adds no new dependency, and check #7's call into the generator already exists]
+- R10: [Checked — no issue; C7 adds no new dependency, and check 7's call into the generator already exists]
 - R11: [N/A]
 - R12: [Checked — 8a-8j now cover every declared invariant; the r1 gap (uniqueness unlisted) is closed as 8h, though its pattern strength is F10]
 - R13-R15: [N/A]
@@ -837,10 +837,10 @@ it to `8j`.
 *Resolution*: **Accepted.** New fixture `8h-stem` changes the stem in the fixture `SKILL.md` only.
 
 **P8 [Major] The digest-side stem equality had no fixture home** (Test F6)
-`$FIX` carries no digest, so `check-rule-sync.sh:206`'s `[ -f "$DIGEST" ]` guard means check #7
+`$FIX` carries no digest, so `check-rule-sync.sh:206`'s `[ -f "$DIGEST" ]` guard means check 7
 never executes in any fixture test; and C7's assertions all compare against a hardcoded literal, so
 none observes `SKILL.md`.
-*Resolution*: **Accepted.** `$FIX` gains a generated digest — which also brings check #7 under
+*Resolution*: **Accepted.** `$FIX` gains a generated digest — which also brings check 7 under
 fixture coverage for the first time — and fixture `8j-digest` mutates the stem in the fixture
 `SKILL.md`.
 
@@ -976,8 +976,8 @@ rather than glossed: the collapse is a summary, not a verbatim preservation.
 
 None beyond P9. Explicitly checked and clear: removing the trailing `---` leaves fence balance even
 (28/22/32) with the terminator outside the final fence; 8h.4 has no false-positive surface on the
-real files; the front matter, both terminators and the C3 clause remain inert to checks
-#3/#4/#5/#6; the three exit-2 tests still short-circuit at the preflight;
+real files; the front matter, both terminators and the C3 clause remain inert to
+checks 3, 4, 5 and 6; the three exit-2 tests still short-circuit at the preflight;
 `tests/triangulate-rule-digest.bats:22-33`'s staged single-row source yields a digest whose last
 line is the terminator, so C7's fresh-digest assertions are satisfiable there.
 
