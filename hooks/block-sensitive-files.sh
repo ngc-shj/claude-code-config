@@ -272,26 +272,30 @@ if _res="$(cd -P -- "$CLAUDE_HOME" 2>/dev/null && pwd -P)"; then
   CLAUDE_HOME_PHYS="${_res%/}"
 fi
 
-case "$LEX_PATH" in
-  "$CLAUDE_HOME/hooks/"*|"$CLAUDE_HOME/settings.json"|"$CLAUDE_HOME/CLAUDE.md"|"$CLAUDE_HOME/rules/"*|"$CLAUDE_HOME/RTK.md"|"$CLAUDE_HOME/model-routing.md")
-    emit_block "Blocked: editing harness config under ~/.claude/ directly. The repo claude-code-config is the source of truth — edit there and run \`bash ./install.sh\`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."
-    exit 0
-    ;;
-  "$CLAUDE_HOME/skills/"*)
-    emit_block "$SKILLS_BLOCK_REASON"
-    exit 0
-    ;;
-  "~/.claude/hooks/"*|"~/.claude/settings.json"|"~/.claude/CLAUDE.md"|"~/.claude/rules/"*|"~/.claude/RTK.md"|"~/.claude/model-routing.md")
-    emit_block "Blocked: editing harness config under ~/.claude/ directly. Edit the repo claude-code-config and run \`bash ./install.sh\`. Use ~/.claude/settings.local.json for local overrides."
-    exit 0
-    ;;
-  "~/.claude/skills/"*)
-    emit_block "$SKILLS_BLOCK_REASON"
-    exit 0
+# The lexical form judges ONLY literal-tilde paths. Applying it to a path the
+# filesystem can resolve is the same mistake as collapsing `..` before
+# resolving, just in the over-block direction: a link inside the guarded tree
+# pointing OUT of it, plus `..`, collapses lexically to a guarded-looking path
+# while really naming a file outside. Fail-closed, so harmless for security —
+# and still wrong, because a guard that refuses writes it has no business
+# refusing is a guard people learn to switch off. Absolute and relative paths
+# are judged solely by CANON_PATH below, which the filesystem answered.
+case "$FILE_PATH" in
+  "~/"*)
+    case "$LEX_PATH" in
+      "~/.claude/hooks/"*|"~/.claude/settings.json"|"~/.claude/CLAUDE.md"|"~/.claude/rules/"*|"~/.claude/RTK.md"|"~/.claude/model-routing.md")
+        emit_block "Blocked: editing harness config under ~/.claude/ directly. Edit the repo claude-code-config and run \`bash ./install.sh\`. Use ~/.claude/settings.local.json for local overrides."
+        exit 0
+        ;;
+      "~/.claude/skills/"*)
+        emit_block "$SKILLS_BLOCK_REASON"
+        exit 0
+        ;;
+    esac
     ;;
 esac
 
-# Second pass over the canonical form. Kept as a separate case rather than
+# The resolved form is the authority for everything the filesystem can answer. Kept as a separate case rather than
 # `case "$FILE_PATH$CANON_PATH"` so each arm stays a plain literal a reader can
 # check against install.sh's write set.
 case "$CANON_PATH" in

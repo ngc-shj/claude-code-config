@@ -455,6 +455,32 @@ run_bash_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
+@test "approve: a link inside the guarded tree pointing out of it, crossed by .." {
+  # The over-block mirror of the symlink test below. Lexically,
+  # `skills/out-link/..` collapses to `skills/`, which looks guarded; physically
+  # the link leaves the tree, so the file is outside it. Fail-closed is not a
+  # licence to refuse writes the guard has no business refusing — a guard that
+  # does that is one people learn to switch off.
+  fake="$BATS_TEST_TMPDIR/ob-home"
+  mkdir -p "$fake/.claude/skills" "$BATS_TEST_TMPDIR/outside/inner"
+  ln -sfn "$BATS_TEST_TMPDIR/outside/inner" "$fake/.claude/skills/out-link"
+  input=$(jq -nc --arg p "$fake/.claude/skills/out-link/../harmless.txt" \
+    '{tool_name:"Edit", tool_input:{file_path:$p}}')
+  run env HOME="$fake" bash -c "printf '%s' '$input' | bash '$SCRIPT'"
+  [[ "$output" == *'"decision": "approve"'* ]]
+}
+
+@test "deny: a genuinely guarded path under the same staged HOME" {
+  # Pairs with the test above: the same staged HOME must still refuse a real
+  # skill file, so the fix is not just "stopped blocking things".
+  fake="$BATS_TEST_TMPDIR/ob-home2"
+  mkdir -p "$fake/.claude/skills/triangulate"
+  input=$(jq -nc --arg p "$fake/.claude/skills/triangulate/SKILL.md" \
+    '{tool_name:"Edit", tool_input:{file_path:$p}}')
+  run env HOME="$fake" bash -c "printf '%s' '$input' | bash '$SCRIPT'"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
 @test "deny: a physical path under a symlinked HOME" {
   # CANON_PATH is fully resolved, so the guarded root has to be resolved too —
   # otherwise the arms hold the symlinked spelling, the path holds the real one,

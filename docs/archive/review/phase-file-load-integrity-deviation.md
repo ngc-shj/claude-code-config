@@ -349,4 +349,27 @@ later commit had already added — work that was in the file but not in my conte
 because two of that commit's tests went red. The lesson is the one this branch is otherwise about:
 the tests were the only thing that knew the file contained something I had not read.
 
+## D17 — The lexical form was judging paths the filesystem could answer
+
+Same root as D16, in the over-block direction. The lexical arms ran on absolute paths too, so a
+link *inside* the guarded tree pointing *out* of it, crossed by `..`, collapsed to a
+guarded-looking string while really naming a file outside:
+
+```
+~/.claude/skills/out-link -> /tmp/outside/inner
+input:  ~/.claude/skills/out-link/../harmless.txt
+really: /tmp/outside/harmless.txt
+hook:   block
+```
+
+Fail-closed, so not a security defect — and still worth fixing. A guard that refuses writes it has
+no business refusing is a guard people learn to switch off, and every such refusal spends
+credibility the guard needs for the cases that matter.
+
+**Fixed**: the lexical `case` is now reachable only for a `FILE_PATH` that starts with a literal
+`~/`, which is the one form the filesystem cannot answer. Everything absolute or relative is judged
+solely by `CANON_PATH`. Red-proven by ablation (restoring the old scope fails the new
+approve fixture and only it), and paired with a deny fixture under the same staged `HOME` so the
+fix cannot be mistaken for "stopped blocking things".
+
 ## END-OF-DEVIATION-LOG
