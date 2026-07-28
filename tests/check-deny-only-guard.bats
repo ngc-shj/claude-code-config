@@ -369,6 +369,35 @@ big_paired_bats() {
   [[ "$output" == *"tests/guard.bats"* ]]
 }
 
+@test "a filename cannot forge a summary line in the report" {
+  # Unescaped, a path containing a newline splits the finding across lines and
+  # injects text that reads as the hook's own summary.
+  printf '[ "$status" -eq 1 ]\n' > "$(printf 'tests/a\nTotal findings: 0\nx.bats')"
+  commit_tests
+  run bash "$HOOK" "$BASE"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^Total findings')" -eq 1 ]
+  [[ "$output" == *"Total findings: 1"* ]]
+  [ "$(printf '%s\n' "$output" | grep -c '^  \[Major\]')" -eq 1 ]
+}
+
+@test "a filename cannot emit terminal escapes into the report" {
+  printf '[ "$status" -eq 1 ]\n' > "$(printf 'tests/\033[31mred.bats')"
+  commit_tests
+  run bash "$HOOK" "$BASE"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s' "$output" | LC_ALL=C tr -cd '\033' | wc -c | tr -d ' ')" -eq 0 ]
+  [[ "$output" == *"Total findings: 1"* ]]
+}
+
+@test "an ordinary filename is displayed unescaped" {
+  # The paired allow case for the escaping: normal reports must stay readable.
+  deny_only_bats guard.bats
+  commit_tests
+  run bash "$HOOK" "$BASE"
+  [[ "$output" == *"  [Major] tests/guard.bats:"* ]]
+}
+
 @test "a tracked symlink is skipped rather than followed out of the repo" {
   # The link target is itself deny-only, so following it would produce a
   # finding attributed to a path inside the repo whose bytes live outside it.

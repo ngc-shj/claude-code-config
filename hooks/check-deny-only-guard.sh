@@ -70,6 +70,13 @@
 #     expression `s://.*$::` contains `/` and cannot be a filename — an
 #     accident of delimiter choice, not a control, and one that does not
 #     transfer to a `#`-comment expression.
+#   - Paths are escaped with `%q` at the moment they are DISPLAYED, never
+#     earlier. A raw filename in a diagnostic lets a repository under review
+#     forge a `Total findings: 0` line inside the report, or emit ANSI escapes
+#     into the reader's terminal. The escaped path can still CONTAIN such
+#     text, so the summary line is anchored at column 0 and every finding
+#     line is indented — a consumer must anchor (`grep '^Total findings'`)
+#     rather than substring-match.
 #   - The changed-file set is read NUL-framed (`--name-status -z`), so a path
 #     containing a newline, quote, backslash or tab is carried through as
 #     itself. `--name-only` would C-quote such a path, and a consumer that
@@ -115,6 +122,14 @@ _DOG_TMPDIR=$(mktemp -d)
 # exit. The path is attacker-influenced wherever TMPDIR is.
 _dog_cleanup() { rm -rf -- "$_DOG_TMPDIR"; }
 trap _dog_cleanup EXIT
+
+# Paths come from a repository under review and are printed into a report a
+# human reads and a script may grep. Unescaped, a filename containing a
+# newline injects a forged `Total findings: 0` line into the middle of the
+# output, and an ANSI escape rewrites the terminal. `%q` leaves an ordinary
+# path untouched and renders a control byte as `$'\033'`. Internal handling
+# stays NUL-framed and raw; only the display form is escaped.
+_dog_display() { printf '%q' "$1"; }
 
 BASE_REF="${1:-main}"
 
@@ -303,7 +318,7 @@ while IFS= read -r -d '' f; do
     awk '{ print NR }' "./$f" > "$added"
   fi
   if [ "$tracked" -eq 1 ] && ! git diff "$MERGE_BASE" --unified=0 -- "./$f" > "$rawdiff" 2>/dev/null; then
-    echo "  [Major] $f — 'git diff' failed for this file, so its added-line set is unknown; not analyzed. A failed diff is not evidence of no findings."
+    echo "  [Major] $(_dog_display "$f") — 'git diff' failed for this file, so its added-line set is unknown; not analyzed. A failed diff is not evidence of no findings."
     findings=$((findings + 1))
     continue
   fi
@@ -377,7 +392,7 @@ while IFS= read -r -d '' f; do
   d="$1"; a="$2"; ln="$3"
 
   if [ "$d" -gt 0 ] && [ "$a" -eq 0 ] && [ "$ln" -gt 0 ]; then
-    echo "  [Major] $f:$ln — $d deny-shaped assertion(s), 0 allow-shaped assertions in the file; the guard's over-block direction is untested. Add the boundary-adjacent allow case: the nearest legitimate input that must still pass (RT10; escalate to Critical when a false deny would block an operational recovery, deployment, or incident-response path)."
+    echo "  [Major] $(_dog_display "$f"):$ln — $d deny-shaped assertion(s), 0 allow-shaped assertions in the file; the guard's over-block direction is untested. Add the boundary-adjacent allow case: the nearest legitimate input that must still pass (RT10; escalate to Critical when a false deny would block an operational recovery, deployment, or incident-response path)."
     findings=$((findings + 1))
   fi
 done < "$KEPT"
