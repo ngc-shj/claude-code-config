@@ -29,7 +29,8 @@ setup() {
   # asserted below; language overlays are load-on-demand and not staged.
   mkdir -p "$STAGING/rules/common"
   cp "$REPO_DIR"/rules/common/*.md "$STAGING/rules/common/"
-  # Skip skills/ for speed — independent of the tests here.
+  # Skip skills/ for speed — independent of the tests here, except for the one
+  # case below that stages skills/triangulate/ explicitly.
 }
 
 teardown() {
@@ -43,6 +44,22 @@ teardown() {
   [[ "$output" == *"Installed hook: block-sensitive-files.sh"* ]]
   [[ "$output" == *"Done."* ]]
   [ -x "$TEST_HOME/.claude/hooks/block-sensitive-files.sh" ]
+}
+
+@test "install: the installed phase files keep their manifest and terminator" {
+  # The whole truncation protocol is a property of the bytes the runtime loads,
+  # i.e. the INSTALLED copy. Nothing asserted that install.sh preserves them —
+  # the front matter is at byte 0 and the terminator is the last line, exactly
+  # the two positions a copy step is most likely to disturb.
+  mkdir -p "$STAGING/skills"
+  cp -r "$REPO_DIR/skills/triangulate" "$STAGING/skills/"
+  run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
+  [ "$status" -eq 0 ]
+  installed="$TEST_HOME/.claude/skills/triangulate/phases/phase-3-review.md"
+  [ -f "$installed" ]
+  [ "$(head -n 1 "$installed")" = "---" ]
+  [ "$(sed '/^[[:space:]]*$/d' "$installed" | tail -n 1)" = "## END-OF-PHASE-3" ]
+  [ "$(sed '/^[[:space:]]*$/d' "$TEST_HOME/.claude/skills/triangulate/common-rules.digest.md" | tail -n 1)" = "## END-OF-DIGEST" ]
 }
 
 @test "install: malformed settings.json (trailing comma) is rejected before install" {

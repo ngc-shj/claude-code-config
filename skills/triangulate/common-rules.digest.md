@@ -73,3 +73,4 @@ Also extract a rule's Extended obligations section when the selected row points 
 | RT7 | New guard / test / gate must be proven able to fail | Major; Critical when the blind check guards a security invariant |
 | RT8 | Vacuous denial-path test (status asserted, mutation not) | Major; Critical for authn/authz, rate-limit, step-up, or fail-closed controls |
 | RT9 | Parallel-implementation twin drift (production artifact vs test-importable twin) | Critical when the drifting logic is a security control (auth/authz check, origin/frame gate, sanitizer, crypto parameter, signature verification, rate limiter, RLS/tenancy predicate, idempotency guard on a security-state mutation — a superset of RT5's Critical-escalation list); Major otherwise |
+## END-OF-DIGEST

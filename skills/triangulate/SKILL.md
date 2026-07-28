@@ -24,6 +24,17 @@ The skill is split across several files for context efficiency. Load only the fi
 
 **Loading protocol** — Read `common-rules.digest.md` first. Match its pattern names against the diff and task, then use anchored `rg` queries to extract only the triggered rows from `common-rules.md`; also extract a selected rule's Extended obligations section when its row points there. For a named non-recurring Common Rules section, extract that heading and its bounded section. Read the full `common-rules.md` only when targeted extraction is inconclusive, and record the reason. Do not paraphrase rule details from memory.
 
+**Truncation protocol** — a partial read of a phase file is silent unless you check for it:
+
+1. Read phase files and `common-rules.digest.md` with the `Read` tool, whole-file. Do not `cat`/`head` them through Bash — Bash output passes through an output-compressing proxy that can render a 500-line file as its first line plus a `[N more lines]` marker.
+2. Every phase file's last line is `## END-OF-PHASE-<N>`, and `common-rules.digest.md`'s last line is `## END-OF-DIGEST`. If the last line you received is not that terminator, the read was partial — re-read before acting on it.
+3. Before reporting a phase complete, reconcile the steps you executed against the `step_ids:` declared in that phase's front matter. An unexecuted ID means the phase is not complete. The step named in `core:` has no substitute — inline work by the orchestrator does not discharge it.
+
+<!-- Machine-parsed by hooks/check-rule-sync.sh (check 8) BY SHAPE: backticked
+     key tokens, and a backticked stem followed by "(phase files)" / "(the
+     digest)". Reword the sentence and the stems stop extracting. -->
+Manifest keys: `step_ids:`, `core:`. Terminator stems: `END-OF-PHASE` (phase files), `END-OF-DIGEST` (the digest).
+
 ---
 
 ## Entry Point Decision
@@ -42,4 +53,4 @@ Determine the starting phase from the user's instructions:
 - Phase 2 → Phase 3: after coding completes, Read `phases/phase-3-review.md`
 - Phase 3 standalone: when invoked for branch review only, skip Phase 1 and 2
 
-Each phase file ends with a summary and a pointer to the next phase. Follow the pointer when the current phase reports complete.
+Each phase file ends with a summary, a pointer to the next phase, and its `## END-OF-PHASE-N` terminator as the final line. Follow the pointer when the current phase reports complete.

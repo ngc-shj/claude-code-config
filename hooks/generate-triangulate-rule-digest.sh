@@ -40,6 +40,12 @@ trap 'rm -f "$TMP"' EXIT
       print "| " id " | " pattern " | " severity " |"
     }
   ' "$SOURCE"
+  # Truncation terminator. The digest is read WHOLE as the routing index
+  # (SKILL.md), and its tail is the RS*/RT* rows — a read cut short deletes the
+  # security and testing checklists while still looking complete. Must be the
+  # LAST line: a terminator emitted mid-file is one a truncated read can see,
+  # which is the failure mode it exists to reveal.
+  echo '## END-OF-DIGEST'
 } > "$TMP"
 
 [ "$(grep -Ec '^\| (R[0-9]+|RS[0-9]+|RT[0-9]+) \|' "$TMP")" -gt 0 ] || {

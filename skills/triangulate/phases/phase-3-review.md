@@ -1,3 +1,11 @@
+---
+phase: 3
+title: "Phase 3: Code Review, Fix & Commit"
+steps: 9
+step_ids: 3-1, 3-2, 3-3, 3-4, 3-5, 3-6, 3-7, 3-8, 3-9
+core: 3-3 — code review by three expert sub-agents launched in parallel; inline self-review by the orchestrator is not a substitute
+---
+
 ## Phase 3: Code Review, Fix & Commit
 
 ### Step 3-1: Gather Review Input
@@ -514,6 +522,7 @@ Plan name: [plan-name]
 Branch: [branch-name]
 Plan review rounds: [n]
 Code review rounds: [n]
+Steps executed: [3-1, 3-2, ... — reconciled against step_ids in this file's front matter]
 Artifacts:
   - ./docs/archive/review/[plan-name]-plan.md (finalized plan)
   - ./docs/archive/review/[plan-name]-review.md (plan review log)
@@ -521,4 +530,4 @@ Artifacts:
   - ./docs/archive/review/[plan-name]-code-review.md (code review log)
 ```
 
----
+## END-OF-PHASE-3

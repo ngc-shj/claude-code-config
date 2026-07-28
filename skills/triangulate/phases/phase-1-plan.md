@@ -1,3 +1,11 @@
+---
+phase: 1
+title: "Phase 1: Plan Creation, Review & Commit"
+steps: 7
+step_ids: 1-1, 1-2, 1-3, 1-4, 1-5, 1-6, 1-7
+core: 1-4 — plan review by three expert sub-agents launched in parallel; inline self-review by the orchestrator is not a substitute
+---
+
 ## Phase 1: Plan Creation, Review & Commit
 
 ### Step 1-1: Determine Plan Name and Branch Name
@@ -357,7 +365,8 @@ Report to user:
 Plan: ./docs/archive/review/[plan-name]-plan.md
 Branch: [branch-name]
 Review rounds: [n]
+Steps executed: [1-1, 1-2, ... — reconciled against step_ids in this file's front matter]
 Next step: Proceeding to Phase 2 (Coding)
 ```
 
----
+## END-OF-PHASE-1
