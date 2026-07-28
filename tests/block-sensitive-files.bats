@@ -379,3 +379,77 @@ run_bash_hook() {
   run run_bash_hook 'cp hooks/x.sh /tmp/y.sh'
   [[ "$output" == *'"decision": "approve"'* ]]
 }
+
+# --- Bypasses closed after review (each reproduced before the fix) ---
+
+@test "deny (Bash): sed --in-place long flag" {
+  # The matcher keyed on `-[a-zA-Z]*i`, so the long spelling walked past.
+  run run_bash_hook 'sed --in-place "s/x/y/" ~/.claude/hooks/block-sensitive-files.sh'
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny (Bash): perl -pi in-place edit" {
+  # perl/ruby/awk spell in-place their own way; only sed was covered.
+  run run_bash_hook 'perl -pi -e "s/x/y/" ~/.claude/hooks/block-sensitive-files.sh'
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny (Bash): quoted \$HOME expands to the guarded tree" {
+  # `"$HOME"/.claude/...` did not match the literal-path regex.
+  run run_bash_hook 'cp /tmp/x "$HOME"/.claude/hooks/block-sensitive-files.sh'
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny (Bash): doubled slash in the guarded path" {
+  # `~/.claude//hooks/` names the same directory the single-slash arm guards.
+  run run_bash_hook 'echo x > ~/.claude//hooks/evil.sh'
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny (Bash): mv OUT of the tree is a deletion from it" {
+  # mv mutates its source, so moving a guarded file away removes it — unlike
+  # cp, which only reads the source.
+  run run_bash_hook 'mv ~/.claude/hooks/x.sh /tmp/'
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "approve (Bash): cp OUT of the tree is a read-only backup" {
+  # Previously blocked: the path matched and `cp` was a write verb, with no
+  # check of which side was the destination.
+  run run_bash_hook 'cp ~/.claude/hooks/block-sensitive-files.sh /tmp/backup.sh'
+  [[ "$output" == *'"decision": "approve"'* ]]
+}
+
+@test "deny: relative path resolving into the installed tree" {
+  # The hook runs in the session cwd, so a relative path names a real file;
+  # it was not made absolute before matching.
+  local rel
+  rel=$(python3 -c "import os,sys; print(os.path.relpath(os.path.expanduser('~/.claude/hooks/block-sensitive-files.sh'), os.getcwd()))")
+  run run_hook "Write" "$rel"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: symlink whose target is an installed hook" {
+  # `cd -P` resolves symlinked DIRECTORY components; a symlinked leaf survived
+  # as its own path and was judged on that.
+  ln -sf "$HOME/.claude/hooks/block-sensitive-files.sh" "$BATS_TEST_TMPDIR/alias.sh"
+  run run_hook "Write" "$BATS_TEST_TMPDIR/alias.sh"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: symlink CHAIN whose terminus is an installed hook" {
+  # One readlink hop is defeated by two links.
+  ln -sf "$HOME/.claude/hooks/block-sensitive-files.sh" "$BATS_TEST_TMPDIR/hop2.sh"
+  ln -sf "$BATS_TEST_TMPDIR/hop2.sh" "$BATS_TEST_TMPDIR/hop1.sh"
+  run run_hook "Write" "$BATS_TEST_TMPDIR/hop1.sh"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "approve: symlink pointing somewhere harmless" {
+  # Chain resolution must not over-block: a link to an unguarded file stays
+  # editable.
+  echo x > "$BATS_TEST_TMPDIR/plain.txt"
+  ln -sf "$BATS_TEST_TMPDIR/plain.txt" "$BATS_TEST_TMPDIR/plain-alias.txt"
+  run run_hook "Write" "$BATS_TEST_TMPDIR/plain-alias.txt"
+  [[ "$output" == *'"decision": "approve"'* ]]
+}

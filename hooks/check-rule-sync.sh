@@ -423,10 +423,44 @@ for pf in "$SKILL_DIR"/phases/phase-*.md; do
   # counting the heading, so the manifest still declares a step nobody performs.
   # That is the fail-OPEN direction, and the inverse of the backtick case where
   # an unrecognised fence merely over-counts.
+  # An HTML comment is the same fail-OPEN shape one layer further out: wrapping
+  # a step in `<!-- ... -->` removes it from the rendered document entirely — no
+  # reader executes it — while a comment-blind scanner still counts the heading
+  # and reports the manifest consistent. So a required step can be deleted in
+  # effect without the linter noticing. Tracked with the same discipline as
+  # fences, and deliberately NOT skipped: a step heading inside a comment is
+  # reported, because a heading nobody can execute must not satisfy the
+  # manifest. Fences win when both are open — `<!--` inside a code block is
+  # literal text, not a comment.
   scan=$(awk '
     {
       match($0, /^ ? ? ?/); ind = RLENGTH
       body = substr($0, ind + 1)
+      if (!fence) {
+        was_in = htmlc
+        # Consume comment open/close pairs on this line, so `<!-- x -->` on a
+        # single line leaves no state behind while a bare `<!--` opens one.
+        rest = $0
+        while (1) {
+          if (!htmlc) {
+            i = index(rest, "<!--")
+            if (i == 0) break
+            htmlc = 1; rest = substr(rest, i + 4)
+          } else {
+            i = index(rest, "-->")
+            if (i == 0) break
+            htmlc = 0; rest = substr(rest, i + 3)
+          }
+        }
+        # Inside a comment for any part of this line: report a step heading
+        # rather than skipping it — a heading removed from the rendered
+        # document must not satisfy the manifest, and a naive scan still
+        # counts it.
+        if (was_in || htmlc || rest != $0) {
+          if (match(body, /^### Step [0-9]+-[0-9]+[a-z]?/)) print "COMMENTED"
+          next
+        }
+      }
       if (match(body, /^(`{3,}|~{3,})/)) {
         marker = substr(body, 1, RLENGTH); ch = substr(marker, 1, 1); len = RLENGTH
         if (!fence) { fence = 1; fch = ch; flen = len; next }
@@ -438,10 +472,16 @@ for pf in "$SKILL_DIR"/phases/phase-*.md; do
         if (match(body, /[0-9]+-[0-9]+[a-z]?/)) print "ID " substr(body, RSTART, RLENGTH)
       }
     }
-    END { if (fence) print "OPEN" }
+    END { if (fence) print "OPEN"; if (htmlc) print "HTMLOPEN" }
   ' "$pf")
   if printf '%s\n' "$scan" | grep -qx 'OPEN'; then
     drift "$base: unbalanced code fence at EOF — the '### Step' scan cannot be trusted"
+  fi
+  if printf '%s\n' "$scan" | grep -qx 'HTMLOPEN'; then
+    drift "$base: unterminated HTML comment at EOF — the '### Step' scan cannot be trusted"
+  fi
+  if printf '%s\n' "$scan" | grep -qx 'COMMENTED'; then
+    drift "$base: a '### Step' heading is inside an HTML comment — it is removed from the rendered document, so no reader executes it, while the manifest still declares it. Delete the step and its manifest entry, or un-comment it."
   fi
   heading_ids=$(printf '%s\n' "$scan" | sed -n 's/^ID //p')
   heading_count=$(printf '%s' "$heading_ids" | grep -c . || true)

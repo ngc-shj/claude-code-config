@@ -644,6 +644,44 @@ EOF
   [[ "$output" == *"phase-1-plan.md: front matter declares 3 steps but file has 2 '### Step' headings"* ]]
 }
 
+@test "drift (I15): a step wrapped in an HTML comment is reported" {
+  # One layer further out than the ~~~ case and the same fail-OPEN shape: an
+  # HTML comment removes the step from the RENDERED document entirely, so no
+  # reader executes it, while a comment-blind scanner still counts the heading
+  # and calls the manifest consistent. Reported rather than merely uncounted —
+  # a heading nobody can execute must not satisfy the manifest.
+  sed_i 's|^### Step 1-2: Second$|<!--\n### Step 1-2: Second\n-->|' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is inside an HTML comment"* ]]
+}
+
+@test "drift (I15): an unterminated HTML comment is refused rather than scanned" {
+  # Same contract as the unbalanced-fence case: if the scan cannot be trusted,
+  # say so instead of reporting a count derived from it.
+  sed_i 's|^### Step 1-2: Second$|<!--\n### Step 1-2: Second|' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated HTML comment at EOF"* ]]
+}
+
+@test "pass (I15): a single-line HTML comment leaves no state behind" {
+  # `<!-- x -->` opens and closes on one line; a state machine that only
+  # toggled would treat every following line as commented and stop counting
+  # real steps — the over-blocking inverse of the bug above.
+  sed_i 's|^### Step 1-2: Second$|<!-- a note -->\n### Step 1-2: Second|' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
+@test "pass (I15): an HTML comment marker inside a code fence is literal text" {
+  # Fences win: `<!--` shown as sample markup in a code block is not a comment,
+  # and treating it as one would suppress every step after it.
+  sed_i 's|^### Step 1-2: Second$|```\n<!--\n```\n### Step 1-2: Second|' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
 @test "drift (I15): a fence is not closed by a shorter run of its own character" {
   # CommonMark: the closer must be at least as long as the opener. A scanner
   # that toggles on any 3+ run would treat the short line as a close and resume
