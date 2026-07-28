@@ -70,16 +70,29 @@
 #     expression `s://.*$::` contains `/` and cannot be a filename — an
 #     accident of delimiter choice, not a control, and one that does not
 #     transfer to a `#`-comment expression.
-#   - `git diff --name-only` C-quotes any path containing a newline, quote,
-#     backslash or tab, emitting the quotes as literal bytes. Such a path is
-#     REFUSED with a diagnostic rather than silently skipped: silently
-#     skipping is the fail-open direction, and a deny-only suite in a file
-#     named `auth<newline>.bats` would otherwise never be reported.
+#   - The changed-file set is read NUL-framed (`--name-status -z`), so a path
+#     containing a newline, quote, backslash or tab is carried through as
+#     itself. `--name-only` would C-quote such a path, and a consumer that
+#     assumes a raw path then skips the file silently — a deny-only suite in
+#     a file named `auth<newline>.bats` would never be reported.
+#
+# Failed commands are never read as "nothing found". The base ref is peeled
+# to a commit (a tree-ish passes plain `--verify` and makes every later diff
+# exit 128), and both the file-list diff and each per-file diff have their
+# own exit status checked. Reporting a clean run from a command that did not
+# run is the fail-open shape this hook exists to name in other people's code.
 #
 # Usage: bash check-deny-only-guard.sh [base-ref]
-#   base-ref defaults to 'main'. The diff is base-ref...HEAD (three-dot:
-#   against the merge base, so commits landing on the base branch after the
-#   branch point are not misreported as this branch's changes).
+#   base-ref defaults to 'main'. The comparison is merge-base(base-ref, HEAD)
+#   against the WORKING TREE — so commits landing on the base branch after
+#   the branch point are not misreported as this branch's changes, and staged
+#   or unstaged test files are analyzed. A commit-only diff would make the
+#   hook a no-op in the phase-2 pre-step and in test-gen's post-generation
+#   block, which both run before anything is committed.
+#
+# Renames are followed (`--diff-filter=AMR`, new path analyzed): moving a
+# paired suite while dropping its allow assertions is the cheapest way to
+# turn it deny-only, and an `AM`-only filter drops it from the set entirely.
 #
 # Env knobs (appended to the built-in vocabularies):
 #   EXTRA_DENY_ASSERTION_RE, EXTRA_ALLOW_ASSERTION_RE, EXTRA_EXCLUDE_PATH_RE
@@ -96,8 +109,12 @@
 set -u
 
 _DOG_TMPDIR=$(mktemp -d)
-# shellcheck disable=SC2064
-trap "rm -rf '$_DOG_TMPDIR'" EXIT
+# The handler quotes at trap-execution time, not at registration time. A
+# string-expanded `trap "rm -rf '$dir'" EXIT` embeds the directory's bytes
+# as shell code, so a $TMPDIR containing a single quote runs a command at
+# exit. The path is attacker-influenced wherever TMPDIR is.
+_dog_cleanup() { rm -rf -- "$_DOG_TMPDIR"; }
+trap _dog_cleanup EXIT
 
 BASE_REF="${1:-main}"
 
@@ -114,8 +131,26 @@ cd "$TRUSTED_ROOT" || exit 1
 # file). The EXIT STATUS is the gate — several option shapes exit 1 while
 # still writing to stdout, so a `[ -n "$(...)" ]` form would not hold.
 # --end-of-options closes the class structurally rather than by convention.
-if ! git rev-parse --quiet --verify --end-of-options "$BASE_REF" >/dev/null 2>&1; then
-  echo "Error: '$BASE_REF' is not a valid git ref" >&2
+#
+# It also peels to a commit. `--verify` alone accepts any object, so a tree-ish such
+# as `HEAD^{tree}` passes and every later `git diff` then exits 128 — which,
+# unchecked, reads as "no findings" and exit 0. Rejecting non-commits here
+# is the first of two guards; the second is checking each diff's status.
+if ! git rev-parse --quiet --verify --end-of-options "$BASE_REF^{commit}" >/dev/null 2>&1; then
+  echo "Error: '$BASE_REF' is not a valid commit-ish" >&2
+  exit 1
+fi
+
+# The comparison point is the merge base, so commits landing on the base
+# branch after the branch point are not misreported as this branch's
+# changes. Diffing the merge base against the WORKING TREE rather than
+# against HEAD is deliberate: staged and unstaged test files must be
+# analyzed too. The phase-2 pre-step and the test-gen post-generation block
+# both run before anything is committed, and a commit-only diff would make
+# the hook a no-op at exactly the moment it is asked to run.
+MERGE_BASE=$(git merge-base "$BASE_REF" HEAD 2>/dev/null) || MERGE_BASE=""
+if [ -z "$MERGE_BASE" ]; then
+  echo "Error: no merge base between '$BASE_REF' and HEAD" >&2
   exit 1
 fi
 
@@ -179,43 +214,68 @@ _validate_extra EXTRA_EXCLUDE_PATH_RE "${EXTRA_EXCLUDE_PATH_RE:-}" || exit 1
 #
 # --diff-filter=AM keeps deleted and renamed paths — which no longer exist —
 # out of the read loop, matching every sibling detector.
-CHANGED="$_DOG_TMPDIR/changed.txt"
-QUOTED="$_DOG_TMPDIR/quoted.txt"
-: > "$CHANGED"
-: > "$QUOTED"
-
-git diff --name-only --diff-filter=AM "$BASE_REF...HEAD" 2>/dev/null \
-  | while IFS= read -r p; do
-      case "$p" in
-        '"'*) printf '%s\n' "$p" >> "$QUOTED" ;;
-        *)    printf '%s\n' "$p" >> "$CHANGED" ;;
-      esac
-    done
-
-KEPT="$_DOG_TMPDIR/kept.txt"
-grep -E "$TEST_EXT_RE|\.bats$" "$CHANGED" 2>/dev/null \
-  | grep -vE "$EXCLUDE_PATH_RE" \
-  > "$KEPT" || true
-
-echo "=== Deny-Only Guard Check (RT10) ==="
-echo "Base: $BASE_REF"
-echo "Test files in diff: $(wc -l < "$KEPT" | tr -d ' ')"
-echo ""
-
-# A C-quoted path is refused loudly. Skipping it silently would be the
-# fail-open direction: a deny-only suite in such a file would never be
-# reported, and the run would still say "Total findings: 0".
-if [ -s "$QUOTED" ]; then
-  while IFS= read -r q; do
-    [ -n "$q" ] || continue
-    echo "  [Major] $q — path is C-quoted by git (contains a newline, quote, backslash or tab) and cannot be analyzed; rename it or exclude it deliberately. Refusing rather than skipping: a silent skip on a guard suite is the fail-open direction RT7 shape (c) names."
-  done < "$QUOTED"
-  echo ""
+RAW="$_DOG_TMPDIR/raw.z"
+# Unpiped, so the status tested is git's own (R44). A failed diff must never
+# reach the "no findings" path: reporting a clean run from a command that
+# did not run is the fail-open direction this whole hook exists to name.
+# `R` is in the filter because a rename is how an existing paired suite is
+# most cheaply turned into a deny-only one — dropping the allow assertions
+# in the same commit that moves the file. With `AM` only, git's rename
+# detection removed the file from the set entirely.
+if ! git diff --name-status -z --diff-filter=AMR "$MERGE_BASE" > "$RAW" 2>/dev/null; then
+  echo "Error: 'git diff' against $MERGE_BASE failed; refusing to report a clean run" >&2
+  exit 1
 fi
+
+# NUL-framed end to end. `--name-status -z` emits raw paths rather than the
+# C-quoted form `--name-only` produces, so a filename containing a newline,
+# quote, backslash or tab is carried through correctly instead of having to
+# be refused. Rename and copy records carry two paths; the second is the one
+# that exists now and the one to analyze.
+KEPT="$_DOG_TMPDIR/kept.z"
+: > "$KEPT"
+while IFS= read -r -d '' status_field; do
+  IFS= read -r -d '' path1 || break
+  case "$status_field" in
+    R*|C*) IFS= read -r -d '' path2 || break; candidate="$path2" ;;
+    *)     candidate="$path1" ;;
+  esac
+  case "$candidate" in
+    *.bats) ;;
+    *) printf '%s' "$candidate" | grep -qE "$TEST_EXT_RE" || continue ;;
+  esac
+  printf '%s' "$candidate" | grep -qE "$EXCLUDE_PATH_RE" && continue
+  printf '%s\0' "$candidate" >> "$KEPT"
+done < "$RAW"
+
+# Untracked files never appear in any `git diff`, and a freshly generated
+# test file is untracked until someone stages it. test-gen's contract is to
+# run this hook immediately after generation, so an untracked-only view of
+# the world would make it a no-op exactly there. --exclude-standard honours
+# .gitignore, so build output and vendored trees stay out.
+UNTRACKED="$_DOG_TMPDIR/untracked.z"
+if ! git ls-files --others --exclude-standard -z > "$UNTRACKED" 2>/dev/null; then
+  echo "Error: 'git ls-files --others' failed; refusing to report a clean run" >&2
+  exit 1
+fi
+while IFS= read -r -d '' candidate; do
+  case "$candidate" in
+    *.bats) ;;
+    *) printf '%s' "$candidate" | grep -qE "$TEST_EXT_RE" || continue ;;
+  esac
+  printf '%s' "$candidate" | grep -qE "$EXCLUDE_PATH_RE" && continue
+  printf '%s\0' "$candidate" >> "$KEPT"
+done < "$UNTRACKED"
+
+kept_count=$(tr -cd '\0' < "$KEPT" | wc -c | tr -d ' ')
+echo "=== Deny-Only Guard Check (RT10) ==="
+echo "Base: $BASE_REF (merge base $MERGE_BASE, compared against the working tree)"
+echo "Test files in diff: $kept_count"
+echo ""
 
 findings=0
 
-while IFS= read -r f; do
+while IFS= read -r -d '' f; do
   [ -n "$f" ] || continue
   # `./` guards option position at every operand. `--` is not a candidate:
   # gawk treats it as a filename after the program text, and it has no
@@ -234,12 +294,26 @@ while IFS= read -r f; do
   esac
 
   added="$_DOG_TMPDIR/added.txt"
-  git diff "$BASE_REF...HEAD" --unified=0 -- "./$f" 2>/dev/null \
-    | awk '
+  rawdiff="$_DOG_TMPDIR/file.diff"
+  if git ls-files --error-unmatch -- "./$f" >/dev/null 2>&1; then
+    tracked=1
+  else
+    # Untracked: the whole file is new, so every line counts as added.
+    tracked=0
+    awk '{ print NR }' "./$f" > "$added"
+  fi
+  if [ "$tracked" -eq 1 ] && ! git diff "$MERGE_BASE" --unified=0 -- "./$f" > "$rawdiff" 2>/dev/null; then
+    echo "  [Major] $f — 'git diff' failed for this file, so its added-line set is unknown; not analyzed. A failed diff is not evidence of no findings."
+    findings=$((findings + 1))
+    continue
+  fi
+  if [ "$tracked" -eq 1 ]; then
+    awk '
         /^@@/ { if (match($0, /\+[0-9]+/)) lineno = substr($0, RSTART + 1, RLENGTH - 1) + 0; next }
         /^\+\+\+/ { next }
         /^\+/ { print lineno; lineno++ }
-      ' > "$added"
+      ' "$rawdiff" > "$added"
+  fi
 
   export _DOG_JS_DENY="$JS_DENY" _DOG_JS_MATCHER="$JS_MATCHER" \
          _DOG_JS_EXPECT="$JS_EXPECT" _DOG_JS_NEGATE="$JS_NEGATE" \
@@ -308,7 +382,7 @@ while IFS= read -r f; do
   fi
 done < "$KEPT"
 
-if [ "$findings" -eq 0 ] && [ ! -s "$QUOTED" ]; then
+if [ "$findings" -eq 0 ]; then
   echo "  (no deny-only guard files found)"
 fi
 echo ""

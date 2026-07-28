@@ -25,6 +25,7 @@ teardown() {
   cd /
   rm -rf "$WORK"
   rm -f /tmp/DOG_SED_INJECT_PROOF
+  rm -f /tmp/DOG_TRAP_PROOF
 }
 
 commit_tests() {
@@ -234,7 +235,7 @@ paired_bats() {
 @test "an invalid base-ref exits 1" {
   run bash "$HOOK" no-such-ref
   [ "$status" -eq 1 ]
-  [[ "$output" == *"not a valid git ref"* ]]
+  [[ "$output" == *"not a valid commit-ish"* ]]
 }
 
 @test "an option-shaped base-ref exits 1 and writes no file" {
@@ -268,13 +269,103 @@ paired_bats() {
   [[ "$output" == *"tests/guard.bats"* ]]
 }
 
-@test "a C-quoted path is refused loudly rather than skipped" {
+@test "a path git would C-quote is analyzed, not skipped" {
+  # --name-only C-quotes a path containing a newline and emits the quotes as
+  # literal bytes; a consumer that assumes a raw path then drops the file
+  # silently. NUL framing carries it through as itself.
+  printf '[ "$status" -eq 1 ]\n' > "$(printf 'tests/nl\nx.bats')"
   deny_only_bats guard.bats
-  printf '@test "d" {\n  [ "$status" -eq 1 ]\n}\n' > "$(printf 'tests/nl\nx.bats')"
   commit_tests
   run bash "$HOOK" "$BASE"
-  [[ "$output" == *"C-quoted"* ]]
-  # The ordinary file in the same run is still analyzed.
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Total findings: 2"* ]]
+  [[ "$output" == *"tests/guard.bats"* ]]
+}
+
+@test "a failed base diff exits non-zero instead of reporting a clean run" {
+  # A tree-ish passes plain `git rev-parse --verify`, and every later
+  # `git diff` then exits 128. Unchecked, that reads as "Total findings: 0"
+  # and exit 0 — a clean report from a command that never ran.
+  deny_only_bats guard.bats
+  commit_tests
+  run bash "$HOOK" 'HEAD^{tree}'
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Total findings: 0"* ]]
+}
+
+@test "a staged but uncommitted test file is analyzed" {
+  deny_only_bats staged.bats
+  git add -A >/dev/null 2>&1
+  run bash "$HOOK" HEAD
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tests/staged.bats"* ]]
+}
+
+@test "an untracked test file is analyzed" {
+  # test-gen runs this hook immediately after writing new test files, which
+  # are untracked until someone stages them. No `git diff` shows them.
+  deny_only_bats fresh.bats
+  run bash "$HOOK" HEAD
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tests/fresh.bats"* ]]
+}
+
+@test "an untracked file with a paired allow case stays silent" {
+  paired_bats fresh.bats
+  run bash "$HOOK" HEAD
+  [[ "$output" == *"Total findings: 0"* ]]
+}
+
+big_paired_bats() {
+  # Large enough that dropping the single allow test leaves similarity above
+  # git's 50% rename threshold — which is the realistic evasion shape and the
+  # only one where git emits R rather than A+D.
+  {
+    for i in 1 2 3 4 5 6 7 8; do
+      printf '@test "rejects case %s" {\n  run bash ./g.sh bad%s\n  [ "$status" -eq 1 ]\n}\n' "$i" "$i"
+    done
+    printf '@test "accepts" {\n  run bash ./g.sh good\n  [ "$status" -eq 0 ]\n}\n'
+  } > "tests/$1"
+}
+
+@test "a renamed test that loses its allow case is analyzed at the new path" {
+  # Moving a paired suite while dropping its allow assertions is the cheapest
+  # way to turn it deny-only, and an AM-only filter drops it from the set.
+  big_paired_bats old.bats
+  commit_tests
+  MID="$(git rev-parse HEAD)"
+  git mv tests/old.bats tests/renamed.bats
+  # Drop only the allow test; the rest is untouched, so git reports R.
+  head -n -4 tests/renamed.bats > tmp && mv tmp tests/renamed.bats
+  git add -A >/dev/null
+  git commit -qm rename >/dev/null
+  [ "$(git diff --name-status "$MID" | cut -c1)" = "R" ]
+  run bash "$HOOK" "$MID"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tests/renamed.bats"* ]]
+}
+
+@test "a renamed test that keeps its allow case stays silent" {
+  big_paired_bats old.bats
+  commit_tests
+  MID="$(git rev-parse HEAD)"
+  git mv tests/old.bats tests/renamed.bats
+  git add -A >/dev/null
+  git commit -qm rename >/dev/null
+  run bash "$HOOK" "$MID"
+  [[ "$output" == *"Total findings: 0"* ]]
+}
+
+@test "a TMPDIR containing a quote does not execute at exit" {
+  # A string-expanded `trap "rm -rf '$dir'" EXIT` embeds the path as shell
+  # code; the handler must quote at trap-execution time instead.
+  EVIL="$WORK/qu';touch /tmp/DOG_TRAP_PROOF;'dir"
+  mkdir -p "$EVIL"
+  rm -f /tmp/DOG_TRAP_PROOF
+  deny_only_bats guard.bats
+  commit_tests
+  run env TMPDIR="$EVIL" bash "$HOOK" "$BASE"
+  [ ! -e /tmp/DOG_TRAP_PROOF ]
   [[ "$output" == *"tests/guard.bats"* ]]
 }
 
