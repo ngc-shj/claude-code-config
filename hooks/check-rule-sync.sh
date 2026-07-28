@@ -303,18 +303,60 @@ else
   # backticked `key:` token anywhere else in SKILL.md would otherwise inject a
   # phantom key and fire 8i on every good phase file.
   SKILL_KEYS=$(printf '%s\n' "$DECL_LINE" | grep -o '`[a-z_]\{1,\}:`' | tr -d '`:' | sort -u)
+  # The parse is by SHAPE: a backticked END-OF-* token followed by the literal
+  # parenthetical that says which file it terminates. Rewording the sentence
+  # empties the stems, which fails closed (8h short-circuits, I29) but would
+  # otherwise be diagnosed as "declares no stem" for a line that declares one —
+  # hence the expected shape in the message. SKILL.md carries a comment saying
+  # this line is machine-parsed.
   STEM_PHASE=$(printf '%s\n' "$DECL_LINE" | sed -nE 's/.*`(END-OF-[A-Z]+)` \(phase files\).*/\1/p')
   STEM_DIGEST=$(printf '%s\n' "$DECL_LINE" | sed -nE 's/.*`(END-OF-[A-Z]+)` \(the digest\).*/\1/p')
 fi
-grep -q '`Read`' "$SKILL" || drift "SKILL.md: loading protocol missing 'Read' — readers must be told which tool delivers a whole file"
-[ -n "$STEM_PHASE" ] || drift "SKILL.md: loading protocol declares no phase-file terminator stem"
-[ -n "$STEM_DIGEST" ] || drift "SKILL.md: loading protocol declares no digest terminator stem"
+[ -n "$STEM_PHASE" ] || drift "SKILL.md: loading protocol declares no phase-file terminator stem (expected the shape: \`<STEM>\` (phase files))"
+[ -n "$STEM_DIGEST" ] || drift "SKILL.md: loading protocol declares no digest terminator stem (expected the shape: \`<STEM>\` (the digest))"
 # The third extracted field needs the same guard as the two stems. Without it an
 # empty key list makes the 8i loop iterate once on "" and check nothing, so
 # SKILL.md could stop naming any manifest key — and stop telling the reader to
 # reconcile against them — with the gate still green.
 [ -n "$SKILL_KEYS" ] || drift "SKILL.md: loading protocol names no front-matter manifest keys"
 grep -q '^### Step' "$SKILL" && drift "SKILL.md: contains a '### Step' enumeration — the step manifest belongs in the phase file's front matter, not here"
+
+# The obligations themselves — the runtime half of the whole mechanism. Without
+# this, every check above can pass while SKILL.md no longer tells anyone to look
+# at the manifest or the terminator: accurate metadata and nothing reading it,
+# which is the shape this linter exists to refuse. Scoped to the protocol block,
+# not the whole file, so an unrelated mention of `Read` or of a key name
+# elsewhere cannot satisfy it (the same scoping 8i already applies to the
+# declaration line — applied here in the fail-closed direction too).
+PROTO=$(awk '/^\*\*Truncation protocol\*\*/ { f = 1 } f && /^Manifest keys:/ { exit } f' "$SKILL")
+if [ -z "$PROTO" ]; then
+  drift "SKILL.md: truncation-protocol block is missing (expected a '**Truncation protocol**' paragraph above the 'Manifest keys:' declaration line)"
+else
+  printf '%s\n' "$PROTO" | grep -q '`Read`' || \
+    drift "SKILL.md: truncation protocol does not name the \`Read\` tool — readers must be told which tool delivers a whole file"
+  for stem in "$STEM_PHASE" "$STEM_DIGEST"; do
+    [ -n "$stem" ] || continue
+    printf '%s\n' "$PROTO" | grep -q "$stem" || \
+      drift "SKILL.md: truncation protocol never tells readers to check the '$stem' terminator"
+  done
+  while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    printf '%s\n' "$PROTO" | grep -q "$k" || \
+      drift "SKILL.md: truncation protocol declares manifest key '$k' but never tells readers to reconcile against it"
+  done <<< "$SKILL_KEYS"
+fi
+# No terminator literal anywhere in SKILL.md may name a stem the declaration
+# line does not declare. The protocol states the terminator in prose and the
+# phase-transition note repeats it; a rename that misses one of them leaves
+# readers hunting for a marker no file carries, and every complete read then
+# reads as partial until the reader learns to ignore the rule.
+while IFS= read -r tok; do
+  [ -n "$tok" ] || continue
+  case "$tok" in
+    "$STEM_PHASE"|"$STEM_DIGEST") ;;
+    *) drift "SKILL.md: names terminator '$tok', which is not one of the declared stems" ;;
+  esac
+done < <(grep -oE 'END-OF-[A-Z]+' "$SKILL" | sort -u)
 
 # Digest terminator, compared against the stem SKILL.md declares (not a literal).
 if [ -n "$STEM_DIGEST" ] && [ -f "$DIGEST" ]; then
@@ -473,6 +515,21 @@ for pf in "$SKILL_DIR"/phases/phase-*.md; do
     [ -z "$decoy" ] || \
       drift "$base: line $decoy resembles a terminator a truncated read would trust"
   fi
+
+  # Counted-set vs readable-set. The strict anchor above deliberately stops at
+  # 3 leading spaces so that `### Step`-shaped lines inside legitimate indented
+  # code blocks are not counted. But a tab-indented heading, one at 4 spaces
+  # inside a list item, and a blockquoted one are all still instructions a
+  # reader acts on — and none would appear in step_ids, so the reconciliation
+  # the protocol mandates would walk an under-declared manifest. Same shape as
+  # the terminator lookalike scan: strict anchoring for the counted set, a loose
+  # scan for anything a reader would act on that the strict form missed.
+  loose=$(awk '
+    /^[[:space:]>]*###[[:space:]]+Step [0-9]+-[0-9]+[a-z]?/ &&
+    !/^ ? ? ?### Step [0-9]+-[0-9]+[a-z]?/ { print NR; exit }
+  ' "$pf")
+  [ -z "$loose" ] || \
+    drift "$base: line $loose is a step-shaped heading the manifest scan does not count"
 done
 
 if [ "$fail" -ne 0 ]; then

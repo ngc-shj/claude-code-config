@@ -158,6 +158,9 @@ run_hook() {
 @test "deny: ~/.claude/skills/<name>/... (absolute HOME path)" {
   run run_hook Edit "$HOME/.claude/skills/triangulate/phases/phase-3-review.md"
   [[ "$output" == *'"decision":"block"'* ]]
+  # Splits by concern from the unmanaged-skill fixture below: that one pins the
+  # message branch, this one pins the arm and the repo-managed half of the text.
+  [[ "$output" == *"edit it in the claude-code-config repo"* ]]
 }
 
 # The guarded set is install.sh's write set. skills/ and rules/ are installed by
@@ -182,11 +185,42 @@ run_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
-@test "deny: ~/.claude/RTK.md and model-routing.md (CLAUDE.md's cited refs)" {
+@test "deny: ~/.claude/RTK.md (a CLAUDE.md-cited ref)" {
   run run_hook Edit "$HOME/.claude/RTK.md"
   [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: ~/.claude/model-routing.md (a CLAUDE.md-cited ref)" {
   run run_hook Edit "$HOME/.claude/model-routing.md"
   [[ "$output" == *'"decision":"block"'* ]]
+}
+
+# T5: the literal-tilde arm carries the same member set as the expanded one, and
+# three of its patterns had no fixture — two of them added by this change. A
+# pattern nothing reaches is a pattern a later edit can delete silently.
+@test "deny: literal ~/.claude/CLAUDE.md (un-expanded tilde)" {
+  run run_hook Edit "~/.claude/CLAUDE.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: literal ~/.claude/RTK.md (un-expanded tilde)" {
+  run run_hook Edit "~/.claude/RTK.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: literal ~/.claude/model-routing.md (un-expanded tilde)" {
+  run run_hook Edit "~/.claude/model-routing.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+# T6: ${HOME:?} pins the fail direction when HOME is unset. Without a fixture,
+# nothing distinguishes "aborts with a stated precondition" from "falls through
+# and approves" — and for a guard, that difference is the whole point.
+@test "unset HOME aborts with a stated precondition rather than approving" {
+  run bash -c 'unset HOME; printf "%s" "$1" | bash "$2"' _     '{"tool_name":"Edit","tool_input":{"file_path":"/anywhere/x.sh"}}' "$SCRIPT"
+  [ "$status" -ne 0 ]
+  [[ "$output" != *'"decision": "approve"'* ]]
+  [[ "$output" == *"HOME"* ]]
 }
 
 @test "approve: ~/.claude/projects/<slug>/memory/*.md is not install-managed" {

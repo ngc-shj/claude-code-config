@@ -30,6 +30,9 @@ The skill is split across several files for context efficiency. Load only the fi
 2. Every phase file's last line is `## END-OF-PHASE-<N>`, and `common-rules.digest.md`'s last line is `## END-OF-DIGEST`. If the last line you received is not that terminator, the read was partial — re-read before acting on it.
 3. Before reporting a phase complete, reconcile the steps you executed against the `step_ids:` declared in that phase's front matter. An unexecuted ID means the phase is not complete. The step named in `core:` has no substitute — inline work by the orchestrator does not discharge it.
 
+<!-- Machine-parsed by hooks/check-rule-sync.sh (check 8) BY SHAPE: backticked
+     key tokens, and a backticked stem followed by "(phase files)" / "(the
+     digest)". Reword the sentence and the stems stop extracting. -->
 Manifest keys: `step_ids:`, `core:`. Terminator stems: `END-OF-PHASE` (phase files), `END-OF-DIGEST` (the digest).
 
 ---

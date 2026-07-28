@@ -522,6 +522,7 @@ Plan name: [plan-name]
 Branch: [branch-name]
 Plan review rounds: [n]
 Code review rounds: [n]
+Steps executed: [3-1, 3-2, ... — reconciled against step_ids in this file's front matter]
 Artifacts:
   - ./docs/archive/review/[plan-name]-plan.md (finalized plan)
   - ./docs/archive/review/[plan-name]-review.md (plan review log)

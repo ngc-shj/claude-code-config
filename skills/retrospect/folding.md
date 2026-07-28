@@ -50,7 +50,13 @@ the text must be repo-neutral.
 5. `skills/triangulate/phases/phase-3-review.md` — same as phase-1.
 6. When the rule warrants review-time procedure text, add it to the phase file that owns
    the moment it fires (plan review → phase-1; implementation → phase-2; code review →
-   phase-3).
+   phase-3). Two constraints the phase manifest imposes on that edit:
+   - Inserted text must land **above** the file's `## END-OF-PHASE-<N>` terminator, which
+     has to stay the last non-empty line. Appending with `>>` puts it after.
+   - Adding a `### Step <N>-<M>` heading obliges updating `steps:` and `step_ids:` in the
+     same file's front matter, and `core:` if the new step is the non-substitutable one.
+   `check-rule-sync.sh` catches both, so a miss reds `bats tests/` rather than shipping —
+   but knowing it here saves the round trip.
 7. Regenerate `skills/triangulate/common-rules.digest.md` with
    `bash hooks/generate-triangulate-rule-digest.sh`; never edit the digest directly.
 

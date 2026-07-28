@@ -1,12 +1,16 @@
 #!/usr/bin/env bats
 # Tests for hooks/check-rule-sync.sh — rule-ID consistency linter for the
-# triangulate skill files. The fixture list is DERIVED from the linter's
-# check list (one red fixture per check, RT7): (1a) table gap, (1b)
-# duplicate table ID, (2) missing template-block R line, (3) stale range
-# string, (4) missing phase-1/phase-3 status line, (5) dangling reference,
-# (6) Extended-obligations pointer list out of sync with section headers —
-# plus exit-2 fixtures (missing file; unparsable table) and a live-repo
-# pass run.
+# triangulate skill files.
+#
+# The fixture list is derived from the linter's CLAUSES, enumerated from the
+# code rather than from any written list of checks (RT7). That distinction is
+# not pedantic: a pass that trusted the documented check list left five clauses
+# unproven — check 4's whole-family-absent branch, both of check 6's asymmetry
+# branches, and both of check 7's — each of which a one-line fixture reaches.
+#
+# The obligation is per CLAUSE, not per check: several checks carry branches
+# that a fixture for their sibling branch never reaches. When adding a clause,
+# ablate it (`sed -i '<line>s/drift /: /'`) and confirm exactly one test reds.
 
 bats_require_minimum_version 1.5.0
 
@@ -108,11 +112,22 @@ setup() {
 - [Expert-specific checks as applicable: Security adds RS1-RS2; Testing adds RT1-RT2]
 EOF
 
+  # Mirrors the real SKILL.md's structure, not just its tokens: a
+  # **Truncation protocol** block carrying the three obligations, then the
+  # declaration line the linter parses. The word "Read" also appears
+  # unbackticked outside the block, so a whole-file grep for it would pass
+  # vacuously — which is the shape the block scoping exists to refuse.
   cat > "$FIX/SKILL.md" <<EOF
 # Fixture skill
 Recurring issue check reference (R1-R3, RS1-RS2, RT1-RT2).
+Read the phase file for the active phase.
 
-Read phase files whole-file with the \`Read\` tool; confirm the terminator before acting.
+**Truncation protocol**
+
+1. Read phase files whole-file with the \`Read\` tool.
+2. Every phase file's last line is \`## $TERM_STEM-<N>\`; the digest's is \`## $DIGEST_STEM\`. If the last line you received is not that terminator, re-read.
+3. Reconcile the steps you executed against \`step_ids:\`; the step named in \`core:\` has no substitute.
+
 Manifest keys: \`step_ids:\`, \`core:\`. Terminator stems: \`$TERM_STEM\` (phase files), \`$DIGEST_STEM\` (the digest).
 EOF
 
@@ -140,9 +155,11 @@ EOF
   regen_digest
 }
 
-# SKILL.md names the digest as the first read, so the linter now requires it.
-# Any test that mutates common-rules.md must regenerate, or check 7's staleness
-# comparison fires on top of whatever that test is actually probing.
+# SKILL.md names the digest as the first read, so the linter now requires it to
+# exist. Tests that mutate common-rules.md regenerate so that check 7's
+# staleness comparison does not fire on top of what they are probing. Only the
+# two table-row mutations actually change the digest; the rest are defensive,
+# kept so the pattern is uniform for the next fixture author.
 regen_digest() {
   bash "$(dirname "$SCRIPT")/generate-triangulate-rule-digest.sh" \
     "$FIX/common-rules.md" "$FIX/common-rules.digest.md" >/dev/null
@@ -309,6 +326,76 @@ EOF
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK: R1-R3 / RS1-RS2 / RT1-RT2"* ]]
+}
+
+@test "drift (4): an entire RT status-line family removed from phase-1" {
+  # The existing RT2 fixture leaves RT1 in place and so takes the per-ID loop.
+  # This takes the whole-family branch, which `continue`s past every remaining
+  # check for that prefix — with no fixture it swallowed the family and exited 0.
+  sed_i '/^- RT[0-9]*: \[status\]$/d' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no '- RTn: [status]' template lines found"* ]]
+}
+
+@test "drift (6): extended-obligations headers exist with no pointer sentence" {
+  cat >> "$FIX/common-rules.md" <<'EOF'
+
+### Extended obligations
+
+**R1: Alpha**
+
+Procedure text.
+EOF
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"section headers exist but no 'full procedures on ...' pointer sentence found"* ]]
+}
+
+@test "drift (6): pointer sentence exists with no extended-obligations headers" {
+  cat >> "$FIX/common-rules.md" <<'EOF'
+
+See "Extended obligations" below for full procedures on R1. All other rules are self-contained in the table row above.
+EOF
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pointer sentence exists but no Extended-obligations section headers found"* ]]
+}
+
+@test "drift (7): a stale digest is rejected" {
+  # Corrupts the digest ONLY, so no common-rules.md mutation co-fires. Without
+  # this the whole staleness chain — the generator's cmp, its exit 1, and the
+  # clause consuming it — was a gate no test could redden.
+  printf '| R9 | Bogus | Major |\n' >> "$FIX/common-rules.digest.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"common-rules.digest.md is stale"* ]]
+}
+
+@test "drift (7): a digest with no generator beside the linter is rejected" {
+  cp "$SCRIPT" "$BATS_TEST_TMPDIR/lonely-linter.sh"
+  run bash "$BATS_TEST_TMPDIR/lonely-linter.sh" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"digest generator is missing"* ]]
+}
+
+@test "drift (I7): checks 3 and 5 sweep a newly added phase file too" {
+  # The stray-file fixture below reds through 8a.1 and so cannot distinguish a
+  # swept ALL_FILES from a hardcoded one. A WELL-FORMED fourth phase file can:
+  # it passes check 8 and must still be reached by the range-string scan.
+  write_phase 4 "$FIX/phases/phase-4-extra.md" "Extra template" '- see R1-R2 only'
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-4-extra.md: stale range R1-R2"* ]]
+}
+
+@test "drift (I7): the dangling-reference scan reaches a newly added phase file" {
+  write_phase 4 "$FIX/phases/phase-4-extra.md" "Extra template" '- see RT9 for details'
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-4-extra.md: reference to undeclared rule RT9"* ]]
 }
 
 # ============================================================
@@ -492,13 +579,6 @@ EOF
   [[ "$output" == OK:* ]]
 }
 
-@test "drift (8j.1): SKILL.md does not name the Read tool" {
-  sed_i 's/the `Read` tool/the appropriate tool/' "$FIX/SKILL.md"
-  run bash "$SCRIPT" "$FIX"
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"SKILL.md: loading protocol missing 'Read'"* ]]
-}
-
 @test "drift (8j.2): SKILL.md declares no phase-file terminator stem" {
   sed_i 's/`END-OF-PHASE` (phase files), //' "$FIX/SKILL.md"
   run bash "$SCRIPT" "$FIX"
@@ -507,6 +587,72 @@ EOF
   # I29: with no stem, the terminator checks short-circuit rather than matching
   # every line through an empty-needle containment test.
   [[ "$output" != *"resembles a terminator"* ]]
+}
+
+@test "drift (8j): the truncation-protocol block is deleted outright" {
+  # Everything else can stay correct — accurate manifests, accurate terminators
+  # — while the file stops telling anyone to look at them.
+  sed_i '/^\*\*Truncation protocol\*\*$/,/^3\. Reconcile/d' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SKILL.md: truncation-protocol block is missing"* ]]
+}
+
+@test "drift (8j): the protocol stops telling readers to check the terminator" {
+  sed_i '/^2\. Every phase file/d' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"truncation protocol never tells readers to check the 'END-OF-PHASE' terminator"* ]]
+}
+
+@test "drift (8j): the protocol stops telling readers to reconcile step_ids" {
+  sed_i '/^3\. Reconcile the steps/d' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"declares manifest key 'step_ids' but never tells readers to reconcile against it"* ]]
+}
+
+@test "drift (8j.1): 'Read' outside the protocol block does not satisfy the check" {
+  # The fixture deliberately mentions Read above the block. Scoping the grep to
+  # the block is what stops that unrelated mention standing in for the
+  # obligation — the same scoping 8i applies to the declaration line.
+  sed_i 's/^1\. Read phase files whole-file with the `Read` tool\.$/1. Open phase files whole-file./' "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"truncation protocol does not name the \`Read\` tool"* ]]
+}
+
+@test "drift (8j): SKILL.md names a terminator the declaration line does not declare" {
+  # Placed OUTSIDE the protocol block, so the block still mentions the real
+  # stem and only the unpinned-literal check fires. This is the shape of a
+  # rename that updates the declaration and the phase files but misses a prose
+  # mention — readers then hunt for a marker no file carries.
+  printf 'Each phase file ends with `## END-OF-SECTION-N` as its final line.\n' >> "$FIX/SKILL.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SKILL.md: names terminator 'END-OF-SECTION', which is not one of the declared stems"* ]]
+}
+
+@test "pass (I15): a lone indent-4 backtick line does not trip the balance counter" {
+  # Three anchors have to agree that 4+ spaces is not a fence: the balance
+  # counter, the scan toggle and the heading anchor. The counter is the one no
+  # other fixture reaches, and its divergence direction is a spurious
+  # "unbalanced fence" on a legitimate file.
+  append_body "$FIX/phases/phase-1-plan.md" '    ```'
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+  [[ "$output" == OK:* ]]
+}
+
+@test "drift (I15): a blockquoted step heading is refused rather than silently uncounted" {
+  # The strict anchor must not count it (it is not at 0-3 spaces), but it is
+  # still an instruction a reader acts on and it is absent from step_ids — so
+  # the reconciliation would walk an under-declared manifest. The loose scan
+  # refuses the file instead.
+  append_body "$FIX/phases/phase-1-plan.md" '> ### Step 1-7: quoted but readable'
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: line"*"is a step-shaped heading the manifest scan does not count"* ]]
 }
 
 @test "drift (8j.3): SKILL.md declares no digest terminator stem" {
@@ -644,12 +790,14 @@ stage_installed_layout() {
 }
 
 @test "error: unparsable rule table exits 2" {
+  # Three paths exit 2 — missing file, missing phases/ dir, unparsable table —
+  # so a status-only assertion passes for any of them.
   sed_i '/^| R/d' "$FIX/common-rules.md"
-  run bash "$SCRIPT" "$FIX"
-  [ "$status" -eq 2 ]
+  run -2 --separate-stderr bash "$SCRIPT" "$FIX"
+  [[ "$stderr" == *"could not parse rule tables"* ]]
 }
 
 @test "error: nonexistent skill dir exits 2" {
-  run bash "$SCRIPT" "$BATS_TEST_TMPDIR/nope"
-  [ "$status" -eq 2 ]
+  run -2 --separate-stderr bash "$SCRIPT" "$BATS_TEST_TMPDIR/nope"
+  [[ "$stderr" == *"missing file"* ]]
 }

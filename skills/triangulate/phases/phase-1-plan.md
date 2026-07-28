@@ -365,6 +365,7 @@ Report to user:
 Plan: ./docs/archive/review/[plan-name]-plan.md
 Branch: [branch-name]
 Review rounds: [n]
+Steps executed: [1-1, 1-2, ... — reconciled against step_ids in this file's front matter]
 Next step: Proceeding to Phase 2 (Coding)
 ```
 

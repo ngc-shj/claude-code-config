@@ -490,6 +490,7 @@ CI gate parity: [N gates extracted, all pass locally / N extracted, M failed and
 Memory cross-check: [N feedback rules enumerated, no regressions / N enumerated, M direct hits resolved / no memory dir]
 Self-R-check: [N rules fired, all resolved / clean]
 Deviations from plan: [yes/no] (log: ./docs/archive/review/[plan-name]-deviation.md)
+Steps executed: [2-1, 2-2, ... — reconciled against step_ids in this file's front matter]
 Next step: Proceeding to Phase 3 (Code Review)
 ```
 

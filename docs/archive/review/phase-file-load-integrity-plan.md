@@ -88,7 +88,7 @@ does Phase 3 have?" exists *only* inside the region that was cut off.
 | Channel | What survives | What detects the truncation |
 |---|---|---|
 | `Read` with `limit`/`offset`, context compaction, a paste that dropped the tail | the head of the file | **the manifest** (C1) — step count and IDs present, terminator absent |
-| Bash whole-file dump through the `rtk` proxy | line 1 only (`---`) | **only** the standing terminator rule in `SKILL.md` (C3), loaded in full every session; and `SC3` if built |
+| Bash whole-file dump through the `rtk` proxy | as little as line 1 (`---`) | **only** the standing terminator rule in `SKILL.md` (C3), loaded in full every session; and `SC3` if built |
 
 On the Bash channel the change is a small regression in what line 1 *says*: today
 `## Phase 1: …`, after C1 `---`. Accepted: front matter only has the always-arrives property at
@@ -769,10 +769,27 @@ of the generated file — one `echo` **after** the awk pass, inside the existing
   widened by C6, both recorded so C6's fixture set is knowingly bounded:
   (a) the hook is wired to `Edit|Write|MultiEdit` only (`settings.json:200`), so a Bash redirect
   bypasses it even for the paths it covers; (b) it matches `$FILE_PATH` literally with no
-  `realpath` normalization, so `$HOME/.claude/../.claude/skills/…` or a relative path from a cwd
-  inside the tree evades every arm. *(A third — `$HOME`-shape sensitivity — was found in r3 and is
-  **fixed in this change**, not deferred: see C6's normalization block. It is listed here only so
-  the enumeration of this hook's known weaknesses is complete.)* Anti-Deferral: worst case — an agent writing under
+  `realpath` normalization. **Corrected in Phase 3 after the cited examples were executed**: the
+  in-tree `..` form this entry originally named actually *blocks* (it matches a sibling arm, with
+  the wrong message — cosmetic). The forms that genuinely evade are `$HOME/.claude//hooks/x.sh`
+  (double slash), `$HOME/.claude/./hooks/x.sh`, `$HOME/./.claude/hooks/x.sh`,
+  `$HOME/.claude/../.claude/hooks/x.sh`, a relative `.claude/hooks/x.sh`, and a symlink alias.
+  A deferral whose examples are wrong is worse than none — a follow-up scoped to the old list
+  would have closed nothing.
+  **The cost estimate was also wrong**: this is one canonicalization into a variable above the
+  `case`, reusing the primitive this repo already owns (`_containment_check` in
+  `hooks/retro-prescreen.sh`, `cd -P` chain-chasing under a hop cap, bash-3.2/BSD-portable), not
+  "normalizing untrusted paths in every arm". And the likelihood assessment predates C6, which
+  made this hook the sole control over `~/.claude/{hooks/**, rules/**, skills/**}` — including
+  `hooks/lib/ast-runner.js`, the engine the detection hooks call. Commit `82449bb`, one commit
+  back on `main`, treated the identical class (a hook canonicalizing an untrusted path for a
+  containment decision) as Critical across three hooks.
+  **Still deferred, deliberately**: adding path canonicalization to a security hook is a
+  change of the same weight as C6 itself and would land without the review depth the rest of this
+  branch received. The honest disposition is a corrected, accurately-costed follow-up rather than
+  a late edit to a guard. Owner: next branch, before any further work depends on this hook.
+  *(A third weakness — `$HOME`-shape sensitivity — was found in r3 and is **fixed in this change**,
+  not deferred: see C6's normalization block.)* Anti-Deferral: worst case — an agent writing under
   `~/.claude/**` by redirect or traversal is ungated; likelihood — low (no workflow in this repo
   writes there that way; `install.sh` uses `cp`); cost — (a) means parsing redirection targets out
   of arbitrary command strings, (b) means normalizing untrusted paths in every arm, which commit

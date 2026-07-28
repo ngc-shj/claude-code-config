@@ -30,7 +30,7 @@ claude-code-config/
 │   ├── session-retrospect-check.sh # SessionStart: prompt when retrospective mining is due
 │   ├── retro-state.sh            # Retrospect state CLI (cursors, due, snooze, config gate)
 │   ├── retro-prescreen.sh        # Zero-token candidate discovery per knowledge source
-│   └── check-rule-sync.sh        # Rule-ID consistency linter for triangulate files
+│   └── check-rule-sync.sh        # Rule-ID + phase-manifest/terminator linter for triangulate files
 ├── skills/
 │   ├── triangulate/
 │   │   └── SKILL.md              # Triangulate: 3-phase × 3-expert review workflow
@@ -141,6 +141,12 @@ Blocks Edit/Write/MultiEdit operations on:
 - Credential files: `credentials.json`, `secrets.yaml`, `*.pem`, `*.key`
 - Lock files: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, etc.
 - Git internals: `.git/*`
+- The installed harness under `~/.claude/`, because `install.sh` overwrites it and
+  an edit there is silently reverted on the next install: `hooks/**` (any file type —
+  `hooks/lib/` is re-copied wholesale), `skills/**`, `rules/**`, `settings.json`,
+  `CLAUDE.md`, `RTK.md`, `model-routing.md`. Edit the repo and run `./install.sh`.
+  `~/.claude/settings.local.json` stays editable — it is the documented override path
+  and install.sh does not touch it — as does `~/.claude/projects/*/memory/`.
 
 ### commit-msg-check.sh (PreToolUse)
 

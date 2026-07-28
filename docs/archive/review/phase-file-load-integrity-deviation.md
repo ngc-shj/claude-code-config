@@ -216,6 +216,63 @@ linter's header enumerated checks 1-7 and never gained an 8; checks 3 and 5 scan
 file list while check 8 swept the phases directory, so a future `phase-4-*.md` would have been
 manifest-checked but escaped range/dangling checking.
 
-Full suite after all of it: **847 tests, 0 failures.**
+Full suite after all of it: **852 tests, 0 failures** (866 after the Phase 3 round below).
+
+## D13 — `phase-2-coding.md`'s `core:` text is longer than the locked C1 literal
+
+- **Plan (C1 table)**: `2-5 — focused recurring-rule self-check before the phase reports complete`.
+- **Shipped**: `2-5 — focused recurring-rule self-check by three sub-agents before the phase
+  reports complete; skipping it moves first-pass discovery into Phase 3`.
+- **Why**: the shipped text is more accurate against Step 2-5's own body, which specifies three
+  parallel sub-agents and states the consequence of skipping. Clause 8g binds only the leading
+  step ID, so nothing structural depends on the wording. Recorded because C1 was locked with
+  literal values for all three files and this was the one that drifted without an entry.
+
+## D14 — Phase 3 round 1 findings, all fixed in-round
+
+Nine findings across the three reviewers; the two Majors converged (functionality F1 == security
+S1) and are the same defect:
+
+**The obligations themselves were ungated.** Check 8 guaranteed the metadata — accurate front
+matter, unique terminator, stems derived from `SKILL.md` — and verified almost nothing about the
+three numbered obligations that turn that metadata into protection. Both reviewers executed it:
+delete the "re-read on a missing terminator" and "reconcile against `step_ids`/`core`" sentences,
+or rename the terminator literals in the protocol while leaving the declaration line intact, and
+the linter still printed `OK`. That is requirement F4's own shape — metadata nobody checks —
+sitting in the one place the whole design leans on. Fixed by scoping a `**Truncation protocol**`
+block and asserting it names the `Read` tool, both declared stems, and every declared manifest key,
+plus a file-wide check that no `END-OF-*` literal anywhere in `SKILL.md` names an undeclared stem
+(the phase-transition sentence repeats the terminator and would otherwise go stale silently).
+The old whole-file `Read` grep was replaced: the fixture now mentions `Read` outside the block
+precisely so that the scoping is what the fixture proves.
+
+**The counted heading set was narrower than the readable set** (security S2, executed). The earlier
+fix closed 0-3 leading spaces; a tab-indented heading, one at 4 spaces inside a list item, and a
+blockquoted one are all still instructions a reader acts on, and none would appear in `step_ids` —
+so the reconciliation the protocol mandates would walk an under-declared manifest. Widening the
+counted anchor would start counting `### Step`-shaped lines inside legitimate indented code blocks,
+so instead a loose fail-closed scan refuses any step-shaped heading the strict anchor missed —
+the same strict-count / loose-refuse split 8h already uses for terminators. Verified no false
+positive on the real files (21 step headings, all at column 0, all outside fences).
+
+**Two of the six new clauses had no red-proof on first ablation** — the undeclared-stem literal
+check and the loose step scan. Both now have isolating fixtures placed so they do not trip a
+sibling: the stem literal goes *outside* the protocol block, and the blockquoted heading leaves the
+strict count unchanged. Re-ablated: each fails exactly its own test. That is the third time in this
+branch that writing the check and proving it can fail were separate events, and the third time the
+proof step is what caught the gap.
+
+**Minor, fixed:** the declaration line's parse contract is now stated in `SKILL.md` as an HTML
+comment and the stem-missing messages carry the expected shape; `skills/retrospect/folding.md`
+gained the two manifest constraints its fold procedure now has to respect (insert above the
+terminator; a new `### Step` obliges a front-matter update); the phase completion-report templates
+gained a `Steps executed:` line so the reconciliation leaves a trace in the committed artifact —
+which does not make I9 verifiable, but does make its omission visible.
+
+**Minor, corrected but not fixed:** SC4(b)'s deferral cited the wrong evading forms and
+under-costed the fix by roughly an order of magnitude. The entry is rewritten with the six forms
+that actually evade (executed), the real cost, and the post-C6 likelihood. The fix itself stays
+deferred with that reasoning stated — adding path canonicalization to a security hook this late
+would land without the review depth the rest of the branch received.
 
 ## END-OF-DEVIATION-LOG
