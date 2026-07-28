@@ -372,4 +372,30 @@ solely by `CANON_PATH`. Red-proven by ablation (restoring the old scope fails th
 approve fixture and only it), and paired with a deny fixture under the same staged `HOME` so the
 fix cannot be mistaken for "stopped blocking things".
 
+## D18 — Literal `~` was kept out of resolution, and cost both directions
+
+Third and last instance of one root: a form judged by string instead of by the filesystem.
+`~/...` was excluded from physical resolution on the grounds that it "cannot be resolved", and the
+string arms then decided it. Both failure directions followed from that single choice:
+
+```
+~/hook-alias.sh -> ~/.claude/hooks/block-sensitive-files.sh   input: ~/hook-alias.sh   -> approve
+~/.claude/skills/out-link -> /tmp/outside/inner   input: ~/.claude/skills/out-link/../x -> block
+```
+
+The premise was simply wrong. `~` has exactly one meaning, `$HOME`, and this hook already accepts
+the spelling as valid input — expanding it is not a guess. **Fixed**: a leading `~` is expanded
+before resolution, so every input form is absolute and the filesystem answers all of them.
+`~user/...` is deliberately left unexpanded (it needs a passwd lookup, the tool does not emit it,
+and not matching is the conservative direction).
+
+**The simplification is the point.** With no unresolvable form left, the entire lexical
+string-matching pass — `LEX_PATH`, its awk normalizer, and the case block that consumed it — is
+deleted. Two judges of the same question were what let both the `~/alias` bypass and the
+`..`-through-a-symlink over-block survive: each was correct in one judge and wrong in the other,
+and whichever ran first won. One authority cannot disagree with itself.
+
+Red-proven: removing the expansion reds nine fixtures, including the two added for this round
+(`~/alias` must block, `~/.claude/.../out-link/../x` must approve).
+
 ## END-OF-DEVIATION-LOG

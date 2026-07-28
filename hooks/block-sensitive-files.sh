@@ -189,30 +189,29 @@ SKILLS_BLOCK_REASON="Blocked: editing an installed skill under ~/.claude/skills/
 # already uses. A RELATIVE path is made absolute against the hook's own working
 # directory first: the harness runs the hook in the session's cwd, so
 # `../../../../.claude/hooks/x.sh` names a real installed hook and was an
-# approve. `pwd -P` (not `$PWD`) because the lexical `..` collapse below is only
-# sound on a path with no symlinked components.
-# Lexical pass first, so the literal-tilde arms (which can never be resolved
-# against the filesystem) also see `~/.claude/./skills/...` as what it names.
+# approve.
+#
+# A leading `~` is EXPANDED here rather than treated as unresolvable. Earlier
+# revisions kept literal-tilde paths out of physical resolution and judged them
+# by string alone, which cost both directions at once: `~/alias.sh` pointing at
+# an installed hook was an approve, and `~/.claude/skills/out-link/../x` whose
+# link leaves the tree was a block. The tilde has exactly one meaning — `$HOME`
+# — and this hook accepts the spelling as valid input, so expanding it is not a
+# guess. With every form absolute, resolution answers every question and the
+# string-matching pass that used to exist alongside it is gone.
+#
+# `~user/...` is deliberately NOT expanded: resolving another account's home
+# needs a passwd lookup, the tool does not emit that form, and leaving it
+# unmatched is the conservative direction for a path this guard has no business
+# reasoning about.
 ABS_PATH="$FILE_PATH"
 case "$ABS_PATH" in
-  /*|"~"/*|"~") : ;;
-  *) ABS_PATH="$(pwd -P)/$ABS_PATH" ;;
+  "~")   ABS_PATH="${HOME%/}" ;;
+  "~/"*) ABS_PATH="${HOME%/}/${ABS_PATH#\~/}" ;;
+  "~"*)  : ;;
+  /*)    : ;;
+  *)     ABS_PATH="$(pwd -P)/$ABS_PATH" ;;
 esac
-LEX_PATH=$(printf '%s' "$ABS_PATH" | awk '
-  {
-    gsub(/\/+/, "/")            # //  -> /
-    while (sub(/\/\.\//, "/")) {}   # /./ -> /
-    sub(/\/\.$/, "/")
-    while (match($0, /\/[^\/]+\/\.\.(\/|$)/)) {   # a/b/../c -> a/c, lexically
-      pre = substr($0, 1, RSTART - 1)
-      post = substr($0, RSTART + RLENGTH - 1)
-      if (post == "/") post = ""
-      $0 = pre post
-      if ($0 == "") $0 = "/"
-    }
-    print
-  }')
-[ -n "$LEX_PATH" ] || LEX_PATH="$ABS_PATH"
 
 # Physical resolution runs on ABS_PATH, NOT on the lexically-collapsed form.
 # `a/b/../c` equals `a/c` only when `b` is a real directory: if `b` is a
@@ -221,9 +220,9 @@ LEX_PATH=$(printf '%s' "$ABS_PATH" | awk '
 # followed by `..` resolves into `~/.claude/hooks`, while the collapsed form
 # pointed at the link's own parent and approved the write. `cd -P` gets this
 # right for free because the kernel resolves each component in order, so the
-# un-collapsed path is both the correct input and the simpler one. LEX_PATH
-# stays in use for the string arms below, where a literal `~/...` can never be
-# resolved and lexical cleanup is the only tool available.
+# un-collapsed path is both the correct input and the simpler one — and, once
+# the tilde is expanded above, the only one: there is no longer a form the
+# filesystem cannot answer, so no lexical pass survives beside this.
 CANON_PATH=""
 case "$ABS_PATH" in
   /*)
@@ -272,30 +271,10 @@ if _res="$(cd -P -- "$CLAUDE_HOME" 2>/dev/null && pwd -P)"; then
   CLAUDE_HOME_PHYS="${_res%/}"
 fi
 
-# The lexical form judges ONLY literal-tilde paths. Applying it to a path the
-# filesystem can resolve is the same mistake as collapsing `..` before
-# resolving, just in the over-block direction: a link inside the guarded tree
-# pointing OUT of it, plus `..`, collapses lexically to a guarded-looking path
-# while really naming a file outside. Fail-closed, so harmless for security —
-# and still wrong, because a guard that refuses writes it has no business
-# refusing is a guard people learn to switch off. Absolute and relative paths
-# are judged solely by CANON_PATH below, which the filesystem answered.
-case "$FILE_PATH" in
-  "~/"*)
-    case "$LEX_PATH" in
-      "~/.claude/hooks/"*|"~/.claude/settings.json"|"~/.claude/CLAUDE.md"|"~/.claude/rules/"*|"~/.claude/RTK.md"|"~/.claude/model-routing.md")
-        emit_block "Blocked: editing harness config under ~/.claude/ directly. Edit the repo claude-code-config and run \`bash ./install.sh\`. Use ~/.claude/settings.local.json for local overrides."
-        exit 0
-        ;;
-      "~/.claude/skills/"*)
-        emit_block "$SKILLS_BLOCK_REASON"
-        exit 0
-        ;;
-    esac
-    ;;
-esac
-
-# The resolved form is the authority for everything the filesystem can answer. Kept as a separate case rather than
+# The resolved path is the single authority. There is no string-matching pass
+# beside it any more: every input form is made absolute above, so the filesystem
+# can answer for all of them, and two judges of the same question were how both
+# the `~/alias` bypass and the `..`-through-a-symlink over-block survived. Kept as a separate case rather than
 # `case "$FILE_PATH$CANON_PATH"` so each arm stays a plain literal a reader can
 # check against install.sh's write set.
 case "$CANON_PATH" in

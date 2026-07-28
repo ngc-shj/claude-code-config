@@ -455,6 +455,28 @@ run_bash_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
+@test "deny: a literal-tilde alias whose target is an installed hook" {
+  # `~` has one meaning, and this hook accepts the spelling, so it is expanded
+  # and resolved like anything else. Judging it by string alone cost both
+  # directions: this alias was an approve, and the fixture below was a block.
+  fake="$BATS_TEST_TMPDIR/th-home"
+  mkdir -p "$fake/.claude/hooks"
+  printf 'x\n' > "$fake/.claude/hooks/target.sh"
+  ln -sfn "$fake/.claude/hooks/target.sh" "$fake/hook-alias.sh"
+  input=$(jq -nc '{tool_name:"Edit", tool_input:{file_path:"~/hook-alias.sh"}}')
+  run env HOME="$fake" bash -c "printf '%s' '$input' | bash '$SCRIPT'"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "approve: a literal-tilde path whose link leaves the guarded tree" {
+  fake="$BATS_TEST_TMPDIR/th-home2"
+  mkdir -p "$fake/.claude/skills" "$BATS_TEST_TMPDIR/th-outside/inner"
+  ln -sfn "$BATS_TEST_TMPDIR/th-outside/inner" "$fake/.claude/skills/out-link"
+  input=$(jq -nc '{tool_name:"Edit", tool_input:{file_path:"~/.claude/skills/out-link/../harmless.txt"}}')
+  run env HOME="$fake" bash -c "printf '%s' '$input' | bash '$SCRIPT'"
+  [[ "$output" == *'"decision": "approve"'* ]]
+}
+
 @test "approve: a link inside the guarded tree pointing out of it, crossed by .." {
   # The over-block mirror of the symlink test below. Lexically,
   # `skills/out-link/..` collapses to `skills/`, which looks guarded; physically
