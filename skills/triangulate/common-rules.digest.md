@@ -58,6 +58,10 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R44 | Gate exit status read through a lossy or identity-less channel | Major (Critical when the masked gate guards a security invariant) |
 | R45 | Repo-wide gate/analyzer scaling super-linearly with the scanned set | Major (Critical when the timeout disables a security gate in CI, i.e. the gate never runs) |
 | R46 | Scope-blind binding resolution in a security analyzer | Critical when the misresolved binding makes a security control read a fake as legitimate (fail-open); Major otherwise |
+| R47 | Surface-form adjudication where an interpreter defines the meaning | Major; Critical when the surface-form check is the control protecting a security boundary (containment or traversal, authz, an injection sink, a sandbox edge) — every unenumerated spelling is a fail-open bypass |
+| R48 | Parallel adjudicators deciding one predicate by different semantics | Major; Critical when the divergent pair guards a security boundary — the weaker semantics' approval is a fail-open bypass |
+| R49 | Undeclared control class, or a claim stronger than the implementation | Major; Critical when the overstated control is relied on elsewhere as a boundary — another control was skipped, narrowed, or deferred because this one was believed to close the class |
+| R50 | Verification preconditions unverified (success inferred from a proxy signal) | Major; Critical when the unverified precondition means a security gate never actually ran, ran on the wrong subject, or reported green from a failed toolchain |
 | RS1 | Timing-safe comparison | Critical |
 | RS2 | Rate limiter on new routes | Major |
 | RS3 | Input validation at boundaries | Major |
@@ -73,4 +77,5 @@ Also extract a rule's Extended obligations section when the selected row points 
 | RT7 | New guard / test / gate must be proven able to fail | Major; Critical when the blind check guards a security invariant |
 | RT8 | Vacuous denial-path test (status asserted, mutation not) | Major; Critical for authn/authz, rate-limit, step-up, or fail-closed controls |
 | RT9 | Parallel-implementation twin drift (production artifact vs test-importable twin) | Critical when the drifting logic is a security control (auth/authz check, origin/frame gate, sanitizer, crypto parameter, signature verification, rate limiter, RLS/tenancy predicate, idempotency guard on a security-state mutation — a superset of RT5's Critical-escalation list); Major otherwise |
+| RT10 | Guard tested only on its deny side (no paired allow case, no axis combinations) | Major; Critical when the guard sits on an operational recovery, deployment, or incident-response path where a false deny blocks remediation |
 ## END-OF-DIGEST

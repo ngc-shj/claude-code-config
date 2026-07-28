@@ -50,6 +50,7 @@ Ensure the following sections are included for review expert agents to evaluate.
   - **Numbering**: every contract is assigned a stable ID — `C1`, `C2`, ..., `Cn` — at the time it is locked. IDs do not get reused if a contract is later removed; renumbering invalidates back-references in subsequent rounds and review artifacts. Findings, deviation log entries, manual-test references, and Phase 3 review comments cite contracts by ID, not by paraphrase.
   - **Function/module signatures**: name, parameter types, return type, error type — no body
   - **Invariants**: properties that must hold across the change. Classify each invariant as **app-enforced** (a runtime check; absence = bug surfaces at request time, only when the offending code path executes) or **schema-enforced** (the storage engine / type system rejects violating writes regardless of which caller attempts them; absence = silent corruption possible from a forgotten code path, an ad-hoc admin query, or a future migration). Schema-enforced invariants are stronger because they survive new callers, late-arriving migrations, and out-of-band writes; prefer them when the storage layer can express the constraint (CHECK constraints, partial unique indexes, triggers, NOT NULL with default, sum types in the schema). App-enforced examples: "every write to table X passes through helper Y", "no nested transaction on raw client", "rate-limit middleware applied to every new route". Schema-enforced examples: "deleted rows cannot be re-inserted with the same primary key" (partial unique index over a tombstone column), "state transitions follow the documented graph" (CHECK constraint over the state column referencing the transition source). When an app-enforced invariant has a viable schema-enforced equivalent, the plan MUST state why the weaker form was chosen — otherwise reviewers should request the stronger form. **Member-set derivation for universally-quantified invariants (R42)**: when an invariant is universally quantified over a class — "rate-limit middleware applied to *every* new route", "*no* permanent delete without step-up", "*all* destructive routes carry a guard" — the plan MUST attach the code-derived member-set: the `grep` command over the primitive that *defines* the class, and the resulting list of members the control will be applied to. A prompt- or external-review-supplied list is an unverified hint, not the member-set; any list-vs-code delta is recorded as a finding. Include indirect members (cascade-via-parent, raw SQL, aliased wrappers) the defining-primitive grep misses. The contract cannot transition to `locked` until this member-set is present (mirrors the Consumer-flow-walkthrough lock refusal below).
+  - **Control class** (mandatory for every contract that introduces or tightens a guard, gate, validator, or check — R49): state which of four the control is, before it is implemented, because the class decides what the rest of the plan may lean on. `enforceable boundary` (the constrained actor structurally cannot bypass it) / `fail-closed verification gate` (bypassable by editing the gate itself, but it cannot pass without deciding, and unresolved, errored, or absent-subject cases deny) / `best-effort tripwire` (a heuristic over an input space that cannot be decided completely — list the known bypasses and name the real recovery path) / `detection or audit only` (no denial). Attach the **adjudication authority** for the control's predicate (R47): the interpreter whose result the decision reads — the filesystem resolver, the parser, the compiler or type system, the argument vector — or, when no interpreter can be consulted at decision time, the statement that the control is a tripwire rather than a boundary and the enumerated input axes it covers (R42, RT10). A contract whose control class is absent cannot transition to `locked`: reviewers default an undeclared control to `enforceable boundary`, and the whole plan is then built on a guarantee nobody implemented.
   - **Forbidden patterns**: grep-able regex or literal strings that MUST NOT appear in the diff. Phase 2-4 contract conformance grep keys off this list. Format each entry as: `pattern: <regex or literal> — reason: <one-line>`
   - **Acceptance criteria**: observable post-conditions per contract
   - **Consumer-flow walkthrough** (mandatory before any contract that defines an API response shape, persisted-state shape, message payload, event payload, or any other shape consumed by code outside the producer transitions to `locked`): a contract that "looks complete" from the producer side can still be unconsumable — the producer-side shape is correct and the consumer-side cannot make use of it because a field the consumer needs is absent (e.g., the consumer needs `entryId` to construct downstream URLs or to compute associated data; the locked shape only carries `attachmentIds`). To prevent this class of mid-implementation shape change:
@@ -234,7 +235,7 @@ routinely sits in the 90-300 s range). Manual fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R46 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R50 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -265,11 +266,11 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R46)
+- ... (R1-R50)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R46)
+- ... (R1-R50)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
@@ -279,7 +280,7 @@ Review round: [nth]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R46)
+- ... (R1-R50)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -289,6 +290,7 @@ Review round: [nth]
 - RT7: [status]
 - RT8: [status]
 - RT9: [status]
+- RT10: [status]
 ```
 
 Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollama:
