@@ -633,6 +633,38 @@ EOF
   [[ "$output" == *"SKILL.md: names terminator 'END-OF-SECTION', which is not one of the declared stems"* ]]
 }
 
+@test "drift (I15): a step hidden inside a ~~~ fence is not counted" {
+  # The fail-OPEN direction, and the inverse of the backtick case: a tilde fence
+  # renders the step as code so a reader stops executing it, while a
+  # backtick-only scanner keeps counting the heading — manifest satisfied, step
+  # neutralised. Reds on the count, the ID list, and `core` no longer resolving.
+  sed_i 's|^### Step 1-2: Second$|~~~\n### Step 1-2: Second\n~~~|' "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: front matter declares 3 steps but file has 2 '### Step' headings"* ]]
+}
+
+@test "drift (I15): a fence is not closed by a shorter run of its own character" {
+  # CommonMark: the closer must be at least as long as the opener. A scanner
+  # that toggles on any 3+ run would treat the short line as a close and resume
+  # counting inside the block.
+  sed_i 's|^### Step 1-2: Second$|````\n### Step 1-2: Second\n```\n### Step 1-8: still fenced|' \
+    "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"phase-1-plan.md: unbalanced code fence at EOF"* ]]
+}
+
+@test "pass (I15): a fence is not closed by the other marker character" {
+  # A ``` block containing a ~~~ line stays open across it; the step inside
+  # remains uncounted, so the manifest must not be told there are more steps.
+  sed_i 's|^### Step 1-3: Third$|### Step 1-3: Third\n\n```\n~~~\n### Step 1-8: inside the backtick block\n```|' \
+    "$FIX/phases/phase-1-plan.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+  [[ "$output" == OK:* ]]
+}
+
 @test "pass (I15): a lone indent-4 backtick line does not trip the balance counter" {
   # Three anchors have to agree that 4+ spaces is not a fence: the balance
   # counter, the scan toggle and the heading anchor. The counter is the one no

@@ -216,6 +216,10 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/hooks/block-sensitive-files.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/block-destructive-docker.sh",
             "timeout": 5
           },

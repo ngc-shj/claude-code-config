@@ -8,6 +8,36 @@ INPUT=$(cat)
 
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty')
 
+emit_block_early() {
+  printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$1" | jq -Rs .)"
+}
+
+# Bash reaches the same files by a different door. The arms below inspect
+# tool_input.file_path, which a shell command does not have, so `sed -i`, a `>`
+# redirect, `cp`, `tee` and friends walked straight past every protection here —
+# including a rewrite of this hook, after which anything is permitted.
+#
+# This is a TRIPWIRE, not a parser: deciding what an arbitrary shell command
+# writes is undecidable in general (variables, eval, subshells, here-docs), and
+# the other block-*.sh hooks in this directory are the same shape — substring
+# matches on a dangerous verb near a dangerous target. It raises the cost of an
+# accident and of a careless rewrite; it does not stop a determined bypass, and
+# `~/.claude/settings.local.json` remains the sanctioned escape.
+#
+# Two conditions must BOTH hold, so read-only work on these paths stays free:
+# the command names a protected path, and it carries a write verb.
+if [ "$(echo "$INPUT" | jq -r '.tool_name // empty')" = "Bash" ]; then
+  CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+  CLAUDE_DIR_RE='(\$HOME|~|/[Uu]sers/[^/ ]+|/home/[^/ ]+)/\.claude/(hooks|skills|rules)/|(\$HOME|~|/[Uu]sers/[^/ ]+|/home/[^/ ]+)/\.claude/(settings\.json|CLAUDE\.md|RTK\.md|model-routing\.md)'
+  WRITE_RE='(^|[|;&[:space:]])(sed[[:space:]]+-[a-zA-Z]*i|cp|mv|install|tee|truncate|rsync|chmod|chown|rm|ln|touch|dd)([[:space:]]|$)|>>?[[:space:]]*[^|;&]*\.claude/'
+  if printf '%s' "$CMD" | grep -qE "$CLAUDE_DIR_RE" && printf '%s' "$CMD" | grep -qE "$WRITE_RE"; then
+    emit_block_early "Blocked: this command writes into the installed harness under ~/.claude/. install.sh overwrites that tree, so the edit is reverted on the next install — and a session that rewrites its own hooks can disable the tripwires meant to catch it. Edit the repo claude-code-config and run \`bash ./install.sh\`; use ~/.claude/settings.local.json for local overrides. (This is a heuristic guard on the Bash tool: it pairs a protected path with a write verb, so reading, grepping and running these files is unaffected.)"
+    exit 0
+  fi
+  echo '{"decision": "approve"}'
+  exit 0
+fi
+
 if [ -z "$FILE_PATH" ]; then
   echo '{"decision": "approve"}'
   exit 0
@@ -99,7 +129,53 @@ SKILLS_BLOCK_REASON="Blocked: editing an installed skill under ~/.claude/skills/
 # next install. Note what is deliberately NOT here: ~/.claude/projects/*/memory/
 # and settings.local.json are not install-managed, so blocking them would break
 # legitimate writes.
-case "$FILE_PATH" in
+# Match the canonical path as well as the raw one. A literal `case` comparison
+# treats `//`, `/./`, an intermediate `..`, and a symlink alias as different
+# strings from the path they name, so each was an approve on a file the arms
+# below are meant to guard — reproduced for all four forms. Resolve the deepest
+# existing ancestor physically (`cd -P`, which also chases symlinks) and
+# re-attach the part that does not exist yet, so a write to a not-yet-created
+# file under a guarded directory is still matched. `realpath -m` would be
+# shorter but is GNU-only; this shape is the one hooks/retro-prescreen.sh
+# already uses. Relative paths cannot be resolved here — the hook is not told
+# the tool's working directory — so they fall through to the literal arms.
+# Lexical pass first, so the literal-tilde arms (which can never be resolved
+# against the filesystem) also see `~/.claude/./skills/...` as what it names.
+LEX_PATH=$(printf '%s' "$FILE_PATH" | awk '
+  {
+    gsub(/\/+/, "/")            # //  -> /
+    while (sub(/\/\.\//, "/")) {}   # /./ -> /
+    sub(/\/\.$/, "/")
+    while (match($0, /\/[^\/]+\/\.\.(\/|$)/)) {   # a/b/../c -> a/c, lexically
+      pre = substr($0, 1, RSTART - 1)
+      post = substr($0, RSTART + RLENGTH - 1)
+      if (post == "/") post = ""
+      $0 = pre post
+      if ($0 == "") $0 = "/"
+    }
+    print
+  }')
+[ -n "$LEX_PATH" ] || LEX_PATH="$FILE_PATH"
+
+CANON_PATH=""
+case "$LEX_PATH" in
+  /*)
+    _dir="$LEX_PATH"; _tail=""
+    while [ -n "$_dir" ] && [ "$_dir" != "/" ] && [ ! -d "$_dir" ]; do
+      _tail="$(basename -- "$_dir")${_tail:+/$_tail}"
+      _dir="$(dirname -- "$_dir")"
+    done
+    if _res="$(cd -P -- "$_dir" 2>/dev/null && pwd -P)"; then
+      _res="${_res%/}"
+      CANON_PATH="${_res}${_tail:+/$_tail}"
+    fi
+    ;;
+esac
+# Never let an unresolvable path silently become the empty string and match
+# nothing meaningful; fall back to the raw path so the arms still see something.
+[ -n "$CANON_PATH" ] || CANON_PATH="$FILE_PATH"
+
+case "$LEX_PATH" in
   "$CLAUDE_HOME/hooks/"*|"$CLAUDE_HOME/settings.json"|"$CLAUDE_HOME/CLAUDE.md"|"$CLAUDE_HOME/rules/"*|"$CLAUDE_HOME/RTK.md"|"$CLAUDE_HOME/model-routing.md")
     emit_block "Blocked: editing harness config under ~/.claude/ directly. The repo claude-code-config is the source of truth — edit there and run \`bash ./install.sh\`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."
     exit 0
@@ -113,6 +189,20 @@ case "$FILE_PATH" in
     exit 0
     ;;
   "~/.claude/skills/"*)
+    emit_block "$SKILLS_BLOCK_REASON"
+    exit 0
+    ;;
+esac
+
+# Second pass over the canonical form. Kept as a separate case rather than
+# `case "$FILE_PATH$CANON_PATH"` so each arm stays a plain literal a reader can
+# check against install.sh's write set.
+case "$CANON_PATH" in
+  "$CLAUDE_HOME/hooks/"*|"$CLAUDE_HOME/settings.json"|"$CLAUDE_HOME/CLAUDE.md"|"$CLAUDE_HOME/rules/"*|"$CLAUDE_HOME/RTK.md"|"$CLAUDE_HOME/model-routing.md")
+    emit_block "Blocked: editing harness config under ~/.claude/ directly (path resolves under the installed harness). The repo claude-code-config is the source of truth — edit there and run \`bash ./install.sh\`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."
+    exit 0
+    ;;
+  "$CLAUDE_HOME/skills/"*)
     emit_block "$SKILLS_BLOCK_REASON"
     exit 0
     ;;

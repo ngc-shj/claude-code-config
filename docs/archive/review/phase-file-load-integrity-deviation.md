@@ -275,4 +275,46 @@ that actually evade (executed), the real cost, and the post-C6 likelihood. The f
 deferred with that reasoning stated — adding path canonicalization to a security hook this late
 would land without the review depth the rest of the branch received.
 
+## D15 — Pre-merge security review: three Majors, all fixed; N2 amended
+
+The user reviewed `origin/main...HEAD` independently and reproduced three bypasses. All three were
+re-reproduced here before any fix, and all three were real.
+
+1. **Bash reaches the same files by a different door.** The hook inspected `tool_input.file_path`,
+   which a shell command does not have, so `sed -i`, a `>` redirect, `cp`, `tee` and `rm` walked
+   past every arm — including a rewrite of the hook itself, after which nothing is guarded.
+   *Fixed*: the hook is wired to the `Bash` matcher and refuses a command that pairs a protected
+   path with a write verb. **This required a `settings.json` line, which contract N2 forbade** —
+   recorded here rather than quietly taken. The constraint was about not growing the hook surface
+   (no new process, no new install step), and both still hold; what changed is that leaving the
+   guard reachable only through `Edit`/`Write` meant it guarded nothing against a shell. The code
+   says plainly that it is a tripwire, not a parser: what an arbitrary shell command writes is
+   undecidable, and the repo's other `block-*.sh` hooks are the same substring shape.
+2. **Non-canonical paths evaded the arms.** `//`, `/./`, an intermediate `..`, the literal-tilde
+   variants and symlink aliases each named a guarded file while spelling it differently.
+   *Fixed*: a lexical pass (the only thing that can reach an un-expandable `~/...`) plus physical
+   resolution of the deepest existing ancestor with `cd -P`, arms run over both forms. The
+   fixtures also caught an **over-block** the old code had — `~/.claude/hooks/../../scratch/x.md`
+   leaves the guarded tree and was being refused — so this was a correctness fix in both
+   directions, not only a security one.
+3. **A `~~~` fence hid a mandatory step with the linter green.** Neither the plan reviewers, the
+   self-check, nor the Phase 3 reviewers caught this; the fence scanner only knew backticks.
+   The direction matters: an unrecognised *backtick* fence over-counts headings, which reds
+   (fail-closed), but an unrecognised *tilde* fence means the renderer hides the step while the
+   scanner keeps counting it — manifest satisfied, step neutralised. Wrapping Step 1-4 of
+   `phase-1-plan.md` in `~~~` exited 0.
+   *Fixed*: one CommonMark fence state machine replacing the parity counter and the toggle (they
+   were two implementations of one rule and could disagree): either marker character, 3+ long,
+   closed only by the same character at least as long with nothing but whitespace after it. After
+   the fix the same mutation reds three ways — count, ID list, and `core` no longer resolving.
+
+All three are red-proven by ablation: disabling the Bash branch fails six fixtures, removing the
+path normalization fails five (four denies and the over-block approve), and reverting the fence
+scanner to backticks-only fails the tilde fixture. Suite: **879 tests, 0 failures.**
+
+Worth stating: this review found in one pass what four rounds of my own review did not. The tilde
+fence in particular is the same class the branch is about — a control that reads one form of a
+thing and calls it the set — and it survived every pass that enumerated *evasions I had thought of*
+rather than *the grammar the format actually defines*.
+
 ## END-OF-DEVIATION-LOG

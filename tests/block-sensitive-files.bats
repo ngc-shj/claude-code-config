@@ -269,3 +269,113 @@ run_hook() {
   run bash -c "HOME='$HOME/' bash '$SCRIPT'" <<< "$input"
   [[ "$output" == *'"decision":"block"'* ]]
 }
+
+# ============================================================
+# Path-equivalence — a literal `case` compares strings, and these all name a
+# guarded file while spelling it differently. Each was an approve before the
+# normalization pass.
+# ============================================================
+
+@test "deny: a doubled slash inside the protected path" {
+  run run_hook Edit "$HOME/.claude//skills/triangulate/SKILL.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: a /./ component inside the protected path" {
+  run run_hook Edit "$HOME/.claude/./skills/triangulate/SKILL.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: a literal-tilde path with a /./ component" {
+  # Cannot be resolved against the filesystem, so the lexical pass is the only
+  # thing that reaches it.
+  run run_hook Edit "~/.claude/./skills/triangulate/SKILL.md"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: an intermediate .. that lands back inside the protected tree" {
+  run run_hook Edit "$HOME/.claude/projects/../hooks/block-sensitive-files.sh"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny: a not-yet-created file under a protected directory" {
+  # The resolver walks up to the deepest EXISTING ancestor and re-attaches the
+  # rest, so a first write to a new file is matched too.
+  run run_hook Write "$HOME/.claude/hooks/does-not-exist-yet.sh"
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "approve: .. that leaves the protected tree is not blocked by it" {
+  run run_hook Edit "$HOME/.claude/hooks/../../scratch/notes.md"
+  [[ "$output" == *'"decision": "approve"'* ]]
+}
+
+# ============================================================
+# Bash tool — the other door to the same files. install.sh overwrites the
+# installed tree, and a session that rewrites its own hooks can disable the
+# tripwires meant to catch it, so a write verb aimed at a protected path is
+# refused. Heuristic by construction: read-only work on the same paths, and
+# writes anywhere else, must stay free.
+# ============================================================
+
+run_bash_hook() {
+  local cmd="$1" input
+  input=$(jq -nc --arg c "$cmd" '{tool_name:"Bash", tool_input:{command:$c}}')
+  printf '%s' "$input" | bash "$SCRIPT"
+}
+
+@test "deny (Bash): sed -i against an installed hook" {
+  run run_bash_hook 'sed -i "s/x/y/" ~/.claude/hooks/block-sensitive-files.sh'
+  [[ "$output" == *'"decision":"block"'* ]]
+  [[ "$output" == *"install.sh overwrites that tree"* ]]
+}
+
+@test "deny (Bash): redirect into the installed hooks directory" {
+  run run_bash_hook 'echo x > $HOME/.claude/hooks/evil.sh'
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny (Bash): cp over an installed skill file" {
+  run run_bash_hook 'cp /tmp/x ~/.claude/skills/triangulate/SKILL.md'
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny (Bash): tee into an installed rules file" {
+  run run_bash_hook 'cat /tmp/x | tee ~/.claude/rules/common/security.md'
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny (Bash): rm of an installed hook" {
+  run run_bash_hook 'rm ~/.claude/hooks/check-rule-sync.sh'
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "deny (Bash): append to the installed CLAUDE.md by absolute path" {
+  run run_bash_hook 'printf x >> /home/someone/.claude/CLAUDE.md'
+  [[ "$output" == *'"decision":"block"'* ]]
+}
+
+@test "approve (Bash): running an installed hook" {
+  # The guard must not make the hooks unusable — every skill invokes them.
+  run run_bash_hook 'bash ~/.claude/hooks/check-rule-sync.sh'
+  [[ "$output" == *'"decision": "approve"'* ]]
+}
+
+@test "approve (Bash): reading and grepping protected paths" {
+  run run_bash_hook 'cat ~/.claude/skills/triangulate/SKILL.md'
+  [[ "$output" == *'"decision": "approve"'* ]]
+  run run_bash_hook 'grep -rn END-OF-PHASE ~/.claude/skills/'
+  [[ "$output" == *'"decision": "approve"'* ]]
+}
+
+@test "approve (Bash): install.sh itself" {
+  # The sanctioned writer. It names no protected path on the command line —
+  # blocking it would make the documented workflow impossible.
+  run run_bash_hook 'bash ./install.sh'
+  [[ "$output" == *'"decision": "approve"'* ]]
+}
+
+@test "approve (Bash): a write verb aimed somewhere else" {
+  run run_bash_hook 'cp hooks/x.sh /tmp/y.sh'
+  [[ "$output" == *'"decision": "approve"'* ]]
+}

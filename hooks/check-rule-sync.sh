@@ -414,16 +414,36 @@ for pf in "$SKILL_DIR"/phases/phase-*.md; do
   # one there is the fail-OPEN direction, because two such literal backtick
   # lines desync the toggle with even parity and every column-0 line between
   # them is skipped. Ignoring them can only over-count headings, which reds.
-  if [ "$(awk '/^ ? ? ?```/ { n++ } END { print (n % 2) }' "$pf")" != "0" ]; then
+  # One pass, one fence state machine — a parity counter and a separate toggle
+  # were two implementations of the same rule and could disagree. Fences are
+  # tracked per CommonMark: either marker character, 3+ long, closed only by the
+  # SAME character at least as long with nothing but whitespace after it.
+  # Tilde fences are not decoration: `~~~` around a step renders the step as
+  # code, so a reader stops executing it — and a backtick-only scanner keeps
+  # counting the heading, so the manifest still declares a step nobody performs.
+  # That is the fail-OPEN direction, and the inverse of the backtick case where
+  # an unrecognised fence merely over-counts.
+  scan=$(awk '
+    {
+      match($0, /^ ? ? ?/); ind = RLENGTH
+      body = substr($0, ind + 1)
+      if (match(body, /^(`{3,}|~{3,})/)) {
+        marker = substr(body, 1, RLENGTH); ch = substr(marker, 1, 1); len = RLENGTH
+        if (!fence) { fence = 1; fch = ch; flen = len; next }
+        if (ch == fch && len >= flen && substr(body, len + 1) ~ /^[ \t]*$/) { fence = 0 }
+        next
+      }
+      if (fence) next
+      if (match(body, /^### Step [0-9]+-[0-9]+[a-z]?/)) {
+        if (match(body, /[0-9]+-[0-9]+[a-z]?/)) print "ID " substr(body, RSTART, RLENGTH)
+      }
+    }
+    END { if (fence) print "OPEN" }
+  ' "$pf")
+  if printf '%s\n' "$scan" | grep -qx 'OPEN'; then
     drift "$base: unbalanced code fence at EOF — the '### Step' scan cannot be trusted"
   fi
-  heading_ids=$(awk '
-    /^ ? ? ?```/ { fence = 1 - fence; next }
-    fence { next }
-    /^ ? ? ?### Step [0-9]+-[0-9]+[a-z]?/ {
-      if (match($0, /[0-9]+-[0-9]+[a-z]?/)) print substr($0, RSTART, RLENGTH)
-    }
-  ' "$pf")
+  heading_ids=$(printf '%s\n' "$scan" | sed -n 's/^ID //p')
   heading_count=$(printf '%s' "$heading_ids" | grep -c . || true)
   heading_joined=$(printf '%s\n' "$heading_ids" | grep . | tr '\n' ',' | sed 's/,$//; s/,/, /g')
 

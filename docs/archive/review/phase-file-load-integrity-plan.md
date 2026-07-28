@@ -123,7 +123,10 @@ tail-bound form.
 **Non-functional**
 
 - N1: `SKILL.md` grows by ≤ 12 lines; no other always-loaded context is added.
-- N2: No new hook process, no new `settings.json` wiring, no new install-time step.
+- N2: No new hook process, no new install-time step. *(Amended in Phase 3: one `settings.json`
+  wiring line was added — the existing hook is now also matched on `Bash`. See D15; the constraint
+  was about not growing the hook surface, and the alternative to wiring was leaving every guarded
+  file writable through a shell command.)*
 - N3: Both layouts pass — the repo copy and the `cp -r`-installed `~/.claude` copy (RT9 twins) —
   exercised through the **zero-argument** self-relative default (`check-rule-sync.sh:36`), which
   no test covers today.
@@ -765,36 +768,29 @@ of the generated file — one `echo` **after** the awk pass, inside the existing
   honest readers, not an adversary, who edits the file rather than the read. Owner: raise with the
   user after this change.
   `TODO(phase-file-load-integrity): reconsider a PreToolUse deny for Bash whole-file reads of skills/**/*.md`.
-- `SC4` — **Two pre-existing bypasses of `block-sensitive-files.sh`**, neither introduced nor
-  widened by C6, both recorded so C6's fixture set is knowingly bounded:
-  (a) the hook is wired to `Edit|Write|MultiEdit` only (`settings.json:200`), so a Bash redirect
-  bypasses it even for the paths it covers; (b) it matches `$FILE_PATH` literally with no
-  `realpath` normalization. **Corrected in Phase 3 after the cited examples were executed**: the
-  in-tree `..` form this entry originally named actually *blocks* (it matches a sibling arm, with
-  the wrong message — cosmetic). The forms that genuinely evade are `$HOME/.claude//hooks/x.sh`
-  (double slash), `$HOME/.claude/./hooks/x.sh`, `$HOME/./.claude/hooks/x.sh`,
-  `$HOME/.claude/../.claude/hooks/x.sh`, a relative `.claude/hooks/x.sh`, and a symlink alias.
-  A deferral whose examples are wrong is worse than none — a follow-up scoped to the old list
-  would have closed nothing.
-  **The cost estimate was also wrong**: this is one canonicalization into a variable above the
-  `case`, reusing the primitive this repo already owns (`_containment_check` in
-  `hooks/retro-prescreen.sh`, `cd -P` chain-chasing under a hop cap, bash-3.2/BSD-portable), not
-  "normalizing untrusted paths in every arm". And the likelihood assessment predates C6, which
-  made this hook the sole control over `~/.claude/{hooks/**, rules/**, skills/**}` — including
-  `hooks/lib/ast-runner.js`, the engine the detection hooks call. Commit `82449bb`, one commit
-  back on `main`, treated the identical class (a hook canonicalizing an untrusted path for a
-  containment decision) as Critical across three hooks.
-  **Still deferred, deliberately**: adding path canonicalization to a security hook is a
-  change of the same weight as C6 itself and would land without the review depth the rest of this
-  branch received. The honest disposition is a corrected, accurately-costed follow-up rather than
-  a late edit to a guard. Owner: next branch, before any further work depends on this hook.
-  *(A third weakness — `$HOME`-shape sensitivity — was found in r3 and is **fixed in this change**,
-  not deferred: see C6's normalization block.)* Anti-Deferral: worst case — an agent writing under
-  `~/.claude/**` by redirect or traversal is ungated; likelihood — low (no workflow in this repo
-  writes there that way; `install.sh` uses `cp`); cost — (a) means parsing redirection targets out
-  of arbitrary command strings, (b) means normalizing untrusted paths in every arm, which commit
-  `82449bb` shows this repo treats as a real contract when it is in scope. Owner: follow-up issue,
-  as one change covering both. `TODO(phase-file-load-integrity): block-sensitive-files.sh — Edit/Write/MultiEdit-only wiring and unnormalized path matching`.
+- `SC4` — **Two pre-existing bypasses of `block-sensitive-files.sh`, both closed in this change
+  after the user's pre-merge security review reproduced them.** Recorded here rather than deleted,
+  because the reasoning that deferred them was wrong in a way worth keeping visible.
+  - (a) The hook was wired to `Edit|Write|MultiEdit` only, so `sed -i`, a `>` redirect, `cp`, `tee`
+    and friends reached every guarded file — including this hook, after which nothing is guarded.
+    **Closed**: the hook is now wired to `Bash` as well and refuses a command that pairs a
+    protected path with a write verb. Stated plainly in the code as a *tripwire*, not a parser —
+    deciding what an arbitrary shell command writes is undecidable, and the repo's other
+    `block-*.sh` hooks are the same shape. It raises the cost of an accident and of a careless
+    rewrite; `settings.local.json` remains the sanctioned escape.
+  - (b) `case` compared the raw string, so `//`, `/./`, an intermediate `..`, a literal-tilde
+    variant and a symlink alias each named a guarded file while spelling it differently.
+    **Closed**: a lexical pass (which is the only thing that can reach the un-expandable
+    `~/...` forms) followed by physical resolution of the deepest existing ancestor via `cd -P`,
+    with the arms run over both forms. The fixtures also caught an over-block the old code had:
+    `~/.claude/hooks/../../scratch/notes.md` leaves the guarded tree and was being refused.
+  - **What the deferral got wrong, kept as the lesson**: the entry's own cited example (in-tree
+    `..`) did not evade — it matched a sibling arm — while the forms that did evade were unnamed,
+    so a follow-up scoped to that list would have closed nothing. The cost was overstated by
+    roughly an order of magnitude. And the likelihood assessment predated C6, which made this hook
+    the sole control over `~/.claude/{hooks,rules,skills}/**`. A deferral is a claim about worst
+    case, likelihood and cost; all three were wrong, and none of that was visible until someone
+    executed the examples.
 
 ## User operation scenarios
 
