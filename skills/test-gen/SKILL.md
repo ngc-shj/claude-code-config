@@ -141,9 +141,11 @@ Review generated tests for completeness:
   bash ~/.claude/hooks/check-vacuous-denial.sh "$BASE_REF"
   # RT4 — race/cardinality test with no both-branches-occurred guard
   bash ~/.claude/hooks/check-race-vacuous-guard.sh "$BASE_REF"
+  # RT10 — guard suite with no allow-shaped assertion anywhere in the file
+  bash ~/.claude/hooks/check-deny-only-guard.sh "$BASE_REF"
   ```
 
-  Any finding here is a vacuous test the generator just wrote — fix it before reporting completion (add the missing negative / lower-bound assertion), do not defer to a later review round. **Scope caveat**: both hooks are **Jest/Vitest TS/JS only** (v1) and are no-ops for pytest / Go / RSpec / other frameworks — for those, the RT8/RT4 obligations (#10/#11 above) are a manual review of the generated denial/race tests, not a mechanical gate. A clean hook run on a non-JS project means "not checked", not "passed".
+  Any finding here is a vacuous test the generator just wrote — fix it before reporting completion (add the missing negative / lower-bound assertion), do not defer to a later review round. **Scope caveat**: the RT8 and RT4 hooks are **Jest/Vitest TS/JS only** (v1); the RT10 hook also covers bats. All three are no-ops for pytest / Go / RSpec — for those, the RT8/RT4/RT10 obligations are a manual review of the generated denial/race/guard tests, not a mechanical gate. On a framework a given hook does not cover, a clean run from that hook means "not checked", not "passed".
 
 If gaps are found, delegate additional test generation to Sonnet.
 
