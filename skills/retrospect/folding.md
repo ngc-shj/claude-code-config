@@ -89,7 +89,16 @@ skip — a noisy hook is worse than none.
    (`skills/triangulate/phases/phase-2-coding.md`, Step 2-5 pre-steps) when it should run
    every implementation round.
 5. If model-invocable, add `Bash(bash ~/.claude/hooks/check-<slug>.sh *)` to
-   `settings.json` `permissions.allow`.
+   `settings.json` `permissions.allow`. A hook that executes caller-supplied argv is the
+   exception — a `*`-suffixed entry there launders the deny/ask lists, whose patterns are
+   anchored on the leading command token and cannot see past a wrapper. Argue such a hook
+   in explicitly or leave it out.
+6. If the hook belongs to the RT-family of test-quality detectors, register it in
+   `skills/test-gen/SKILL.md`'s post-generation block as well — that closes the
+   generate→verify loop, since test-gen is the skill that writes the tests these hooks
+   later catch in review. Update the scope caveat beside that block in the same edit: it
+   states which frameworks each hook covers, and a hook with different coverage makes the
+   existing sentence false in both directions.
 
 ## 4. Gates (mandatory, in order)
 

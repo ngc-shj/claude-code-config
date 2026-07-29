@@ -162,6 +162,8 @@
       "Bash(bash ~/.claude/hooks/check-input-validation.sh *)",
       "Bash(bash ~/.claude/hooks/check-race-vacuous-guard.sh)",
       "Bash(bash ~/.claude/hooks/check-race-vacuous-guard.sh *)",
+      "Bash(bash ~/.claude/hooks/check-deny-only-guard.sh)",
+      "Bash(bash ~/.claude/hooks/check-deny-only-guard.sh *)",
       "Bash(bash ~/.claude/hooks/check-rule-sync.sh)",
       "Bash(bash ~/.claude/hooks/check-rule-sync.sh *)",
       "Bash(bash ~/.claude/hooks/retro-state.sh *)",
