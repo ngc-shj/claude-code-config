@@ -129,7 +129,16 @@ trap _dog_cleanup EXIT
 # output, and an ANSI escape rewrites the terminal. `%q` leaves an ordinary
 # path untouched and renders a control byte as `$'\033'`. Internal handling
 # stays NUL-framed and raw; only the display form is escaped.
-_dog_display() { printf '%q' "$1"; }
+#
+# LC_ALL=C is load-bearing. Under a UTF-8 locale `%q` treats U+202E
+# (RIGHT-TO-LEFT OVERRIDE) and its siblings as ordinary printable characters
+# and emits them raw, so a filename can still reverse the rendering of the
+# diagnostic around it. Byte-wise escaping makes the rule a whitelist —
+# ASCII printables pass, every other byte is escaped — rather than an
+# enumeration of dangerous code points, which reopens with each Unicode
+# revision. The cost is real and accepted: a legitimate non-ASCII filename
+# is shown as octal escapes rather than as itself.
+_dog_display() { LC_ALL=C printf '%q' "$1"; }
 
 BASE_REF="${1:-main}"
 

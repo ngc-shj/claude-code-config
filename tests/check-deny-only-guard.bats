@@ -390,6 +390,19 @@ big_paired_bats() {
   [[ "$output" == *"Total findings: 1"* ]]
 }
 
+@test "a filename cannot carry bidi override bytes into the report" {
+  # U+202E reverses the rendering of the text around it. Under a UTF-8 locale
+  # `%q` treats it as printable and passes it through; the escaping is pinned
+  # to the C locale so every non-ASCII byte is escaped instead.
+  RLO="$(printf '\342\200\256')"
+  printf '[ "$status" -eq 1 ]\n' > "tests/a${RLO}b.bats"
+  commit_tests
+  run bash "$HOOK" "$BASE"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"$RLO"* ]]
+  [[ "$output" == *"Total findings: 1"* ]]
+}
+
 @test "an ordinary filename is displayed unescaped" {
   # The paired allow case for the escaping: normal reports must stay readable.
   deny_only_bats guard.bats
