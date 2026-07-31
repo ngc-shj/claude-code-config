@@ -254,14 +254,18 @@ platform-maximum identifiers, values produced by a machine caller rather than an
 operator.
 
 **Disposition.** `Extends-R48`. Grep evidence over `common-rules.md` and
-`rule-details/`: `never stricter` = 0 hits, `over-block` = 0, and `fail-closed` = 0
-within the R48 row itself. `false block` = 1 hit — inside R48's own body, the symmetry
-observation quoted below. `availability` = 2 hits, both unrelated senses (R50 clause
-(iv)'s "Unavailability of the pinned tool", RT7 shape (e)'s "gate matcher availability");
-neither is service availability as a severity direction. R48's severity line names only
-the fail-open direction, and its body's "denies what the stronger would allow (a false
-block)" is stated as a symmetry observation with no obligation and no severity attached.
-Considered RT10 (the test-time
+`rule-details/`: `never stricter` = 0 hits, and `fail-closed` = 0 within the R48 row
+itself. `over-block` = **1** hit — RT10's row, "Over-blocking is not the safe direction
+in practice; a guard that denies legitimate work gets disabled…", which is this
+direction's *test-time* statement and the counterpart named two sentences below; R48's
+own row remains silent on it. (An earlier draft of this disposition recorded 0 and was
+corrected by re-running the query.) `false block` = 1 hit — inside R48's own body, the
+symmetry observation quoted below. `availability` = 2 hits, both unrelated senses (R50
+clause (iv)'s "Unavailability of the pinned tool", RT7 shape (e)'s "gate matcher
+availability"); neither is service availability as a severity direction. R48's severity
+line names only the fail-open direction, and its body's "denies what the stronger would
+allow (a false block)" is stated as a symmetry observation with no obligation and no
+severity attached. Considered RT10 (the test-time
 obligation, already folded at 2026-07-27's successor round — this is its design-time
 counterpart), R16 (covers "no test environment reaches it", not the divergence), R43
 (one boundary widened, not two predicates).
@@ -285,27 +289,58 @@ the two.
 
 ---
 
-## Tooling defect found while running this pipeline
+## Tooling defects found while running this pipeline
 
-`retro-prescreen.sh` records each repository's cursor at whole-second precision
-(`stat -c %Y`) but selects candidates with `find -newer`, which compares at the
-filesystem's nanosecond precision against a reference file materialized by `touch -t` —
-also whole seconds, so `.000000000`. Every file whose mtime falls in the same second as
-the recorded cursor with a non-zero fractional part is therefore strictly newer on every
-run, while recomputing the cursor from `%Y` lands on the same whole second again. The
-cursor is a fixed point: those files are re-mined forever and the source's candidate set
-never drains.
+Two independent defects in `retro-prescreen.sh`, both in the cursor machinery, and the
+first is why the second's evidence had to be re-taken.
 
-Executed evidence: one repository's four candidate files all carry `%Y` = 1784047446
-with fractional parts `.8443`–`.8445`, against a recorded cursor of the same second.
-That cursor has not advanced across the last two runs and those four files were mined
-in both.
+**(1) The reference file was built in the wrong timezone.** `_mtime_ref_file` rendered the
+cursor's stamp with `date -u` and handed it to `touch -t`, which parses in the LOCAL zone
+— so the reference landed one UTC offset away from the cursor it represents. Measured:
+`TZ=Asia/Tokyo` → −32400 s, `TZ=UTC` → 0, `TZ=America/New_York` → +14400 s. East of UTC
+the reference is too early and `find` is merely over-permissive; **west of UTC it is too
+late, and `find` drops candidates the authoritative comparison would have accepted** —
+the pre-filter deciding, which is exactly what R47 sub-clause (c) forbids and what this
+function's own containment argument assumes it cannot do.
 
-Fixed here by making the whole-second ISO comparison authoritative in the candidate loop
-and demoting `find -newer` to the cheap pre-filter it can correctly be — the producer of
-the cursor and the consumer of the cursor now use one representation, which is R48's own
-discipline applied to this repository's tooling. Cost: a file written later in the same
-second as a run is skipped, which is the semantics a whole-second cursor already claims.
+**(2) The cursor was a fixed point.** The cursor is recorded at whole-second precision
+(`stat -c %Y`) while `find -newer` compares at the filesystem's nanosecond precision
+against a reference materialized by `touch -t`, i.e. at `.000000000`. A file whose mtime
+falls in the cursor's own second with a non-zero fraction is therefore strictly newer on
+every run, while recomputing the cursor from `%Y` lands on that same second again — so
+those files are re-mined forever and the source never drains.
+
+**On the evidence.** The observation that prompted this — one repository's four candidate
+files all carrying `%Y` = 1784047446 with fractions `.8443`–`.8445` against a recorded
+cursor of the same second, re-mined across two consecutive runs — is real, but it does
+**not** isolate defect (2). This machine runs `TZ=Asia/Tokyo`, so defect (1) placed the
+reference nine hours before the cursor and those four files would have re-qualified with
+or without a fractional part. Defect (2) is nonetheless independently real: with (1)
+fixed, the reference sits at exactly `<cursor>.000000000` and a `.8443` file is still
+strictly newer. Each is now pinned by its own test, and each test was red-proved by its
+own single mutation. This correction is itself the lesson-3 mechanism (a mutation that
+reds for a reason other than the one claimed) landing on this document.
+
+**Fixed here.** (1) The stamp is rendered locally, matching `touch -t`'s parsing. (2) The
+whole-second ISO comparison is the authority in the candidate loop and `find -newer` is
+demoted to a pre-filter — producer and consumer now share one representation, R48's own
+discipline applied to this repository's tooling. Three further defects the review surfaced
+in the same machinery are fixed alongside: a failed `stat` was spelled as epoch 0 and so
+read as "older than any cursor", inverting the file's documented fail direction into
+"nothing matched" — it now degrades to "everything is new" and says so on stderr; a single
+future-dated artifact (a clock-skewed copy, a restored backup) could drive the persisted
+cursor arbitrarily far forward and exclude every artifact in that repository from then on
+while the source kept reporting success, so the cursor is now clamped to the present; and
+the identical `%Y` + `find -newer` pair in the transcripts source carried the identical
+fixed point, which R3 says is a member of the same class and is now closed too.
+
+**Declared residual.** An artifact written into the cursor's own second *after* the run
+that recorded it is skipped **permanently**, not deferred — its mtime never changes and
+the cursor never moves back. The window is under one second per repository per run, and
+the suppression is now announced on stderr rather than left silent. Eliminating it
+outright would mean recording cursors at sub-second precision, which widens the state
+file's validation contract; that is recorded as a deferred item below rather than taken
+on inside a retrospective fold.
 
 ---
 
@@ -328,6 +363,8 @@ folding them would push a rule row past its routing-summary role. Revisit on rec
 | Check and dependent mutation split across concurrency domains | An await point or thread hop between check and mutation is the transaction gap, at the in-process layer R5 does not reach | `Extends-R5` |
 | Bipolar classifier with mismatched generality | A negative side specified generally and a positive side enumerated routes every unenumerated case to the general side's verdict; measured 130 fires versus 1 on the same corpus after making both sides symmetric | `Extends-R47` |
 | A broad directive whose plain reading negates a narrower one | Two directives govern one behavioural predicate at different scopes; the broad one is loaded first and unconditionally, so its silence is read as permission | `Extends-R48` |
+| This repo's own gates do not meet R50 clause (ii) | Eleven `check-*.sh` hooks widen their exclude regex straight from `EXTRA_EXCLUDE_PATH_RE` without asserting it unset, and none emits an analysed-subject count — so the clause folded this round is, today, a claim stronger than the implementation (R49) in the catalog's own tooling. Closing it means an analysed-count and active-override report in the shared scan helper, plus a non-zero exit when an override empties the scanned set | Code work in `hooks/scan-shared-utils.sh`, not a rule edit — out of scope for a fold, tracked here |
+| Sub-second cursor precision | Recording cursors at whole seconds leaves a bounded permanent-skip window (see above). Removing it means widening `_is_iso`'s contract and the frontmatter scalar shape, which touches the state file's validation chokepoint | Follow-up change, deliberately not bundled with a rule fold |
 
 ## Disposition summary
 

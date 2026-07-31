@@ -37,6 +37,30 @@ set_mtime_ago() {
     || python3 -c "import os; os.utime('$file', ($target_ts, $target_ts))" 2>/dev/null || true
 }
 
+# Epoch seconds -> the whole-second ISO-8601 spelling the cursors use. One
+# definition rather than the format string re-spelled per call site (RT3).
+iso_at() {
+  date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ
+}
+
+# Set an mtime to an exact whole-second + nanosecond pair. `os.utime(ns=)` is
+# the portable spelling — `touch -t` carries only second granularity and
+# `touch -d @sec.frac` is GNU-only, so a fraction must be CONSTRUCTED here
+# rather than inherited from whenever the file happened to be written.
+set_mtime_frac() {
+  local file="$1" secs="$2" nsec="$3"
+  python3 -c "import os,sys; t=int(sys.argv[2])*10**9+int(sys.argv[3]); os.utime(sys.argv[1], ns=(t,t))" \
+    "$file" "$secs" "$nsec"
+}
+
+# Did the filesystem PRESERVE the fraction we just set? Asserted, not inferred:
+# on a second-granularity filesystem the sub-second cases would be excluded by
+# `find -newer` alone and would pass vacuously. Portable — it compares mtimes
+# through python rather than parsing a `stat` format string.
+fs_keeps_subsecond() {
+  python3 -c "import os,sys; sys.exit(0 if os.stat(sys.argv[1]).st_mtime_ns % 10**9 else 1)" "$1"
+}
+
 write_config() {
   # jq-edited from the shipped C5 example so schema drift breaks tests
   # instead of hiding (RT3). Forwards all args to jq, so callers may pass
@@ -178,6 +202,11 @@ setup() {
   export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/xdg-runtime"
   export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/xdg-cache"
   mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME"
+  # The subject's own scratch sink: `_mtime_ref_file` calls bare `mktemp`, so
+  # without this its reference files land in shared system temp instead of the
+  # tree this test reclaims (RT11 — scope every mutable sink the subject
+  # touches, do not assume the scratch-directory pattern covers it).
+  export TMPDIR="$BATS_TEST_TMPDIR"
 
   unset LLM_BACKEND OPENAI_HOST OPENAI_HOSTS LLM_TRUSTED_HOSTS OLLAMA_HOST OLLAMA_EXTRA_HOSTS
   unset CLAUDE_SESSION_ID
@@ -367,17 +396,18 @@ setup_artifacts_repo() {
   local f="$repo/docs/archive/review/boundary-review.md"
   echo "boundary" > "$f"
 
-  # Precondition: this filesystem must record a sub-second mtime, or the file
-  # would be excluded by `-newer` alone and the case would pass vacuously.
-  local frac
-  frac=$(stat -c %y "$f" 2>/dev/null | sed -n 's/.*\.\([0-9]*\).*/\1/p')
-  [ -n "$frac" ] || skip "filesystem does not expose sub-second mtime"
-  [ "$((10#$frac))" -gt 0 ] || skip "mtime landed exactly on a second boundary"
+  # CONSTRUCT the fractional mtime rather than observing it: reading it back
+  # with `stat -c %y` is GNU-only, so on BSD the case would skip permanently
+  # while blaming the filesystem for what is a missing command fallback.
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 844377201
+  # Precondition, now asserted rather than inferred: the filesystem must have
+  # PRESERVED the fraction. Without it the file is excluded by `-newer` alone
+  # and the case would pass vacuously under the buggy implementation too.
+  fs_keeps_subsecond "$f" || skip "filesystem did not preserve a sub-second mtime"
 
-  local secs
-  secs=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
   seed_state
-  mark_high_water artifacts "{\"$repo\": \"$(date -u -d "@$secs" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$secs" +%Y-%m-%dT%H:%M:%SZ)\"}"
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at "$secs")\"}"
   setup_curl_fail_mock
   export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
 
@@ -385,9 +415,28 @@ setup_artifacts_repo() {
   [ "$status" -eq 0 ]
   run jq -e '.candidates | length == 0' <<<"$DOC"
   [ "$status" -eq 0 ]
-  # The cursor must not regress below the value it already held.
-  run jq -e --arg r "$repo" --arg hw "$(date -u -d "@$secs" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$secs" +%Y-%m-%dT%H:%M:%SZ)" \
-    '.high_water[$r] == $hw' <<<"$DOC"
+}
+
+# Split out of the case above so each assertion has its own mutant (RT7 shape
+# (g)(i)): under the deny case's mutation bats aborts before reaching this one,
+# so it would otherwise ride along unproven.
+@test "artifacts: cursor does not regress when every candidate is suppressed" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/boundary-review.md"
+  echo "boundary" > "$f"
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 844377201
+  fs_keeps_subsecond "$f" || skip "filesystem did not preserve a sub-second mtime"
+
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at "$secs")\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e --arg r "$repo" --arg hw "$(iso_at "$secs")" '.high_water[$r] == $hw' <<<"$DOC"
   [ "$status" -eq 0 ]
 }
 
@@ -402,8 +451,7 @@ setup_artifacts_repo() {
   secs=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
   seed_state
   # Cursor one second BEFORE the file's own second.
-  local prev=$(( secs - 1 ))
-  mark_high_water artifacts "{\"$repo\": \"$(date -u -d "@$prev" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$prev" +%Y-%m-%dT%H:%M:%SZ)\"}"
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at $(( secs - 1 )))\"}"
   setup_curl_fail_mock
   export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
 
@@ -412,6 +460,149 @@ setup_artifacts_repo() {
   run jq -e '.candidates | length == 1' <<<"$DOC"
   [ "$status" -eq 0 ]
   run jq -e --arg p "$f" '.candidates[0].path == $p' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+# The candidate loop iterates files-per-repo, and every other artifacts fixture
+# has cardinality 1 on that dimension — so `> $repo_hw` and `> $repo_max` were
+# indistinguishable to the whole suite, though the latter silently drops any
+# qualifying file processed after a newer sibling (RT7 empty-oracle sub-clause).
+@test "artifacts: two qualifying files in one repo both appear, cursor takes the max" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local older="$repo/docs/archive/review/a-review.md"
+  local newer="$repo/docs/archive/review/b-review.md"
+  echo a > "$older"; echo b > "$newer"
+  local base=1784047500
+  # Materialize the newer file FIRST in mtime order but leave directory order
+  # alone, so whichever order `find` yields, one qualifying file follows a file
+  # with a strictly greater mtime.
+  set_mtime_frac "$older" "$base" 0
+  set_mtime_frac "$newer" "$(( base + 60 ))" 0
+
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at $(( base - 60 )))\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 2' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg p "$older" '[.candidates[].path] | index($p) != null' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg p "$newer" '[.candidates[].path] | index($p) != null' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg r "$repo" --arg hw "$(iso_at $(( base + 60 )))" '.high_water[$r] == $hw' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+# `touch -t` parses its stamp in the LOCAL zone. Rendering that stamp with
+# `date -u` shifted the `-newer` reference by the UTC offset, and west of UTC
+# the reference landed AFTER the cursor — so the pre-filter dropped candidates
+# the authoritative comparison would have accepted. Reds against the -u form.
+@test "artifacts: candidate past the cursor still qualifies west of UTC" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/tz-review.md"
+  echo tz > "$f"
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 0
+  seed_state
+  # Cursor two seconds back: well inside any UTC offset's shift, so only the
+  # offset bug can push the reference past the file.
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at $(( secs - 2 )))\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434" TZ="America/New_York"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+# A single future-dated artifact must not drive the persisted cursor past the
+# present, which would exclude every artifact in the repository from then on
+# while the source keeps reporting success and an empty candidate list.
+@test "artifacts: a future-dated artifact does not push the cursor past now" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/future-review.md"
+  echo future > "$f"
+  set_mtime_frac "$f" 4102444800 0   # 2100-01-01T00:00:00Z
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  # Still mined this run — the clamp bounds the CURSOR, not the candidate set.
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg r "$repo" --arg now "$(iso_at "$(date -u +%s)")" '.high_water[$r] <= $now' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"future mtime"* ]]
+}
+
+# An unreadable mtime must degrade to "everything is new" — the direction
+# _mtime_ref_file's own comment commits to — not to "older than any cursor".
+# Spelling a failed stat as epoch 0 made the comparison drop the candidate,
+# turning a broken toolchain into an empty-and-successful report (R50 (ii)).
+@test "artifacts: an unreadable mtime keeps the candidate and warns" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/nostat-review.md"
+  echo nostat > "$f"
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  # Shadow `stat` only for the subject's own invocation, after every helper
+  # that needs a working stat has already run.
+  cat > "$BATS_TEST_TMPDIR/stat" <<'EOF'
+#!/bin/bash
+exit 1
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/stat"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"cannot read mtime"* ]]
+}
+
+# End-to-end drain property: the emitted cursor, fed back through mark-run,
+# must empty the source. This is also the only case where the cursor compared
+# against is the one PRODUCTION computed (jq `todate`) rather than one the test
+# hand-spelled with `date`.
+@test "artifacts: high_water round-trips into mark-run and drains the source" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/rt-review.md"
+  echo roundtrip > "$f"
+  set_mtime_frac "$f" 1784047446 0
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+
+  # Feed the produced high_water back in, exactly as Step 9 of the pipeline does.
+  local hwfile="$BATS_TEST_TMPDIR/hw-roundtrip.json"
+  jq -c '.high_water' <<<"$DOC" > "$hwfile"
+  RETRO_CONFIG="$CONFIG" RETRO_STATE="$STATE" RETRO_NOW="$NOW" \
+    bash "$STATE_CLI" mark-run artifacts --high-water-file "$hwfile" >/dev/null 2>&1
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 0' <<<"$DOC"
   [ "$status" -eq 0 ]
 }
 

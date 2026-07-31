@@ -83,6 +83,16 @@ per source (parallel when multiple). Every sub-agent receives:
    extract or pass the full table prose from `common-rules.md`.
 3. The source file's procedure and prohibitions verbatim.
 
+**Partition a large source.** One sub-agent per source is the default, not a cap. When a
+source's candidate corpus exceeds what one agent can hold and still read every file whole
+(~400 KB is a workable slice), split the candidate list by repository or by work item and
+give each partition its own sub-agent, running them in parallel. The invariants are
+unchanged — each agent is read-only, receives its slice as its COMPLETE work queue, and
+the orchestrator re-checks `git status --porcelain` after each returns. Record the
+partitioning in the retrospective doc: disposition counts are then per-partition, and the
+same mechanism surfacing in two partitions is convergence evidence rather than a
+duplicate.
+
 Sub-agents return candidate lessons as text: one block per lesson in
 Symptom / Root cause / Fix / Proposed-disposition form, each citing its provenance
 (artifact path, PR number, lesson index, or URL).
@@ -111,12 +121,20 @@ Disposition summary table. Frontmatter (the durable state backup — scalars onl
 ---
 sources: [artifacts]
 cursors:
-  artifacts: <max ISO timestamp this run advanced to>
-  github: <max updatedAt, when run>
+  artifacts: <MINIMUM per-repo ISO cursor after this run>
+  github: <MINIMUM per-repo updatedAt, when run>
   transcripts: <max mtime ISO, when run>
 # scout omitted by design: url->hash cursors have no scalar form; recovery = re-fetch
 ---
 ```
+
+Record the artifacts and github cursors as the per-repo **minimum**, not the maximum.
+Their live cursors are per-repo maps, and a scalar cannot reconstruct a map: restoring
+every repo to the global maximum would silently skip everything unmined in whichever repo
+lagged (the gap has been weeks). The minimum is the only value that is safe in the
+recovery direction — it re-mines already-seen artifacts in the ahead repos, which costs
+sub-agent tokens, rather than dropping unseen ones, which loses the lesson. Transcripts is
+genuinely a scalar.
 
 Never place repo paths, URLs, or other config keys in a committed file.
 
