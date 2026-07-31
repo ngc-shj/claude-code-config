@@ -38,6 +38,10 @@ cmd_summarize_diff() {
     600
 }
 
+# NOTE: the Recurring Issue Check line in the prompt below deliberately says
+# `R*` rather than a literal range. This file is outside check-rule-sync.sh's
+# scan list, so a spelled-out upper bound goes stale with no gate to catch it —
+# it read `R1-R28` for 23 rules past that before anyone noticed.
 cmd_merge_findings() {
   _ollama_request "gpt-oss:120b" \
     "You receive review findings from multiple expert agents. Deduplicate, merge, and quality-check them.
@@ -57,7 +61,7 @@ Quality gate — flag findings that fail these checks:
 Append a '## Quality Warnings' section at the end listing any flagged findings. The orchestrator will return these to the expert for revision.
 
 PRESERVE Recurring Issue Check (mandatory, do NOT deduplicate):
-- Each expert's input includes a '## Recurring Issue Check' section listing R1-R28 (and expert-specific RS*/RT*) status.
+- Each expert's input includes a '## Recurring Issue Check' section listing R* (and expert-specific RS*/RT*) status.
 - These are NOT findings — they are checklists proving each pattern was checked.
 - Output them verbatim under a single top-level '## Recurring Issue Check' section, organized by expert (### Functionality expert / ### Security expert / ### Testing expert).
 - Do NOT merge, deduplicate, or summarize the R-codes across experts. Each expert's check status is independent evidence." \
