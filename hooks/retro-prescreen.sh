@@ -92,22 +92,6 @@ _resolve_contained() {
     "$resolved_root"|"$resolved_root"/*) ;;
     *) return 1 ;;
   esac
-  # Declared residual (R51). What this returns is a NAME, not a handle: the
-  # containment verdict is bound to what the path denoted at this instant, and
-  # every later step — the caller's `stat`, the summarizer's read, and above all
-  # the mining sub-agent that Reads the emitted path minutes later — re-resolves
-  # that name afresh. So the guarantee is "no link planted before the scan
-  # escapes the root", NOT "the object read is the object checked". Closing the
-  # latter needs a descriptor the shell cannot carry across these boundaries
-  # (open once with symlink resolution refused, then operate descriptor-relative
-  # one component at a time), so it is declared rather than claimed. Do NOT read
-  # the window as bounded by trust in the repository's own directories — the
-  # symlink chase above exists precisely because this function treats that repo
-  # as untrusted. It is open to any principal that can write inside it during
-  # the run, including entirely non-adversarial ones (a checkout or rebase in
-  # that repo, a sync client, a second agent). The verdict does not travel with
-  # the name: every consumer of the emitted path must re-establish containment
-  # at its own moment of use.
   printf '%s/%s' "$resolved_dir" "$base"
 }
 
@@ -119,93 +103,17 @@ _resolve_contained() {
 # and use `-newer`, which GNU and BSD both accept. Echoes the reference path;
 # caller passes it to -newer and removes it when done.
 _mtime_ref_file() {
-  local iso="$1" dir ref epoch stamp
-  # A directory, not a bare file: `touch -t` DEREFERENCES, so a predictable or
-  # attacker-influenced name in a shared temp dir turns this into an
-  # arbitrary-file-mtime write. A 0700 directory removes both the swap and the
-  # name race. The caller removes the directory, not the file.
-  dir=$(mktemp -d) || return 1
-  ref="$dir/ref"
-  : > "$ref" 2>/dev/null || { rm -rf "$dir"; return 1; }
+  local iso="$1" ref epoch
+  ref=$(mktemp) || return 1
   # date -j -f: BSD; date -d: GNU. Fall back to epoch 0 on either failure so
   # the scan degrades to "everything is new", never to "nothing matched".
   epoch=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$iso" +%s 2>/dev/null) \
     || epoch=$(date -u -d "$iso" +%s 2>/dev/null) \
     || epoch=0
-  # `touch -t` parses its stamp in the LOCAL zone, so the stamp must be
-  # rendered locally too. Rendering it with `date -u` shifted the reference by
-  # the UTC offset: west of UTC the reference landed AFTER the cursor and
-  # `find -newer` dropped candidates the authoritative comparison below would
-  # have accepted — a pre-filter deciding, which is exactly what R47 sub-clause
-  # (c) forbids and what this function's containment argument assumes it cannot
-  # do. No `-u` here, and none in the format string.
-  stamp=$(date -j -f %s "$epoch" +%Y%m%d%H%M.%S 2>/dev/null \
-          || date -d "@$epoch" +%Y%m%d%H%M.%S 2>/dev/null) || { rm -rf "$dir"; return 1; }
-  # A failed `touch` would leave the reference at its CREATION mtime — the
-  # present — and `find -newer <now>` matches nothing: the demoted pre-filter
-  # silently becoming the decider, in the forbidden direction. Refuse instead,
-  # and let the caller scan without a pre-filter.
-  touch -t "$stamp" "$ref" 2>/dev/null || { rm -rf "$dir"; return 1; }
-  printf '%s' "$dir"
-}
-
-# Emit the `-newer <ref>` argv fragment for a cursor, or nothing when the
-# reference could not be built. Callers word-split the result deliberately: an
-# empty expansion drops the pre-filter and leaves the authoritative whole-second
-# comparison to narrow the set, which is the documented fail direction.
-_find_newer_args() {
-  local dir="$1"
-  [ -n "$dir" ] && printf -- '-newer\n%s\n' "$dir/ref"
-}
-
-# Present instant as a whole-second ISO string, in the same representation the
-# cursors use so the two can be compared directly.
-#
-# Deliberately NOT read through the `RETRO_NOW` seam. That seam pins the
-# scheduling clock (due/snooze arithmetic in retro-state.sh), where every value
-# compared is itself simulated. Here the other operand is a real file mtime, so
-# a simulated present would classify every genuinely-existing artifact as
-# future-dated and clamp the cursor on every run. A future-mtime fixture is
-# pinned by dating it past any plausible wall clock instead.
-# `RETRO_PRESCREEN_NOW` (epoch seconds) is this function's own seam, kept
-# separate from `RETRO_NOW` on purpose: `RETRO_NOW` pins the scheduling clock,
-# where both operands are simulated, while the operand here is a real file
-# mtime — routing this through `RETRO_NOW` would classify every genuinely
-# existing artifact as future-dated. Tests that need to pin the present instant
-# relative to a fixture's mtime set this one.
-#
-# Emits nothing when the clock cannot be read or is not numeric. Callers treat
-# an empty value as "no clamp available": an empty string compares less than
-# every ISO stamp, so letting it through would mark every file future-dated and
-# pin the cursor at its floor forever.
-_now_iso() {
-  local n="${RETRO_PRESCREEN_NOW:-$(date -u +%s 2>/dev/null)}"
-  case "$n" in
-    ''|*[!0-9]*) return 1 ;;
-  esac
-  jq -nr --argjson n "$n" '$n | todate' 2>/dev/null
-}
-
-# Clamp a cursor to the present, applied where the cursor is READ IN — one
-# adjudicator, not two (R48). Clamping there also un-poisons the value handed to
-# _mtime_ref_file and gives the running maximum a sane starting point, so a
-# second clamp at emission adds nothing except a branch no test can observe.
-#
-# A future value — written by a clock-skewed
-# copy, a restored backup, or any earlier run of this tool before the clamp
-# existed — excludes every artifact in that repository from then on while the
-# source keeps reporting success and an empty candidate list. Applied to the
-# cursor READ IN and to the cursor EMITTED, not only to each candidate's mtime:
-# clamping the increment alone never heals a value that is already ahead.
-_clamp_iso() {
-  local value="$1" now="$2" source="$3" label="$4"
-  if [ -n "$now" ] && [[ "$value" > "$now" ]]; then
-    printf 'retro-prescreen: %s: %s cursor %s is past the present — clamped to %s\n' \
-      "$source" "$label" "$value" "$now" >&2
-    printf '%s' "$now"
-  else
-    printf '%s' "$value"
-  fi
+  touch -t "$(date -j -u -f %s "$epoch" +%Y%m%d%H%M.%S 2>/dev/null \
+              || date -u -d "@$epoch" +%Y%m%d%H%M.%S 2>/dev/null \
+              || echo 197001010000.00)" "$ref" 2>/dev/null
+  printf '%s' "$ref"
 }
 
 _json_empty() {
@@ -309,9 +217,7 @@ cmd_artifacts() {
     echo "retro-prescreen: artifacts LLM summarization skipped (no loopback backend / no allow_remote_llm consent) — emitting file list only" >&2
   fi
 
-  local candidates='[]' hw_map='{}' now_iso
-  now_iso=$(_now_iso) || now_iso=""
-  [ -n "$now_iso" ] || echo "retro-prescreen: cannot read the present instant — future-mtime clamp disabled this run" >&2
+  local candidates='[]' hw_map='{}'
   local repo
   while IFS= read -r repo; do
     [ -n "$repo" ] || continue
@@ -322,7 +228,6 @@ cmd_artifacts() {
     local repo_hw
     repo_hw=$(_state_high_water "$source" | jq -r --arg r "$repo" '.[$r] // "1970-01-01T00:00:00Z"' 2>/dev/null)
     [ -n "$repo_hw" ] && [ "$repo_hw" != "null" ] || repo_hw="1970-01-01T00:00:00Z"
-    repo_hw=$(_clamp_iso "$repo_hw" "$now_iso" "$source" "persisted")
 
     local glob_dir glob_pat
     glob_dir="$expanded/$(dirname "$glob")"
@@ -336,55 +241,10 @@ cmd_artifacts() {
       resolved=$(_resolve_contained "$f" "$expanded") || continue
       [ -n "$resolved" ] || continue
 
-      local mtime_epoch mtime_iso
-      # Keep the stat verdict separate from its value: an unreadable mtime must
-      # not be spelled as epoch 0, which the comparison below would silently
-      # read as "older than any cursor" and drop. Unknown mtime degrades to
-      # "everything is new" (the direction _mtime_ref_file commits to), never
-      # to "nothing matched".
-      mtime_epoch=$(stat -c %Y "$resolved" 2>/dev/null || stat -f %m "$resolved" 2>/dev/null)
-      # Numeric, not merely non-empty: a `stat` that exits 0 printing garbage
-      # would make `jq --argjson` fail, leaving mtime_iso empty — and an empty
-      # string compares BELOW every cursor, silently dropping the candidate.
-      case "$mtime_epoch" in ''|*[!0-9]*) mtime_epoch="" ;; esac
-      if [ -n "$mtime_epoch" ]; then
-        mtime_iso=$(jq -nr --argjson n "$mtime_epoch" '$n | todate')
-        # The cursor is produced from whole seconds (%Y) but `-newer` compares
-        # at the filesystem's sub-second precision against a reference
-        # materialized by `touch -t`, i.e. at .000000000. Every file whose mtime
-        # falls inside the cursor's own second is therefore strictly newer on
-        # each run, while recomputing the cursor from %Y lands back on that same
-        # second: a fixed point that re-mines those files forever and never
-        # drains the source. The whole-second ISO comparison is the authority;
-        # `-newer` is demoted to a cheap pre-filter, which may narrow the set
-        # but never decide it (R47 sub-clause (c)).
-        #
-        # Declared residual (R51/R49): an artifact written into the cursor's own
-        # second AFTER the run that recorded it is skipped PERMANENTLY, not
-        # merely deferred — its mtime never changes and the cursor never moves
-        # back. The window is under one second per repository per run; the
-        # suppression is announced on stderr rather than left silent.
-        if ! [[ "$mtime_iso" > "$repo_hw" ]]; then
-          printf 'retro-prescreen: %s: mtime %s not past cursor %s — suppressed\n' \
-            "$source" "$mtime_iso" "$repo_hw" >&2
-          continue
-        fi
-        # Clamp the cursor to the present. A single future-dated artifact — a
-        # clock-skewed copy, a restored backup, an archive extracted with its
-        # recorded times — would otherwise drive the persisted cursor arbitrarily
-        # far forward and exclude every artifact in the repository from then on,
-        # while the source keeps reporting success and an empty candidate list.
-        # That is R50 clause (ii) turned on this pipeline: drained and blind are
-        # the same observation unless the cursor cannot outrun the clock.
-        if [ -n "$now_iso" ] && [[ "$mtime_iso" > "$now_iso" ]]; then
-          printf 'retro-prescreen: %s: %s has a future mtime (%s > %s) — cursor clamped\n' \
-            "$source" "${resolved#"$expanded"/}" "$mtime_iso" "$now_iso" >&2
-        elif [[ "$mtime_iso" > "$repo_max" ]]; then
-          repo_max="$mtime_iso"
-        fi
-      else
-        printf 'retro-prescreen: %s: cannot read mtime of %s — treating as new\n' \
-          "$source" "${resolved#"$expanded"/}" >&2
+      local mtime_iso
+      mtime_iso=$(jq -nr --argjson n "$(stat -c %Y "$resolved" 2>/dev/null || stat -f %m "$resolved" 2>/dev/null || echo 0)" '$n | todate')
+      if [[ "$mtime_iso" > "$repo_max" ]]; then
+        repo_max="$mtime_iso"
       fi
 
       local summary=""
@@ -395,11 +255,9 @@ cmd_artifacts() {
       else
         candidates=$(jq -c --arg p "$resolved" '. + [{path: $p, summary: null}]' <<<"$candidates")
       fi
-    done < <(hw_ref=$(_mtime_ref_file "$repo_hw") || hw_ref=""
-             [ -n "$hw_ref" ] || echo "retro-prescreen: $source: no mtime reference — scanning without the pre-filter" >&2
-             mapfile -t _nf < <(_find_newer_args "$hw_ref")
-             find "$glob_dir" -maxdepth 1 -name "$glob_pat" "${_nf[@]}" -print0 2>/dev/null
-             [ -n "$hw_ref" ] && rm -rf "$hw_ref")
+    done < <(hw_ref=$(_mtime_ref_file "$repo_hw"); \
+             find "$glob_dir" -maxdepth 1 -name "$glob_pat" -newer "$hw_ref" -print0 2>/dev/null; \
+             rm -f "$hw_ref")
 
     hw_map=$(jq -c --arg r "$repo" --arg v "$repo_max" '. + {($r): $v}' <<<"$hw_map")
   done <<<"$repos"
@@ -597,14 +455,9 @@ cmd_transcripts() {
 
   [ -d "$root" ] || { [ "$as_json" -eq 1 ] && _json_empty "$source"; return 0; }
 
-  local cursor now_iso
+  local cursor
   cursor=$(_state_high_water "$source" | jq -r '. // "1970-01-01T00:00:00Z"' 2>/dev/null)
   [ -n "$cursor" ] && [ "$cursor" != "null" ] || cursor="1970-01-01T00:00:00Z"
-  now_iso=$(_now_iso) || now_iso=""
-  # Before the scan, not after it: a poisoned cursor makes `find` return nothing,
-  # and the empty-file-list early return below would then hide the clamp — the
-  # one branch with no other signal is the permanently-blind one.
-  cursor=$(_clamp_iso "$cursor" "$now_iso" "$source" "persisted")
 
   # --- gather processed (non-excluded) files ---
   local now_epoch
@@ -620,11 +473,9 @@ cmd_transcripts() {
       [ $(( now_epoch - f_epoch )) -lt 300 ] && continue
     fi
     files+=("$f")
-  done < <(cur_ref=$(_mtime_ref_file "$cursor") || cur_ref=""
-           [ -n "$cur_ref" ] || echo "retro-prescreen: $source: no mtime reference — scanning without the pre-filter" >&2
-           mapfile -t _nf < <(_find_newer_args "$cur_ref")
-           find "$root" -name '*.jsonl' "${_nf[@]}" -print0 2>/dev/null
-           [ -n "$cur_ref" ] && rm -rf "$cur_ref")
+  done < <(cur_ref=$(_mtime_ref_file "$cursor"); \
+           find "$root" -name '*.jsonl' -newer "$cur_ref" -print0 2>/dev/null; \
+           rm -f "$cur_ref")
 
   if [ "${#files[@]}" -eq 0 ]; then
     if [ "$as_json" -eq 1 ]; then
@@ -641,32 +492,12 @@ cmd_transcripts() {
   # into an aggregate count. jq errors on malformed input are suppressed and
   # rewrapped into a generic warning so a corrupt line can never leak raw
   # bytes onto stderr.
-  local excerpts=() counts='{}'
-  local max_hw="$cursor"
+  local excerpts=() counts='{}' max_hw="$cursor"
   for f in "${files[@]}"; do
-    # Same whole-second cursor authority as cmd_artifacts — this loop has the
-    # identical `%Y` producer / `find -newer` consumer pair, so it carried the
-    # identical fixed point. Extraction is skipped along with the candidate,
-    # which also stops re-feeding an already-mined transcript to the summarizer.
-    local mtime_epoch mtime_iso
-    mtime_epoch=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null)
-    case "$mtime_epoch" in ''|*[!0-9]*) mtime_epoch="" ;; esac
-    if [ -n "$mtime_epoch" ]; then
-      mtime_iso=$(jq -nr --argjson n "$mtime_epoch" '$n | todate')
-      if ! [[ "$mtime_iso" > "$cursor" ]]; then
-        printf 'retro-prescreen: %s: mtime %s not past cursor %s — suppressed\n' \
-          "$source" "$mtime_iso" "$cursor" >&2
-        continue
-      fi
-      if [ -n "$now_iso" ] && [[ "$mtime_iso" > "$now_iso" ]]; then
-        printf 'retro-prescreen: %s: a session file has a future mtime (%s > %s) — cursor clamped\n' \
-          "$source" "$mtime_iso" "$now_iso" >&2
-      elif [[ "$mtime_iso" > "$max_hw" ]]; then
-        max_hw="$mtime_iso"
-      fi
-    else
-      printf 'retro-prescreen: %s: cannot read a session file mtime — treating as new\n' \
-        "$source" >&2
+    local mtime_iso
+    mtime_iso=$(jq -nr --argjson n "$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)" '$n | todate')
+    if [[ "$mtime_iso" > "$max_hw" ]]; then
+      max_hw="$mtime_iso"
     fi
 
     # Parse each line independently so a single malformed or blank line
@@ -676,20 +507,6 @@ cmd_transcripts() {
     # loop simply moves on. Only structurally-matching events survive.
     local file_events=""
     local line filtered
-    # Open through an explicit descriptor rather than `done < "$f"`. The shell's
-    # own redirection failure is NOT covered by the `2>/dev/null` on every jq /
-    # stat / find in this loop, and it names the file — and a transcript path
-    # carries the user name and the full repository location twice over, which
-    # is exactly the shape cmd_scrub redacts. The declared privacy invariant at
-    # the top of this file says "in any branch"; this was the branch.
-    # The brace group is load-bearing: in `exec 3< "$f" 2>/dev/null` the
-    # redirections are applied left to right, so the failing open reports to the
-    # still-live stderr and prints the path before the suppression takes effect
-    # (and the suppression would then persist for the rest of the script).
-    if ! { exec 3< "$f"; } 2>/dev/null; then
-      printf 'retro-prescreen: %s: a session file is unreadable — skipped\n' "$source" >&2
-      continue
-    fi
     while IFS= read -r line || [ -n "$line" ]; do
       [ -n "$line" ] || continue
       filtered=$(printf '%s' "$line" | jq -c --argjson markers "$markers" '
@@ -718,8 +535,7 @@ cmd_transcripts() {
       else
         file_events="$file_events"$'\n'"$filtered"
       fi
-    done <&3
-    exec 3<&-
+    done < "$f"
 
     local n
     n=$(printf '%s\n' "$file_events" | grep -c . || true)

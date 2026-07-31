@@ -171,7 +171,7 @@ bash ~/.claude/hooks/check-migrations.sh
 # test-gen is supposed to ADD tests, not modify production code. If the diff
 # touches files outside the test surface, the sub-agent likely violated the
 # "do not modify production code to make it easier to test" rule (Step 3
-# obligation #9). Adapt the path globs for the project's test naming conventions.
+# obligation #10). Adapt the path globs for the project's test naming conventions.
 PROD_DIFF=$(git diff main...HEAD --name-only \
   | grep -vE '(^|/)(__tests__|tests|test|spec|specs)/|\.test\.|\.spec\.|_test\.|test_' || true)
 if [ -n "$PROD_DIFF" ]; then

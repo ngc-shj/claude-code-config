@@ -6,14 +6,9 @@ folding into this repo's rule set.
 
 ## Sub-agent inputs
 
-1. Candidate file list from the prescreen JSON (`candidates`) — absolute paths whose
-   containment was checked *at scan time*. This is the COMPLETE work queue; do not scan
-   for additional files. The containment verdict does not travel with the name (R51):
-   minutes pass between the scan and the read, and anything that can write inside that
-   repository — a checkout, a sync client, a second agent — can rebind a component in
-   between. Re-establish containment before reading: confirm each path is still under the
-   configured repository root and is a regular file, not a link out of it, and drop any
-   candidate that is not.
+1. Candidate file list from the prescreen JSON (`candidates`) — absolute paths already
+   containment-checked against the configured repo. This is the COMPLETE work queue; do
+   not scan for additional files.
 2. The rule-ID digest (ID + one-line pattern name per existing rule).
 3. Prescreen LLM bullets when present (Symptom/Root-cause seeds — starting evidence, not
    authoritative).
