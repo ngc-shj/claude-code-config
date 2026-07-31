@@ -1,7 +1,9 @@
 ---
 sources: [artifacts]
 cursors:
-  artifacts: 2026-07-31T04:18:18Z
+  # Per-repo MINIMUM, per pipeline.md Step 4 — a scalar cannot reconstruct
+  # the per-repo map, and only the minimum is safe in the recovery direction.
+  artifacts: 2026-07-14T16:44:06Z
 ---
 
 # Retrospective: artifacts source mining (2026-07-31)
@@ -56,11 +58,16 @@ the remedies for the rules that look adjacent: consulting the authoritative reso
 obligation reads as discharged while the hole is still there.
 
 **Fix.** When a decision about an object is made before its use and any other principal
-can act in between, carry the decision on a handle to the object — open once with
-link-following disabled, validate the descriptor (type, owner, mode, size ceiling), and
-perform every subsequent operation descriptor-relative — or repeat the check at the
-instant of use and declare the residual window. Restrictive creation mode on one's own
-directory does not protect operations that re-traverse the path afterwards.
+can act in between, carry the decision on a handle acquired without traversing any
+component that principal can write — refusing to follow a link on the final component is
+not enough, since every intermediate directory is still resolved by name during that open.
+Validate the descriptor (type, owner, mode, size ceiling), then operate relative to it one
+non-symlink component at a time; a multi-component relative path re-resolves the names in
+it. Where no handle exists, re-checking at the instant of use only narrows the window — it
+must be paired with making the write conditional on the checked state (compare-and-swap
+over every field the check read and the write mutates), and the remainder declared.
+Restrictive creation mode on one's own directory does not protect operations that
+re-traverse the path afterwards.
 
 **Disposition.** `Novel` → **R51**. Grep evidence over `common-rules.md` and
 `rule-details/`: `descriptor` = 0 hits, `link-following` = 0, `O_NOFOLLOW` = 0,
@@ -254,8 +261,9 @@ platform-maximum identifiers, values produced by a machine caller rather than an
 operator.
 
 **Disposition.** `Extends-R48`. Grep evidence over `common-rules.md` and
-`rule-details/`: `never stricter` = 0 hits, and `fail-closed` = 0 within the R48 row
-itself. `over-block` = **1** hit — RT10's row, "Over-blocking is not the safe direction
+`rule-details/` **as they stood on `main`, before this round's fold** (both phrases
+are now present, added by the fold itself): `never stricter` = 0 hits, and `fail-closed`
+= 0 within the R48 row. `over-block` = **1** hit — RT10's row, "Over-blocking is not the safe direction
 in practice; a guard that denies legitimate work gets disabled…", which is this
 direction's *test-time* statement and the counterpart named two sentences below; R48's
 own row remains silent on it. (An earlier draft of this disposition recorded 0 and was
@@ -363,7 +371,7 @@ folding them would push a rule row past its routing-summary role. Revisit on rec
 | Check and dependent mutation split across concurrency domains | An await point or thread hop between check and mutation is the transaction gap, at the in-process layer R5 does not reach | `Extends-R5` |
 | Bipolar classifier with mismatched generality | A negative side specified generally and a positive side enumerated routes every unenumerated case to the general side's verdict; measured 130 fires versus 1 on the same corpus after making both sides symmetric | `Extends-R47` |
 | A broad directive whose plain reading negates a narrower one | Two directives govern one behavioural predicate at different scopes; the broad one is loaded first and unconditionally, so its silence is read as permission | `Extends-R48` |
-| This repo's own gates do not meet R50 clause (ii) | Eleven `check-*.sh` hooks widen their exclude regex straight from `EXTRA_EXCLUDE_PATH_RE` without asserting it unset, and none emits an analysed-subject count — so the clause folded this round is, today, a claim stronger than the implementation (R49) in the catalog's own tooling. Closing it means an analysed-count and active-override report in the shared scan helper, plus a non-zero exit when an override empties the scanned set | Code work in `hooks/scan-shared-utils.sh`, not a rule edit — out of scope for a fold, tracked here |
+| This repo's own gates do not meet R50 clause (ii) | Ten `check-*.sh` hooks widen their exclude regex straight from `EXTRA_EXCLUDE_PATH_RE` without asserting it unset, and none emits an analysed-subject count — so the clause folded this round is, today, a claim stronger than the implementation (R49) in the catalog's own tooling. Closing it is per-hook work (or a new shared entry point — `hooks/scan-shared-utils.sh` does not itself read the variable): an analysed-count and active-override report on every run, plus a non-zero exit when an override empties the scanned set | Code work in `hooks/scan-shared-utils.sh`, not a rule edit — out of scope for a fold, tracked here |
 | Sub-second cursor precision | Recording cursors at whole seconds leaves a bounded permanent-skip window (see above). Removing it means widening `_is_iso`'s contract and the frontmatter scalar shape, which touches the state file's validation chokepoint | Follow-up change, deliberately not bundled with a rule fold |
 
 ## Disposition summary
