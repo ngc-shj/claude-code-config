@@ -357,6 +357,64 @@ setup_artifacts_repo() {
   [ "$status" -eq 0 ]
 }
 
+# The cursor is recorded from whole seconds while `find -newer` compares at the
+# filesystem's sub-second precision, so a file written inside the cursor's own
+# second used to re-qualify on every run — and recomputing the cursor from %Y
+# landed on that same second, making it a fixed point that never drained.
+@test "artifacts: a file inside the cursor's own second does not re-qualify" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/boundary-review.md"
+  echo "boundary" > "$f"
+
+  # Precondition: this filesystem must record a sub-second mtime, or the file
+  # would be excluded by `-newer` alone and the case would pass vacuously.
+  local frac
+  frac=$(stat -c %y "$f" 2>/dev/null | sed -n 's/.*\.\([0-9]*\).*/\1/p')
+  [ -n "$frac" ] || skip "filesystem does not expose sub-second mtime"
+  [ "$((10#$frac))" -gt 0 ] || skip "mtime landed exactly on a second boundary"
+
+  local secs
+  secs=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"$(date -u -d "@$secs" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$secs" +%Y-%m-%dT%H:%M:%SZ)\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 0' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  # The cursor must not regress below the value it already held.
+  run jq -e --arg r "$repo" --arg hw "$(date -u -d "@$secs" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$secs" +%Y-%m-%dT%H:%M:%SZ)" \
+    '.high_water[$r] == $hw' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+# Allow side of the same predicate (RT10): tightening the comparison must not
+# swallow a file that genuinely postdates the cursor's second.
+@test "artifacts: a file past the cursor's second still qualifies" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/fresh-review.md"
+  echo "fresh" > "$f"
+  local secs
+  secs=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
+  seed_state
+  # Cursor one second BEFORE the file's own second.
+  local prev=$(( secs - 1 ))
+  mark_high_water artifacts "{\"$repo\": \"$(date -u -d "@$prev" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$prev" +%Y-%m-%dT%H:%M:%SZ)\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg p "$f" '.candidates[0].path == $p' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
 @test "artifacts: filename with control characters is rejected with stderr warning" {
   local repo
   repo=$(setup_artifacts_repo)

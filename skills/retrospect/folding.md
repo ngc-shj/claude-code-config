@@ -63,7 +63,9 @@ the text must be repo-neutral.
 ## 3. Detection hook (only when mechanically detectable)
 
 Ask first: can a regex/AST scan over a diff decide this with low false positives? If not,
-skip — a noisy hook is worse than none.
+skip — a noisy hook is worse than none. Record the answer either way: a lesson folded
+without a hook should say in the retrospective doc why it is not mechanically decidable,
+so the next round does not re-litigate it.
 
 1. Author `hooks/check-<slug>.sh` modeled on the existing `check-*.sh` hooks: header
    comment stating the rule ID, detection logic, severity, and usage
@@ -111,3 +113,9 @@ A rule-sync failure means the edit map above was applied incompletely — fix th
 sync point; never silence the linter. Judge each gate by its OWN exit status (R44): run
 it unpiped, or redirect output to a file and inspect afterwards — piping a gate through
 `head`/`tail`/`grep` reports the pipe tail's status and masks a real failure as green.
+
+A zero exit is only half the verdict (R50 clause ii): "examined nothing" and "found
+nothing wrong" are the same status. Quote the count alongside it — the number of tests
+the suite actually ran, and the new tests among them by name. A `bats tests/` that
+collected fewer files than the directory holds, or a run whose new cases never appear in
+the output, is a green that verified nothing.

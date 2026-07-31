@@ -19,6 +19,14 @@ orchestrator edits files, and only after Step 3 dispositions. After EACH mining 
 returns, the orchestrator runs `git status --porcelain` and verifies this repo's working
 tree gained no unexpected changes; any change is a run-aborting defect.
 
+That enumeration is a *prompt* obligation, not a capability grant: the host may offer no
+agent type restricted to exactly Read/Grep/Glob, in which case the sub-agent can reach
+Bash whatever the prompt says, and runs have deviated. Pick the available agent type that
+structurally cannot write (no Edit/Write/NotebookEdit) — that is the property the
+invariant actually needs — restate the prohibition in the prompt, and treat the
+per-agent `git status --porcelain` check as the enforcement rather than the paperwork.
+A sub-agent that self-reports a deviation is doing its job; record it in the run report.
+
 **Self-trigger caution.** Rule text quoting destructive-command examples (force-push,
 volume-prune, key-deletion invocations) is written with the Edit/Write tools ONLY — never
 via Bash echo/heredoc/sed, which would substring-match the PreToolUse deny hooks. Search

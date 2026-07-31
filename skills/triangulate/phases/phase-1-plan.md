@@ -235,7 +235,7 @@ routinely sits in the 90-300 s range). Manual fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R50 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R51 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -266,11 +266,11 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R50)
+- ... (R1-R51)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R50)
+- ... (R1-R51)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
@@ -280,7 +280,7 @@ Review round: [nth]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R50)
+- ... (R1-R51)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -291,6 +291,7 @@ Review round: [nth]
 - RT8: [status]
 - RT9: [status]
 - RT10: [status]
+- RT11: [status]
 ```
 
 Round 2+: optionally draft the "Changes from Previous Round" paragraph via Ollama:

@@ -243,6 +243,15 @@ cmd_artifacts() {
 
       local mtime_iso
       mtime_iso=$(jq -nr --argjson n "$(stat -c %Y "$resolved" 2>/dev/null || stat -f %m "$resolved" 2>/dev/null || echo 0)" '$n | todate')
+      # The cursor is produced from whole seconds (%Y) but `-newer` compares at
+      # the filesystem's sub-second precision against a reference materialized
+      # by `touch -t`, i.e. at .000000000. Every file whose mtime falls inside
+      # the cursor's own second is therefore strictly newer on each run, while
+      # recomputing the cursor from %Y lands back on that same second: a fixed
+      # point that re-mines those files forever and never drains the source.
+      # The whole-second ISO comparison is the authority; `-newer` is demoted to
+      # a cheap pre-filter, which may narrow the set but never decide it.
+      [[ "$mtime_iso" > "$repo_hw" ]] || continue
       if [[ "$mtime_iso" > "$repo_max" ]]; then
         repo_max="$mtime_iso"
       fi
