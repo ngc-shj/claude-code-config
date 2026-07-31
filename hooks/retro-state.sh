@@ -279,7 +279,8 @@ cmd_due() {
   # report nothing-due for EVERY source. A source with an unparseable cursor
   # is treated as due (fail toward more mining, never toward silently skipping).
   due=$(jq -c --argjson now "$now" --argjson state "$state" '
-    [ (.sources | to_entries[])
+    ((.snooze_days // 3) * 86400) as $maxsnooze
+    | [ (.sources | to_entries[])
       | select(.value.enabled == true)
       | .key as $k
       | ((.value.interval_days // 7) * 86400) as $ivl
@@ -289,11 +290,42 @@ cmd_due() {
         # which is not > $now), never as far-future — otherwise one bad value
         # would suppress the source forever. A malformed last_run is treated as
         # past the interval (catch -> $ivl), i.e. due. Both fail toward mining.
+        #
+        # A WELL-FORMED future value is the case the catch arms do not reach,
+        # and it is the reachable one: a clock stepped back, a restored backup,
+        # a state file copied from a machine with a skewed clock. Bound the
+        # snooze by what `snooze` itself could have written — anything past
+        # now + snooze_days is not a snooze this tool set, so it expires.
         elif (($e.snoozed_until // null) != null)
-             and ((try ($e.snoozed_until | fromdateiso8601) catch $now) > $now) then empty
+             and ((try ($e.snoozed_until | fromdateiso8601) catch $now) > $now)
+             and ((try ($e.snoozed_until | fromdateiso8601) catch $now) <= ($now + $maxsnooze)) then empty
+        # last_run AHEAD of the present makes ($now - last_run) negative, so the
+        # source is never due and retro-prescreen.sh is never invoked for it.
+        # That silences the cursor heal as well: the one diagnostic that would
+        # name the skew is emitted by a hook this comprehension decides not to
+        # run, so a poisoned cursor and a skewed clock hide each other. Heal in
+        # the direction the cursor heal takes — treat it as never having run.
+        elif ((try ($e.last_run | fromdateiso8601) catch 0) > $now) then $k
         elif ((try ($now - ($e.last_run | fromdateiso8601)) catch $ivl) >= $ivl) then $k
         else empty
         end ]' <<<"$cfg") || due='[]'
+
+  # Announce the heal on stderr. `due`'s stdout is machine-parsed, and a source
+  # that becomes due BECAUSE its recorded timestamps are in the future is
+  # indistinguishable on that channel from one that is due on schedule.
+  local skewed
+  skewed=$(jq -r --argjson now "$now" --argjson state "$state" '
+    ((.snooze_days // 3) * 86400) as $maxsnooze
+    | [ (.sources | to_entries[])
+      | select(.value.enabled == true)
+      | .key as $k
+      | (($state.sources? // {})[$k] // null) as $e
+      | select($e != null)
+      | select(((try (($e.last_run // "") | fromdateiso8601) catch 0) > $now)
+               or ((try (($e.snoozed_until // "") | fromdateiso8601) catch 0) > ($now + $maxsnooze)))
+      | $k ] | join(", ")' <<<"$cfg" 2>/dev/null) || skewed=""
+  [ -n "$skewed" ] && printf 'retro-state: %s: recorded timestamps are past the present (clock skew or a restored backup) — treated as due\n' \
+    "$skewed" >&2
 
   if [ "$as_json" -eq 1 ]; then
     printf '%s\n' "$due"

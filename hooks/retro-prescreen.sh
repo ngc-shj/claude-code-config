@@ -20,8 +20,16 @@
 # bodies, artifacts LLM summaries, transcripts distilled lessons) AND by the
 # skill's folding gate (C6), so redaction logic exists in exactly one place.
 #
+# Env seams: RETRO_PRESCREEN_NOW (epoch seconds) simulates the present instant
+# for tests, and is kept separate from retro-state.sh's RETRO_NOW because the
+# other operand here is a real file mtime. It governs three controls (the
+# cursor heal, the future-mtime bound, the 5-minute transcript freshness rule),
+# so it announces itself on every run in which it is set, and a value ahead of
+# the system clock is refused.
+#
 # Exit codes: 0 on every degraded path (missing gh/curl/LLM -> stderr
-# warning + empty candidates); 2 on unknown mode or missing config.
+# warning + empty candidates); 2 on unknown mode, missing config, or a required
+# primitive being unavailable (a JSON document is still emitted).
 #
 # Privacy invariant: raw transcript content must never reach stdout or
 # stderr, in any branch, including jq parse errors on malformed input.
@@ -56,15 +64,23 @@ _state_high_water() {
 # on rejection.
 _resolve_contained() {
   local file="$1" root="$2" dir base resolved_dir resolved_root
+  # Resolved BEFORE the control-character branch: that branch reports a path,
+  # and under `set -u` an unassigned resolved_root would abort there instead.
+  resolved_root=$(cd -P -- "$root" 2>/dev/null && pwd -P) || return 1
   dir=$(dirname "$file")
   base=$(basename "$file")
   case "$base" in
     *[[:cntrl:]]*)
-      echo "retro-prescreen: rejecting filename with control characters in $dir" >&2
+      # `$dir` here descends from the caller's `$expanded/...` glob, so it is
+      # LEXICAL — stripping the physical root off it is a no-op whenever the
+      # repo root is a symlink, and the message would then fall back to a bare
+      # directory basename. Strip the lexical root, which is the spelling this
+      # operand actually carries. The trigger is a filename inside an untrusted
+      # sibling repository, so this must not put $HOME on stderr.
+      echo "retro-prescreen: rejecting filename with control characters in $(_repo_relative "$dir" "$root")" >&2
       return 1
       ;;
   esac
-  resolved_root=$(cd -P -- "$root" 2>/dev/null && pwd -P) || return 1
 
   # Chase the ENTIRE symlink chain to its terminal real file, re-resolving the
   # containing directory at every hop. A single readlink only catches a
@@ -92,28 +108,165 @@ _resolve_contained() {
     "$resolved_root"|"$resolved_root"/*) ;;
     *) return 1 ;;
   esac
+  # Declared residual (R51). What this returns is a NAME, not a handle: the
+  # containment verdict is bound to what the path denoted at this instant, and
+  # every later step — the caller's `stat`, the summarizer's read, and above all
+  # the mining sub-agent that Reads the emitted path minutes later — re-resolves
+  # that name afresh. So the guarantee is "no link planted before the scan
+  # escapes the root", NOT "the object read is the object checked". Closing the
+  # latter needs a descriptor the shell cannot carry across these boundaries
+  # (open once with symlink resolution refused, then operate descriptor-relative
+  # one component at a time), so it is declared rather than claimed. Do NOT read
+  # the window as bounded by trust in the repository's own directories — the
+  # symlink chase above exists precisely because this function treats that repo
+  # as untrusted. It is open to any principal that can write inside it during
+  # the run, including entirely non-adversarial ones (a checkout or rebase in
+  # that repo, a sync client, a second agent). The verdict does not travel with
+  # the name: every consumer of the emitted path must re-establish containment
+  # at its own moment of use.
   printf '%s/%s' "$resolved_dir" "$base"
 }
 
-# Emit an empty machine document for a degraded/error path.
-# Emit a `find` predicate that selects files newer than an ISO-8601 cursor.
-# BSD find (macOS) rejects `-newermt <iso>` outright — and because the call
-# sites redirect stderr, the parse error surfaces as "no files matched"
-# rather than a failure. Materialize a reference file with the cursor mtime
-# and use `-newer`, which GNU and BSD both accept. Echoes the reference path;
-# caller passes it to -newer and removes it when done.
-_mtime_ref_file() {
-  local iso="$1" ref epoch
-  ref=$(mktemp) || return 1
-  # date -j -f: BSD; date -d: GNU. Fall back to epoch 0 on either failure so
-  # the scan degrades to "everything is new", never to "nothing matched".
-  epoch=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$iso" +%s 2>/dev/null) \
-    || epoch=$(date -u -d "$iso" +%s 2>/dev/null) \
-    || epoch=0
-  touch -t "$(date -j -u -f %s "$epoch" +%Y%m%d%H%M.%S 2>/dev/null \
-              || date -u -d "@$epoch" +%Y%m%d%H%M.%S 2>/dev/null \
-              || echo 197001010000.00)" "$ref" 2>/dev/null
-  printf '%s' "$ref"
+# The epoch floor, in both spellings. A healed cursor resets HERE, not to the
+# present: clamping a poisoned cursor forward suppresses every file that
+# already exists (all have mtime <= now) and loses the backlog permanently,
+# while resetting backward costs one re-mine. skills/retrospect/pipeline.md
+# decided this for the same failure — "the minimum is the only value that is
+# safe in the recovery direction".
+EPOCH_FLOOR_ISO='1970-01-01T00:00:00Z'
+LAG_MARGIN=86400   # GitHub's search index lag; see cmd_github.
+
+# Render $1 relative to root $2, for a stderr diagnostic.
+#
+# The caller passes the root in the SAME SPELLING as the path.
+# `_resolve_contained`'s output is physical (`cd -P; pwd -P`); the `$dir` it
+# computes internally and the configured repo value are lexical. Stripping a
+# physical prefix off a lexical path is a silent no-op the moment the repo root
+# is a symlink, which is why the operand kind is the caller's to get right and
+# not something this function can infer.
+#
+# Fails closed: if a leading `/` survives the strip, the basename is emitted
+# instead, so no branch can put $HOME — and therefore the user name — on stderr.
+_repo_relative() {
+  local path="$1" root="$2" rel
+  rel="${path#"${root%/}/"}"
+  case "$rel" in
+    /*) rel="${path##*/}" ;;
+  esac
+  printf '%s' "$rel"
+}
+
+# ISO-8601 <-> whole-second epoch. jq is the single codec at both boundaries,
+# replacing the `date -j -f` (BSD) / `date -d` (GNU) fork entirely.
+#
+# The operand is passed with --arg and the program is a fixed single-quoted
+# literal. The interpolated spelling `jq -nr "\"$iso\" | fromdate"` satisfies
+# every other criterion here while letting the operand choose its own epoch
+# (`x" | 4102444800 # ` -> 4102444800, re-creating the cursor poisoning this
+# whole change exists to close) and read the process environment via jq's `env`.
+#
+# `_iso_to_epoch` accepts a strict SUBSET of the language _is_iso (retro-state.sh)
+# defines, and says so rather than claiming equality: _is_iso is a syntactic
+# regex, `fromdate` is strptime-backed and semantic. Date-only values are
+# expanded here because _norm_iso runs only in `seed`, not on the mark-run path
+# the pipeline uses, so a bare YYYY-MM-DD is a live persisted spelling.
+#
+# A NEGATIVE parse (a pre-1970 cursor, which _is_iso accepts) is clamped to the
+# floor SILENTLY — a representable instant before the epoch is not corrupt, and
+# warning about it would misreport a well-formed cursor. Empty is returned only
+# on a parse failure, and only that case warrants the caller's warning.
+_iso_to_epoch() {
+  local iso="$1" e
+  case "$iso" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) iso="${iso}T00:00:00Z" ;;
+  esac
+  e=$(jq -nr --arg s "$iso" '$s | fromdate' 2>/dev/null) || e=""
+  case "$e" in
+    -[0-9]*)
+      case "${e#-}" in *[!0-9]*) return 0 ;; esac
+      printf '0'   # pre-1970 but representable: floor it, without a warning
+      ;;
+    [0-9]*)
+      case "$e" in *[!0-9]*) return 0 ;; esac
+      printf '%s' "$e"
+      ;;
+  esac
+}
+
+# Epoch -> ISO, validated against _is_iso's OWN regex rather than against jq's
+# notion of a date: `todate` happily emits 5- and 7-digit years
+# (253402300800 -> 10000-01-01T00:00:00Z) that retro-state.sh's _validate_hw
+# rejects — and it rejects the WHOLE high_water object on one bad value, so an
+# out-of-range entry for one repo would freeze every repo's cursor.
+_epoch_to_iso() {
+  local iso
+  case "$1" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  iso=$(jq -nr --argjson n "$1" '$n | todate' 2>/dev/null) || return 0
+  case "$iso" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) printf '%s' "$iso" ;;
+  esac
+}
+
+# Present instant as whole-second epoch, or empty.
+#
+# `RETRO_PRESCREEN_NOW` is this function's own seam, kept separate from
+# `RETRO_NOW` on purpose: `RETRO_NOW` pins the scheduling clock, where both
+# operands are simulated, while the operand here is a real file mtime — routing
+# this through `RETRO_NOW` would classify every genuinely existing artifact as
+# future-dated.
+#
+# The seam governs three controls (the heal, the future-mtime bound, and the
+# 5-minute freshness rule), so it is ANNOUNCED whenever set: the
+# numeric-but-absurd case is otherwise completely silent, and a value ahead of
+# the real clock is REFUSED — the seam exists to pin the present downward
+# relative to fixture mtimes, and a future value would disable the freshness
+# rule and admit the in-flight session transcript into the Stage-2 egress set.
+#
+# Empty means "no heal available", never epoch 0: an unreadable clock must
+# disable the bound loudly rather than pin every cursor at its floor.
+_now_epoch() {
+  local real n
+  real=$(date -u +%s 2>/dev/null)
+  case "$real" in ''|*[!0-9]*) real="" ;; esac
+  if [ -n "${RETRO_PRESCREEN_NOW:-}" ]; then
+    n="$RETRO_PRESCREEN_NOW"
+    case "$n" in
+      ''|*[!0-9]*)
+        echo "retro-prescreen: RETRO_PRESCREEN_NOW is not numeric — heal and freshness bounds disabled this run" >&2
+        return 0
+        ;;
+    esac
+    if [ -n "$real" ] && [ "$n" -gt "$real" ]; then
+      echo "retro-prescreen: RETRO_PRESCREEN_NOW is ahead of the system clock — refused" >&2
+      return 0
+    fi
+    echo "retro-prescreen: RETRO_PRESCREEN_NOW is set ($n) — the present instant is simulated this run" >&2
+    printf '%s' "$n"
+    return 0
+  fi
+  printf '%s' "$real"
+}
+
+# Heal a persisted cursor that is ahead of the present, at READ-IN — one
+# adjudicator, not two (R48). Integer comparison, never string: lexicographic
+# `>` reports "999999999" as greater than "1784047446", so a `[[ > ]]`
+# implementation would heal away every cursor written before 2001-09-09.
+#
+# The heal moves BACKWARD (to the epoch floor), never forward. Every fixture in
+# this file's suite uses ten-digit epochs where the two comparisons agree, so
+# the nine-digit case is the one that discriminates them.
+_heal_cursor() {
+  local value="$1" now="$2" source="$3" label="$4" shown
+  if [ -n "$now" ] && [ "$value" -gt "$now" ]; then
+    shown=$(_epoch_to_iso "$value"); [ -n "$shown" ] || shown="epoch $value"
+    printf 'retro-prescreen: %s: %s cursor %s is past the present — reset to %s; this source will re-mine once and will not send raw text off-machine on that run\n' \
+      "$source" "$label" "$shown" "$EPOCH_FLOOR_ISO" >&2
+    printf '0'
+    return 0
+  fi
+  printf '%s' "$value"
 }
 
 _json_empty() {
@@ -198,53 +351,148 @@ cmd_artifacts() {
     exit 2
   fi
 
-  local glob repos allow_remote
+  local glob repos_json allow_remote
   glob=$(jq -r '.sources.artifacts.glob // "docs/archive/review/*.md"' <<<"$cfg")
-  repos=$(jq -r '.sources.artifacts.repos // [] | .[]' <<<"$cfg")
+  # Empty elements are dropped here rather than skipped in the loop: an empty
+  # string would otherwise become a "" key in the emitted map, and the shapes
+  # retro-state.sh validates differ on whether that is accepted.
+  repos_json=$(jq -c '[.sources.artifacts.repos // [] | .[] | select(. != null and . != "")]' <<<"$cfg")
   allow_remote=$(jq -r '.sources.artifacts.allow_remote_llm // false' <<<"$cfg")
 
+  local now_epoch
+  now_epoch=$(_now_epoch)
+  [ -n "$now_epoch" ] || echo "retro-prescreen: $source: cannot read the present instant — heal and future-mtime bounds disabled this run" >&2
+
+  # --- seed pass: every configured repo gets its healed cursor BEFORE the scan.
+  #
+  # Stated over the config array and the whole loop, not over a line. The scan
+  # loop below has guards that skip a repo (root absent, archive dir absent),
+  # and retro-state.sh writes `.high_water = $hw` as a WHOLE-OBJECT
+  # REPLACEMENT — so a repo missing from the emitted map is DELETED from state,
+  # reset to 1970, and re-mined in full on the next run it is visible. Seeding
+  # here means no guard added later can re-open that.
+  #
+  # One `show --json` read for the run, not one per repo: N re-reads across the
+  # loop can observe N different states if anything writes concurrently, and the
+  # whole-object replacement would then persist the mixture.
+  local state_hw
+  state_hw=$(_state_high_water "$source")
+  [ -n "$state_hw" ] && [ "$state_hw" != "null" ] || state_hw='{}'
+
+  local hw_epoch='{}' healed_any=0 repo
+  while IFS= read -r repo; do
+    local persisted_iso persisted_epoch healed
+    persisted_iso=$(jq -r --arg r "$repo" '.[$r] // ""' <<<"$state_hw" 2>/dev/null)
+    persisted_epoch=$(_iso_to_epoch "$persisted_iso")
+    if [ -z "$persisted_epoch" ]; then
+      [ -n "$persisted_iso" ] && printf 'retro-prescreen: %s: unparseable persisted cursor for %s — treating as %s\n' \
+        "$source" "${repo##*/}" "$EPOCH_FLOOR_ISO" >&2
+      persisted_epoch=0
+    fi
+    healed=$(_heal_cursor "$persisted_epoch" "$now_epoch" "$source" "persisted")
+    [ "$healed" = "$persisted_epoch" ] || healed_any=1
+    hw_epoch=$(jq -c --arg r "$repo" --argjson v "$healed" '. + {($r): $v}' <<<"$hw_epoch")
+  done < <(jq -r '.[]' <<<"$repos_json")
+
   # Egress gate for sending RAW artifact text to the LLM summarizer — decided
-  # ONCE (not per file). Without a loopback backend (or explicit consent) the
-  # raw artifacts are never sent; summarization is skipped and the source
-  # falls back to file-list-only, which is still fully usable by the mining
-  # sub-agent (it Reads the files locally). See _summarize_artifact.
+  # ONCE for the run, and AFTER the seed pass so the heal verdict is known for
+  # the WHOLE configured array. Deciding it per repo inside the scan loop would
+  # send the raw bytes of every repo processed before the poisoned one.
+  #
+  # A heal resets a cursor to the floor, which makes the entire corpus a
+  # candidate — and the heal's trigger is a cursor ahead of the present, whose
+  # ordinary producers are backward clock movements (NTP step-back, RTC-local
+  # dual boot, VM snapshot restore), not corruption. Widening the candidate set
+  # must not widen the off-machine set with it. Recovery is unaffected: the
+  # mining sub-agent Reads the files locally, and file-list-only is already the
+  # documented degraded mode.
   # shellcheck source=llm-utils.sh
   source "$HOOK_DIR/llm-utils.sh" 2>/dev/null
+  # The source above is stderr-suppressed, so a missing or unreadable
+  # llm-utils.sh would leave _file_mtime_epoch undefined and every mtime
+  # unreadable — every file a candidate, no cursor ever advancing, forever, and
+  # exit 0. Refuse instead, with a document on stdout so the caller still parses
+  # a well-formed reply.
+  if ! command -v _file_mtime_epoch >/dev/null 2>&1; then
+    echo "retro-prescreen: required primitive _file_mtime_epoch is unavailable (llm-utils.sh not sourced)" >&2
+    [ "$as_json" -eq 1 ] && _json_empty "$source"
+    exit 2
+  fi
   local artifacts_llm_ok=0
-  if _raw_llm_egress_ok "$allow_remote"; then
+  if [ "$healed_any" -eq 1 ]; then
+    echo "retro-prescreen: $source: a cursor was healed this run — raw artifact text is not sent off-machine on a healing run" >&2
+  elif _raw_llm_egress_ok "$allow_remote"; then
     artifacts_llm_ok=1
   else
     echo "retro-prescreen: artifacts LLM summarization skipped (no loopback backend / no allow_remote_llm consent) — emitting file list only" >&2
   fi
 
-  local candidates='[]' hw_map='{}'
-  local repo
+  local candidates='[]'
   while IFS= read -r repo; do
-    [ -n "$repo" ] || continue
     local expanded
     expanded="${repo/#\~/$HOME}"
-    [ -d "$expanded" ] || continue
+    if [ ! -d "$expanded" ]; then
+      printf 'retro-prescreen: %s: skipping %s — repo root absent; its cursor is preserved\n' \
+        "$source" "${repo##*/}" >&2
+      continue
+    fi
 
-    local repo_hw
-    repo_hw=$(_state_high_water "$source" | jq -r --arg r "$repo" '.[$r] // "1970-01-01T00:00:00Z"' 2>/dev/null)
-    [ -n "$repo_hw" ] && [ "$repo_hw" != "null" ] || repo_hw="1970-01-01T00:00:00Z"
-
-    local glob_dir glob_pat
+    local glob_dir glob_pat repo_phys
     glob_dir="$expanded/$(dirname "$glob")"
     glob_pat="$(basename "$glob")"
-    [ -d "$glob_dir" ] || continue
+    # The physical root, for _repo_relative: _resolve_contained returns a
+    # physical path while the configured value is only tilde-expanded, and the
+    # two differ whenever the repo root is a symlink.
+    repo_phys=$(cd -P -- "$expanded" 2>/dev/null && pwd -P) || repo_phys="$expanded"
+    if [ ! -d "$glob_dir" ]; then
+      printf 'retro-prescreen: %s: skipping %s — archive directory absent; its cursor is preserved\n' \
+        "$source" "${repo##*/}" >&2
+      continue
+    fi
 
-    local repo_max="$repo_hw"
-    local f
+    local cursor_epoch repo_max
+    cursor_epoch=$(jq -r --arg r "$repo" '.[$r]' <<<"$hw_epoch")
+    repo_max="$cursor_epoch"
+
+    # Per-file diagnostics are AGGREGATED. With the `-newer` pre-filter gone the
+    # scan enumerates the whole corpus, so a per-file line scales with it — the
+    # steady state on a healthy run, and the fixed point under a slow clock. The
+    # heal announcement, the clock-disabled notice and the skipped-repo signal
+    # are single lines on this same stream; burying them defeats them as surely
+    # as omitting them.
+    local n_sup=0 n_future=0 n_nostat=0 n_seen=0 future_example="" f
     while IFS= read -r -d '' f; do
       local resolved
+      # The LEXICAL root: _resolve_contained resolves it itself for the
+      # containment check, and its own diagnostic reports a lexical `$dir`, so
+      # the operand kinds match on both sides. `$repo_phys` is for the physical
+      # `resolved` paths below.
       resolved=$(_resolve_contained "$f" "$expanded") || continue
       [ -n "$resolved" ] || continue
+      n_seen=$((n_seen + 1))
 
-      local mtime_iso
-      mtime_iso=$(jq -nr --argjson n "$(stat -c %Y "$resolved" 2>/dev/null || stat -f %m "$resolved" 2>/dev/null || echo 0)" '$n | todate')
-      if [[ "$mtime_iso" > "$repo_max" ]]; then
-        repo_max="$mtime_iso"
+      local mtime_epoch
+      mtime_epoch=$(_file_mtime_epoch "$resolved")
+      if [ -n "$mtime_epoch" ]; then
+        # Integer comparison against a whole-second cursor. Both operands come
+        # from `%Y`, so a file mined in run N is strictly not greater in run
+        # N+1 and the source drains. Declared residual: an artifact written
+        # into the cursor's own second AFTER the run that recorded it is
+        # skipped permanently — under one second, per repo, per run.
+        if [ "$mtime_epoch" -le "$cursor_epoch" ]; then
+          n_sup=$((n_sup + 1))
+          continue
+        fi
+        if [ -z "$now_epoch" ]; then
+          : # No clock: an increment cannot be judged, so it is not recorded.
+        elif [ "$mtime_epoch" -gt "$now_epoch" ]; then
+          n_future=$((n_future + 1))
+          [ -n "$future_example" ] || future_example=$(_repo_relative "$resolved" "$repo_phys")
+        elif [ "$mtime_epoch" -gt "$repo_max" ]; then
+          repo_max="$mtime_epoch"
+        fi
+      else
+        n_nostat=$((n_nostat + 1))
       fi
 
       local summary=""
@@ -255,16 +503,42 @@ cmd_artifacts() {
       else
         candidates=$(jq -c --arg p "$resolved" '. + [{path: $p, summary: null}]' <<<"$candidates")
       fi
-    done < <(hw_ref=$(_mtime_ref_file "$repo_hw"); \
-             find "$glob_dir" -maxdepth 1 -name "$glob_pat" -newer "$hw_ref" -print0 2>/dev/null; \
-             rm -f "$hw_ref")
+    done < <(find "$glob_dir" -maxdepth 1 -name "$glob_pat" -print0 2>/dev/null)
 
-    hw_map=$(jq -c --arg r "$repo" --arg v "$repo_max" '. + {($r): $v}' <<<"$hw_map")
-  done <<<"$repos"
+    [ "$n_sup" -eq 0 ] || printf 'retro-prescreen: %s: %s: %d of %d at or below the cursor — suppressed\n' \
+      "$source" "${repo##*/}" "$n_sup" "$n_seen" >&2
+    [ "$n_future" -eq 0 ] || printf 'retro-prescreen: %s: %s: %d of %d future-dated (e.g. %s) — kept, cursor not advanced\n' \
+      "$source" "${repo##*/}" "$n_future" "$n_seen" "$future_example" >&2
+    [ "$n_nostat" -eq 0 ] || printf 'retro-prescreen: %s: %s: %d of %d with an unreadable mtime — kept, cursor not advanced\n' \
+      "$source" "${repo##*/}" "$n_nostat" "$n_seen" >&2
+
+    hw_epoch=$(jq -c --arg r "$repo" --argjson v "$repo_max" '. + {($r): $v}' <<<"$hw_epoch")
+  done < <(jq -r '.[]' <<<"$repos_json")
+
+  # Project to ISO at emission. A conversion that leaves the range _validate_hw
+  # accepts re-emits the HEALED value for that key — never an empty string and
+  # never a dropped key, either of which discards the whole object.
+  local hw_map='{}'
+  while IFS= read -r repo; do
+    local e iso
+    e=$(jq -r --arg r "$repo" '.[$r]' <<<"$hw_epoch")
+    iso=$(_epoch_to_iso "$e")
+    if [ -z "$iso" ]; then
+      printf 'retro-prescreen: %s: %s: cursor %s is not representable — re-emitting %s\n' \
+        "$source" "${repo##*/}" "$e" "$EPOCH_FLOOR_ISO" >&2
+      iso="$EPOCH_FLOOR_ISO"
+    fi
+    hw_map=$(jq -c --arg r "$repo" --arg v "$iso" '. + {($r): $v}' <<<"$hw_map")
+  done < <(jq -r '.[]' <<<"$repos_json")
 
   if [ "$as_json" -eq 1 ]; then
+    # No configured repos -> null, never `{}`: an empty object passes
+    # _validate_hw trivially and the whole-object replacement then wipes every
+    # repo's cursor in one write.
     jq -nc --arg s "$source" --argjson c "$candidates" --argjson hw "$hw_map" \
-      '{source: $s, candidates: $c, high_water: $hw, deferred: false}'
+      '{source: $s, candidates: $c,
+        high_water: (if ($hw | length) == 0 then null else $hw end),
+        deferred: false}'
   else
     echo "artifacts: $(jq 'length' <<<"$candidates") candidate file(s)"
     jq -r '.[] | "  - " + .path' <<<"$candidates"
@@ -308,31 +582,65 @@ cmd_github() {
     exit 2
   fi
 
+  # Empty elements dropped: an empty string would become a "" key, which
+  # _validate_hw's github arm rejects (it requires owner/repo), discarding the
+  # whole object and freezing every repo's cursor.
+  local repos_json
+  repos_json=$(jq -c '[.sources.github.repos // [] | .[] | select(. != null and . != "")]' <<<"$cfg")
+
+  # Seed and heal BEFORE the environment guards below. `gh` absent or
+  # unauthenticated is a degraded run, not a reason to leave a poisoned cursor
+  # unhealed and unannounced — and emitting an empty document there would make
+  # the orchestrator skip mark-run entirely, so `last_run` would never advance
+  # and the source would stay permanently due.
+  local now_epoch
+  now_epoch=$(_now_epoch)
+  [ -n "$now_epoch" ] || echo "retro-prescreen: $source: cannot read the present instant — heal and future bounds disabled this run" >&2
+
+  local state_hw
+  state_hw=$(_state_high_water "$source")
+  [ -n "$state_hw" ] && [ "$state_hw" != "null" ] || state_hw='{}'
+
+  local hw_epoch='{}' repo
+  while IFS= read -r repo; do
+    local persisted_iso persisted_epoch
+    persisted_iso=$(jq -r --arg r "$repo" '.[$r] // ""' <<<"$state_hw" 2>/dev/null)
+    persisted_epoch=$(_iso_to_epoch "$persisted_iso")
+    if [ -z "$persisted_epoch" ]; then
+      [ -n "$persisted_iso" ] && printf 'retro-prescreen: %s: unparseable persisted cursor for %s — treating as %s\n' \
+        "$source" "$repo" "$EPOCH_FLOOR_ISO" >&2
+      persisted_epoch=0
+    fi
+    hw_epoch=$(jq -c --arg r "$repo" --argjson v "$(_heal_cursor "$persisted_epoch" "$now_epoch" "$source" "persisted")" \
+      '. + {($r): $v}' <<<"$hw_epoch")
+  done < <(jq -r '.[]' <<<"$repos_json")
+
+  local candidates='[]'
   if ! command -v gh >/dev/null 2>&1; then
     echo "retro-prescreen: gh CLI not found; skipping github source" >&2
-    [ "$as_json" -eq 1 ] && _json_empty "$source"
+    _github_emit "$as_json" "$source" "$candidates" "$hw_epoch" "$repos_json"
     return 0
   fi
   if ! gh auth status >/dev/null 2>&1; then
     echo "retro-prescreen: gh is not authenticated; skipping github source" >&2
-    [ "$as_json" -eq 1 ] && _json_empty "$source"
+    _github_emit "$as_json" "$source" "$candidates" "$hw_epoch" "$repos_json"
     return 0
   fi
 
-  local repos
-  repos=$(jq -r '.sources.github.repos // [] | .[]' <<<"$cfg")
-
-  local candidates='[]' hw_map='{}'
-  local repo
   while IFS= read -r repo; do
-    [ -n "$repo" ] || continue
-    local cursor
-    cursor=$(_state_high_water "$source" | jq -r --arg r "$repo" '.[$r] // "1970-01-01T00:00:00Z"' 2>/dev/null)
-    [ -n "$cursor" ] && [ "$cursor" != "null" ] || cursor="1970-01-01T00:00:00Z"
+    local cursor_epoch bound_iso
+    cursor_epoch=$(jq -r --arg r "$repo" '.[$r]' <<<"$hw_epoch")
+    # The query bound is the healed cursor widened by LAG_MARGIN. GitHub's
+    # search index lags, so a PR can be absent at query time and permanently
+    # below an un-widened bound afterwards. The widening is free only because a
+    # local suppression predicate now re-adjudicates what comes back — without
+    # it the trailing window would be re-mined on every run, forever.
+    bound_iso=$(_epoch_to_iso "$(( cursor_epoch > LAG_MARGIN ? cursor_epoch - LAG_MARGIN : 0 ))")
+    [ -n "$bound_iso" ] || bound_iso="$EPOCH_FLOOR_ISO"
 
     local prs
     prs=$(gh pr list -R "$repo" --state merged --limit 200 \
-      --search "updated:>=${cursor} sort:updated-asc" \
+      --search "updated:>=${bound_iso} sort:updated-asc" \
       --json number,title,updatedAt 2>/dev/null) || prs='[]'
     [ -n "$prs" ] || prs='[]'
 
@@ -343,15 +651,33 @@ cmd_github() {
       echo "retro-prescreen: github $repo returned 200 (limit) merged PRs; more may remain for next run" >&2
     fi
 
-    local repo_max="$cursor"
+    local repo_max="$cursor_epoch" n_sup=0
     local pr_num
     while IFS= read -r pr_num; do
       [ -n "$pr_num" ] || continue
-      local title updated_at
+      local title updated_at updated_epoch
       title=$(jq -r --arg n "$pr_num" '.[] | select((.number|tostring) == $n) | .title' <<<"$prs")
       updated_at=$(jq -r --arg n "$pr_num" '.[] | select((.number|tostring) == $n) | .updatedAt' <<<"$prs")
-      if [[ -n "$updated_at" ]] && [[ "$updated_at" > "$repo_max" ]]; then
-        repo_max="$updated_at"
+      updated_epoch=$(_iso_to_epoch "$updated_at")
+      if [ -n "$updated_epoch" ]; then
+        # The local adjudicator this source never had. Without it the server's
+        # `updated:>=` filter is the only thing deciding membership, which is
+        # the same shape as the `find -newer` pre-filter this change deletes.
+        if [ "$updated_epoch" -le "$cursor_epoch" ]; then
+          n_sup=$((n_sup + 1))
+          continue
+        fi
+        if [ -z "$now_epoch" ]; then
+          :
+        elif [ "$updated_epoch" -gt "$now_epoch" ]; then
+          printf 'retro-prescreen: %s: %s #%s is future-dated — kept, cursor not advanced\n' \
+            "$source" "$repo" "$pr_num" >&2
+        elif [ "$updated_epoch" -gt "$repo_max" ]; then
+          repo_max="$updated_epoch"
+        fi
+      else
+        printf 'retro-prescreen: %s: %s #%s has an unparseable updatedAt — kept, cursor not advanced\n' \
+          "$source" "$repo" "$pr_num" >&2
       fi
 
       # Emit one base64 line PER COMMENT (not per body line): a review comment
@@ -377,12 +703,38 @@ cmd_github() {
         '. + [{repo: $repo, number: ($n|tonumber), title: $t, comment_bodies: $bodies}]' <<<"$candidates")
     done < <(jq -r '.[].number' <<<"$prs")
 
-    hw_map=$(jq -c --arg r "$repo" --arg v "$repo_max" '. + {($r): $v}' <<<"$hw_map")
-  done <<<"$repos"
+    [ "$n_sup" -eq 0 ] || printf 'retro-prescreen: %s: %s: %d of %d at or below the cursor — suppressed\n' \
+      "$source" "$repo" "$n_sup" "$count" >&2
+
+    hw_epoch=$(jq -c --arg r "$repo" --argjson v "$repo_max" '. + {($r): $v}' <<<"$hw_epoch")
+  done < <(jq -r '.[]' <<<"$repos_json")
+
+  _github_emit "$as_json" "$source" "$candidates" "$hw_epoch" "$repos_json"
+}
+
+# Project the epoch-keyed cursor map to ISO and emit the document. One emitter
+# for every exit path of cmd_github, so a degraded path cannot silently drop the
+# healed cursors the way an `_json_empty` return did.
+_github_emit() {
+  local as_json="$1" source="$2" candidates="$3" hw_epoch="$4" repos_json="$5"
+  local hw_map='{}' repo
+  while IFS= read -r repo; do
+    local e iso
+    e=$(jq -r --arg r "$repo" '.[$r]' <<<"$hw_epoch")
+    iso=$(_epoch_to_iso "$e")
+    if [ -z "$iso" ]; then
+      printf 'retro-prescreen: %s: %s: cursor %s is not representable — re-emitting %s\n' \
+        "$source" "$repo" "$e" "$EPOCH_FLOOR_ISO" >&2
+      iso="$EPOCH_FLOOR_ISO"
+    fi
+    hw_map=$(jq -c --arg r "$repo" --arg v "$iso" '. + {($r): $v}' <<<"$hw_map")
+  done < <(jq -r '.[]' <<<"$repos_json")
 
   if [ "$as_json" -eq 1 ]; then
     jq -nc --arg s "$source" --argjson c "$candidates" --argjson hw "$hw_map" \
-      '{source: $s, candidates: $c, high_water: $hw, deferred: false}'
+      '{source: $s, candidates: $c,
+        high_water: (if ($hw | length) == 0 then null else $hw end),
+        deferred: false}'
   else
     echo "github: $(jq 'length' <<<"$candidates") merged PR(s) with review comments"
     jq -r '.[] | "  - #" + (.number|tostring) + " " + .title' <<<"$candidates"
@@ -453,36 +805,70 @@ cmd_transcripts() {
   allow_remote=$(jq -r '.sources.transcripts.allow_remote_llm // false' <<<"$cfg")
   markers=$(jq -c '.correction_markers // []' <<<"$cfg")
 
-  [ -d "$root" ] || { [ "$as_json" -eq 1 ] && _json_empty "$source"; return 0; }
+  # Sourced ABOVE the gather loop: _file_mtime_epoch lives in llm-utils.sh (it
+  # has three consumers that never load this hook) and both adopter sites below
+  # would otherwise run before it is defined. The source is stderr-suppressed,
+  # so its failure has no other observer — hence the explicit guard.
+  # shellcheck source=llm-utils.sh
+  source "$HOOK_DIR/llm-utils.sh" 2>/dev/null
+  if ! command -v _file_mtime_epoch >/dev/null 2>&1; then
+    echo "retro-prescreen: required primitive _file_mtime_epoch is unavailable (llm-utils.sh not sourced)" >&2
+    [ "$as_json" -eq 1 ] && _json_empty "$source"
+    exit 2
+  fi
 
-  local cursor
-  cursor=$(_state_high_water "$source" | jq -r '. // "1970-01-01T00:00:00Z"' 2>/dev/null)
-  [ -n "$cursor" ] && [ "$cursor" != "null" ] || cursor="1970-01-01T00:00:00Z"
+  # One clock for the whole function. The 5-minute freshness rule used to read
+  # `date +%s` directly while the cursor read its own — two adjudicators of
+  # "what time is it", free to disagree.
+  local now_epoch
+  now_epoch=$(_now_epoch)
+  [ -n "$now_epoch" ] || echo "retro-prescreen: $source: cannot read the present instant — heal and future bounds disabled this run" >&2
+
+  local persisted_iso cursor
+  persisted_iso=$(_state_high_water "$source" | jq -r '. // ""' 2>/dev/null)
+  [ "$persisted_iso" != "null" ] || persisted_iso=""
+  cursor=$(_iso_to_epoch "$persisted_iso")
+  if [ -z "$cursor" ]; then
+    [ -n "$persisted_iso" ] && printf 'retro-prescreen: %s: unparseable persisted cursor — treating as %s\n' \
+      "$source" "$EPOCH_FLOOR_ISO" >&2
+    cursor=0
+  fi
+  local healed
+  healed=$(_heal_cursor "$cursor" "$now_epoch" "$source" "persisted")
+  local healed_any=0
+  [ "$healed" = "$cursor" ] || healed_any=1
+  cursor="$healed"
+
+  # The root can be absent on a fresh machine or a not-yet-created config path.
+  # Emit the healed cursor even then: `_json_empty`'s null would make the
+  # orchestrator skip mark-run, so `last_run` would never advance and the source
+  # would stay permanently due while its poisoned cursor survived.
+  if [ ! -d "$root" ]; then
+    _transcripts_emit "$as_json" "$source" '[]' "$cursor" false "no root directory"
+    return 0
+  fi
 
   # --- gather processed (non-excluded) files ---
-  local now_epoch
-  now_epoch=$(date +%s)
-  local files=()
-  local f base f_epoch
+  local files=() f base f_epoch
   while IFS= read -r -d '' f; do
-    base=$(basename "$f")
+    base="${f##*/}"
     if [ -n "${CLAUDE_SESSION_ID:-}" ]; then
       [ "$base" = "${CLAUDE_SESSION_ID}.jsonl" ] && continue
     else
-      f_epoch=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)
-      [ $(( now_epoch - f_epoch )) -lt 300 ] && continue
+      # BOTH operands validated. Under `set -u`, `$(( n - not-a-number ))`
+      # aborts the shell mid-loop — no JSON document at all — and an empty
+      # `now_epoch` makes the difference negative, excluding EVERY transcript as
+      # "too fresh". Unknown either way keeps the file, the permissive direction.
+      f_epoch=$(_file_mtime_epoch "$f")
+      if [ -n "$now_epoch" ] && [ -n "$f_epoch" ]; then
+        [ "$(( now_epoch - f_epoch ))" -lt 300 ] && continue
+      fi
     fi
     files+=("$f")
-  done < <(cur_ref=$(_mtime_ref_file "$cursor"); \
-           find "$root" -name '*.jsonl' -newer "$cur_ref" -print0 2>/dev/null; \
-           rm -f "$cur_ref")
+  done < <(find "$root" -name '*.jsonl' -print0 2>/dev/null)
 
   if [ "${#files[@]}" -eq 0 ]; then
-    if [ "$as_json" -eq 1 ]; then
-      jq -nc --arg s "$source" '{source: $s, candidates: [], high_water: null, deferred: false}'
-    else
-      echo "transcripts: no new sessions"
-    fi
+    _transcripts_emit "$as_json" "$source" '[]' "$cursor" false "no new sessions"
     return 0
   fi
 
@@ -492,12 +878,31 @@ cmd_transcripts() {
   # into an aggregate count. jq errors on malformed input are suppressed and
   # rewrapped into a generic warning so a corrupt line can never leak raw
   # bytes onto stderr.
-  local excerpts=() counts='{}' max_hw="$cursor"
-  for f in "${files[@]}"; do
-    local mtime_iso
-    mtime_iso=$(jq -nr --argjson n "$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)" '$n | todate')
-    if [[ "$mtime_iso" > "$max_hw" ]]; then
-      max_hw="$mtime_iso"
+  local excerpts=() counts='{}'
+  local max_hw="$cursor" ordinal=0
+  local n_sup=0 n_future=0 n_nostat=0 n_seen=0
+  for f in ${files[@]+"${files[@]}"}; do
+    n_seen=$((n_seen + 1))
+    # Same whole-second cursor authority as cmd_artifacts: both operands come
+    # from `%Y`, so a transcript mined in run N is not greater in run N+1 and
+    # the source drains. Extraction is skipped along with the candidate, which
+    # also stops re-feeding an already-mined transcript to the summarizer.
+    local mtime_epoch
+    mtime_epoch=$(_file_mtime_epoch "$f")
+    if [ -n "$mtime_epoch" ]; then
+      if [ "$mtime_epoch" -le "$cursor" ]; then
+        n_sup=$((n_sup + 1))
+        continue
+      fi
+      if [ -z "$now_epoch" ]; then
+        :
+      elif [ "$mtime_epoch" -gt "$now_epoch" ]; then
+        n_future=$((n_future + 1))
+      elif [ "$mtime_epoch" -gt "$max_hw" ]; then
+        max_hw="$mtime_epoch"
+      fi
+    else
+      n_nostat=$((n_nostat + 1))
     fi
 
     # Parse each line independently so a single malformed or blank line
@@ -507,6 +912,20 @@ cmd_transcripts() {
     # loop simply moves on. Only structurally-matching events survive.
     local file_events=""
     local line filtered
+    # Open through an explicit descriptor rather than `done < "$f"`. The shell's
+    # own redirection failure is NOT covered by the `2>/dev/null` on every jq /
+    # stat / find in this loop, and it names the file — and a transcript path
+    # carries the user name and the full repository location twice over, which
+    # is exactly the shape cmd_scrub redacts. The declared privacy invariant at
+    # the top of this file says "in any branch"; this was the branch.
+    # The brace group is load-bearing: in `exec 3< "$f" 2>/dev/null` the
+    # redirections are applied left to right, so the failing open reports to the
+    # still-live stderr and prints the path before the suppression takes effect
+    # (and the suppression would then persist for the rest of the script).
+    if ! { exec 3< "$f"; } 2>/dev/null; then
+      printf 'retro-prescreen: %s: a session file is unreadable — skipped\n' "$source" >&2
+      continue
+    fi
     while IFS= read -r line || [ -n "$line" ]; do
       [ -n "$line" ] || continue
       filtered=$(printf '%s' "$line" | jq -c --argjson markers "$markers" '
@@ -535,11 +954,19 @@ cmd_transcripts() {
       else
         file_events="$file_events"$'\n'"$filtered"
       fi
-    done < "$f"
+    done <&3
+    exec 3<&-
 
     local n
     n=$(printf '%s\n' "$file_events" | grep -c . || true)
-    counts=$(jq -c --arg f "$(basename "$f")" --argjson n "$n" '. + {($f): $n}' <<<"$counts")
+    # Keyed by a per-run ORDINAL, not by the basename. A transcript's basename
+    # is the session UUID, and `counts` is projected onto BOTH the --json
+    # document and the human report, so keying it by identity leaks that
+    # identity on both streams. F-R6 forbids a filename on either. Nothing
+    # machine-readable consumes the key — the human run report needs
+    # cardinality and per-session counts, and an ordinal carries both.
+    ordinal=$((ordinal + 1))
+    counts=$(jq -c --arg f "$ordinal" --argjson n "$n" '. + {($f): $n}' <<<"$counts")
 
     if [ -n "$file_events" ] && [ "$file_events" != "" ]; then
       while IFS= read -r ev; do
@@ -549,25 +976,44 @@ cmd_transcripts() {
     fi
   done
 
+  [ "$n_sup" -eq 0 ] || printf 'retro-prescreen: %s: %d of %d at or below the cursor — suppressed\n' \
+    "$source" "$n_sup" "$n_seen" >&2
+  [ "$n_future" -eq 0 ] || printf 'retro-prescreen: %s: %d of %d future-dated — kept, cursor not advanced\n' \
+    "$source" "$n_future" "$n_seen" >&2
+  [ "$n_nostat" -eq 0 ] || printf 'retro-prescreen: %s: %d of %d with an unreadable mtime — kept, cursor not advanced\n' \
+    "$source" "$n_nostat" "$n_seen" >&2
+
   # --- S3 loopback egress gate + reachability probe (shared with artifacts) ---
-  # shellcheck source=llm-utils.sh
-  source "$HOOK_DIR/llm-utils.sh" 2>/dev/null
   local stage2_allowed=0
-  if _raw_llm_egress_ok "$allow_remote"; then
+  if [ "$healed_any" -eq 1 ]; then
+    # A heal makes the whole corpus a candidate. Stage 2 sends each excerpt raw
+    # to the backend, so widening the candidate set must not widen the
+    # off-machine set with it. Declared residual: this DEFERS the widened
+    # egress by one run rather than preventing it — the deferred emitter
+    # persists the healed cursor, so the next run's Stage 2 sees the same
+    # widened corpus with no heal to suppress it. Only the artifacts arm, which
+    # has a usable non-egress mining mode, prevents it outright.
+    echo "retro-prescreen: $source: a cursor was healed this run — Stage 2 skipped; the NEXT run will send the widened corpus to the configured backend" >&2
+  elif _raw_llm_egress_ok "$allow_remote"; then
     stage2_allowed=1
   fi
 
   if [ "$stage2_allowed" -ne 1 ]; then
-    # Fail-closed: counts only, no content, deferred=true, high_water null
-    # (cursor not advanced so nothing is skipped next run).
+    # Fail-closed: counts only, no content, deferred=true. The cursor emitted is
+    # the HEALED read-in value, never `max_hw` — Stage 1 above runs to
+    # completion and fully advances `max_hw` BEFORE this gate is consulted, so
+    # emitting it here would record every scanned transcript as mined on a run
+    # that distilled nothing. The healed value is <= the persisted one by
+    # construction, so it records no progress while still carrying the heal to
+    # the state file.
     if [ "$as_json" -eq 1 ]; then
-      jq -nc --arg s "$source" --argjson counts "$counts" \
+      jq -nc --arg s "$source" --argjson counts "$counts" --arg hw "$(_epoch_to_iso "$cursor")" \
         '{source: $s,
-          candidates: ($counts | to_entries | map({file: .key, event_count: .value})),
-          high_water: null, deferred: true}'
+          candidates: ($counts | to_entries | map({index: (.key|tonumber), event_count: .value})),
+          high_water: $hw, deferred: true}'
     else
       echo "transcripts: LLM unavailable or non-loopback — deferred (counts only, no content)"
-      jq -r 'to_entries[] | "  - " + .key + ": " + (.value|tostring) + " event(s)"' <<<"$counts"
+      jq -r 'to_entries[] | "  - session " + .key + ": " + (.value|tostring) + " event(s)"' <<<"$counts"
     fi
     return 0
   fi
@@ -575,7 +1021,11 @@ cmd_transcripts() {
   # --- Stage 2: distillation + scrub ---
   local lessons='[]'
   local ev
-  for ev in "${excerpts[@]}"; do
+  # Guarded expansion: with the pre-filter gone the whole corpus is enumerated
+  # and, on a drained source, every file is suppressed — so an EMPTY excerpts
+  # array is the steady state on a healthy system, not an edge case. A bare
+  # "${excerpts[@]}" is an unbound-variable abort there on the bash 3.2 floor.
+  for ev in ${excerpts[@]+"${excerpts[@]}"}; do
     local lesson
     lesson=$(llm_request "gpt-oss:20b" \
       "Distill this event into a single project-neutral lesson. Remove all paths, code, identifiers, and specifics. Output one sentence. If nothing actionable, output exactly: NONE." \
@@ -587,12 +1037,30 @@ cmd_transcripts() {
     lessons=$(jq -c --arg l "$clean" '. + [$l]' <<<"$lessons")
   done
 
+  _transcripts_emit "$as_json" "$source" "$lessons" "$max_hw" false "distilled lesson(s)"
+}
+
+# The single emitter for cmd_transcripts' non-deferred exits. Every one of them
+# carries the cursor — the healed read-in value on the paths that mined nothing,
+# the running maximum on the path that mined. Emitting `null` anywhere makes the
+# orchestrator skip mark-run entirely, so `last_run` never advances and the
+# source stays permanently due while a poisoned cursor survives the run that
+# announced it.
+_transcripts_emit() {
+  local as_json="$1" source="$2" candidates="$3" cursor_epoch="$4" deferred="$5" label="$6"
+  local iso
+  iso=$(_epoch_to_iso "$cursor_epoch")
+  if [ -z "$iso" ]; then
+    printf 'retro-prescreen: %s: cursor %s is not representable — re-emitting %s\n' \
+      "$source" "$cursor_epoch" "$EPOCH_FLOOR_ISO" >&2
+    iso="$EPOCH_FLOOR_ISO"
+  fi
   if [ "$as_json" -eq 1 ]; then
-    jq -nc --arg s "$source" --argjson c "$lessons" --arg hw "$max_hw" \
-      '{source: $s, candidates: $c, high_water: $hw, deferred: false}'
+    jq -nc --arg s "$source" --argjson c "$candidates" --arg hw "$iso" --argjson d "$deferred" \
+      '{source: $s, candidates: $c, high_water: $hw, deferred: $d}'
   else
-    echo "transcripts: $(jq 'length' <<<"$lessons") distilled lesson(s)"
-    jq -r '.[] | "  - " + .' <<<"$lessons"
+    echo "transcripts: $(jq 'length' <<<"$candidates") $label"
+    jq -r '.[] | "  - " + (. | tostring)' <<<"$candidates"
   fi
 }
 
@@ -666,7 +1134,11 @@ MODE="${1:-}"
 shift || true
 
 AS_JSON=0
-for arg in "$@"; do
+# `"$@"` with no positional parameters is the same unbound-variable class as
+# an unguarded array on the bash 3.2 floor, and this sits on the dispatch path
+# every mode reaches — including `scrub`, which the header names as the single
+# shared redaction artifact.
+for arg in ${@+"$@"}; do
   case "$arg" in
     --json) AS_JSON=1 ;;
   esac

@@ -68,8 +68,18 @@ mode is advisory.
   (when non-null) to a file under the tri-tmpdir and run
   `bash ~/.claude/hooks/retro-state.sh mark-run <source> --high-water-file <file>`.
 - `deferred` true (transcripts without a loopback LLM) → run
-  `bash ~/.claude/hooks/retro-state.sh mark-run transcripts` (NO high-water file — the
-  cursor is preserved so nothing is skipped) and record the deferral in the run report.
+  `bash ~/.claude/hooks/retro-state.sh mark-run transcripts` **with** the emitted
+  `high_water` when it is non-null, exactly as on the clean path, and record the deferral
+  in the run report. The value a deferred run emits is the healed read-in cursor, which is
+  `<=` the persisted one by construction — it records no progress, so the "nothing is
+  skipped" guarantee is strengthened, not weakened, while a cursor healed on that run
+  actually reaches the state file. Omitting it means `mark-run` is never called at all, so
+  `last_run` never advances and the source stays permanently due.
+- **`mark-run` is always run for its own exit status.** It returns 1 and leaves state
+  untouched when the high-water file fails shape validation, and a rejected write is
+  otherwise indistinguishable from a successful one: the run reports success, the cursor
+  does not move, and the source re-mines its whole corpus on every subsequent run. A
+  non-zero status aborts the run and is reported, naming the source and the rejected value.
 - ALL in-scope sources clean/deferred → report "nothing new" and STOP. This is the common
   path; no sub-agents are spawned.
 
@@ -186,5 +196,7 @@ to a file under the tri-tmpdir, then
 bash ~/.claude/hooks/retro-state.sh mark-run <source> --high-water-file <file>
 ```
 
-(deferred sources: `mark-run <source>` without the file). Clean up the tri-tmpdir. Report:
+read for its own exit status, and abort the run on a non-zero one (deferred sources take
+the same path — see Step 1; the file is omitted only when `high_water` is null). Clean up
+the tri-tmpdir. Report:
 sources processed, candidate counts per disposition, rules/hooks added, PR URL.

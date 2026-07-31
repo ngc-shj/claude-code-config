@@ -37,6 +37,32 @@ set_mtime_ago() {
     || python3 -c "import os; os.utime('$file', ($target_ts, $target_ts))" 2>/dev/null || true
 }
 
+# Epoch seconds -> the whole-second ISO-8601 spelling the cursors use. One
+# definition rather than the format string re-spelled per call site (RT3).
+iso_at() {
+  date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ
+}
+
+# Set an mtime to an exact whole-second + nanosecond pair. `os.utime(ns=)` is
+# the portable spelling — `touch -t` carries only second granularity and
+# `touch -d @sec.frac` is GNU-only, so a fraction must be CONSTRUCTED here
+# rather than inherited from whenever the file happened to be written.
+set_mtime_frac() {
+  local file="$1" secs="$2" nsec="$3"
+  command -v python3 >/dev/null 2>&1 || skip "python3 required to construct sub-second mtimes"
+  python3 -c "import os,sys; t=int(sys.argv[2])*10**9+int(sys.argv[3]); os.utime(sys.argv[1], ns=(t,t))" \
+    "$file" "$secs" "$nsec"
+}
+
+# Did the filesystem PRESERVE the fraction we just set? Asserted, not inferred:
+# on a second-granularity filesystem the sub-second cases would be excluded by
+# `find -newer` alone and would pass vacuously. Portable — it compares mtimes
+# through python rather than parsing a `stat` format string.
+fs_keeps_subsecond() {
+  command -v python3 >/dev/null 2>&1 || skip "python3 required to read back a sub-second mtime"
+  python3 -c "import os,sys; sys.exit(0 if os.stat(sys.argv[1]).st_mtime_ns % 10**9 else 1)" "$1"
+}
+
 write_config() {
   # jq-edited from the shipped C5 example so schema drift breaks tests
   # instead of hiding (RT3). Forwards all args to jq, so callers may pass
@@ -178,6 +204,11 @@ setup() {
   export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/xdg-runtime"
   export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/xdg-cache"
   mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME"
+  # The subject's own scratch sink: `_mtime_ref_file` calls bare `mktemp`, so
+  # without this its reference files land in shared system temp instead of the
+  # tree this test reclaims (RT11 — scope every mutable sink the subject
+  # touches, do not assume the scratch-directory pattern covers it).
+  export TMPDIR="$BATS_TEST_TMPDIR"
 
   unset LLM_BACKEND OPENAI_HOST OPENAI_HOSTS LLM_TRUSTED_HOSTS OLLAMA_HOST OLLAMA_EXTRA_HOSTS
   unset CLAUDE_SESSION_ID
@@ -341,15 +372,499 @@ setup_artifacts_repo() {
 }
 
 @test "artifacts: -newermt high-water excludes files older than the cursor" {
+  # East of UTC, so the TZ axis is covered in both directions (the allow-side
+  # case below pins a west-of-UTC zone).
+  export TZ="Asia/Tokyo"
   local repo
   repo=$(setup_artifacts_repo)
   local old="$repo/docs/archive/review/old-review.md"
   echo "old" > "$old"
   set_mtime_ago "$old" 864000   # 10 days ago
   seed_state
-  mark_high_water artifacts "{\"$repo\": \"$(date -u -d '@'$(( $(date +%s) - 432000 )) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r $(( $(date +%s) - 432000 )) +%Y-%m-%dT%H:%M:%SZ)\"}"
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at $(( $(date +%s) - 432000 )))\"}"
   setup_curl_fail_mock
   export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 0' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+# The cursor is recorded from whole seconds while `find -newer` compares at the
+# filesystem's sub-second precision, so a file written inside the cursor's own
+# second used to re-qualify on every run — and recomputing the cursor from %Y
+# landed on that same second, making it a fixed point that never drained.
+@test "artifacts: a file inside the cursor's own second does not re-qualify" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/boundary-review.md"
+  echo "boundary" > "$f"
+
+  # CONSTRUCT the fractional mtime rather than observing it: reading it back
+  # with `stat -c %y` is GNU-only, so on BSD the case would skip permanently
+  # while blaming the filesystem for what is a missing command fallback.
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 844377201
+  # Precondition, now asserted rather than inferred: the filesystem must have
+  # PRESERVED the fraction. Without it the file is excluded by `-newer` alone
+  # and the case would pass vacuously under the buggy implementation too.
+  fs_keeps_subsecond "$f" || skip "filesystem did not preserve a sub-second mtime"
+
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at "$secs")\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 0' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+# Split out of the case above so each assertion has its own mutant (RT7 shape
+# (g)(i)): under the deny case's mutation bats aborts before reaching this one,
+# so it would otherwise ride along unproven.
+@test "artifacts: cursor does not regress when every candidate is suppressed" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/boundary-review.md"
+  echo "boundary" > "$f"
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 844377201
+  fs_keeps_subsecond "$f" || skip "filesystem did not preserve a sub-second mtime"
+
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at "$secs")\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e --arg r "$repo" --arg hw "$(iso_at "$secs")" '.high_water[$r] == $hw' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+# Allow side of the same predicate (RT10): tightening the comparison must not
+# swallow a file that genuinely postdates the cursor's second.
+@test "artifacts: a file past the cursor's second still qualifies" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/fresh-review.md"
+  echo "fresh" > "$f"
+  local secs
+  secs=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
+  seed_state
+  # Cursor one second BEFORE the file's own second.
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at $(( secs - 1 )))\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg p "$f" '.candidates[0].path == $p' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+# The candidate loop iterates files-per-repo, and every other artifacts fixture
+# has cardinality 1 on that dimension — so `> $repo_hw` and `> $repo_max` were
+# indistinguishable to the whole suite, though the latter silently drops any
+# qualifying file processed after a newer sibling (RT7 empty-oracle sub-clause).
+@test "artifacts: two qualifying files in one repo both appear, cursor takes the max" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local older="$repo/docs/archive/review/a-review.md"
+  local newer="$repo/docs/archive/review/b-review.md"
+  echo a > "$older"; echo b > "$newer"
+  local base=1784047500
+  # The `repo_max` mutant only survives if a qualifying file is traversed AFTER
+  # one with a strictly greater mtime, so the fixture must not depend on
+  # readdir order: ask the production scan for the real order, then give the
+  # FIRST-traversed file the LATER mtime.
+  local first
+  first=$(find "$repo/docs/archive/review" -maxdepth 1 -name '*.md' -print0 \
+          | tr '\0' '\n' | head -1)
+  [ -n "$first" ]
+  local second
+  if [ "$first" = "$older" ]; then second="$newer"; else second="$older"; fi
+  set_mtime_frac "$first"  "$(( base + 60 ))" 0
+  set_mtime_frac "$second" "$base" 0
+
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at $(( base - 60 )))\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 2' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg p "$older" '[.candidates[].path] | index($p) != null' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg p "$newer" '[.candidates[].path] | index($p) != null' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg r "$repo" --arg hw "$(iso_at $(( base + 60 )))" '.high_water[$r] == $hw' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+# `touch -t` parses its stamp in the LOCAL zone. Rendering that stamp with
+# `date -u` shifted the `-newer` reference by the UTC offset, and west of UTC
+# the reference landed AFTER the cursor — so the pre-filter dropped candidates
+# the authoritative comparison would have accepted. Reds against the -u form.
+@test "artifacts: candidate past the cursor still qualifies west of UTC" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/tz-review.md"
+  echo tz > "$f"
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 0
+  seed_state
+  # Cursor two seconds back: well inside any UTC offset's shift, so only the
+  # offset bug can push the reference past the file.
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at $(( secs - 2 )))\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434" TZ="America/New_York"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+# A single future-dated artifact must not drive the persisted cursor past the
+# present, which would exclude every artifact in the repository from then on
+# while the source keeps reporting success and an empty candidate list.
+@test "artifacts: a future-dated artifact does not push the cursor past now" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/future-review.md"
+  echo future > "$f"
+  set_mtime_frac "$f" 4102444800 0   # 2100-01-01T00:00:00Z
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  # Still mined this run — the clamp bounds the CURSOR, not the candidate set.
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg r "$repo" --arg now "$(iso_at "$(date -u +%s)")" '.high_water[$r] <= $now' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"future-dated"* ]]
+}
+
+# An unreadable mtime must degrade to "everything is new" — the direction
+# _mtime_ref_file's own comment commits to — not to "older than any cursor".
+# Spelling a failed stat as epoch 0 made the comparison drop the candidate,
+# turning a broken toolchain into an empty-and-successful report (R50 (ii)).
+@test "artifacts: an unreadable mtime keeps the candidate and warns" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/nostat-review.md"
+  echo nostat > "$f"
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  # Shadow `stat` only for the subject's own invocation, after every helper
+  # that needs a working stat has already run.
+  cat > "$BATS_TEST_TMPDIR/stat" <<'EOF'
+#!/bin/bash
+exit 1
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/stat"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  # Pin the sink's exact state (RT11): advancing the cursor here would exclude
+  # every artifact in the repo from then on while still reporting success.
+  run jq -e --arg r "$repo" '.high_water[$r] == "1970-01-01T00:00:00Z"' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"unreadable mtime"* ]]
+}
+
+# Boundary cells for the clamp (RT10 clause 2). RETRO_PRESCREEN_NOW is the
+# present-instant seam — distinct from RETRO_NOW, which pins the scheduling
+# clock — so both cells are deterministic instead of racing the wall clock.
+@test "artifacts: an artifact dated exactly now still advances the cursor" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/now-review.md"
+  echo now > "$f"
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 0
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at $(( secs - 60 )))\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+  export RETRO_PRESCREEN_NOW="$secs"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e --arg r "$repo" --arg hw "$(iso_at "$secs")" '.high_water[$r] == $hw' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+@test "artifacts: an artifact one second past now is clamped out of the cursor" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/ahead-review.md"
+  echo ahead > "$f"
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 0
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"$(iso_at $(( secs - 60 )))\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+  export RETRO_PRESCREEN_NOW="$(( secs - 1 ))"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  # The clamp withholds the advance; it does not move the cursor forward to now.
+  run jq -e --arg r "$repo" --arg hw "$(iso_at $(( secs - 60 )))" '.high_water[$r] == $hw' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"future-dated"* ]]
+}
+
+# A cursor that is ALREADY past the present — written by any run before the
+# clamp existed — must be healed, not merely left alone. Clamping the increment
+# does nothing for a value that is already ahead, and the loop body never runs
+# to announce it, so this is the branch with no other signal.
+@test "artifacts: a persisted future cursor is clamped and the source is not blind" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/healed-review.md"
+  echo healed > "$f"
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 0
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"2100-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+  export RETRO_PRESCREEN_NOW="$(( secs + 60 ))"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  # Healing bounds the damage; it does not recover the window already skipped,
+  # so this artifact stays excluded. What matters is that the persisted value
+  # is no longer in the future, so the source is not blind from here on.
+  run jq -e --arg r "$repo" '.high_water[$r] < "2100-01-01T00:00:00Z"' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"past the present"* ]]
+}
+
+# When the present cannot be read, neither bound can be applied: the heal has
+# nothing to compare against, and an increment cannot be judged as past or
+# future. The candidate is KEPT (the permissive direction), and the cursor does
+# NOT advance — recording an unjudgeable increment would persist a value the
+# next run cannot distinguish from a poisoned one, and an absurd mtime picked up
+# on a clock-less run can spell a year `_is_iso` rejects, which discards the
+# whole high_water object rather than one entry.
+@test "artifacts: an unreadable present keeps the candidate and does not advance the cursor" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/noclock-review.md"
+  echo noclock > "$f"
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 0
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+  export RETRO_PRESCREEN_NOW="not-a-number"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg r "$repo" '.high_water[$r] == "1970-01-01T00:00:00Z"' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"bounds disabled"* ]]
+}
+
+# `stat` can exit 0 and print something non-numeric (a wrapper, a locale-mangled
+# format). jq --argjson then fails and mtime_iso comes back empty — and an empty
+# string compares BELOW every cursor, which would silently drop the candidate.
+@test "artifacts: a non-numeric mtime keeps the candidate rather than dropping it" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/junkstat-review.md"
+  echo junk > "$f"
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  cat > "$BATS_TEST_TMPDIR/stat" <<'EOF'
+#!/bin/bash
+echo "not-a-number"
+exit 0
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/stat"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg r "$repo" '.high_water[$r] == "1970-01-01T00:00:00Z"' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"unreadable mtime"* ]]
+}
+
+# The whole-second cursor guard, the clamp and the stat fail-direction were all
+# added to cmd_transcripts as well (R3 — same producer/consumer pair, same
+# class), and RT7 wants one mutation per arm, so each arm needs its own case.
+@test "transcripts: a session inside the cursor's own second does not re-qualify" {
+  local root
+  root=$(setup_transcripts_config)
+  mkdir -p "$root/proj"
+  local f="$root/proj/boundary.jsonl"
+  write_transcript_fixture "$f" "irrelevant"
+  local secs=1784047446
+  set_mtime_frac "$f" "$secs" 844377201
+  fs_keeps_subsecond "$f" || skip "filesystem did not preserve a sub-second mtime"
+  seed_state
+  mark_high_water transcripts "\"$(iso_at "$secs")\""
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen transcripts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 0' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+@test "transcripts: a future-dated session does not push the cursor past now" {
+  local root
+  root=$(setup_transcripts_config)
+  mkdir -p "$root/proj"
+  local f="$root/proj/future.jsonl"
+  write_transcript_fixture "$f" "irrelevant"
+  set_mtime_frac "$f" 4102444800 0   # 2100-01-01T00:00:00Z
+  # With no session id the 5-minute freshness rule drops a future-dated file
+  # before the cursor logic runs; pin the id so this case reaches the clamp.
+  export CLAUDE_SESSION_ID="00000000-0000-0000-0000-000000000000"
+  seed_state
+  mark_high_water transcripts "\"1970-01-01T00:00:00Z\""
+  export LLM_BACKEND=openai
+  export LLM_MOCK_CONTENT="a generic distilled lesson"
+  setup_llm_online_mock
+  export OPENAI_HOST="http://127.0.0.1:8080"
+
+  run_prescreen transcripts --json
+  [ "$status" -eq 0 ]
+  run jq -e --arg now "$(iso_at "$(date -u +%s)")" '.high_water <= $now' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"future-dated"* ]]
+}
+
+@test "transcripts: an unreadable session mtime keeps the file and warns without naming it" {
+  local root
+  root=$(setup_transcripts_config)
+  mkdir -p "$root/proj"
+  local f="$root/proj/nostat.jsonl"
+  write_transcript_fixture "$f" "irrelevant"
+  set_mtime_ago "$f" 600
+  seed_state
+  mark_high_water transcripts "\"1970-01-01T00:00:00Z\""
+  export LLM_BACKEND=openai
+  export LLM_MOCK_CONTENT="a generic distilled lesson"
+  setup_llm_online_mock
+  export OPENAI_HOST="http://127.0.0.1:8080"
+
+  cat > "$BATS_TEST_TMPDIR/stat" <<'EOF'
+#!/bin/bash
+exit 1
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/stat"
+
+  run_prescreen transcripts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length >= 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"unreadable mtime"* ]]
+  # The privacy invariant: no branch may name a transcript path or filename.
+  [[ "$ERR" != *"nostat"* ]]
+  [[ "$ERR" != *"$root"* ]]
+}
+
+# The shell's own redirection error is not covered by the loop's 2>/dev/null
+# and would print the absolute transcript path — user name and repository
+# location — onto stderr.
+@test "transcripts: an unreadable session file never leaks its path to stderr" {
+  local root
+  root=$(setup_transcripts_config)
+  mkdir -p "$root/proj"
+  local f="$root/proj/CANARYNAME.jsonl"
+  write_transcript_fixture "$f" "irrelevant"
+  set_mtime_ago "$f" 600
+  chmod 000 "$f"
+  seed_state
+  mark_high_water transcripts "\"1970-01-01T00:00:00Z\""
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen transcripts --json
+  [ "$status" -eq 0 ]
+  [[ "$ERR" != *"CANARYNAME"* ]]
+  [[ "$ERR" != *"$root"* ]]
+  chmod 644 "$f"
+}
+
+# Same read-in clamp on the transcripts side (R3 — one class, two members).
+@test "transcripts: a persisted future cursor is clamped rather than left blind" {
+  local root
+  root=$(setup_transcripts_config)
+  mkdir -p "$root/proj"
+  local f="$root/proj/healed.jsonl"
+  write_transcript_fixture "$f" "irrelevant"
+  set_mtime_ago "$f" 600
+  seed_state
+  mark_high_water transcripts "\"2100-01-01T00:00:00Z\""
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen transcripts --json
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"past the present"* ]]
+}
+
+# End-to-end drain property: the emitted cursor, fed back through mark-run,
+# must empty the source. This is also the only case where the cursor compared
+# against is the one PRODUCTION computed (jq `todate`) rather than one the test
+# hand-spelled with `date`.
+@test "artifacts: high_water round-trips into mark-run and drains the source" {
+  local repo
+  repo=$(setup_artifacts_repo)
+  local f="$repo/docs/archive/review/rt-review.md"
+  echo roundtrip > "$f"
+  # A fractional mtime, so the second pass must be drained by the whole-second
+  # ISO authority — with nsec=0 `-newer` alone excludes it and the case would
+  # prove only what the pre-filter already gave us.
+  set_mtime_frac "$f" 1784047446 500000000
+  fs_keeps_subsecond "$f" || skip "filesystem did not preserve a sub-second mtime"
+  seed_state
+  mark_high_water artifacts "{\"$repo\": \"1970-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+
+  # Feed the produced high_water back in, exactly as Step 9 of the pipeline does.
+  local hwfile="$BATS_TEST_TMPDIR/hw-roundtrip.json"
+  jq -c '.high_water' <<<"$DOC" > "$hwfile"
+  RETRO_CONFIG="$CONFIG" RETRO_STATE="$STATE" RETRO_NOW="$NOW" \
+    bash "$STATE_CLI" mark-run artifacts --high-water-file "$hwfile" >/dev/null 2>&1
 
   run_prescreen artifacts --json
   [ "$status" -eq 0 ]
@@ -764,7 +1279,12 @@ write_transcript_fixture() {
   [[ "$stderr" != *"$canary"* ]]
   run jq -e '.deferred == true' <<<"$DOC"
   [ "$status" -eq 0 ]
-  run jq -e '.high_water == null' <<<"$DOC"
+  # NOT null: pipeline.md writes the high-water file only "(when non-null)", so
+  # a null here makes mark-run be skipped entirely and `last_run` never
+  # advances -- the source stays permanently due while a poisoned cursor
+  # survives the run that announced it. The emitted value is the HEALED read-in
+  # cursor, never max_hw, so it records no progress.
+  run jq -e '.high_water == "1970-01-01T00:00:00Z"' <<<"$DOC"
   [ "$status" -eq 0 ]
   run jq -e '[.candidates[].event_count] | add > 0' <<<"$DOC"
   [ "$status" -eq 0 ]
@@ -971,7 +1491,9 @@ setup_transcripts_with_events() {
   [ "$status" -eq 0 ]
   run jq -e '.deferred == true' <<<"$DOC"
   [ "$status" -eq 0 ]
-  run jq -e '.high_water == null' <<<"$DOC"
+  # The deferred emitter carries the healed read-in cursor (see the offline
+  # canary case); `null` would make the orchestrator skip mark-run.
+  run jq -e '.high_water == "1970-01-01T00:00:00Z"' <<<"$DOC"
   [ "$status" -eq 0 ]
   [[ "$DOC" != *"CANARY-LOOPBACK"* ]]
   [[ "$ERR" != *"CANARY-LOOPBACK"* ]]
@@ -1045,4 +1567,430 @@ setup_transcripts_with_events() {
   [ "$status" -eq 0 ]
   run jq -e --arg r "$repo2" '.high_water[$r] != null' <<<"$DOC"
   [ "$status" -eq 0 ]
+}
+
+# ===========================================================================
+# helper unit group (C0) — the primitives every contract rests on
+# ===========================================================================
+
+# Sourcing the hook in `scrub` mode exposes the helpers without running a
+# cmd_*: `scrub` reads stdin and has no `exit`, so the dispatch returns.
+# `llm-utils.sh` is sourced too because `_file_mtime_epoch` lives there — it has
+# three consumers that never load this hook, so defining it here would silently
+# undefine it for them.
+HELPER_PRELUDE="source '$REPO_ROOT/hooks/llm-utils.sh' 2>/dev/null; source '$SCRIPT' scrub </dev/null >/dev/null 2>&1;"
+helper() { run bash -c "$HELPER_PRELUDE $1"; }
+
+@test "helpers: _iso_to_epoch and _epoch_to_iso round-trip against literals, both directions" {
+  helper '_iso_to_epoch 2026-07-14T16:44:06Z'; [ "$output" = "1784047446" ]
+  # Asserted against a LITERAL in each direction, never as f(g(x)) == x, which
+  # two functions wrong in mirrored ways both satisfy.
+  helper '_epoch_to_iso 1784047446'; [ "$output" = "2026-07-14T16:44:06Z" ]
+}
+
+@test "helpers: _iso_to_epoch expands the date-only spelling mark-run stores unnormalized" {
+  helper '_iso_to_epoch 2026-07-31'; [ "$output" = "1785456000" ]
+}
+
+@test "helpers: _iso_to_epoch clamps a pre-1970 cursor silently, warns only on a parse failure" {
+  # _is_iso accepts 1969-12-31; jq's fromdate returns -86400. A representable
+  # instant before the epoch is not corrupt, so it must not be reported as one.
+  run bash -c "$HELPER_PRELUDE _iso_to_epoch 1969-12-31 2>/dev/null"
+  [ "$output" = "0" ]
+  helper '_iso_to_epoch 2026-13-45'; [ -z "$output" ]
+  helper '_iso_to_epoch not-a-date'; [ -z "$output" ]
+}
+
+@test "helpers: _iso_to_epoch is not injectable — the operand cannot choose its own epoch" {
+  # The interpolated spelling `jq -nr "\"$iso\" | fromdate"` satisfies every
+  # other assertion in this group while returning 4102444800 here (and can read
+  # the process environment via jq's `env`). This is the only case that
+  # separates the two implementations.
+  helper '_iso_to_epoch '"'"'x" | 4102444800 # '"'"''
+  [ -z "$output" ]
+}
+
+@test "helpers: _epoch_to_iso refuses a value outside the shape _validate_hw accepts" {
+  # jq's todate emits 5- and 7-digit years; _is_iso anchors on ^[0-9]{4}, and
+  # _validate_hw rejects the WHOLE high_water object on one bad value.
+  helper '_epoch_to_iso 253402300800'; [ -z "$output" ]
+  helper '_epoch_to_iso 0'; [ "$output" = "1970-01-01T00:00:00Z" ]
+}
+
+@test "helpers: _heal_cursor compares as an integer, not lexicographically" {
+  # [[ "999999999" > "1784047446" ]] is TRUE. A string comparison would heal
+  # away every cursor written before 2001-09-09. Every other fixture in this
+  # file uses ten-digit epochs, where the two comparisons agree.
+  run bash -c "$HELPER_PRELUDE _heal_cursor 999999999 1784047446 artifacts persisted 2>/dev/null"
+  [ "$output" = "999999999" ]
+}
+
+@test "helpers: _heal_cursor boundary — at now no heal, one second past resets to the floor" {
+  run bash -c "$HELPER_PRELUDE _heal_cursor 1784047446 1784047446 artifacts persisted 2>/dev/null"
+  [ "$output" = "1784047446" ]
+  run bash -c "$HELPER_PRELUDE _heal_cursor 1784047447 1784047446 artifacts persisted 2>/dev/null"
+  [ "$output" = "0" ]
+}
+
+@test "helpers: _heal_cursor with no clock returns the value unchanged" {
+  run bash -c "$HELPER_PRELUDE _heal_cursor 4102444800 '' artifacts persisted 2>/dev/null"
+  [ "$output" = "4102444800" ]
+}
+
+@test "helpers: _file_mtime_epoch keeps the two stat arms' exit statuses distinct" {
+  local f="$BATS_TEST_TMPDIR/m.txt"; echo x > "$f"
+  set_mtime_frac "$f" 1784047446 0
+  helper "_file_mtime_epoch '$f'"; [ "$output" = "1784047446" ]
+
+  # `$(a || b)` concatenates BOTH stdouts when `a` prints and then fails, and
+  # no numeric guard can tell "123456" from "123" then "456".
+  cat > "$BATS_TEST_TMPDIR/stat" <<'EOF'
+#!/bin/bash
+case "$1" in
+  -c) printf '123'; exit 1 ;;
+  -f) printf '456'; exit 0 ;;
+esac
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/stat"
+  PATH="$BATS_TEST_TMPDIR:$PATH" run bash -c "$HELPER_PRELUDE _file_mtime_epoch '$f'"
+  [ "$output" = "456" ]
+}
+
+@test "helpers: _repo_relative fails closed to the basename when the strip is a no-op" {
+  helper '_repo_relative /a/b/docs/x.md /a/b';       [ "$output" = "docs/x.md" ]
+  helper '_repo_relative /a/b/docs/x.md /a/b/';      [ "$output" = "docs/x.md" ]
+  # Physical resolved path against a lexical (symlinked) root: the strip cannot
+  # match, so no absolute path — and therefore no $HOME — reaches stderr.
+  helper '_repo_relative /a/real/docs/x.md /a/link'; [ "$output" = "x.md" ]
+}
+
+# ===========================================================================
+# cursor survival across the loop's guards (the round-2/3 Critical)
+# ===========================================================================
+#
+# retro-state.sh writes `.high_water = $hw` as a WHOLE-OBJECT REPLACEMENT, so a
+# repo missing from the emitted map is DELETED from state, reset to 1970, and
+# re-mined in full — re-sending its whole archive to the LLM when
+# allow_remote_llm is set. The seed pass runs over the CONFIGURED ARRAY before
+# the scan loop, so no guard inside that loop can drop a key.
+
+setup_two_repos() {
+  local a="$BATS_TEST_TMPDIR/repoA" b="$BATS_TEST_TMPDIR/repoB"
+  mkdir -p "$a/docs/archive/review" "$b/docs/archive/review"
+  write_config --arg a "$a" --arg b "$b" \
+    '.sources.artifacts.repos = [$a, $b] | .sources.github.enabled = false'
+  printf '%s %s' "$a" "$b"
+}
+
+@test "artifacts: a repo whose ROOT is absent keeps its persisted cursor" {
+  local a b; read -r a b <<<"$(setup_two_repos)"
+  echo x > "$a/docs/archive/review/a.md"
+  seed_state
+  mark_high_water artifacts "{\"$a\": \"1970-01-01T00:00:00Z\", \"$b\": \"$(iso_at 1784047446)\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+  rm -rf "$b"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e --arg b "$b" '.high_water | has($b)' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e --arg b "$b" --arg hw "$(iso_at 1784047446)" '.high_water[$b] == $hw' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  # The silence was half the defect: a dropped repo and a drained repo were
+  # byte-identical on both channels.
+  [[ "$ERR" == *"repoB"* ]]
+  [[ "$ERR" == *"root absent"* ]]
+  # ...and the diagnostic names the repo WITHOUT its absolute path.
+  [[ "$ERR" != *"$b"* ]]
+  [[ "$ERR" != *"$HOME"* ]]
+}
+
+@test "artifacts: a repo whose ARCHIVE DIR is absent keeps its persisted cursor" {
+  local a b; read -r a b <<<"$(setup_two_repos)"
+  echo x > "$a/docs/archive/review/a.md"
+  seed_state
+  mark_high_water artifacts "{\"$a\": \"1970-01-01T00:00:00Z\", \"$b\": \"$(iso_at 1784047446)\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+  rm -rf "$b/docs"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e --arg b "$b" --arg hw "$(iso_at 1784047446)" '.high_water[$b] == $hw' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"archive directory absent"* ]]
+}
+
+@test "artifacts: a skipped repo whose cursor is POISONED emits the healed value, not the poison" {
+  # "equals the persisted value" alone is satisfied by a seed that bypasses the
+  # heal — which would re-persist 2100-01-01 for exactly the repo the seed
+  # exists to protect.
+  local a b; read -r a b <<<"$(setup_two_repos)"
+  echo x > "$a/docs/archive/review/a.md"
+  seed_state
+  mark_high_water artifacts "{\"$a\": \"1970-01-01T00:00:00Z\", \"$b\": \"2100-01-01T00:00:00Z\"}"
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+  export RETRO_PRESCREEN_NOW=1784047446
+  rm -rf "$b"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e --arg b "$b" '.high_water[$b] == "1970-01-01T00:00:00Z"' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"past the present"* ]]
+}
+
+@test "artifacts: no configured repos emits high_water null, never an empty object" {
+  # `{}` passes _validate_hw trivially and the whole-object replacement then
+  # wipes every repo's cursor in one write; `null` makes mark-run leave the
+  # cursors alone.
+  write_config '.sources.artifacts.repos = [] | .sources.github.enabled = false'
+  seed_state
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  run jq -e '.high_water == null' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+@test "artifacts: a heal disables raw egress for the run, for EVERY repo" {
+  # The poisoned repo is LAST. Deciding the egress verdict per repo inside the
+  # scan loop passes a single-repo fixture while shipping the sane repo's raw
+  # bytes off-machine on a run in which a heal fired.
+  local a b; read -r a b <<<"$(setup_two_repos)"
+  echo "Symptom: internal detail" > "$a/docs/archive/review/a.md"
+  echo "Symptom: internal detail" > "$b/docs/archive/review/b.md"
+  set_mtime_frac "$a/docs/archive/review/a.md" 1784047000 0
+  set_mtime_frac "$b/docs/archive/review/b.md" 1784047000 0
+  seed_state
+  mark_high_water artifacts "{\"$a\": \"1970-01-01T00:00:00Z\", \"$b\": \"2100-01-01T00:00:00Z\"}"
+  export LLM_BACKEND=openai
+  export LLM_MOCK_CONTENT="Symptom: a distilled bullet"
+  export OPENAI_HOST="http://127.0.0.1:8080"
+  setup_llm_online_mock
+  export RETRO_PRESCREEN_NOW=1784047446
+
+  run_prescreen artifacts --json
+  [ "$status" -eq 0 ]
+  # Both repos are mined — the heal bounds the CURSOR, not the candidate set...
+  run jq -e '.candidates | length == 2' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  # ...and no summary was produced, i.e. no raw artifact text was sent.
+  run jq -e '[.candidates[].summary] | all(. == null)' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"not sent off-machine"* ]]
+}
+
+# ===========================================================================
+# github: the local adjudicator this source never had
+# ===========================================================================
+
+@test "github: a PR at or below the cursor is not a candidate" {
+  # Without a local suppression predicate the server's `updated:>=` filter is
+  # the only thing deciding membership — the same shape as the `find -newer`
+  # pre-filter this change deletes — and LAG_MARGIN would re-mine the trailing
+  # day on every run, forever.
+  setup_github_config
+  seed_state
+  mark_high_water github '{"acme/widgets": "2026-07-01T00:00:00Z"}'
+  export GH_PR_LIST_JSON='[{"number":1,"title":"old","updatedAt":"2020-01-01T00:00:00Z"},{"number":2,"title":"new","updatedAt":"2026-07-20T00:00:00Z"}]'
+  export GH_PR_COMMENTS_BODY=""
+  setup_gh_mock
+
+  run_prescreen github --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates[0].number == 2' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e '.high_water["acme/widgets"] == "2026-07-20T00:00:00Z"' <<<"$DOC"
+  [ "$status" -eq 0 ]
+}
+
+@test "github: an unparseable updatedAt keeps the PR and does not advance the cursor" {
+  setup_github_config
+  seed_state
+  mark_high_water github '{"acme/widgets": "2026-07-01T00:00:00Z"}'
+  export GH_PR_LIST_JSON='[{"number":9,"title":"junk","updatedAt":"not-a-date"}]'
+  export GH_PR_COMMENTS_BODY=""
+  setup_gh_mock
+
+  run_prescreen github --json
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | length == 1' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e '.high_water["acme/widgets"] == "2026-07-01T00:00:00Z"' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$ERR" == *"unparseable updatedAt"* ]]
+}
+
+@test "github: gh absent still emits the healed cursor rather than an empty document" {
+  # `_json_empty`'s null made the orchestrator skip mark-run entirely, so
+  # last_run never advanced and a poisoned cursor survived the degraded run.
+  setup_github_config
+  seed_state
+  mark_high_water github '{"acme/widgets": "2100-01-01T00:00:00Z"}'
+  export RETRO_PRESCREEN_NOW=1784047446
+  local sandbox="$BATS_TEST_TMPDIR/nogh-bin"
+  mkdir -p "$sandbox"
+  local tool real
+  for tool in bash jq find date sha256sum awk sed grep cat stat dirname basename readlink perl mktemp; do
+    real=$(command -v "$tool" 2>/dev/null) && ln -sf "$real" "$sandbox/$tool"
+  done
+  RETRO_CONFIG="$CONFIG" RETRO_STATE="$STATE" RETRO_NOW="$NOW" RETRO_PRESCREEN_NOW=1784047446 PATH="$sandbox" \
+    run --separate-stderr bash "$SCRIPT" github --json
+  [ "$status" -eq 0 ]
+  run jq -e '.high_water["acme/widgets"] == "1970-01-01T00:00:00Z"' <<<"$output"
+  [ "$status" -eq 0 ]
+}
+
+# ===========================================================================
+# transcripts identity (F-R6) — both streams, at the producer
+# ===========================================================================
+
+@test "transcripts: the deferred document names no session file, on either stream" {
+  # `counts` is projected onto BOTH the --json document (:750) and the human
+  # report (:754), and a transcript's basename IS the session identity. Fixing
+  # only the JSON projection left the human stream leaking.
+  local root
+  root=$(setup_transcripts_config)
+  mkdir -p "$root/proj"
+  local f="$root/proj/SESSCANARY-0000-0000.jsonl"
+  write_transcript_fixture "$f" "irrelevant"
+  set_mtime_ago "$f" 600
+  seed_state
+  setup_curl_fail_mock
+  export LLM_BACKEND=ollama OLLAMA_HOST="http://127.0.0.1:11434"
+
+  run_prescreen transcripts --json
+  [ "$status" -eq 0 ]
+  # Presence first — an absence assertion over an empty candidate list is
+  # satisfied by the defect it is meant to catch.
+  run jq -e '.candidates | length > 0' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | all(has("index") and (has("file") | not))' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  run jq -e '.candidates | all(.index | type == "number")' <<<"$DOC"
+  [ "$status" -eq 0 ]
+  [[ "$DOC" != *"SESSCANARY"* ]]
+  [[ "$ERR" != *"SESSCANARY"* ]]
+
+  # The human stream is a second invocation, and it reads the same keys.
+  run_prescreen transcripts
+  [ "$status" -eq 0 ]
+  [[ "$DOC" != *"SESSCANARY"* ]]
+  [[ "$ERR" != *"SESSCANARY"* ]]
+}
+
+# ===========================================================================
+# C8 conformance gate — the deleted mechanism stays deleted
+# ===========================================================================
+#
+# A gate, not a hand-run grep: bash 3.2 and BSD `stat` are not executable here
+# (VC1/VC2), so this is the ONLY enforcement those constraints have, and a
+# hand-run step with no caller is no enforcement at all.
+#
+# Every row carries a must-MATCH and a must-NOT-match example, and both are
+# asserted for every pattern. Two rounds of review produced three regexes that
+# denied conformant code — `date -[ud][[:space:]]` matched the `date -u +%s`
+# the clock read requires, an array pattern matched the guarded idiom the hook
+# mandates, and a `jq` pattern matched every correct `--arg` call. Reviewing a
+# regex by eye does not catch that; asserting its negative example does.
+#
+# The must-NOT-match examples are drawn from the SUBJECT'S OWN vocabulary
+# (`candidate`, `updated_at`, `${a[@]+...}`), because that is where the false
+# positives came from — a negative example invented from the retired construct
+# cannot detect them.
+forbidden_rows() {
+  cat <<'ROWS'
+-newer|find "$d" -newer "$r"|find "$d" -maxdepth 1 -name "$p"
+_mtime_ref_file|hw_ref=$(_mtime_ref_file "$c")|_file_mtime_epoch "$f"
+\bmapfile\b|\breadarray\b|mapfile -t a < <(f)|map_file_name=x
+(^|[^+])"\$\{[A-Za-z_][A-Za-z0-9_]*\[@\]\}"|for f in "${files[@]}"; do|for f in ${files[@]+"${files[@]}"}; do
+touch -t|touch -t "$s" "$r"|touch "$f"
+date -j|epoch=$(date -j -u -f %s "$e")|n=$(date -u +%s)
+\bdate\b[^|;&]*-d[[:space:]]|e=$(date -u -d "$iso" +%s)|# a candidate path is handed to find -d for depth-first order
+(declare|local|typeset) +-A|declare -A hw_map|declare -a hw_list
+\$\{[A-Za-z_][A-Za-z0-9_]*\[-[0-9]+\]\}|last="${repos[-1]}"|last="${repos[1]}"
+\bclamp|# clamped to now|healed=$(_heal_cursor "$e" "$n" "$s" persisted)
+ROWS
+}
+
+@test "C8: the conformance gate examines a non-empty subject carrying a known token" {
+  # R50 clause (ii): a gate that examined nothing reports the same green as a
+  # gate that found nothing. A renamed hook or a typo'd path must DENY here,
+  # not pass over an empty set.
+  [ -s "$SCRIPT" ]
+  run grep -qE 'cmd_artifacts' "$SCRIPT"
+  [ "$status" -eq 0 ]
+}
+
+@test "C8: every forbidden pattern matches its violating example and spares its conformant one" {
+  local line pat yes no
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    # Rightmost two fields are the examples; everything before is the pattern,
+    # which may itself contain `|` alternation.
+    no="${line##*|}"; line="${line%|*}"
+    yes="${line##*|}"; pat="${line%|*}"
+    if ! printf '%s\n' "$yes" | grep -qE -- "$pat"; then
+      echo "pattern does not match its violating example: $pat <- $yes"; return 1
+    fi
+    if printf '%s\n' "$no" | grep -qE -- "$pat"; then
+      echo "pattern denies its conformant example: $pat <- $no"; return 1
+    fi
+  done < <(forbidden_rows)
+}
+
+@test "C8: no forbidden pattern appears in the shipped hook's CODE" {
+  # The subject is code, not prose: a comment explaining why `-newer` was
+  # deleted is documentation worth keeping, and a gate that forbids naming the
+  # retired construct would push that explanation out of the file. Only
+  # full-line comments are stripped, so an inline `# ...` cannot hide code.
+  local subject="$BATS_TEST_TMPDIR/code-only.sh"
+  grep -v '^[[:space:]]*#' "$SCRIPT" > "$subject"
+  [ -s "$subject" ]
+  grep -qE 'cmd_artifacts' "$subject"
+
+  local line pat rc
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    line="${line%|*}"; line="${line%|*}"; pat="$line"
+    # `cmd; rc=$?` aborts under bats' `set -e` before the assignment runs; the
+    # `|| rc=$?` form is what actually captures a non-zero status here.
+    rc=0
+    grep -nE -- "$pat" "$subject" >/dev/null 2>&1 || rc=$?
+    # Exactly 1 (clean), never merely non-zero: 2 means grep could not read the
+    # subject, which is the case an `if ! grep -q ... 2>/dev/null` reports as
+    # clean.
+    if [ "$rc" -ne 1 ]; then
+      echo "forbidden pattern present in code (or subject unreadable, rc=$rc): $pat"
+      grep -nE -- "$pat" "$subject"; return 1
+    fi
+  done < <(forbidden_rows)
+}
+
+@test "C8: the gate denies a subject with the pre-filter reinserted (deny-side proof)" {
+  # Without this, the previous case proves only that the patterns are absent
+  # from *something*.
+  local copy="$BATS_TEST_TMPDIR/mutant.sh"
+  sed 's|find "$glob_dir" -maxdepth 1 -name "$glob_pat" -print0|find "$glob_dir" -maxdepth 1 -name "$glob_pat" -newer "$ref" -print0|' \
+    "$SCRIPT" | grep -v '^[[:space:]]*#' > "$copy"
+  run grep -qE -- '-newer' "$copy"
+  [ "$status" -eq 0 ]
+}
+
+@test "C10: no docstring describes a helper the change deleted" {
+  local t
+  for t in _mtime_ref_file _find_newer_args _now_iso _clamp_iso; do
+    run grep -qF -- "$t" "$SCRIPT"
+    [ "$status" -eq 1 ]
+  done
+  # The env seam that can disable a control is named in the header block.
+  run bash -c "grep -n 'RETRO_PRESCREEN_NOW' '$SCRIPT' | head -1 | cut -d: -f1"
+  [ "$output" -lt 40 ]
 }
