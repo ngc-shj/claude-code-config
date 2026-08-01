@@ -297,7 +297,52 @@ the two.
 
 ---
 
-## Tooling defects found while running this pipeline — split out, not fixed here
+## Tooling defects found while running this pipeline — split out, and since closed
+
+> **Outcome (2026-08-01).** The split-out work landed as the epoch-cursor change on
+> `retro/prescreen-cursor-v2`, planned and reviewed under `/triangulate`
+> (`docs/archive/review/retro-prescreen-cursor-epoch-{plan,review}.md`). All six defects
+> below are closed, and the fix was a **mechanism replacement**, not a fourth round of
+> guards: cursor arithmetic moved out of ISO-string space into whole-second integer epoch
+> space and the `find -newer` pre-filter was deleted outright. That removed the reference
+> file, and with it the `mktemp` / `touch -t` / `date -j` / `date -d` / `mapfile` surface
+> that produced defects (1) and most of (2) — and integer comparison removed the third
+> collision, where an empty string sorted below every cursor so any upstream failure spelled
+> itself "older than everything".
+>
+> Three findings from that review changed the design rather than the prose, and are worth
+> recording here because each contradicts something this section asserted:
+>
+> - **The heal direction in the original fix was backwards.** Clamping a poisoned cursor
+>   *forward* to the present suppresses every file that already exists and loses the backlog
+>   permanently, while reporting success with no diagnostic on the following run. Reproduced
+>   across two consecutive runs. A cursor ahead of the present now resets to the epoch floor,
+>   matching the policy `skills/retrospect/pipeline.md:134-137` had already settled for the
+>   same failure.
+> - **Defect (6)'s "same producer/consumer pair" was true but incomplete for `github`.** That
+>   source has no local suppression predicate at all — every PR the API returns is a candidate
+>   unconditionally, so the server-side `updated:>=` filter was the only adjudicator. One was
+>   added; without it the lag margin the fix introduced would have re-mined the trailing day
+>   forever.
+> - **The heal composes with the egress gate.** A heal makes the whole corpus a candidate, and
+>   `cmd_artifacts` decides `artifacts_llm_ok` once per run before piping raw bytes to the
+>   summarizer — so a backward clock step would have re-sent every configured repository's
+>   full archive off-machine under `allow_remote_llm`. A healing run now sends no raw text.
+>
+> Two rule-level lessons came out of the review itself and are folded as mechanism changes in
+> the plan rather than as new rules: a forbidden-pattern list must ship a *must-match* and a
+> *must-not-match* example per row, asserted by a test (three hand-written regexes denied
+> conformant code across two rounds); and a "derived set" obligation must ship as the grep, its
+> output, and a test — not as prose, which missed a sibling site eight times.
+>
+> The deferred row "Sub-second cursor precision" below stays deferred, on the same reasoning.
+> `last_run` / `snoozed_until` in `retro-state.sh` were *not* deferred in the end: a backward
+> clock makes them suppress the source entirely, so `retro-prescreen.sh` is never invoked and
+> the cursor heal's own announcement is unreachable — they gated the observability of the fix.
+>
+> The original assessment, and its correction, are preserved unedited below.
+
+### As recorded on 2026-07-31
 
 Running the pipeline surfaced a cluster of defects in `retro-prescreen.sh`'s cursor
 machinery. They are recorded here and their fix is **deliberately not in this change**;
@@ -362,6 +407,8 @@ rule set hostage.
 second, so each run re-mines a small number of already-seen artifacts. That costs sub-agent
 tokens and inflates candidate counts; it loses nothing.
 
+*(Closed 2026-08-01 — see the outcome note at the head of this section.)*
+
 ---
 
 ## Deferred (real gaps, not folded this round)
@@ -385,7 +432,7 @@ folding them would push a rule row past its routing-summary role. Revisit on rec
 | A broad directive whose plain reading negates a narrower one | Two directives govern one behavioural predicate at different scopes; the broad one is loaded first and unconditionally, so its silence is read as permission | `Extends-R48` |
 | Remedy accumulation with no stop rule | Round-by-round review optimises each finding locally; nothing counts remedies per defect class, so a mechanism that is wrong for the job is hardened indefinitely. When the Nth fix for one class opens a new instance of that class, the disposition is to replace the mechanism or split the unit on readiness — not another patch. **Fired on this round's own tooling work** (three rounds, each closing one path and opening another) and was applied: see the split above | `Extends-R43` — folded next round with the recurrence evidence this round produced |
 | This repo's own gates do not meet R50 clause (ii) | Ten `check-*.sh` hooks widen their exclude regex straight from `EXTRA_EXCLUDE_PATH_RE` without asserting it unset, and none emits an analysed-subject count — so the clause folded this round is, today, a claim stronger than the implementation (R49) in the catalog's own tooling. Closing it is per-hook work (or a new shared entry point — `hooks/scan-shared-utils.sh` does not itself read the variable): an analysed-count and active-override report on every run, plus a non-zero exit when an override empties the scanned set | Per-hook code work across the ten `check-*.sh` gates (or a new shared entry point), not a rule edit — out of scope for a fold, tracked here |
-| Sub-second cursor precision | Recording cursors at whole seconds leaves a bounded skip window. Removing it means widening `_is_iso`'s contract and the frontmatter scalar shape, which touches the state file's validation chokepoint | Belongs to the split-out cursor branch, not to a rule fold |
+| Sub-second cursor precision | Recording cursors at whole seconds leaves a bounded skip window. Removing it means widening `_is_iso`'s contract and the frontmatter scalar shape, which touches the state file's validation chokepoint | Still deferred after the cursor branch landed: the epoch rewrite shrinks the `stat` portability surface, and sub-second precision would re-expand it (`stat -c %.9Y` / `stat -f %Fm`) on top of the chokepoint. Recorded as SC1 in that change's plan |
 
 ## Disposition summary
 

@@ -58,6 +58,30 @@ _llm_trusted_file() {
   [ -f "$1" ] && ! [ -L "$1" ] && [ -O "$1" ]
 }
 
+# Read a file's mtime as whole epoch seconds; empty when it cannot be read.
+#
+# Lives here rather than in retro-prescreen.sh because this file is sourced
+# independently by pre-review.sh, commit-msg-check.sh and llm-commands.sh,
+# none of which ever load that hook — defining it there would silently
+# undefine it for three unrelated callers.
+#
+# The GNU and BSD arms are SEPARATE commands so their exit statuses stay
+# distinct. `$(a || b)` concatenates both stdouts when `a` prints and then
+# fails, and no numeric guard can tell "123456" apart from "123" then "456".
+#
+# Emits nothing — never a sentinel — when the mtime is unreadable or
+# non-numeric. Callers branch on empty, so a broken `stat` can never be
+# mistaken for epoch 0, which every comparison would read as "older than
+# everything".
+_llm_file_mtime_epoch() {
+  local e
+  e=$(stat -c %Y "$1" 2>/dev/null) || e=$(stat -f %m "$1" 2>/dev/null) || e=""
+  case "$e" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  printf '%s' "$e"
+}
+
 # Word-split the given host-list argument strings on IFS WITHOUT filename
 # globbing, emitting one non-empty host per line. A host entry containing `*`,
 # `?`, or `[...]` (typo, or a misguided "trust everything" wildcard) must be
@@ -90,9 +114,19 @@ _llm_cached_records() {
   local cache="$1" fingerprint="$2"
   [ -n "${cache:-}" ] || return 0
   _llm_trusted_file "$cache" || return 0
-  local mtime
-  mtime=$(stat -c %Y "$cache" 2>/dev/null || stat -f %m "$cache" 2>/dev/null || echo 0)
-  [ "$(( $(date +%s) - mtime ))" -lt 300 ] || return 0
+  local mtime now
+  mtime=$(_llm_file_mtime_epoch "$cache")
+  [ -n "$mtime" ] || return 0
+  now=$(date +%s 2>/dev/null)
+  case "$now" in ''|*[!0-9]*) return 0 ;; esac
+  # A cache stamped in the FUTURE — a clock stepped back, a restored backup, an
+  # archive extracted with its recorded times — otherwise satisfies the
+  # freshness test for as long as the skew lasts, pinning the resolved host
+  # list indefinitely. That list decides where artifact text and transcript
+  # excerpts are sent, so staleness here is an egress-destination question, not
+  # a latency one. Same direction as check-pre-pr.sh's cache entry check.
+  [ "$mtime" -le "$now" ] || return 0
+  [ "$(( now - mtime ))" -lt 300 ] || return 0
   local header
   IFS= read -r header < "$cache"
   [ "$header" = "$fingerprint" ] || return 0
