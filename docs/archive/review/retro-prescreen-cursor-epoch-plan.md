@@ -566,18 +566,38 @@ file re-read. `pipeline.md`'s prose has no gate; that is declared, not claimed.
 
 | ID  | Subject | Status |
 |-----|---------|--------|
-| C1  | `_file_mtime_epoch` — one validated primitive, defined in `llm-utils.sh`, source hoisted | pending |
-| C2  | codec — `--arg`, output bounded to `_is_iso`, subset declared not equality | pending |
-| C3  | `_now_epoch` — announced seam, bracketed acceptance | pending |
-| C4  | `_heal_cursor` — backward heal, integer compare, wording matches the operation | pending |
-| C5  | `cmd_artifacts` — hw_map from the config array, aggregate diagnostic, heal disables egress | pending |
-| C6  | `cmd_transcripts` — one clock, every derived exit heals, identity fixed at the producer, both arrays guarded | pending |
-| C7  | `cmd_github` — local suppression predicate, declared pre-filter, ISO emission | pending |
-| C8  | Deletions + gate with per-pattern positive/negative examples | pending |
-| C9  | `_resolve_contained` residual: window **and** sink | pending |
-| C10 | Header / docstrings, gated by TC12 | pending |
-| C11 | TC0–TC21c with per-row mutants | pending |
-| C12 | `pipeline.md` deferred write + `mark-run` status | pending |
+| C1  | `_llm_file_mtime_epoch` — one validated primitive, defined in `llm-utils.sh`, source hoisted, guard at both sourcing sites | locked |
+| C2  | codec — `--arg`, output bounded to `_is_iso`, subset declared not equality | locked |
+| C3  | `_now_epoch` — announced seam, refused when it cannot be bounded | locked |
+| C4  | `_heal_cursor` — backward heal, integer compare, wording matches the operation | locked |
+| C5  | `cmd_artifacts` — hw_map from the config array, aggregate diagnostics, reset disables egress | locked |
+| C6  | `cmd_transcripts` — one clock, every derived exit heals, identity fixed at the producer, both arrays guarded, cumulative freshness rule | locked |
+| C7  | `cmd_github` — local suppression predicate, declared pre-filter, ISO emission, repo shape filtered at the boundary | locked |
+| C8  | Deletions + gate with per-pattern positive/negative examples, three-file subject, pinned row cardinality | locked |
+| C9  | `_resolve_contained` residual: window **and** sink; terminal-type assertion is the containment authority | locked |
+| C10 | Header / docstrings, gated by TC12 | locked |
+| C11 | Test changes — 117 cases, every guard red-proved by a single mutation | locked |
+| C12 | `pipeline.md` deferred write + `mark-run` status + the null guard on every path | locked |
+| C13 | `retro-state.sh` `due` heal — `last_run` / `snoozed_until` | locked |
+
+**Amended during Phase 3.** Three contracts were widened by code review and the
+amendments are load-bearing, so they are recorded here rather than only in the
+review file:
+
+- **C5/C6/C7** — the egress gate keys on **every cause that resets a cursor to
+  the floor**, not on the heal alone. An unparseable-but-`_is_iso`-valid
+  persisted value and an absent state entry both reset, and both previously
+  left raw egress enabled.
+- **C9** — the regular-file assertion sits **after** the symlink chase, not as a
+  `find -type f` predicate: `find` tests the link, so the predicate both missed
+  a FIFO reached through a symlink and excluded a legitimate artifact symlinked
+  into the archive directory.
+- **SC5 is withdrawn** — `last_run` / `snoozed_until` are fixed in C13 rather
+  than deferred. A backward clock makes them suppress the source entirely, so
+  `retro-prescreen.sh` is never invoked and the cursor heal's own announcement
+  is unreachable: they gated the observability of this change's own remedy.
+- **SC7 added** — `cmd_github`'s `title` bypassed `cmd_scrub`; fixed in Phase 3
+  rather than deferred, since C7 restates this source's emitted shape.
 
 ## Testing strategy
 

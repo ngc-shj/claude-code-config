@@ -73,7 +73,7 @@ _llm_trusted_file() {
 # non-numeric. Callers branch on empty, so a broken `stat` can never be
 # mistaken for epoch 0, which every comparison would read as "older than
 # everything".
-_file_mtime_epoch() {
+_llm_file_mtime_epoch() {
   local e
   e=$(stat -c %Y "$1" 2>/dev/null) || e=$(stat -f %m "$1" 2>/dev/null) || e=""
   case "$e" in
@@ -115,7 +115,7 @@ _llm_cached_records() {
   [ -n "${cache:-}" ] || return 0
   _llm_trusted_file "$cache" || return 0
   local mtime now
-  mtime=$(_file_mtime_epoch "$cache")
+  mtime=$(_llm_file_mtime_epoch "$cache")
   [ -n "$mtime" ] || return 0
   now=$(date +%s 2>/dev/null)
   case "$now" in ''|*[!0-9]*) return 0 ;; esac

@@ -100,7 +100,7 @@ asymmetry introduced by the same commit.
 | Sec S1 | Egress gate keyed on one of three reset causes | **FIXED** |
 | Sec S2 | PR `title` bypasses `cmd_scrub` on both streams; SC7 entry understated the sinks and the severity | **FIXED** |
 | Sec S3 / Func F6 | `CLAUDE_SESSION_ID` disabled the freshness rule for *every other* transcript, admitting in-flight sibling sessions to Stage-2 egress | **FIXED** (rules made cumulative) |
-| Sec S4 | No `-type f` anywhere: a FIFO named `*.md` in an untrusted repo hung the hook forever (exit 124, zero output — breaks F-R5) | **FIXED** (`find -type f` **and** `[ -f "$cur" ]` in `_resolve_contained`) |
+| Sec S4 | No `-type f` anywhere: a FIFO named `*.md` in an untrusted repo hung the hook forever (exit 124, zero output — breaks F-R5) | **FIXED** — `[ -f "$cur" ]` after the symlink chase. `find -type f` was tried first and withdrawn: it tests the LINK, so it excluded legitimate symlinked artifacts while still missing a FIFO reached through a symlink |
 | Func F1 | An unreadable transcript advanced `max_hw` past itself before the open, then `continue`d — lost permanently | **FIXED** (staged, committed after `exec 3<&-`) |
 | Func F2 | Mtime stat'd twice per file; C1 claims "read once and carried" and the deviation log repeats it | **FIXED** (index-aligned `files_epoch`) |
 | Func F3 | `cmd_scout`'s `{}`-wipe | **FIXED** (pre-loop seed + `null` on empty) |
@@ -110,10 +110,10 @@ asymmetry introduced by the same commit.
 | X3 | The skew announcement used a second, divergent predicate — fired for sources `due` did not return | **FIXED** (intersected with `due`) |
 | X4 | `snooze` on a source with no state entry was a silent no-op (the missing-entry arm preceded the snooze arm) — pre-existing, reachable for `scout` | **FIXED** (arm reordered) |
 | X5 | Step 1's backticked command still showed the fileless `mark-run` its own prose retires | **FIXED** |
-| X6 | The rationale sentence was **false**: `mark-run` without a file *does* advance `last_run` (executed, rc 0). The same claim reached the commit message and the PR body | **FIXED in `pipeline.md`; commit message and PR body still carry it** |
+| X6 | The rationale sentence was **false**: `mark-run` without a file *does* advance `last_run` (executed, rc 0). The same claim reached the commit message and the PR body | **FIXED** in `pipeline.md` and in the PR body; the `d84ca51` commit message still carries it and cannot be amended without rewriting a pushed commit |
 | X7 | Step 9's abort-on-non-zero rule lacked Step 1's `(when non-null)` guard — a null `high_water` (reachable for a *processed* source) aborts the run | **FIXED** (guard hoisted for all sources) |
 
-### Major — tests (ALL OPEN)
+### Major — tests (all FIXED; see Resolution Status)
 
 | ID | Subject |
 |---|---|
@@ -215,13 +215,51 @@ consumer-side status read).
 
 ## Resolution Status
 
-Fixed this round, verified by execution (see the tables above for the full list): Sec
-S1/S2/S3/S4/S5/S6/S7, Func F1/F2/F3/F5/F6/F8, X1/X2/X3/X4/X5/X6/X7/X9.
+**All 46 findings closed except three declared residuals** (R3-21, Func F9, Func F10 — see
+the deviation log's "Remaining open").
 
-Gates after the fixes: `bats tests/retro-prescreen.bats` 97 ok / rc 0;
-`bats tests/retro-state.bats` 46 ok / rc 0; `hooks/check-rule-sync.sh` rc 0.
+Implementation: Sec S1–S8, Func F1–F8, F10 (documented), X1–X9.
+Tests: T1–T17. The suite grew from 74 to **119 cases**.
 
-**Open, and the reason the round is not closed**: every Testing finding (T1–T17 except the
-confirmations), plus X8, Sec S8, Func F9/F10. The test findings are not deferrable — they
-are the verification mechanism for the fixes above, and while they stand, "the suite is
-green" is not evidence about any of them.
+### The mutation battery — the reason this round is closable
+
+The review's central finding was that **eight mutations the plan declared red-expected were
+green**. Every guard this change ships is now red-proved by a single surgical mutation
+applied to a scratch copy outside the repository:
+
+```
+proven 22/22; unproven: none
+```
+
+Each reds its own named assertion. The full list, with the assertion each reds, is in the
+battery driver preserved at `scratchpad/battery.py` and reproduced in the commit message.
+
+**One mutation did not red — it HUNG**, and that was itself a finding. Removing the
+terminal-type assertion from `_resolve_contained` makes `< "$file"` block forever on the
+FIFO fixture, and `bats` has no timeout of its own, so the battery stalled rather than
+failing. RT7 shape (g) states it directly: *a mutation whose failure mode is non-termination
+must be bounded so the absence of the guard surfaces as a red.* Both FIFO cases now run
+under `timeout 20` and assert `status -ne 124` explicitly, and the mutation reds.
+
+### Defects the fixes themselves introduced
+
+Three, all caught by the suite or the battery rather than by a reviewer — the "Nth fix opens
+a new instance" shape this change exists to stop, recorded in the deviation log:
+
+1. `reset_any` keyed on `persisted_epoch -eq 0` conflated "no state entry" with a
+   legitimately persisted `1970-01-01T00:00:00Z`, disabling raw egress on every first run.
+2. The cumulative freshness rule bounded one side only, so a future-dated transcript was
+   excluded as "written moments ago" and never reached the diagnostic that reports it.
+3. `find -type f` tests the LINK, so it silently excluded a legitimate artifact symlinked
+   into the archive directory while still missing a FIFO reached *through* a symlink. The
+   battery surfaced it as an unprovable guard; the terminal-type assertion after the chase
+   is the containment authority and the `find` predicate was removed.
+
+### Environment Verification Report — update
+
+`VC2` (bash 3.2) was the constraint this review most weakened, and it is now the one most
+strengthened. The C8 gate: spans all three edited files, asserts positive evidence from each,
+ships a must-match **and** a must-not-match example per row, pins its own row cardinality
+(a deleted row reds), and its deny side runs the gate's own loop over every row rather than a
+hand-spelled grep. It caught four defects while this branch was written, two of them in its
+own rows.

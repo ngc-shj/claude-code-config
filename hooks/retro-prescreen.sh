@@ -99,10 +99,14 @@ _resolve_contained() {
     hops=$((hops + 1))
   done
   [ -L "$cur" ] && return 1   # still a link after the cap: refuse (likely a cycle)
-  # A REGULAR file, not merely a contained one. `find -type f` narrows the scan
-  # but is not the containment authority — this is. A FIFO named *.md in an
-  # untrusted sibling repo otherwise blocks the summarizer's `< "$file"` before
-  # any timeout applies, and the hook exits with no document at all.
+  # A REGULAR file, after the chain has been chased to its terminal entry. This
+  # is the containment authority, and it is the only place the test can live: a
+  # `find -type f` predicate tests the LINK, so it would both miss a FIFO
+  # reached through a symlink and exclude a legitimate artifact symlinked into
+  # the archive directory — the case the chase above exists to support.
+  # A FIFO named *.md in an untrusted sibling repo otherwise blocks the
+  # summarizer's `< "$file"` before any timeout applies (llm_request's bounds
+  # only curl), and the hook exits with no document at all.
   [ -f "$cur" ] || return 1
 
   dir=$(dirname "$cur")
@@ -435,12 +439,12 @@ cmd_artifacts() {
   # shellcheck source=llm-utils.sh
   source "$HOOK_DIR/llm-utils.sh" 2>/dev/null
   # The source above is stderr-suppressed, so a missing or unreadable
-  # llm-utils.sh would leave _file_mtime_epoch undefined and every mtime
+  # llm-utils.sh would leave _llm_file_mtime_epoch undefined and every mtime
   # unreadable — every file a candidate, no cursor ever advancing, forever, and
   # exit 0. Refuse instead, with a document on stdout so the caller still parses
   # a well-formed reply.
-  if ! command -v _file_mtime_epoch >/dev/null 2>&1; then
-    echo "retro-prescreen: required primitive _file_mtime_epoch is unavailable (llm-utils.sh not sourced)" >&2
+  if ! command -v _llm_file_mtime_epoch >/dev/null 2>&1; then
+    echo "retro-prescreen: required primitive _llm_file_mtime_epoch is unavailable (llm-utils.sh not sourced)" >&2
     [ "$as_json" -eq 1 ] && _json_empty "$source"
     exit 2
   fi
@@ -486,19 +490,28 @@ cmd_artifacts() {
     # heal announcement, the clock-disabled notice and the skipped-repo signal
     # are single lines on this same stream; burying them defeats them as surely
     # as omitting them.
-    local n_sup=0 n_future=0 n_nostat=0 n_seen=0 future_example="" f
+    local n_sup=0 n_future=0 n_nostat=0 n_seen=0 n_reject=0 future_example="" f
     while IFS= read -r -d '' f; do
       local resolved
       # The LEXICAL root: _resolve_contained resolves it itself for the
       # containment check, and its own diagnostic reports a lexical `$dir`, so
       # the operand kinds match on both sides. `$repo_phys` is for the physical
       # `resolved` paths below.
-      resolved=$(_resolve_contained "$f" "$expanded") || continue
-      [ -n "$resolved" ] || continue
+      if ! resolved=$(_resolve_contained "$f" "$expanded") || [ -z "$resolved" ]; then
+        # Counted, not silent. Four of the five rejection paths inside
+        # _resolve_contained return without a word — including the containment
+        # escape, the highest-signal observation this hook can make about an
+        # untrusted repository. `n_seen` increments only after a successful
+        # resolve, so the aggregate lines below could not reveal them either,
+        # and a repo that legitimately symlinks its archive directory was
+        # indistinguishable from one attacking the scan.
+        n_reject=$((n_reject + 1))
+        continue
+      fi
       n_seen=$((n_seen + 1))
 
       local mtime_epoch
-      mtime_epoch=$(_file_mtime_epoch "$resolved")
+      mtime_epoch=$(_llm_file_mtime_epoch "$resolved")
       if [ -n "$mtime_epoch" ]; then
         # Integer comparison against a whole-second cursor. Both operands come
         # from `%Y`, so a file mined in run N is strictly not greater in run
@@ -529,7 +542,7 @@ cmd_artifacts() {
       else
         candidates=$(jq -c --arg p "$resolved" '. + [{path: $p, summary: null}]' <<<"$candidates")
       fi
-    done < <(find "$glob_dir" -maxdepth 1 -name "$glob_pat" -type f -print0 2>/dev/null)
+    done < <(find "$glob_dir" -maxdepth 1 -name "$glob_pat" -print0 2>/dev/null)
 
     [ "$n_sup" -eq 0 ] || printf 'retro-prescreen: %s: %s: %d of %d at or below the cursor — suppressed\n' \
       "$source" "${repo##*/}" "$n_sup" "$n_seen" >&2
@@ -537,6 +550,8 @@ cmd_artifacts() {
       "$source" "${repo##*/}" "$n_future" "$n_seen" "$future_example" >&2
     [ "$n_nostat" -eq 0 ] || printf 'retro-prescreen: %s: %s: %d of %d with an unreadable mtime — kept, cursor not advanced\n' \
       "$source" "${repo##*/}" "$n_nostat" "$n_seen" >&2
+    [ "$n_reject" -eq 0 ] || printf 'retro-prescreen: %s: %s: %d file(s) rejected — outside the repo root, a symlink cycle, or not a regular file\n' \
+      "$source" "${repo##*/}" "$n_reject" >&2
 
     hw_epoch=$(jq -c --arg r "$repo" --argjson v "$repo_max" '. + {($r): $v}' <<<"$hw_epoch")
   done < <(jq -r '.[]' <<<"$repos_json")
@@ -849,14 +864,14 @@ cmd_transcripts() {
   allow_remote=$(jq -r '.sources.transcripts.allow_remote_llm // false' <<<"$cfg")
   markers=$(jq -c '.correction_markers // []' <<<"$cfg")
 
-  # Sourced ABOVE the gather loop: _file_mtime_epoch lives in llm-utils.sh (it
+  # Sourced ABOVE the gather loop: _llm_file_mtime_epoch lives in llm-utils.sh (it
   # has three consumers that never load this hook) and both adopter sites below
   # would otherwise run before it is defined. The source is stderr-suppressed,
   # so its failure has no other observer — hence the explicit guard.
   # shellcheck source=llm-utils.sh
   source "$HOOK_DIR/llm-utils.sh" 2>/dev/null
-  if ! command -v _file_mtime_epoch >/dev/null 2>&1; then
-    echo "retro-prescreen: required primitive _file_mtime_epoch is unavailable (llm-utils.sh not sourced)" >&2
+  if ! command -v _llm_file_mtime_epoch >/dev/null 2>&1; then
+    echo "retro-prescreen: required primitive _llm_file_mtime_epoch is unavailable (llm-utils.sh not sourced)" >&2
     [ "$as_json" -eq 1 ] && _json_empty "$source"
     exit 2
   fi
@@ -899,7 +914,7 @@ cmd_transcripts() {
   local files=() files_epoch=() f base f_epoch
   while IFS= read -r -d '' f; do
     base="${f##*/}"
-    f_epoch=$(_file_mtime_epoch "$f")
+    f_epoch=$(_llm_file_mtime_epoch "$f")
     # The two exclusions are CUMULATIVE, not alternatives. The session id
     # excludes exactly THIS session's transcript and says nothing about any
     # other, so writing them as if/else meant that on the normal path — where

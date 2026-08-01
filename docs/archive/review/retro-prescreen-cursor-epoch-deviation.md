@@ -49,6 +49,70 @@ emptiness, so nothing broke, but the suite's stderr is noisier than before.
   deferral to in-scope, on the finding that a future `last_run` suppresses the source entirely
   and therefore makes the cursor heal's own announcement unreachable.
 
+## Resolved in Phase 3 (code review round 1)
+
+Every entry that stood as "Skipped" below was **closed**, not carried. Three of them were
+judged **understated** by the review, and that judgement was correct in each case:
+
+- **[SC7]** rated the unscrubbed PR `title` Minor and named one sink. It reaches the `--json`
+  document, the human report **and** the mining sub-agent, carrying the `/home/<user>/`
+  spelling this same file treats as a hard invariant elsewhere. Fixed.
+- **[C11-map round-trip]** rated a malformed configured repo "Likelihood: low" — a typo in a
+  hand-edited list is ordinary user error — and said it "aborts the whole source" where
+  `pipeline.md` aborts the **run**. It also claimed both round-trips assert rc 0; the
+  artifacts one did not. Both fixed, plus a boundary shape filter on the config.
+- **[C11-TC18]** framed the gap as a cardinality problem. The diagnostic was unasserted
+  **entirely**, at any cardinality, on any source — neutering all three left the suite green.
+  Fixed with one case per source at N ≥ 2.
+
+**[C11-TC7e/f]** (the `--search` bound) was verified accurate: the bound is built from
+`hw_epoch`, which holds only healed values, confirmed by execution.
+
+**[R3-21]** (`pipeline.md` Step 4 as an unlisted `high_water` consumer) remains open and is
+the only entry below that survives — see the tail of this file.
+
+## Defects the fixes themselves introduced
+
+Recorded because they are the "Nth fix opens a new instance" shape this change exists to
+stop, and because the suite — not a reviewer — caught all three:
+
+- **`reset_any` keyed on `persisted_epoch -eq 0`** conflated "no state entry" with a
+  legitimately persisted `1970-01-01T00:00:00Z`, disabling raw egress on every first run.
+  Three tests red. Keyed on `-z "$persisted_iso"` instead.
+- **The cumulative freshness rule bounded one side only**, so a future-dated transcript was
+  excluded as "written moments ago" and never reached the diagnostic that reports it. One
+  test red. Bounded on both sides.
+- **`find -type f`** was added as the non-regular-file guard. `find` tests the LINK, so it
+  silently excluded a legitimate artifact symlinked into the archive directory — a case
+  `_resolve_contained`'s symlink chase exists to support — while still missing a FIFO reached
+  *through* a symlink. The mutation battery surfaced it as an unprovable guard. The
+  terminal-type assertion after the chase is the containment authority; the `find` predicate
+  was removed.
+
+## Remaining open
+
+### [R3-21] [Minor] `pipeline.md` Step 4 is an unlisted `high_water` consumer
+- **Worst case**: Step 4 writes the per-repo **minimum** into a committed retrospective doc's
+  frontmatter as the durable state backup. After a heal that minimum is
+  `1970-01-01T00:00:00Z`, and `retro-state.sh seed --high-water artifacts=<scalar>` expands a
+  scalar over *all* configured repos — so a later recovery from that doc re-mines every repo
+  from 1970.
+- **Likelihood**: low. The direction is the safe one `pipeline.md:134-137` mandates, and the
+  next heal-free run rewrites the doc.
+- **Cost to fix**: two sentences in C5/C6's walkthroughs and one in `pipeline.md`.
+
+### [Func F9] [Minor] github's per-item diagnostics
+`cmd_github`'s future-dated and unparseable-`updatedAt` lines are per-PR where every sibling
+source aggregates. Bounded by `--limit 200`, so N-R2's output bound is not breached, but 200
+lines still buries the single-line signals they share the stream with.
+
+### [Func F10] [Minor] a third `exit 2` class
+A missing `_llm_file_mtime_epoch` exits 2, which F-R5 admits only for unknown mode / missing
+config. It is the right call — the alternative is every mtime unreadable, every file a
+candidate, no cursor ever advancing — and the file header documents it; the plan does not.
+
+---
+
 ## Skipped — with Anti-Deferral entries
 
 ### [C11-TC7e/f] [Major] The `--search` bound has no acceptance case — Skipped
