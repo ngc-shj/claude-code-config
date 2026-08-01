@@ -1978,7 +1978,9 @@ ROWS
   # Without this, the previous case proves only that the patterns are absent
   # from *something*.
   local copy="$BATS_TEST_TMPDIR/mutant.sh"
-  sed 's|find "$glob_dir" -maxdepth 1 -name "$glob_pat" -print0|find "$glob_dir" -maxdepth 1 -name "$glob_pat" -newer "$ref" -print0|' \
+  # Anchored on the `-type f` the containment fix added, so the mutant is a
+  # genuine reinsertion of the deleted pre-filter rather than a no-op sed.
+  sed 's|-maxdepth 1 -name "$glob_pat" -type f|-maxdepth 1 -name "$glob_pat" -newer "$ref"|' \
     "$SCRIPT" | grep -v '^[[:space:]]*#' > "$copy"
   run grep -qE -- '-newer' "$copy"
   [ "$status" -eq 0 ]

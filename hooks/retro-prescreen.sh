@@ -99,6 +99,11 @@ _resolve_contained() {
     hops=$((hops + 1))
   done
   [ -L "$cur" ] && return 1   # still a link after the cap: refuse (likely a cycle)
+  # A REGULAR file, not merely a contained one. `find -type f` narrows the scan
+  # but is not the containment authority — this is. A FIFO named *.md in an
+  # untrusted sibling repo otherwise blocks the summarizer's `< "$file"` before
+  # any timeout applies, and the hook exits with no document at all.
+  [ -f "$cur" ] || return 1
 
   dir=$(dirname "$cur")
   base=$(basename "$cur")
@@ -238,8 +243,12 @@ _now_epoch() {
         return 0
         ;;
     esac
-    if [ -n "$real" ] && [ "$n" -gt "$real" ]; then
-      echo "retro-prescreen: RETRO_PRESCREEN_NOW is ahead of the system clock — refused" >&2
+    # Refused also when the real clock is unreadable: without it the guard is
+    # skipped exactly when nothing else can bound the seam, and a year-2100
+    # value then disables the heal, the future-mtime bound and the freshness
+    # rule at once.
+    if [ -z "$real" ] || [ "$n" -gt "$real" ]; then
+      echo "retro-prescreen: RETRO_PRESCREEN_NOW cannot be bounded against the system clock — refused" >&2
       return 0
     fi
     echo "retro-prescreen: RETRO_PRESCREEN_NOW is set ($n) — the present instant is simulated this run" >&2
@@ -261,7 +270,10 @@ _heal_cursor() {
   local value="$1" now="$2" source="$3" label="$4" shown
   if [ -n "$now" ] && [ "$value" -gt "$now" ]; then
     shown=$(_epoch_to_iso "$value"); [ -n "$shown" ] || shown="epoch $value"
-    printf 'retro-prescreen: %s: %s cursor %s is past the present — reset to %s; this source will re-mine once and will not send raw text off-machine on that run\n' \
+    # No egress clause here: cmd_github has no equivalent of artifacts'
+    # artifacts_llm_ok=0 / transcripts' stage2_allowed=0, so the two call sites
+    # that DO suppress raw egress say so themselves.
+    printf 'retro-prescreen: %s: %s cursor %s is past the present — reset to %s; this source will re-mine once\n' \
       "$source" "$label" "$shown" "$EPOCH_FLOOR_ISO" >&2
     printf '0'
     return 0
@@ -310,7 +322,7 @@ cmd_scrub() {
   ')
 
   # /home/<user>/... paths (any depth).
-  input=$(printf '%s' "$input" | sed -E 's#/home/[A-Za-z0-9_.-]+(/[^[:space:]]*)?#[REDACTED]#g')
+  input=$(printf '%s' "$input" | sed -E 's#/(home|Users)/[A-Za-z0-9_.-]+(/[^[:space:]]*)?#[REDACTED]#g')
 
   # AWS-style access key IDs (checked before the generic secret-shaped pass
   # so the AKIA prefix is not partially matched by the broader class first).
@@ -379,18 +391,32 @@ cmd_artifacts() {
   state_hw=$(_state_high_water "$source")
   [ -n "$state_hw" ] && [ "$state_hw" != "null" ] || state_hw='{}'
 
-  local hw_epoch='{}' healed_any=0 repo
+  local hw_epoch='{}' reset_any=0 repo
   while IFS= read -r repo; do
     local persisted_iso persisted_epoch healed
     persisted_iso=$(jq -r --arg r "$repo" '.[$r] // ""' <<<"$state_hw" 2>/dev/null)
     persisted_epoch=$(_iso_to_epoch "$persisted_iso")
+    # EVERY cause that puts a cursor back at the floor sets the flag, not just
+    # the heal. The three are: an unparseable-but-_is_iso-valid persisted value
+    # (_is_iso is a syntactic regex, fromdate is semantic, so `2026-13-01` is
+    # storable through seed/mark-run and unreadable here), an absent state
+    # entry, and a cursor ahead of the present. All three make the whole corpus
+    # a candidate, which is the condition the egress gate below reacts to —
+    # keying it on the heal alone left two of the three shipping raw text.
     if [ -z "$persisted_epoch" ]; then
-      [ -n "$persisted_iso" ] && printf 'retro-prescreen: %s: unparseable persisted cursor for %s — treating as %s\n' \
+      [ -n "$persisted_iso" ] && printf 'retro-prescreen: %s: unparseable persisted cursor for %s — reset to %s\n' \
         "$source" "${repo##*/}" "$EPOCH_FLOOR_ISO" >&2
       persisted_epoch=0
+      reset_any=1
+    elif [ -z "$persisted_iso" ]; then
+      # No state entry AT ALL — distinct from a persisted `1970-01-01T00:00:00Z`,
+      # which parses to the same epoch but is the ordinary never-mined steady
+      # state, not an anomaly. Keying on the epoch conflated the two and
+      # disabled egress on every first run.
+      reset_any=1
     fi
     healed=$(_heal_cursor "$persisted_epoch" "$now_epoch" "$source" "persisted")
-    [ "$healed" = "$persisted_epoch" ] || healed_any=1
+    [ "$healed" = "$persisted_epoch" ] || reset_any=1
     hw_epoch=$(jq -c --arg r "$repo" --argjson v "$healed" '. + {($r): $v}' <<<"$hw_epoch")
   done < <(jq -r '.[]' <<<"$repos_json")
 
@@ -419,8 +445,8 @@ cmd_artifacts() {
     exit 2
   fi
   local artifacts_llm_ok=0
-  if [ "$healed_any" -eq 1 ]; then
-    echo "retro-prescreen: $source: a cursor was healed this run — raw artifact text is not sent off-machine on a healing run" >&2
+  if [ "$reset_any" -eq 1 ]; then
+    echo "retro-prescreen: $source: a cursor was reset to the floor this run — raw artifact text is not sent off-machine on a resetting run" >&2
   elif _raw_llm_egress_ok "$allow_remote"; then
     artifacts_llm_ok=1
   else
@@ -503,7 +529,7 @@ cmd_artifacts() {
       else
         candidates=$(jq -c --arg p "$resolved" '. + [{path: $p, summary: null}]' <<<"$candidates")
       fi
-    done < <(find "$glob_dir" -maxdepth 1 -name "$glob_pat" -print0 2>/dev/null)
+    done < <(find "$glob_dir" -maxdepth 1 -name "$glob_pat" -type f -print0 2>/dev/null)
 
     [ "$n_sup" -eq 0 ] || printf 'retro-prescreen: %s: %s: %d of %d at or below the cursor — suppressed\n' \
       "$source" "${repo##*/}" "$n_sup" "$n_seen" >&2
@@ -560,9 +586,12 @@ _summarize_artifact() {
   command -v llm_request >/dev/null 2>&1 || return 0
 
   local raw
-  raw=$(llm_request "gpt-oss:120b" \
+  # Bounded like cmd_scout bounds its untrusted network input (--max-filesize
+  # 5242880). This file comes from an untrusted sibling repository and is read
+  # whole into a JSON request body before leaving the machine.
+  raw=$(head -c 5242880 < "$file" 2>/dev/null | llm_request "gpt-oss:120b" \
     "You extract failure patterns from a code-review artifact. Output concise Symptom/Root-cause bullets. If the document has no actionable failure pattern, output exactly: NONE." \
-    30 1024 < "$file" 2>/dev/null)
+    30 1024 2>/dev/null)
   [ -n "$raw" ] || return 0
   [ "$raw" = "NONE" ] && return 0
 
@@ -586,7 +615,19 @@ cmd_github() {
   # _validate_hw's github arm rejects (it requires owner/repo), discarding the
   # whole object and freezing every repo's cursor.
   local repos_json
-  repos_json=$(jq -c '[.sources.github.repos // [] | .[] | select(. != null and . != "")]' <<<"$cfg")
+  # Shape-filtered at the boundary, not just null/empty: the value becomes a
+  # high_water KEY, and retro-state.sh's github arm requires owner/repo. One bad
+  # element makes _validate_hw reject the whole object, which under the run-for-
+  # its-own-status rule now aborts the entire retrospect run — a hand-edited
+  # typo should skip one repo with a diagnostic instead.
+  repos_json=$(jq -c '[.sources.github.repos // [] | .[]
+                       | select(type == "string" and test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))]' <<<"$cfg")
+  local dropped
+  dropped=$(jq -r '[.sources.github.repos // [] | .[]
+                    | select((type == "string" and test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")) | not)
+                    | tostring] | join(", ")' <<<"$cfg" 2>/dev/null) || dropped=""
+  [ -z "$dropped" ] || printf 'retro-prescreen: %s: skipping malformed repo entries (need owner/repo): %s\n' \
+    "$source" "$dropped" >&2
 
   # Seed and heal BEFORE the environment guards below. `gh` absent or
   # unauthenticated is a degraded run, not a reason to leave a poisoned cursor
@@ -656,7 +697,10 @@ cmd_github() {
     while IFS= read -r pr_num; do
       [ -n "$pr_num" ] || continue
       local title updated_at updated_epoch
-      title=$(jq -r --arg n "$pr_num" '.[] | select((.number|tostring) == $n) | .title' <<<"$prs")
+      # Scrubbed like the comment bodies below: a merged-PR title is free-text
+      # from the same untrusted API, and it reaches the --json document, the
+      # human report, the mining sub-agent and from there a committed doc.
+      title=$(cmd_scrub <<<"$(jq -r --arg n "$pr_num" '.[] | select((.number|tostring) == $n) | .title' <<<"$prs")")
       updated_at=$(jq -r --arg n "$pr_num" '.[] | select((.number|tostring) == $n) | .updatedAt' <<<"$prs")
       updated_epoch=$(_iso_to_epoch "$updated_at")
       if [ -n "$updated_epoch" ]; then
@@ -849,22 +893,35 @@ cmd_transcripts() {
   fi
 
   # --- gather processed (non-excluded) files ---
-  local files=() f base f_epoch
+  # Index-aligned arrays rather than an associative one (bash 3.2 floor): the
+  # gather loop already reads each mtime, so Stage 1 must not read it again —
+  # C1 budgets one stat per file and two is the shape N-R2 measured and rejected.
+  local files=() files_epoch=() f base f_epoch
   while IFS= read -r -d '' f; do
     base="${f##*/}"
+    f_epoch=$(_file_mtime_epoch "$f")
+    # The two exclusions are CUMULATIVE, not alternatives. The session id
+    # excludes exactly THIS session's transcript and says nothing about any
+    # other, so writing them as if/else meant that on the normal path — where
+    # CLAUDE_SESSION_ID is set — a concurrent session's in-flight .jsonl was
+    # enumerated, extracted and sent raw to the backend.
     if [ -n "${CLAUDE_SESSION_ID:-}" ]; then
       [ "$base" = "${CLAUDE_SESSION_ID}.jsonl" ] && continue
-    else
-      # BOTH operands validated. Under `set -u`, `$(( n - not-a-number ))`
-      # aborts the shell mid-loop — no JSON document at all — and an empty
-      # `now_epoch` makes the difference negative, excluding EVERY transcript as
-      # "too fresh". Unknown either way keeps the file, the permissive direction.
-      f_epoch=$(_file_mtime_epoch "$f")
-      if [ -n "$now_epoch" ] && [ -n "$f_epoch" ]; then
-        [ "$(( now_epoch - f_epoch ))" -lt 300 ] && continue
+    fi
+    # BOTH operands validated. Under `set -u`, `$(( n - not-a-number ))` aborts
+    # the shell mid-loop — no JSON document at all — and an empty `now_epoch`
+    # makes the difference negative, excluding EVERY transcript as "too fresh".
+    # Unknown either way keeps the file, the permissive direction.
+    if [ -n "$now_epoch" ] && [ -n "$f_epoch" ]; then
+      # Bounded on BOTH sides: a mtime in the future is not "written moments
+      # ago", it is clock-skewed, and excluding it here would keep it from ever
+      # reaching the future-mtime diagnostic that exists to report it.
+      if [ "$f_epoch" -le "$now_epoch" ] && [ "$(( now_epoch - f_epoch ))" -lt 300 ]; then
+        continue
       fi
     fi
     files+=("$f")
+    files_epoch+=("$f_epoch")
   done < <(find "$root" -name '*.jsonl' -print0 2>/dev/null)
 
   if [ "${#files[@]}" -eq 0 ]; then
@@ -881,14 +938,16 @@ cmd_transcripts() {
   local excerpts=() counts='{}'
   local max_hw="$cursor" ordinal=0
   local n_sup=0 n_future=0 n_nostat=0 n_seen=0
+  local fi=-1
   for f in ${files[@]+"${files[@]}"}; do
+    fi=$((fi + 1))
     n_seen=$((n_seen + 1))
     # Same whole-second cursor authority as cmd_artifacts: both operands come
     # from `%Y`, so a transcript mined in run N is not greater in run N+1 and
     # the source drains. Extraction is skipped along with the candidate, which
     # also stops re-feeding an already-mined transcript to the summarizer.
-    local mtime_epoch
-    mtime_epoch=$(_file_mtime_epoch "$f")
+    local mtime_epoch pending_hw=""
+    mtime_epoch="${files_epoch[$fi]}"
     if [ -n "$mtime_epoch" ]; then
       if [ "$mtime_epoch" -le "$cursor" ]; then
         n_sup=$((n_sup + 1))
@@ -899,7 +958,11 @@ cmd_transcripts() {
       elif [ "$mtime_epoch" -gt "$now_epoch" ]; then
         n_future=$((n_future + 1))
       elif [ "$mtime_epoch" -gt "$max_hw" ]; then
-        max_hw="$mtime_epoch"
+        # STAGED, not committed. The open below can fail, and this loop then
+        # `continue`s without extracting anything — advancing the cursor here
+        # would carry that file's own mtime past itself and suppress it on every
+        # later run. Committed after the descriptor closes.
+        pending_hw="$mtime_epoch"
       fi
     else
       n_nostat=$((n_nostat + 1))
@@ -956,6 +1019,7 @@ cmd_transcripts() {
       fi
     done <&3
     exec 3<&-
+    [ -z "$pending_hw" ] || max_hw="$pending_hw"
 
     local n
     n=$(printf '%s\n' "$file_events" | grep -c . || true)
@@ -1089,14 +1153,31 @@ cmd_scout() {
   prior_hw=$(_state_high_water "$source")
   [ -n "$prior_hw" ] && [ "$prior_hw" != "null" ] || prior_hw='{}'
 
+  # Seeded from the configured URLs BEFORE the loop, carrying each prior hash,
+  # for the same reason cmd_artifacts and cmd_github are: retro-state.sh writes
+  # `.high_water = $hw` as a WHOLE-OBJECT REPLACEMENT, so a URL missing from the
+  # emitted map is DELETED from state and reported as changed on the next run
+  # that reaches it. A fetch failure — one unreachable host — used to drop the
+  # key, and a run where every fetch failed emitted `{}`, which _validate_hw
+  # accepts trivially (both its loops iterate zero times) and which then wiped
+  # every persisted hash. This is the third member of that class in this file.
   local candidates='[]' hw_map='{}'
   local url
+  while IFS= read -r url; do
+    [ -n "$url" ] || continue
+    hw_map=$(jq -c --arg u "$url" --arg h "$(jq -r --arg u "$url" '.[$u] // ""' <<<"$prior_hw")" \
+      '. + {($u): $h}' <<<"$hw_map")
+  done <<<"$urls"
+
   while IFS= read -r url; do
     [ -n "$url" ] || continue
     local body hash prior
     body=$(curl -s --proto '=https' --proto-redir '=https' --max-time 30 \
       --max-filesize 5242880 --max-redirs 3 "$url" 2>/dev/null)
-    [ -n "$body" ] || continue
+    if [ -z "$body" ]; then
+      printf 'retro-prescreen: %s: no response for a configured URL — its hash is preserved\n' "$source" >&2
+      continue
+    fi
     hash=$(printf '%s' "$body" | sha256sum | awk '{print $1}')
     prior=$(jq -r --arg u "$url" '.[$u] // ""' <<<"$prior_hw")
     if [ "$hash" != "$prior" ]; then
@@ -1106,8 +1187,12 @@ cmd_scout() {
   done <<<"$urls"
 
   if [ "$as_json" -eq 1 ]; then
+    # null, never `{}` — an empty object passes _validate_hw and the whole-object
+    # replacement then wipes every URL's hash in one write.
     jq -nc --arg s "$source" --argjson c "$candidates" --argjson hw "$hw_map" \
-      '{source: $s, candidates: $c, high_water: $hw, deferred: false}'
+      '{source: $s, candidates: $c,
+        high_water: (if ($hw | length) == 0 then null else $hw end),
+        deferred: false}'
   else
     echo "scout: $(jq 'length' <<<"$candidates") changed URL(s)"
     jq -r '.[] | "  - " + .' <<<"$candidates"
