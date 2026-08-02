@@ -110,13 +110,22 @@ bats tests/                                        # full suite green, including
 ```
 
 **Pass the skill directory explicitly, and run the repo's copy of the hook.** With no
-argument the linter resolves its target relative to its own location, so
-`bash ~/.claude/hooks/check-rule-sync.sh` lints `~/.claude/skills/triangulate` — the
-*installed* copy, which does not contain the edits just made. It prints the same
+directory argument the linter resolves its target relative to its own location, so the
+installed hook invoked bare lints `~/.claude/skills/triangulate` — the *installed* copy,
+which does not contain the edits just made. It prints the same
 `OK: R1-R… consistent` line either way. That is the R50 shape this file's own gate
 instruction used to have: a green whose subject was the wrong tree. Prove the subject
 before trusting the status — e.g. grep the regenerated digest in the repo for a string
 from this round's edit and confirm the installed digest lacks it.
+
+This command is deliberately NOT in `settings.json`'s allow list, so it prompts once per
+round. A `Bash(bash hooks/check-rule-sync.sh *)` entry would be cwd-relative and would
+auto-approve executing whatever `hooks/check-rule-sync.sh` happens to exist in any
+repository the session is opened in — a wider grant than the gate is worth. The installed
+form accepts the same argument (`bash ~/.claude/hooks/check-rule-sync.sh skills/triangulate`)
+and is already allow-listed, but it runs the INSTALLED linter against repo content, so it
+is only equivalent while `install.sh` is current; prefer the repo copy and accept the
+prompt.
 
 A rule-sync failure means the edit map above was applied incompletely — fix the named
 sync point; never silence the linter. Judge each gate by its OWN exit status (R44): run

@@ -322,3 +322,26 @@ teardown() {
     [ "$output" -eq 0 ]
   done
 }
+
+@test "retrospect: the rule-sync gate is prescribed with an explicit skill directory" {
+  # Without the directory argument, check-rule-sync.sh resolves its target
+  # relative to its own location, so the installed ~/.claude copy is linted
+  # instead of the repo — and it prints the same OK line either way. Both
+  # files that state the gate must carry the argument, or a retro round's
+  # first green has the wrong subject (R50).
+  for f in "$REPO_DIR/skills/retrospect/folding.md" \
+           "$REPO_DIR/skills/retrospect/pipeline.md"; do
+    [ -f "$f" ]
+    # The prescribed invocation appears...
+    run grep -c 'check-rule-sync\.sh skills/triangulate' "$f"
+    [ "$status" -eq 0 ]
+    [ "$output" -gt 0 ]
+    # ...and no bare `bash ... check-rule-sync.sh` invocation survives: one
+    # terminated by end-of-line, a closing backtick, or a trailing comment or
+    # pipe has no directory argument. Mentions without a `bash ` prefix (the
+    # settings.json allow-pattern, references to the script by name) are not
+    # invocations and are deliberately out of scope.
+    run grep -nE 'bash [^ ]*check-rule-sync\.sh([[:space:]]*`|[[:space:]]*$|[[:space:]]+[#|])' "$f"
+    [ "$status" -ne 0 ]
+  done
+}

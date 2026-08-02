@@ -56,8 +56,13 @@ grep-evidence obligation was not engaged.
    clause (i), in the file that teaches R50's sibling R44. Fixed here to
    `bash hooks/check-rule-sync.sh skills/triangulate`, with the subject-proof step spelled
    out.
-2. The scrub gate (`retro-prescreen.sh scrub`) redacted eight spans of this document, all
-   false positives. Its secret-shaped pass (`hooks/retro-prescreen.sh:352`) matches
+2. The scrub gate (`retro-prescreen.sh scrub`) redacts 11 spans of this document across 10
+   lines (7 distinct strings), all false positives. Reproduce with
+   `bash hooks/retro-prescreen.sh scrub < docs/archive/audit/retro-artifacts-lessons-2026-08-02.md | grep -o '\[REDACTED\]' | wc -l`.
+   The distinct strings are `destructive-verification`, `closed-by-construction`,
+   `check-deny-only-guard`, `build-must-run-before-merge`, `presence-vs-identity`,
+   `destructive-confirmation`, `downstream-sanitizer`.
+   Its secret-shaped pass (`hooks/retro-prescreen.sh:352`) matches
    `[A-Za-z0-9+_=-]{20,}`, and `-` is in the class, so any English compound of 20+
    characters is redacted: `destructive-verification`, `closed-by-construction`,
    `check-deny-only-guard.sh`. Nothing leaked — the document is committed unmodified — but

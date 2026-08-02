@@ -157,8 +157,10 @@ Never place repo paths, URLs, or other config keys in a committed file.
 ## Step 5 — Fold
 
 For each `Novel` and `Extends` item, Read `folding.md` and apply the edit map. Gates
-(both mandatory, in order): `bash ~/.claude/hooks/check-rule-sync.sh` exits 0, then the
-full `bats tests/` is green.
+(both mandatory, in order): `bash hooks/check-rule-sync.sh skills/triangulate` exits 0,
+then the full `bats tests/` is green. The skill-directory argument is load-bearing — see
+folding.md §4; without it the linter lints the installed tree and reports the same `OK`
+line whatever the repo says.
 
 ## Step 6 — Standard passes 2 and 3
 
