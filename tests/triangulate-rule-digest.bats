@@ -127,6 +127,35 @@ SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/generate-triang
   if grep -q '^| R1 | Alpha | Major |$' "$digest"; then false; fi
 }
 
+@test "a DOUBLE backslash before a pipe is a delimiter, not an escape" {
+  # The parity case, and the dangerous direction. `\|` is an escaped pipe, but
+  # `\\|` is a literal backslash followed by a real delimiter — so R2's severity
+  # is `Major`, not the whole procedure cell. A parser that matches "backslash
+  # pipe" without counting the run treats both as escaped and merges the last
+  # two cells, which makes a Procedure cell mentioning "Critical" read as the
+  # severity: a ceiling check would then pass on text it never examined, in the
+  # digest AND in the linter comparing against it.
+  work="$BATS_TEST_TMPDIR/parity"
+  mkdir -p "$work"
+  source="$work/common.md"
+  digest="$work/digest.md"
+  printf '%s\n' \
+    '| R1 | Alpha | one backslash is an escape `a \| b` | Critical \| Major |' \
+    '| R2 | Beta | Check Critical paths \\| Major |' \
+    '| R3 | Gamma | three is escape again `x \\\| y` | Minor |' > "$source"
+
+  run bash "$SCRIPT" "$source" "$digest"
+  [ "$status" -eq 0 ]
+  # odd run: the pipe stays inside the severity cell
+  grep -q '^| R1 | Alpha | Critical \\| Major |$' "$digest"
+  # even run: the pipe splits, so the severity is just the trailing cell
+  grep -q '^| R2 | Beta | Major |$' "$digest"
+  grep -q '^| R3 | Gamma | Minor |$' "$digest"
+  # the defect: R2's procedure text swallowed into the severity, carrying a
+  # "Critical" that is not a ceiling at all
+  if grep -q 'Check Critical paths' "$digest"; then false; fi
+}
+
 @test "the generator refuses to run without its shared row-parsing library" {
   # The library is what makes the generator and the linter agree. If it can go
   # missing and the generator still emits something, the digest becomes a

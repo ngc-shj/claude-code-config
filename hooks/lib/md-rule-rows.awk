@@ -28,16 +28,38 @@
 
 function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
 
-# Split a table row into cells[1..n], honouring backslash-escaped pipes.
-# Returns n. cells[1] is the ID, cells[n] the severity.
-function md_cells(line, cells,   n, i) {
-  gsub(/\\\|/, SUBSEP, line)          # protect escaped pipes from the split
+# Split a table row into cells[1..n]. Returns n; cells[1] is the ID and cells[n]
+# the severity.
+#
+# A pipe is a DELIMITER only when the run of backslashes immediately before it is
+# EVEN. `\|` is an escaped pipe and belongs to the cell; `\\|` is a literal
+# backslash followed by a real delimiter; `\\\|` is a literal backslash then an
+# escaped pipe. Counting the run is the whole point — a `/\\\|/` match treats
+# `\\|` as escaped too, which merges the last two cells so a Procedure cell's
+# text is read as the severity. That direction is the dangerous one: a procedure
+# mentioning "Critical" would then satisfy a ceiling check that never looked at
+# the severity, in both this generator's output and the linter comparing against
+# it. Hence a character walk rather than a regex.
+function md_cells(line, cells,   i, len, ch, run, cur, raw, n, lo, hi, k) {
   sub(/[[:space:]]+$/, "", line)
-  sub(/\|$/, "", line)                # drop the row's closing pipe, if present
-  sub(/^\|/, "", line)                # and its opening pipe
-  n = split(line, cells, "[|]")
-  for (i = 1; i <= n; i++) gsub(SUBSEP, "\\|", cells[i])
-  return n
+  len = length(line); n = 0; cur = ""; run = 0
+  for (i = 1; i <= len; i++) {
+    ch = substr(line, i, 1)
+    if (ch == "\\") { run++; cur = cur ch; continue }
+    if (ch == "|" && run % 2 == 0) { raw[++n] = cur; cur = "" }
+    else { cur = cur ch }
+    run = 0
+  }
+  raw[++n] = cur
+  # A table row opens with `|`, so raw[1] is empty, and usually closes with one,
+  # so raw[n] is too. Drop those sentinels. A row missing its closing pipe still
+  # yields the right cells; whether that is an error is the caller's policy.
+  lo = 1; hi = n
+  if (raw[lo] ~ /^[[:space:]]*$/) lo++
+  if (hi >= lo && raw[hi] ~ /^[[:space:]]*$/) hi--
+  k = 0
+  for (i = lo; i <= hi; i++) cells[++k] = raw[i]
+  return k
 }
 
 /^\| (R[0-9]+|RS[0-9]+|RT[0-9]+) [|]/ {

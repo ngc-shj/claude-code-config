@@ -310,6 +310,23 @@ regen_digest() {
   [[ "$output" == *"table Critical=0, detail Critical=1"* ]]
 }
 
+@test "pass: a DOUBLE backslash before a pipe does not smuggle Critical into the ceiling" {
+  # The parity case at the linter. `\\|` is a literal backslash plus a real
+  # delimiter, so R1's severity here is `Major` on BOTH sides and the ceilings
+  # agree. A parser that reads "backslash pipe" as escaped without counting the
+  # run merges the last two cells, and the detail's procedure text — which says
+  # "Critical" — becomes its severity, so the gate reports a ceiling mismatch
+  # that does not exist. Green is the correct verdict; the failure it guards
+  # against is a false DRIFT that would train a reader to wave the check through.
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' \
+    '| R1 | Alpha | Check Critical paths \\| Major |' > "$FIX/rule-details/R1.md"
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
 @test "drift: a pipe-bearing row still has its ceiling compared, not a neighbouring cell" {
   # The deny-side twin. Same inline pipe, but the ceilings genuinely differ — so
   # a rewrite that reads a fixed field index (and therefore compares the wrong
