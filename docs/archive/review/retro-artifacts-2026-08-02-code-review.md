@@ -1,8 +1,108 @@
 # Code Review: retro-artifacts-2026-08-02 fold
 
 Date: 2026-08-02
-Review round: 1
+Review round: 2
 Branch: `retro/2026-08-02-artifacts-r52-r57`
+
+---
+
+# Round 2 — incremental review of the round-1 fixes
+
+Subject: `git diff HEAD~1 HEAD` (commit 294ec9c). Twenty findings, six Major. All twenty
+resolved; details in the Round-2 Resolution Status at the end of this file.
+
+**The headline: one round-1 fix was a security regression, and two cited receivers that do not
+receive.** That is the shape this branch's own R29 extension names — a fix whose *rationale* is
+false even where its conclusion is not — and all three were found by verifying the round-1
+Resolution Status entries against the code rather than reading them.
+
+## Round-2 convergence
+
+| Merged | Reported by | Severity |
+|---|---|---|
+| The completion sentinel is forgeable by the reviewed diff | S-10 (sec), and T-07/T-08 as coverage gaps in the same code | Major |
+| The carry-forward receiver does not receive | N-01 (func) | Major |
+
+## Round-2 findings
+
+- **S-10 Major (new, introduced by the round-1 fix) — the completeness sentinel is forgeable by
+  the diff under review.** Round 1 promoted `llm-commands.sh`'s `## END-OF-ANALYSIS` to a
+  completeness certificate. Upstream, that normalizer emits the FIRST standalone sentinel and
+  silently drains the rest — and its `sed` deliberately splits an inline occurrence onto its own
+  line first. Verified by execution: an input containing a diff line `+## END-OF-ANALYSIS`
+  followed by `[Critical] src/auth.ts:42 — hardcoded credential committed` produced output ending
+  at the echoed marker, the Critical discarded, and `_run_ollama` then reported
+  `sentinel=present`, `rc=0`, no failure line, exit 0. A contributor's diff could truncate its own
+  security review and attach a completeness certificate. The analyze-* prompts instruct the model
+  to quote problem text, so an echo is the ordinary case, not a contrived one — and this branch's
+  own `tests/review-backend.bats` adds standalone sentinel lines, so the precondition is live.
+- **N-01 Major (continuing) — F-02 is not closed.** The round-1 fix routed carried-forward
+  findings into "the plan file's Implementation Checklist — the artifact Phase 2 Step 2-1 actually
+  reads". It does not: `phase-2-coding.md` Step 2-1 item 5 AUTHORS that section from its own impact
+  analysis. Phase 1 would create it, Phase 2 would append a second one under the same heading, and
+  the only real consumer — `phase-3-review.md:160` — reads it as a list of files that must appear
+  in the diff, so a finding entry is either ignored or reported as a spurious Phase-3 finding.
+  F-02 with a rationale attached.
+- **N-02 Major (new) — the permission allowlist now pre-approves exactly the forbidden form.**
+  `settings.json` carried only `Bash(bash ~/.claude/hooks/check-rule-sync.sh)` and its `*` variant.
+  The round-1 fix made `bash hooks/check-rule-sync.sh skills/triangulate` the mandatory gate, which
+  matches neither — so the invocation the skill declares wrong is the one that runs without a
+  prompt, and the one it mandates is the one that asks. An inverted incentive at a gate whose whole
+  point is that the cheap wrong form must not be the easy one.
+- **S-11 Major (continuing) — the R36 carve-out draws its line on a distinction R36 calls
+  indistinguishable.** It foreclosed spellings (a) and (c) for security detectors and left (b)
+  *narrowing the gate's subject* admissible with a proof. Two routes back: adding the offending
+  file to a secret scanner's exclusion glob IS a subject narrowing and is the canonical real-world
+  bypass; and R36's own text says (b) is "nearly indistinguishable from (c)", so an author doing
+  (c) can file it as (b).
+- **T-07 Major (new) — `--adversarial` had zero coverage.** Executed proof: mutating the gate to
+  `[ "$adversarial" = 1 ] || [ "$failed" -eq 0 ]` — restoring the exact T-01 defect for adversarial
+  runs — left all 18 cases green.
+- **T-08 Major (new) — no mixed-pass case, so a `failed`-flag reset survived the suite.** Executed
+  proof: adding `else failed=0` to the success branch left the whole file green, while the
+  realistic scenario (one pass dies, two succeed) then returns 0 and reads as clean.
+- **N-03 / N-04 / S-13 / S-14 Minor — the linter's own new surfaces.** `Subject:` printed the
+  argument unresolved, so `skills/triangulate` and `~/.claude/skills/triangulate` printed
+  identically from different cwds — the instance was closed, the mechanism was not. The ceiling
+  check passed silently when no severity cell parsed, and `$(NF-1)` on a row without a trailing
+  pipe returns the Procedure cell, whose text contains "Critical" for most security rules — so a
+  malformed row yields fabricated agreement. And the ceiling test is token-presence, so a row that
+  keeps the word while narrowing its trigger to something unreachable still passes.
+- **N-05 / S-15 Minor — the round-1 fix's in-band control line.** `SKILL.md` declared an empty pass
+  body a FAILED RUN that the runner never emitted, and `## FAILED:` was itself forgeable by echoed
+  diff text in the fail-closed direction.
+- **N-06 Minor — "open" was undefined** in saturation condition 2 against the four Anti-Deferral
+  dispositions established 19 lines earlier; the cheapest reading (file the entry, the finding is
+  no longer open) reinstates the severity-blind exit through a documented format.
+- **S-17 Minor — saturation conditions 3 and 4 were jointly unsatisfiable.** A wording ambiguity is
+  not reachable only by executing, so no non-empty finding set satisfied both — and an unsatisfiable
+  conjunction invites the loose reading, which is how the weakening returns.
+- **N-07 Minor — R37's row carried a Major trigger absent from its detail**, in the very class
+  F-06's sweep declared closed. Both sides are non-Critical, so the new ceiling check is blind to it
+  by construction.
+- **N-08 Minor — `check-suppression.sh` still carried R36's pre-rename title**, the last surviving
+  use and the first thing a reader of that hook sees.
+- **S-12 Minor — the carve-out's category was a closed list** while the escalation it cites is
+  explicitly non-exhaustive, so a project-specific security detector fell outside the bar.
+- **S-16 Minor [Adjacent] — `stage_llm_stub`'s unquoted heredoc** interpolated the caller's body
+  into a double-quoted stub; a body containing `$(…)` or a backtick would execute rather than print.
+- **T-09 Minor — no fixture for the row shapes that break `$(NF-1)`**, though the digest generator's
+  own suite already has that precedent.
+- **T-10 Minor (continuing) — F-09's supersession did not cover the axis it closed.** T-03 pinned
+  the linter's output, not the caller's invocation form: reverting `folding.md` to the bare
+  installed path — the exact T-02 regression — left all 1014 tests green.
+
+**Verified by the round-2 experts, not accepted:** all three re-ran both gates themselves; the
+testing expert re-executed all three of round 1's claimed red-proofs and reproduced them exactly,
+noting that one of the two ceiling directions also emits a stale-digest drift line and is therefore
+not singly attributable (the other direction is). `git status --porcelain` was empty before,
+between and after every mutation. The R43 sweep found no fix-induced widening: R37's default did
+NOT move from Major to Minor — the pre-fix row already read "Minor otherwise", so the rewrite only
+ADDED Major triggers. No secrets or PII.
+
+---
+
+# Round 1
 
 ## Changes from Previous Round
 
@@ -317,3 +417,90 @@ the nine new cases are named below).
   pins the property mechanically instead of pinning the prose that describes it — the stronger of
   the two remedies, and the one that survives a rewording of the documentation.
 
+
+---
+
+## Round-2 Resolution Status
+
+All 20 resolved. Gates: `bash hooks/check-rule-sync.sh skills/triangulate` → exit 0, `R1-R57`,
+`Subject: <absolute repo path>/skills/triangulate`; `bats tests/` → exit 0, **1019 passed /
+0 failed / 30 files** (1014 before this round).
+
+### S-10 / S-15 / N-05 / S-16 / T-07 / T-08 — the backend change, narrowed to out-of-band signals
+- Action: removed the forgery surface rather than defending it. `_run_ollama` no longer reads the
+  `## END-OF-ANALYSIS` sentinel as evidence (it is stripped as framing, as before the fold) and no
+  longer emits `## FAILED:` into the review stream. What remains is the part that is not forgeable:
+  each pass's own process status is captured before the strip, a failing pass names itself on
+  **stderr**, and the run exits non-zero. `SKILL.md` Step 5 now keys on exit status and transcript
+  judgement only, and DECLARES the residual per R49 — a backend that stops early and still exits 0
+  is not detectable here, and no in-band marker can close that gap, because stdout carries model
+  text about a contributor's diff. The structural mitigation (partition the subject) is named as the
+  remedy instead of a signal.
+- Modified files: `skills/agent-review/review-backend.sh`, `skills/agent-review/SKILL.md`,
+  `tests/review-backend.bats`
+- Tests: `stage_llm_stub` now passes the body through the ENVIRONMENT rather than interpolating it
+  into a generated script (S-16), and supports per-pass overrides so mixed-pass behaviour is
+  expressible. Six ollama cases: complete pass, sentinel-only body, all-passes-fail, ONE failing
+  pass among three (T-08), `--adversarial` single pass (T-07), and a diff echoing the sentinel
+  (S-10) which must not gain a clean verdict.
+- Red-proof, executed and bounded with a restoring trap: `else failed=0` reds ONLY the mixed-pass
+  case; exempting `--adversarial` from the gate reds ONLY the adversarial case; swallowing the pass
+  status reds all four deny-side cases while both allow-side cases stay green.
+
+### N-01 Major — carry-forward receiver
+- Action: the round-1 claim was wrong and is replaced, not reworded. Carried-forward findings now go
+  under a distinct `## Carried-Forward Plan Findings` heading, and `phase-2-coding.md` Step 2-1
+  gained an explicit obligation to read that section and disposition every entry before writing
+  code. Stated why it must NOT ride in `## Implementation Checklist`: Step 2-1 item 5 authors that
+  section, and Phase 3 reads it as a file list.
+- Modified files: `skills/triangulate/phases/phase-1-plan.md`, `phases/phase-2-coding.md`
+
+### N-02 Major — permission allowlist
+- Action: added `Bash(bash hooks/check-rule-sync.sh)` and `Bash(bash hooks/check-rule-sync.sh *)`
+  to `settings.json`, so the mandated repo-local form is the one that runs without a prompt.
+- Modified file: `settings.json`
+
+### S-11 / S-12 Major+Minor — the R36 carve-out
+- Action: extended the carve-out to spelling (b) **when the subject narrowed away is the one that
+  produced the finding** — excluding the offending file from a scanner's glob is the canonical
+  bypass, and drawing the line on whether the firing subject survives is enforceable where drawing
+  it between (b) and (c) is not, since R36 itself calls those indistinguishable in a diff. Restated
+  the security category as the non-exhaustive one the escalation clause already defines, with the
+  test being what the detector protects rather than whether it appears in the list.
+- Modified file: `skills/triangulate/rule-details/R36.md`
+
+### N-03 / N-04 / S-13 / S-14 / T-09 — the linter's own surfaces
+- Action: `SKILL_DIR` is resolved to an absolute path (exit 2 naming the subject if it does not
+  exist), so `Subject:` identifies a tree rather than echoing an argument. The ceiling extraction
+  now requires the row to end in `|` and both cells to parse non-empty, refusing rather than
+  fabricating agreement from the Procedure cell. The token-presence limit is declared in place
+  (R49): a row that keeps the word "Critical" while narrowing its trigger still passes, and that
+  narrowing is R36 spelling (c) applied to this gate — human review.
+- Modified files: `hooks/check-rule-sync.sh`, `tests/check-rule-sync.bats` (+2 cases: a
+  trailing-pipe-less row must red; a literal pipe in a non-severity cell must stay green)
+- Red-proof: dropping the row-shape guard, and separately dropping the non-empty assertion, each
+  reds exactly the trailing-pipe case; dropping the absolute-path resolution reds exactly the
+  nonexistent-subject case. No collateral reds.
+
+### T-10 Minor — the caller's invocation form is now pinned
+- Action: a bats case asserts both `folding.md` and `pipeline.md` contain
+  `bash hooks/check-rule-sync.sh skills/triangulate` and neither presents a bare installed-copy
+  invocation. Precedent: `tests/check-pre-pr.bats` "skill docs reference scripts/pre-pr.sh
+  literally". F-09 is now closed on its own axis rather than by supersession.
+- Modified file: `tests/check-rule-sync.bats`
+- Red-proof: reverting `folding.md` to the bare form reds exactly that case.
+
+### N-06 / S-17 Minor — the saturation criterion's remaining ambiguities
+- Action: defined *open* — a Critical or Major finding carrying any Anti-Deferral disposition is
+  still open, because filing a cost-justification tracks a finding rather than resolving one.
+  Rewrote conditions 3 and 4 as a partition rather than a conjunction: every remaining Minor is
+  either prose-only or executable-only, which is satisfiable, where requiring both of every finding
+  was not.
+- Modified file: `skills/triangulate/phases/phase-1-plan.md`
+
+### N-07 / N-08 Minor — the two remaining drifts
+- Action: R37's detail gained the comprehension/safe-recovery trigger its compact row leads with,
+  closing the divergence the ceiling check is blind to by construction. `check-suppression.sh`'s
+  header carries R36's new title and now states that the hook covers only the marker-bearing half,
+  so a clean run from it is not an R36 pass.
+- Modified files: `skills/triangulate/rule-details/R37.md`, `hooks/check-suppression.sh`

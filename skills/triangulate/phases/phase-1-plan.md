@@ -353,21 +353,27 @@ what stop it from becoming one.
 1. **At least two rounds have completed.** Round 1 is the full review; Round 2+ are incremental.
    A Round-1 result consisting entirely of prose findings means the design has been looked at
    once, not that it has settled, so saturation cannot fire before Round 2.
-2. **No Critical or Major finding is open, in ANY category** — design or prose. Severity governs
-   first and this criterion never overrides it: `Critical/Major finding: Must be reflected in the
-   plan file` (above) applies unchanged, and a prose finding is not automatically Minor. A wrong
-   citation is R29, which is **Critical** when it drives a security-tightening or
+2. **No Critical or Major finding is open, in ANY category** — design or prose. *Open* means not
+   resolved in the plan file, and a Critical or Major finding carrying any Anti-Deferral
+   disposition (Skipped / Accepted / Out of scope / Pre-existing) is STILL OPEN for this purpose:
+   filing the cost-justification tracks a finding, it does not resolve one, and reading it as a
+   resolution would reinstate the severity-blind exit through a documented format. Severity
+   governs first and this criterion never overrides it: `Critical/Major finding: Must be reflected
+   in the plan file` (above) applies unchanged, and a prose finding is not automatically Minor. A
+   wrong citation is R29, which is **Critical** when it drives a security-tightening or
    security-loosening decision; a stale justification is what licenses omitting a member from a
    control's coverage (R42's symmetric-counterpart sub-clause); a predicate that denies
    conformant code is the R47/R48 class, not document hygiene. Classify by the rule that fires,
    not by which artifact the text sits in.
 3. **No finding is against the design itself** — the contracts, the control classes, the
-   invariants, the adequacy of the acceptance criteria. The remaining Minor findings are against
-   the document's own prose: a wording ambiguity, an unbuildable illustrative example, a
-   redundant restatement.
-4. **Every remaining finding is only reachable by BUILDING AND EXECUTING the planned
-   implementation.** A finding that can only be settled by running the code is Phase 2 work;
-   keeping it in the plan loop converts it into more prose.
+   invariants, the adequacy of the acceptance criteria.
+4. **Every remaining Minor finding is one of exactly two kinds**: (a) prose-only — a wording
+   ambiguity, an unbuildable illustrative example, a redundant restatement — where a further plan
+   revision would add more prose than it removes; or (b) only reachable by BUILDING AND EXECUTING
+   the planned implementation, which is Phase 2 work by definition. Conditions 3 and 4 are a
+   partition, not a conjunction over one finding: a wording ambiguity is (a) and is not reachable
+   only by executing, so requiring both of every finding would make the exit unsatisfiable and
+   push a reader toward the loose reading instead.
 
 **The design/prose classification is made per finding by the expert who filed it**, in that
 expert's own output, using the rule ID that fires. The orchestrator MERGES those labels; it does
@@ -379,11 +385,15 @@ Record the saturation call in the review artifact with the round number, the per
 as the experts filed them, and the severity of every remaining finding. Then, before proceeding:
 surface the call to the user with the remaining findings and their severities, exactly as the
 10-round cap below does — an early exit is a decision with a cost, and the cost is the user's to
-weigh. Carry each remaining finding forward by writing it into the plan file's **Implementation
-Checklist** — the artifact Phase 2 Step 2-1 actually reads — with its finding ID and an
-Anti-Deferral entry per the mandatory format above. "Carried forward" is not a fifth disposition
-that escapes that format; a finding routed to Phase 2 with no checklist item and no
-cost-justification is dropped, not deferred.
+weigh. Carry each remaining finding forward by writing it into the plan file under a
+`## Carried-Forward Plan Findings` heading, one entry per finding ID, each with an Anti-Deferral
+entry per the mandatory format above and a one-line statement of what would settle it. Phase 2
+Step 2-1 reads that section explicitly. Do NOT route them through `## Implementation Checklist`:
+Phase 2 Step 2-1 item 5 AUTHORS that section from its own impact analysis rather than reading an
+existing one, and Phase 3 reads it as a list of files that must appear in the diff — a finding
+entry there would be either silently ignored or reported as a spurious Phase-3 finding. "Carried
+forward" is not a fifth disposition that escapes the Anti-Deferral format; a finding routed to
+Phase 2 with no entry and no cost-justification is dropped, not deferred.
 
 **Keep the specification and the litigation apart.** The growth this criterion detects has one
 dominant cause: merging two artifacts that should stay separate — the specification (obligations

@@ -166,6 +166,8 @@
       "Bash(bash ~/.claude/hooks/check-deny-only-guard.sh *)",
       "Bash(bash ~/.claude/hooks/check-rule-sync.sh)",
       "Bash(bash ~/.claude/hooks/check-rule-sync.sh *)",
+      "Bash(bash hooks/check-rule-sync.sh)",
+      "Bash(bash hooks/check-rule-sync.sh *)",
       "Bash(bash ~/.claude/hooks/retro-state.sh *)",
       "Bash(bash ~/.claude/hooks/retro-prescreen.sh *)",
       "Bash(bash ~/.claude/hooks/tri-tmpdir.sh create)",

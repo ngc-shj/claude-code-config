@@ -137,21 +137,27 @@ transcripts; re-run file-scoped with one reviewer per subject, the same four pro
 46 findings including 2 Critical). Before emitting `approve` on an empty result,
 confirm the run finished, using signals the backend actually produces:
 
-- **`review-backend.sh run` exited non-zero** — a FAILED RUN in every case.
-- **A `## FAILED: <pass> exit=<n> sentinel=<present|missing>` line in the output.**
-  The ollama backend emits this per pass when the pass exited non-zero or its
-  output lost `llm-commands.sh`'s `## END-OF-ANALYSIS` sentinel (i.e. was
-  truncated). Name the failed pass when you report it.
-- **A declared pass whose `## <pass>` heading is present with an empty body.**
-  The ollama backend emits one heading per pass; an empty section is a pass that
-  produced nothing, which is not the same as a pass that found nothing.
-- **A near-empty or obviously truncated transcript** from `codex` / `claude`.
-  Those backends emit no terminator of their own, so for them transcript size and
-  the process exit status are the only available signals — say so in the summary
-  rather than implying a completeness check that was not possible.
+- **`review-backend.sh run` exited non-zero.** A FAILED RUN in every case, for
+  every backend. For `ollama` this is per-pass: any pass whose process failed
+  reddens the whole run and names itself on **stderr**
+  (`review-backend: pass <name> failed (exit <n>)`), so run the backend with
+  stderr captured separately and read it.
+- **A near-empty or obviously truncated transcript.** The only remaining signal,
+  and a judgement rather than a check.
 
-Any of these is a FAILED RUN: report it as such and re-run, never as `approve`.
-When the diff is large enough that exhaustion is plausible,
+Either is a FAILED RUN: report it as such and re-run, never as `approve`.
+
+**Declare what this does NOT cover (R49).** The check is on the reviewing
+PROCESS, not on the completeness of its text. A backend that stops early and
+still exits 0 is not detectable from here, and nothing in the review stream can
+be used to close that gap: stdout carries model text about a contributor's diff,
+so any in-band marker — including `llm-commands.sh`'s `## END-OF-ANALYSIS`
+sentinel, whose normalizer stops at the first standalone occurrence and drains
+the rest — is forgeable by the reviewed content, and reading one as a completeness
+certificate would let a diff both truncate its own review and certify it clean.
+Say so in the summary rather than implying a check that is not implemented. The
+mitigation for silent truncation is structural, not a signal:
+when the diff is large enough that exhaustion is plausible,
 partition the subject up front (one reviewer per file or per subsystem) rather than
 issuing one unscoped whole-diff review, and say in the summary which subjects were
 covered. A null result from a cheap pre-screen backend is an unproven signal, not

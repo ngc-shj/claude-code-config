@@ -256,6 +256,32 @@ regen_digest() {
   [[ "$output" == *"table Critical=1, detail Critical=0"* ]]
 }
 
+@test "drift: a detail row without a trailing pipe is refused, not silently mis-parsed" {
+  # $(NF-1) on a row that does not end in `|` returns the PROCEDURE cell, and
+  # most security rules' procedures contain the word "Critical" — so without the
+  # row-shape guard the ceiling check would report agreement it never made.
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' '| R1 | Alpha | Procedure mentioning Critical | Major' \
+    > "$FIX/rule-details/R1.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"severity cell not parseable for row R1"* ]]
+}
+
+@test "pass: a literal pipe inside a non-severity cell does not disturb the ceiling read" {
+  # The extraction counts from the END of the row, so pipes in earlier cells are
+  # harmless — four live rows already carry them. Pin that, so a future rewrite
+  # to a fixed field index reds here rather than in production.
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' '| R1 | Alpha | Procedure with `a|b` inline | Major |' \
+    > "$FIX/rule-details/R1.md"
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
 @test "pass: differently-worded severities with the same ceiling are accepted" {
   mkdir -p "$FIX/rule-details"
   sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
@@ -928,7 +954,36 @@ stage_installed_layout() {
   [[ "$stderr" == *"could not parse rule tables"* ]]
 }
 
-@test "error: nonexistent skill dir exits 2" {
+@test "error: nonexistent skill dir exits 2 naming the subject it could not resolve" {
+  # Refused at resolution, before the missing-file preflight: the subject must
+  # resolve to an absolute path for the "Subject:" line to identify a tree, and
+  # a subject that does not exist cannot be silently carried as a relative
+  # string into checks that would then report on nothing.
   run -2 --separate-stderr bash "$SCRIPT" "$BATS_TEST_TMPDIR/nope"
-  [[ "$stderr" == *"missing file"* ]]
+  [[ "$stderr" == *"no such subject directory"* ]]
+  [[ "$stderr" == *"$BATS_TEST_TMPDIR/nope"* ]]
+}
+
+# ============================================================
+# The documented fold gate — the caller's invocation form
+#
+# T-03 pinned the linter's OUTPUT; nothing pinned the CALLER. Reverting
+# folding.md to the bare `~/.claude/hooks/check-rule-sync.sh` — the exact
+# regression that made a fold's gate report on the pre-fold installed tree —
+# left the whole suite green. Precedent for asserting skill-document content:
+# tests/check-pre-pr.bats "skill docs reference scripts/pre-pr.sh literally".
+# ============================================================
+
+@test "retrospect's fold gate is documented as repo-local, script and subject" {
+  local repo_root
+  repo_root="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  local f
+  for f in "$repo_root/skills/retrospect/folding.md" "$repo_root/skills/retrospect/pipeline.md"; do
+    # the mandated form: repo-local script AND repo-local subject
+    grep -q 'bash hooks/check-rule-sync\.sh skills/triangulate' "$f"
+    # and no bare installed-copy invocation presented as the gate. The prose
+    # explains why that form is wrong, so match only an invocation line — a
+    # `bash ` prefix with nothing between it and the installed path.
+    ! grep -qE '^[^#]*bash ~/\.claude/hooks/check-rule-sync\.sh[[:space:]]*$' "$f"
+  done
 }

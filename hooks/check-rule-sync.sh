@@ -38,7 +38,16 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve to an absolute path so the "Subject:" line printed at the end
+# IDENTIFIES a tree. A relative argument echoed back does not: the repo-local
+# `skills/triangulate` and the installed `~/.claude/skills/triangulate` print
+# byte-identically when the caller's cwd differs, which is the confusion the
+# line exists to remove.
 SKILL_DIR="${1:-$SCRIPT_DIR/../skills/triangulate}"
+SKILL_DIR="$(cd "$SKILL_DIR" 2>/dev/null && pwd)" || {
+  echo "Error: no such subject directory: ${1:-$SCRIPT_DIR/../skills/triangulate}" >&2
+  exit 2
+}
 
 COMMON="$SKILL_DIR/common-rules.md"
 SKILL="$SKILL_DIR/SKILL.md"
@@ -283,13 +292,31 @@ if [ -d "$SKILL_DIR/rule-details" ]; then
     # in the detail caps a security escalation at Major for every reader who
     # follows the documented digest-first protocol. Compared case-insensitively
     # in both directions so either side losing the escalation is caught.
-    table_sev=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" {print $(NF-1); exit}' "$COMMON")
-    detail_sev=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" {print $(NF-1); exit}' "$detail_file")
-    table_crit=0; detail_crit=0
-    case "${table_sev,,}"  in *critical*) table_crit=1 ;; esac
-    case "${detail_sev,,}" in *critical*) detail_crit=1 ;; esac
-    if [ "$table_crit" -ne "$detail_crit" ]; then
-      drift "$detail severity ceiling disagrees with common-rules.md row $id (table Critical=$table_crit, detail Critical=$detail_crit)"
+    # $(NF-1) is the last cell of a row that ends in `|`, so it counts from the
+    # end and is unaffected by pipes inside earlier cells. A row written WITHOUT
+    # a trailing pipe silently yields the Procedure cell instead — and most
+    # security rules' Procedure text contains the word "Critical", so the
+    # comparison would then report agreement it never made. Require the row to
+    # end in a pipe, and require both cells to parse non-empty, before comparing:
+    # a check that cannot say what it read is the shape this rule set calls out.
+    table_sev=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" && /\|[[:space:]]*$/ {print $(NF-1); exit}' "$COMMON")
+    detail_sev=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" && /\|[[:space:]]*$/ {print $(NF-1); exit}' "$detail_file")
+    if [ -z "${table_sev// /}" ] || [ -z "${detail_sev// /}" ]; then
+      drift "$detail severity cell not parseable for row $id (row must end in '|' in both files)"
+    else
+      # Ceiling, not text. The compact row legitimately summarizes the detail's
+      # wording, so equality would fire on nearly every pair; what must never
+      # differ is whether the rule can reach Critical, because the digest and the
+      # compact row are what a reviewer routes through. Known limit (R49): this
+      # is a token-presence test, so a row that KEEPS the word while narrowing
+      # its trigger to something unreachable still passes. Narrowing a Critical
+      # clause is R36 spelling (c) applied to this gate and is human review.
+      table_crit=0; detail_crit=0
+      case "${table_sev,,}"  in *critical*) table_crit=1 ;; esac
+      case "${detail_sev,,}" in *critical*) detail_crit=1 ;; esac
+      if [ "$table_crit" -ne "$detail_crit" ]; then
+        drift "$detail severity ceiling disagrees with common-rules.md row $id (table Critical=$table_crit, detail Critical=$detail_crit)"
+      fi
     fi
   done
 fi

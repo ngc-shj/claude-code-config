@@ -12,6 +12,16 @@ core: 2-5 — focused recurring-rule self-check by three sub-agents before the p
 
 Read `./docs/archive/review/[plan-name]-plan.md` and understand the implementation steps.
 
+**Read the plan's `## Carried-Forward Plan Findings` section, if present, and disposition every
+entry before writing code.** Phase 1's saturation exit writes plan-review findings there when the
+review loop stops paying but a Minor remains open — each entry carries a finding ID, an
+Anti-Deferral cost-justification, and a one-line statement of what would settle it. For each: fix
+it in this phase, or record why it stays open in the deviation log using the same Anti-Deferral
+format. A carried-forward finding that reaches Phase 3 without a disposition is a dropped finding,
+not a deferred one, and Phase 3 reports it as such. Findings here are NOT the same artifact as the
+`## Implementation Checklist` this step's item 5 authors from its own impact analysis; keep them
+separate, because Phase 3 reads the checklist as a list of files that must appear in the diff.
+
 Before writing any code, perform the following impact analysis:
 
 1. **Enumerate all code paths**: grep for the target identifiers (e.g., function names, API endpoint paths, message types, and file name patterns) to identify every location that will need changes
