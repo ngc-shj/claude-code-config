@@ -323,25 +323,72 @@ teardown() {
   done
 }
 
+# Matches any invocation of the linter; `ok` additionally requires an accepted
+# trailing form. Whitelist, not denylist: a spelling nobody anticipated raises
+# `tot` without raising `ok`, so the assertion fires. A denylist of terminators
+# is open by construction — the first version of this test enumerated three and
+# caught none of ten plausible bare spellings.
+RULE_SYNC_ANY='(bash |\./)[^ ]*check-rule-sync\.sh'
+RULE_SYNC_OK='(bash |\./)[^ ]*check-rule-sync\.sh( skills/triangulate| \*\))'
+
 @test "retrospect: the rule-sync gate is prescribed with an explicit skill directory" {
   # Without the directory argument, check-rule-sync.sh resolves its target
   # relative to its own location, so the installed ~/.claude copy is linted
-  # instead of the repo — and it prints the same OK line either way. Both
-  # files that state the gate must carry the argument, or a retro round's
+  # instead of the repo — and it prints the same OK line either way. Every
+  # file that prescribes the gate must carry the argument, or a retro round's
   # first green has the wrong subject (R50).
-  for f in "$REPO_DIR/skills/retrospect/folding.md" \
-           "$REPO_DIR/skills/retrospect/pipeline.md"; do
-    [ -f "$f" ]
-    # The prescribed invocation appears...
-    run grep -c 'check-rule-sync\.sh skills/triangulate' "$f"
-    [ "$status" -eq 0 ]
-    [ "$output" -gt 0 ]
-    # ...and no bare `bash ... check-rule-sync.sh` invocation survives: one
-    # terminated by end-of-line, a closing backtick, or a trailing comment or
-    # pipe has no directory argument. Mentions without a `bash ` prefix (the
-    # settings.json allow-pattern, references to the script by name) are not
-    # invocations and are deliberately out of scope.
-    run grep -nE 'bash [^ ]*check-rule-sync\.sh([[:space:]]*`|[[:space:]]*$|[[:space:]]+[#|])' "$f"
-    [ "$status" -ne 0 ]
-  done
+  #
+  # The accepted forms are `... check-rule-sync.sh skills/triangulate` and the
+  # settings.json allow-pattern `Bash(bash hooks/check-rule-sync.sh *)`, which
+  # folding.md quotes while explaining why it is deliberately NOT added.
+
+  # Derive the subject set rather than hardcoding it, so a third file that
+  # starts prescribing the gate is claimed automatically (R42). An empty set
+  # would make every assertion below vacuous, so assert it is non-empty.
+  local files
+  files=$(cd "$REPO_DIR" && grep -rlE "$RULE_SYNC_ANY" skills/ global/ 2>/dev/null)
+  [ -n "$files" ]
+
+  local f tot ok
+  while IFS= read -r f; do
+    [ -f "$REPO_DIR/$f" ]
+    tot=$(grep -oE "$RULE_SYNC_ANY" "$REPO_DIR/$f" | wc -l | tr -d ' ')
+    ok=$(grep -oE "$RULE_SYNC_OK" "$REPO_DIR/$f" | wc -l | tr -d ' ')
+    [ "$tot" -gt 0 ]
+    [ "$tot" -eq "$ok" ]
+  done <<< "$files"
+}
+
+@test "retrospect: the rule-sync gate matcher rejects bare invocations" {
+  # The allow case for the matcher above. Without it the whitelist is never
+  # exercised against a string it must catch, so a typo in the pattern leaves
+  # the guard green forever — a deny-only guard on absence, which is the R50
+  # shape the guard itself exists to prevent (RT10 clause 1 / obligation 17a).
+  local fixture="$BATS_TEST_TMPDIR/bare.md"
+  cat > "$fixture" <<'EOF'
+bash hooks/check-rule-sync.sh && bats tests/
+bash hooks/check-rule-sync.sh; bats tests/
+bash hooks/check-rule-sync.sh > /dev/null
+bash "$REPO/hooks/check-rule-sync.sh"
+bash 'hooks/check-rule-sync.sh'
+(bash hooks/check-rule-sync.sh)
+./hooks/check-rule-sync.sh
+bash hooks/check-rule-sync.sh --help
+bash hooks/check-rule-sync.sh,
+bash hooks/check-rule-sync.sh.
+EOF
+  local tot ok
+  tot=$(grep -oE "$RULE_SYNC_ANY" "$fixture" | wc -l | tr -d ' ')
+  ok=$(grep -oE "$RULE_SYNC_OK" "$fixture" | wc -l | tr -d ' ')
+  # Every line is an invocation, and none of them is an accepted form.
+  [ "$tot" -eq 10 ]
+  [ "$ok" -eq 0 ]
+
+  # Boundary-adjacent allow case: the same spelling WITH the argument is
+  # accepted, so the matcher is not simply refusing everything.
+  printf 'bash hooks/check-rule-sync.sh skills/triangulate\n' > "$fixture"
+  tot=$(grep -oE "$RULE_SYNC_ANY" "$fixture" | wc -l | tr -d ' ')
+  ok=$(grep -oE "$RULE_SYNC_OK" "$fixture" | wc -l | tr -d ' ')
+  [ "$tot" -eq 1 ]
+  [ "$ok" -eq 1 ]
 }

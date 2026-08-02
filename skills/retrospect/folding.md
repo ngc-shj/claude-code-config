@@ -25,6 +25,44 @@ Derive the next free ID from the tables in `skills/triangulate/common-rules.md`
 (all-expert rules → `R<n+1>`; security-only → `RS<n+1>`; testing-only → `RT<n+1>`).
 `Extends-<id>` items modify the existing row/obligation instead of taking a new ID.
 
+**`Extends` is not a smaller `Novel` — it has its own edit set, and §2 below does not
+cover it.** §2 is written for *adding* a rule: its steps append a row, append a template
+line, bump a range string. Widening an EXISTING rule leaves every one of those in place
+and stale, and `check-rule-sync.sh` cannot see it — the linter compares rule IDs, never
+the pattern names, the `N/A` / `Checked` wording, or whether a phase file's manual check
+still mirrors the row. That blind spot is not hypothetical: it is how a run has shipped a
+widened row whose Recurring Issue Check line still let a reviewer answer `N/A` on exactly
+the case the widening added, and a widened rule whose `rule-details/<ID>.md` still
+prescribed the superseded procedure.
+
+For each `Extends-<id>`, walk this list and record the outcome of every item, including
+"unchanged, because …":
+
+1. **The row's pattern name.** Does it still describe the widened trigger? A reviewer
+   routes from the digest's pattern-name column and never opens the row otherwise.
+2. **The row's severity cell.** Does the added mechanism reach a severity the cell does
+   not offer? Widening the body without the cell leaves the new case rated by the old
+   ceiling.
+3. **The Recurring Issue Check template line** — BOTH branches. The `N/A` escape must no
+   longer be answerable for a diff the widening now covers, and the `Checked` branch must
+   name what the widening obliges. Closing only the `N/A` side is the common half-fix.
+4. **`rule-details/<ID>.md`**, when the row points to one. The mandatory full procedure is
+   what a reviewer executes; a widened row over an un-widened procedure is a claim
+   stronger than the implementation (R49).
+5. **Extended obligations**, when the row points there — the section title as well as its
+   steps, since the title is what a reader matches against the row.
+6. **Phase-file manual checks that mirror the row** (`phases/phase-1-plan.md`,
+   `phase-2-coding.md`, `phase-3-review.md`). Grep the phase files for the rule ID: a
+   check written against the narrow trigger passes on the mechanism the widening added.
+7. **Cross-ports of the same text into other skills** (Pass 3). If the wording changed
+   here, the copy there is now drift.
+8. **Sibling rules that cite this one.** Grep for the ID: a cross-reference written
+   against the old scope may now point at the wrong rule, or need the new clause named.
+
+Then run §2 steps 1 and 7 (the table row itself, and the digest regeneration). §2's
+remaining steps — new template line, range-string bumps, `steps:`/`step_ids:` front
+matter — apply only when an ID was ADDED.
+
 ## 2. Sync-point edit map (ALL points, in this order)
 
 Editing tool: Edit/Write ONLY (self-trigger caution, pipeline.md). After each point,

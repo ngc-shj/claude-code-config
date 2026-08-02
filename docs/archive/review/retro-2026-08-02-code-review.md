@@ -145,10 +145,16 @@ status (R44), with counts quoted rather than a bare zero (R50 clause ii):
 - `bats tests/` → 1006 tests collected from 30 files, 1003 ok, 3 not ok, exit 1.
   The 3 failures are byte-identical on a clean `main` checkout (verified by stashing this
   branch and re-running the two affected files) and are macOS/BSD portability bugs in test
-  code, not defects in any hook: `tests/check-deny-only-guard.bats:338` uses GNU-only
-  `head -n -4`; `tests/retro-prescreen.bats` tests 61/62 compare a hook-emitted realpath
-  (`/private/var/...`) against an unresolved fixture path (`/var/...`). The user elected to
-  fix these in a separate PR. This branch adds no new failure.
+  code, not defects in any hook. Enumerate them with
+  `bats tests/ 2>&1 | grep '^not ok'`; identify them per file with
+  `bats tests/check-deny-only-guard.bats 2>&1 | grep '^not ok'` and the same for
+  `tests/retro-prescreen.bats`:
+  `tests/check-deny-only-guard.bats:339` uses GNU-only `head -n -4` (the failing assertion
+  is at `:342`); `tests/retro-prescreen.bats` file-ordinals **23 and 24** — global
+  `not ok 802` / `803`, source lines `:457` and `:482`, failing at the `.candidates[].path`
+  comparison on `:475` and `:512` — compare a hook-emitted realpath (`/private/var/...`)
+  against an unresolved fixture path (`/var/...`). The user elected to fix these in a
+  separate PR. This branch adds no new failure.
 - The new test `retrospect: the rule-sync gate is prescribed with an explicit skill
   directory` appears in the run as `ok 623`.
 
@@ -163,7 +169,8 @@ status (R44), with counts quoted rather than a bare zero (R50 clause ii):
 - Action: widened all three template lines — R25 gains the access-scope axis in its Checked
   branch, R29's N/A now requires "no codebase-derived numbers", R38's N/A now requires "no
   persisted fail-closed state" and names the four member kinds.
-- Modified file: `skills/triangulate/common-rules.md:618,622,631`
+- Modified file: `skills/triangulate/common-rules.md:627,631,640` (post-change line numbers;
+  the Extended-obligations Part 3 insertion moved the template block down by nine lines)
 
 ### F3 Major — phase-1 R29 trigger gated on external standards only
 - Action: added a `Derived-claim check (R29)` bullet requiring the reproducing command

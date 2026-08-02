@@ -65,7 +65,7 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R51 | Decision bound to a name, not to the object the operation uses | Major; Critical when the interval is attacker-schedulable (a namespace another principal can write, an untrusted command running between check and use) or when the re-resolved object is the subject of a privileged or destructive operation |
 | RS1 | Timing-safe comparison | Critical |
 | RS2 | Rate limiter on new routes | Major |
-| RS3 | Input validation at boundaries | Major; Critical when an unvalidated off-type value can reach a query operator, a credential comparison, or an object-merge/assign sink |
+| RS3 | Input validation at boundaries | Major; Critical when an unvalidated off-type value can reach a query operator, a credential comparison, an object-merge/assign sink, or a template / HTML-interpolation sink |
 | RS4 | Personal-identifying data in committed artifacts | Critical for secrets or exploitable identity data; Major otherwise |
 | RS5 | Untrusted externally-supplied security parameter without floor/whitelist | Major (Critical when no transport pinning/TOFU mitigates the MITM vector) |
 | RS6 | Incomplete sanitization — escape-character ordering | Major (Critical when the unsanitized output crosses into an interpolation/injection sink — SQL, shell, HTML attribute, template) |

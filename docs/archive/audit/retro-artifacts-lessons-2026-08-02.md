@@ -56,12 +56,18 @@ grep-evidence obligation was not engaged.
    clause (i), in the file that teaches R50's sibling R44. Fixed here to
    `bash hooks/check-rule-sync.sh skills/triangulate`, with the subject-proof step spelled
    out.
-2. The scrub gate (`retro-prescreen.sh scrub`) redacts 11 spans of this document across 10
-   lines (7 distinct strings), all false positives. Reproduce with
+2. The scrub gate (`retro-prescreen.sh scrub`) redacts **19 spans across 14 lines** of this
+   document as committed, all false positives. Reproduce with
    `bash hooks/retro-prescreen.sh scrub < docs/archive/audit/retro-artifacts-lessons-2026-08-02.md | grep -o '\[REDACTED\]' | wc -l`.
-   The distinct strings are `destructive-verification`, `closed-by-construction`,
-   `check-deny-only-guard`, `build-must-run-before-merge`, `presence-vs-identity`,
-   `destructive-confirmation`, `downstream-sanitizer`.
+   **The measurement is self-inclusive**: this paragraph names the false-positive strings,
+   and the scrub matches them here too, so the figure counts the evidence as well as the
+   findings — 11 spans across 10 lines before this paragraph was written, 19 across 14
+   with it. That is a property of measuring a document from inside it, not drift; a
+   re-derivation that returns something other than 19 means the document changed, which is
+   exactly what the number is for. The distinct matched strings are
+   `destructive-verification`, `closed-by-construction`, `check-deny-only-guard`,
+   `build-must-run-before-merge`, `presence-vs-identity`, `destructive-confirmation`,
+   `downstream-sanitizer`.
    Its secret-shaped pass (`hooks/retro-prescreen.sh:352`) matches
    `[A-Za-z0-9+_=-]{20,}`, and `-` is in the class, so any English compound of 20+
    characters is redacted: `destructive-verification`, `closed-by-construction`,
