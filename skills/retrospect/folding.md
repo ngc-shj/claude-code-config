@@ -105,9 +105,18 @@ so the next round does not re-litigate it.
 ## 4. Gates (mandatory, in order)
 
 ```bash
-bash ~/.claude/hooks/check-rule-sync.sh        # must exit 0 — all sync points consistent
-bats tests/                                    # full suite green, including new tests
+bash hooks/check-rule-sync.sh skills/triangulate   # must exit 0 — all sync points consistent
+bats tests/                                        # full suite green, including new tests
 ```
+
+**Pass the skill directory explicitly, and run the repo's copy of the hook.** With no
+argument the linter resolves its target relative to its own location, so
+`bash ~/.claude/hooks/check-rule-sync.sh` lints `~/.claude/skills/triangulate` — the
+*installed* copy, which does not contain the edits just made. It prints the same
+`OK: R1-R… consistent` line either way. That is the R50 shape this file's own gate
+instruction used to have: a green whose subject was the wrong tree. Prove the subject
+before trusting the status — e.g. grep the regenerated digest in the repo for a string
+from this round's edit and confirm the installed digest lacks it.
 
 A rule-sync failure means the edit map above was applied incompletely — fix the named
 sync point; never silence the linter. Judge each gate by its OWN exit status (R44): run
