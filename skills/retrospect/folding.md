@@ -105,18 +105,25 @@ so the next round does not re-litigate it.
 ## 4. Gates (mandatory, in order)
 
 ```bash
-bash ~/.claude/hooks/check-rule-sync.sh "$PWD/skills/triangulate"   # must exit 0
-bats tests/                                                        # full suite green
+bash hooks/check-rule-sync.sh skills/triangulate   # repo-local, both halves
+bats tests/                                        # full suite green
 ```
 
-**The path argument is mandatory, not decoration.** `check-rule-sync.sh` defaults its
-subject to `<dir of the script>/../skills/triangulate`, so the bare invocation checks the
-INSTALLED copy under `~/.claude/`. A fold edits the repository source, and the installed
-copy is stale until `install.sh` runs — so the bare form reports on the pre-fold tree and
-cannot fail for the reason the gate claims. Read the range the linter prints (`R1-R<n> /
-RS1-RS<n> / RT1-RT<n>`) and confirm the maximum matches the ID just added: a green quoting
-the previous maximum means the gate ran on the wrong subject (R50 clause iii), not that the
-edit map is consistent.
+**Run the repo's own linter against the repo's own tree — both halves matter.**
+`check-rule-sync.sh` defaults its subject to `<dir of the script>/../skills/triangulate`,
+so `bash ~/.claude/hooks/check-rule-sync.sh` with no argument checks the INSTALLED copy
+under `~/.claude/`. A fold edits the repository source and the installed copy is stale
+until `install.sh` runs, so that form reports on the pre-fold tree and cannot fail for the
+reason the gate claims (R50 clause iii). The same staleness argument applies to the SCRIPT,
+not only to its subject: a fold that changes the linter itself — adding a check, teaching it
+a new sync point — would run the pre-fold linter against post-fold rules and pass because
+the new check does not exist in the copy being executed. Invoke both from the repo.
+
+Then read the `Subject:` line the linter prints and confirm it is the tree you edited. That
+is the check, not the ID range: a fold consisting only of `Extends` items adds no rule ID, so
+the stale-subject run and the correct run print a byte-identical `R1-R<n>` range and comparing
+it discriminates nothing. When the fold DOES add an ID, confirm the printed maximum matches it
+as a second, cheaper signal.
 
 A rule-sync failure means the edit map above was applied incompletely — fix the named
 sync point; never silence the linter. Judge each gate by its OWN exit status (R44): run

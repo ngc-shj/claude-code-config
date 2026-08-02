@@ -275,6 +275,22 @@ if [ -d "$SKILL_DIR/rule-details" ]; then
     if [ -z "$table_pattern" ] || [ "$detail_heading" != "$table_pattern" ] || [ "$detail_row_pattern" != "$table_pattern" ]; then
       drift "$detail ID/pattern does not match common-rules.md row $id"
     fi
+    # Severity CEILING, not severity text. The compact row is a routing summary
+    # and legitimately words its severity differently from the detail's full
+    # sentence, so an equality test would fire on almost every pair. What must
+    # never differ is whether the rule can reach Critical: the digest and the
+    # compact row are what a reviewer routes through, and a ceiling present only
+    # in the detail caps a security escalation at Major for every reader who
+    # follows the documented digest-first protocol. Compared case-insensitively
+    # in both directions so either side losing the escalation is caught.
+    table_sev=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" {print $(NF-1); exit}' "$COMMON")
+    detail_sev=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" {print $(NF-1); exit}' "$detail_file")
+    table_crit=0; detail_crit=0
+    case "${table_sev,,}"  in *critical*) table_crit=1 ;; esac
+    case "${detail_sev,,}" in *critical*) detail_crit=1 ;; esac
+    if [ "$table_crit" -ne "$detail_crit" ]; then
+      drift "$detail severity ceiling disagrees with common-rules.md row $id (table Critical=$table_crit, detail Critical=$detail_crit)"
+    fi
   done
 fi
 
@@ -594,6 +610,7 @@ done
 
 if [ "$fail" -ne 0 ]; then
   echo ""
+  echo "Subject: $SKILL_DIR"
   echo "Rule-ID drift detected. Sync points: common-rules.md table + template"
   echo "block, the Extended-obligations pointer sentence, phase-1/phase-3"
   echo "'- RSn/RTn: [status]' lines, and every 'R1-Rn'/'RS1-RSn'/'RT1-RTn'"
@@ -604,5 +621,11 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
+# Name the subject. A caller cannot otherwise tell WHICH tree was checked, and
+# the default resolves to the installed copy under ~/.claude — so a run against
+# a stale tree prints a verdict indistinguishable from a run against the tree
+# the caller just edited. The ID range is not a substitute: a change that adds
+# no new rule ID (extending existing rows) prints the same range either way.
 echo "OK: R1-R$MAX_R / RS1-RS$MAX_RS / RT1-RT$MAX_RT consistent across all sync points"
+echo "Subject: $SKILL_DIR"
 exit 0

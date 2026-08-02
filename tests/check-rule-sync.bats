@@ -179,6 +179,26 @@ regen_digest() {
   run bash "$SCRIPT" "$REPO_SKILL_DIR"
   [ "$status" -eq 0 ]
   [[ "$output" == OK:* ]]
+  # The verdict must name WHICH tree produced it. The ID range cannot serve as
+  # that evidence: a change extending existing rows adds no ID, so a run against
+  # a stale tree prints an identical range. Without the subject line the caller
+  # has nothing that distinguishes the two.
+  [[ "$output" == *"Subject: $REPO_SKILL_DIR"* ]]
+}
+
+@test "pass: the OK verdict names the subject it was given, not a fixed path" {
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Subject: $FIX"* ]]
+  [[ "$output" != *"Subject: $REPO_SKILL_DIR"* ]]
+}
+
+@test "drift: the failure verdict names the subject too" {
+  sed_i 's/^| R2 | Beta |/| R3 | Beta |/' "$FIX/common-rules.md"
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Subject: $FIX"* ]]
 }
 
 @test "drift: referenced mandatory rule detail is missing" {
@@ -204,6 +224,47 @@ regen_digest() {
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"ID/pattern does not match"* ]]
+}
+
+# Severity CEILING, both directions. The compact row and the digest are what a
+# reviewer routes through; a Critical escalation stated only in the detail file
+# caps the finding at Major for every reader who follows the digest-first
+# protocol. Equality of the severity TEXT is deliberately not asserted — the
+# compact row legitimately summarizes — so each direction needs its own fixture.
+
+@test "drift: detail file states a Critical ceiling the table row does not" {
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' \
+    '| R1 | Alpha | Procedure | Major (Critical when it guards a security boundary) |' \
+    > "$FIX/rule-details/R1.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"severity ceiling disagrees with common-rules.md row R1"* ]]
+  [[ "$output" == *"table Critical=0, detail Critical=1"* ]]
+}
+
+@test "drift: table row states a Critical ceiling the detail file does not" {
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  sed_i 's/^\(| R1 | Alpha |[^|]*|\) Major |/\1 Critical |/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' '| R1 | Alpha | Procedure | Major |' > "$FIX/rule-details/R1.md"
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"severity ceiling disagrees with common-rules.md row R1"* ]]
+  [[ "$output" == *"table Critical=1, detail Critical=0"* ]]
+}
+
+@test "pass: differently-worded severities with the same ceiling are accepted" {
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' \
+    '| R1 | Alpha | Procedure | Major by default; Minor for cosmetic instances |' \
+    > "$FIX/rule-details/R1.md"
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
 }
 
 # ============================================================

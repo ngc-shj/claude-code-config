@@ -40,15 +40,15 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R26 | Disabled-state UI without visible cue | Minor |
 | R27 | Numeric range hardcoded in user-facing strings | Minor (Major when constant governs any security or privacy policy boundary) |
 | R28 | Grammatical inconsistency in toggle/switch labels | Minor |
-| R29 | External spec citation accuracy | Major (Critical when the hallucinated citation drives a security-tightening or security-loosening decision) |
+| R29 | Citation and rationale accuracy (external spec or intra-repo) | Major (Critical when the hallucinated citation drives a security-tightening or security-loosening decision) |
 | R30 | Markdown autolink footguns in citations | Minor |
 | R31 | Destructive operations without explicit user confirmation | Major (a, b, d) / Critical (c, e, f, g, h, i) |
 | R32 | New long-running runtime artifact merged without real boot smoke test | Major |
 | R33 | CI configuration change applied to one config but not its duplicates | Major (Critical when the drifting gate is a security control) |
 | R34 | Pre-existing bug in adjacent file deferred without Anti-Deferral cost-justification | Major |
 | R35 | Production-deployed component merged without manual test plan | Major; Critical for unvalidated security-sensitive deployed behavior |
-| R36 | Static-analysis warning suppression as substitute for fix | Major |
-| R37 | Internal implementation jargon in user-facing strings | Major when it blocks comprehension or safe recovery; Minor otherwise |
+| R36 | Suppression, or any markerless weakening, as substitute for fix | Major (Critical when the suppressed or out-edited warning is in a security category) |
+| R37 | Internal implementation jargon in user-facing strings | Minor by default; Major when it blocks comprehension or safe recovery, when the string sits in a security-relevant flow, or for stale-organization claims with measurable user impact |
 | R38 | Async state machine: non-terminal state + fail-open supersession | Major (non-terminal state) / Critical (fail-open supersession on auth/session/key/token state) |
 | R39 | Lifecycle secret/metadata zeroization (inverse of R25) | Major (Critical when long-term key material / live tokens survive) |
 | R40 | Cross-boundary serialization shape vs strict consumer | Critical (silent total-path failure or data loss) |

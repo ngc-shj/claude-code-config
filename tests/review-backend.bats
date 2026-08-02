@@ -120,6 +120,78 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# ollama pass completeness — a truncated or failed pass must not read as clean.
+#
+# The skill's Step 5 obligation ("an empty result is only a verdict when the run
+# completed") needs a signal that survives to the caller. `_run_ollama` therefore
+# reads each pass's OWN status (not the pipe tail's) and checks llm-commands.sh's
+# END-OF-ANALYSIS sentinel BEFORE stripping it. Both directions are covered: a
+# complete pass must stay green and stay sentinel-free (the allow side), and each
+# failure mode must red on its own (the deny side).
+#
+# CLAUDE_HOOKS_DIR is staged per test so no real llm-commands.sh is reached.
+# ---------------------------------------------------------------------------
+
+# Stage a fake hooks dir whose llm-commands.sh prints $1 and exits $2.
+stage_llm_stub() {
+  local body="$1" rc="$2"
+  FAKE_HOOKS="$BATS_TEST_TMPDIR/hooks"
+  mkdir -p "$FAKE_HOOKS"
+  cat > "$FAKE_HOOKS/llm-commands.sh" <<EOF
+#!/bin/bash
+cat > /dev/null
+printf '%s\n' "$body"
+exit $rc
+EOF
+  chmod +x "$FAKE_HOOKS/llm-commands.sh"
+}
+
+@test "run ollama: a complete pass exits 0, strips the sentinel, and flags nothing" {
+  make_stub git "FAKEDIFF"
+  stage_llm_stub '[Major] a.ts:1 — problem — fix
+## END-OF-ANALYSIS' 0
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[Major] a.ts:1"* ]]
+  # the sentinel is llm-commands.sh's framing, not review output
+  [[ "$output" != *"END-OF-ANALYSIS"* ]]
+  [[ "$output" != *"## FAILED:"* ]]
+  # one heading per declared pass
+  [[ "$output" == *"## functionality"* ]]
+  [[ "$output" == *"## security"* ]]
+  [[ "$output" == *"## testing"* ]]
+}
+
+@test "run ollama: a pass whose body is only the sentinel still exits 0 (empty is not failure)" {
+  make_stub git "FAKEDIFF"
+  stage_llm_stub '## END-OF-ANALYSIS' 0
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"## FAILED:"* ]]
+}
+
+@test "run ollama: a truncated pass (no sentinel) reds and names itself" {
+  make_stub git "FAKEDIFF"
+  stage_llm_stub '[Major] a.ts:1 — partial output cut off mid-' 0
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"## FAILED: functionality exit=0 sentinel=missing"* ]]
+  # the partial text is still emitted, so a human can see what was produced
+  [[ "$output" == *"partial output cut off"* ]]
+}
+
+@test "run ollama: a pass that exits non-zero reds even when the sentinel arrived" {
+  make_stub git "FAKEDIFF"
+  stage_llm_stub 'No findings
+## END-OF-ANALYSIS' 7
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"## FAILED: functionality exit=7 sentinel=present"* ]]
+  [[ "$output" == *"## FAILED: security exit=7 sentinel=present"* ]]
+  [[ "$output" == *"## FAILED: testing exit=7 sentinel=present"* ]]
+}
+
+# ---------------------------------------------------------------------------
 # detect ordering (ollama forced unavailable via empty hooks dir)
 # ---------------------------------------------------------------------------
 

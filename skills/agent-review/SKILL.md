@@ -135,9 +135,23 @@ zero findings from a thorough one are indistinguishable downstream (observed: th
 whole-diff reviewers all exhausted their context after ~60 minutes, leaving 163-byte
 transcripts; re-run file-scoped with one reviewer per subject, the same four produced
 46 findings including 2 Critical). Before emitting `approve` on an empty result,
-confirm the run finished: a non-zero exit, a truncated or near-empty transcript, or an
-output missing the backend's own closing marker is a FAILED RUN — report it as such and
-re-run, never as `approve`. When the diff is large enough that exhaustion is plausible,
+confirm the run finished, using signals the backend actually produces:
+
+- **`review-backend.sh run` exited non-zero** — a FAILED RUN in every case.
+- **A `## FAILED: <pass> exit=<n> sentinel=<present|missing>` line in the output.**
+  The ollama backend emits this per pass when the pass exited non-zero or its
+  output lost `llm-commands.sh`'s `## END-OF-ANALYSIS` sentinel (i.e. was
+  truncated). Name the failed pass when you report it.
+- **A declared pass whose `## <pass>` heading is present with an empty body.**
+  The ollama backend emits one heading per pass; an empty section is a pass that
+  produced nothing, which is not the same as a pass that found nothing.
+- **A near-empty or obviously truncated transcript** from `codex` / `claude`.
+  Those backends emit no terminator of their own, so for them transcript size and
+  the process exit status are the only available signals — say so in the summary
+  rather than implying a completeness check that was not possible.
+
+Any of these is a FAILED RUN: report it as such and re-run, never as `approve`.
+When the diff is large enough that exhaustion is plausible,
 partition the subject up front (one reviewer per file or per subsystem) rather than
 issuing one unscoped whole-diff review, and say in the summary which subjects were
 covered. A null result from a cheap pre-screen backend is an unproven signal, not

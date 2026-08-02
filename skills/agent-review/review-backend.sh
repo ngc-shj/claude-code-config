@@ -67,13 +67,35 @@ _run_ollama() {
   else
     passes=(analyze-functionality analyze-security analyze-testing)
   fi
-  local pass
+  # A pass that dies mid-output still emits partial text under its heading, and a
+  # partial review is shaped exactly like a clean one. Capture each pass's own
+  # status (never the pipe tail's — R44) and check for llm-commands.sh's
+  # END-OF-ANALYSIS sentinel BEFORE stripping it, so the caller can tell a
+  # completed pass from a truncated one. Emit the verdict as a machine-readable
+  # line and fail the whole run: the skill's "an empty result is only a verdict
+  # when the run completed" obligation needs a signal that survives to it.
+  local pass out rc failed=0
   for pass in "${passes[@]}"; do
     printf '## %s\n' "${pass#analyze-}"
-    printf '%s' "$diff" | bash "$HOOKS_DIR/llm-commands.sh" "$pass" \
-      | grep -v '^## END-OF-ANALYSIS$' || true
+    rc=0
+    out="$(printf '%s' "$diff" | bash "$HOOKS_DIR/llm-commands.sh" "$pass")" || rc=$?
+    if printf '%s\n' "$out" | grep -q '^## END-OF-ANALYSIS$'; then
+      # `|| true`: a pass whose body is only the sentinel filters to nothing and
+      # grep exits 1, which pipefail+set -e would turn into an abort. It cannot
+      # mask a pass failure — that status was captured above, before the pipe.
+      printf '%s\n' "$out" | grep -v '^## END-OF-ANALYSIS$' || true
+      if [ "$rc" -ne 0 ]; then
+        printf '## FAILED: %s exit=%d sentinel=present\n' "${pass#analyze-}" "$rc"
+        failed=1
+      fi
+    else
+      printf '%s\n' "$out"
+      printf '## FAILED: %s exit=%d sentinel=missing\n' "${pass#analyze-}" "$rc"
+      failed=1
+    fi
     printf '\n'
   done
+  [ "$failed" -eq 0 ]
 }
 
 # --- codex backend (external second opinion; does its own diff) ---

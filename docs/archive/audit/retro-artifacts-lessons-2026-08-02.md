@@ -413,9 +413,15 @@ for scope-affecting overrides.
 | `Covered-by-<id>` | 68 | Mapped to an existing row whose full text states the mechanism. The largest clusters: R42 (member-set derivation, 9), R50 (verification preconditions, 8), RT7 (proof able to fail, 7), R48 (parallel adjudicators, 6), R49 (overstated claim, 5), R47 (surface-form adjudication, 4). |
 | `Extends-<id>` folded | 4 | R42, R36, R29, R34 — each convergent across ≥2 partitions. |
 | `Extends-<id>` deferred | 13 | §12. Each real, none convergent. |
-| `Novel` folded | 6 | R52–R57 (§1–§6) plus the phase-1 saturation criterion (§11), which takes no R-table ID. |
+| `Novel` folded | 6 | R52–R57 (§1–§6). |
 | `Out-of-scope` | 2 | A collision in the identifier namespace between a plan's row labels and a review's finding labels (artifact-authoring hygiene, no defect mechanism); an announced-removal deprecation warning inside a test gate (generic dependency hygiene, no shape a diff review can detect). |
 | **Total** | **93** | P1 18 / P2 22 / P3 26 / P4 27. |
+
+The phase-1 saturation criterion (§11) is folded but sits OUTSIDE this table. It converged
+across two partitions as a `Novel` mechanism, but it is a phase-loop policy rather than a defect
+class, takes no R-table ID, and is therefore not one of the 93 rows dispositioned above. Counting
+it as a seventh `Novel` would break the total; leaving it unmentioned would drop its
+mechanical-detectability record, so §15 carries an entry for it explicitly.
 
 The sub-agents proposed 34 `Extends` and 9 `Novel`. The orchestrator's re-derivation against the
 full rule text moved 17 of those `Extends` to `Covered` and 2 of the `Novel` to `Extends`/policy.
@@ -485,4 +491,12 @@ the next round does not re-litigate:
   live in the schema and the clock, not in the ordering expression.
 - **R42 / R36 / R29 / R34 extensions** — each is a claim-verification obligation on prose, and the
   existing hooks for these rules (`check-suppression.sh` for R36) already cover the marker-bearing
-  half. The markerless half is markerless by definition.
+  half. The markerless half is markerless by definition. Round 1 of the self-review did surface one
+  mechanically detectable member of this group and it was implemented rather than deferred: a
+  compact row and its `rule-details/` file disagreeing on whether a rule's ceiling is Critical is a
+  two-string comparison, so `check-rule-sync.sh` gained that check with a red fixture per direction.
+- **The phase-1 saturation criterion (§11)** — a loop-exit policy, not a diff-level shape. Nothing
+  in a diff indicates which round produced it or how its findings were classified; the criterion's
+  own safeguards are procedural (a round floor, a severity gate, per-finding labels filed by the
+  expert rather than the orchestrator, and a user-facing surface of the call). Recorded here so a
+  later round does not re-litigate the absence of a hook.
