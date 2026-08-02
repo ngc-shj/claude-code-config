@@ -49,6 +49,14 @@ SKILL_DIR="$(cd -P -- "$SKILL_DIR" >/dev/null 2>&1 && pwd)" || {
   exit 2
 }
 
+# Shared with generate-triangulate-rule-digest.sh — see the note at the severity
+# comparison below for why the parsing must not be duplicated. Fail closed: a
+# missing library would make every severity read empty, and "empty" is a state
+# this linter reports as drift, so the gate would fail loudly rather than pass
+# blind — but naming the real cause is cheaper than diagnosing that.
+AWK_LIB="$SCRIPT_DIR/lib/md-rule-rows.awk"
+[ -f "$AWK_LIB" ] || { echo "Error: missing $AWK_LIB" >&2; exit 2; }
+
 COMMON="$SKILL_DIR/common-rules.md"
 SKILL="$SKILL_DIR/SKILL.md"
 # The digest is named in SKILL.md's loading protocol as the FIRST read and its
@@ -293,36 +301,27 @@ if [ -d "$SKILL_DIR/rule-details" ]; then
     # follows the documented digest-first protocol. Compared case-insensitively
     # in both directions so either side losing the escalation is caught.
     # $(NF-1) is the last cell of a row that ends in `|`, so it counts from the
-    # end and is unaffected by pipes inside earlier cells. A row written WITHOUT
-    # a trailing pipe silently yields the Procedure cell instead — and most
-    # security rules' Procedure text contains the word "Critical", so the
-    # comparison would then report agreement it never made. Require the row to
-    # end in a pipe, and require both cells to parse non-empty, before comparing:
-    # a check that cannot say what it read is the shape this rule set calls out.
-    # An ESCAPED pipe (`\|`) is one Markdown cell, not a delimiter — a severity
-    # written `Critical \| Major` is a single cell containing "Critical", but a
-    # naive split reads the trailing `Major` and reports no ceiling. Protect
-    # escaped pipes before splitting, restore them after, and lowercase inside
-    # awk: `${var,,}` is bash 4+, and this repo targets the bash 3.2 that ships
-    # on macOS (see the associative-array note above), where it is a hard
-    # `bad substitution` that would take the whole gate down.
-    sev_of() {
-      awk -v id="$2" '
-        index($0, "| " id " |") == 1 && /\|[[:space:]]*$/ {
-          line = $0
-          gsub(/\\\|/, "\001", line)
-          n = split(line, a, "|")
-          if (n < 3) next
-          sev = a[n-1]
-          gsub(/\001/, "\\|", sev)
-          print tolower(sev)
-          exit
-        }' "$1"
-    }
+    # end and is unaffected by pipes inside earlier cells — including ESCAPED
+    # ones, which are part of a cell rather than delimiters. That parsing is in
+    # lib/md-rule-rows.awk, shared with the digest generator: two copies drifted
+    # once already, and because the generator's output IS what the staleness
+    # check compares against, both agreed on a severity that had lost its
+    # Critical. The lowercasing happens inside awk because `${var,,}` is bash 4+
+    # and this script targets the bash 3.2 that ships on macOS (see the
+    # associative-array note above), where it is a hard `bad substitution`.
+    sev_of() { awk -v want=severity -v id="$2" -f "$AWK_LIB" "$1"; }
+    # Row SHAPE is this linter's policy, not the library's, so assert it here and
+    # separately: a rule row must open and close with a pipe. Kept distinct from
+    # the extraction so a malformed row and an empty cell fail for their own
+    # reasons rather than one masking the other.
+    for sev_file in "$COMMON" "$detail_file"; do
+      grep -qE "^\| $id \|.*\|[[:space:]]*\$" "$sev_file" || \
+        drift "$detail row $id is not a well-formed table row in $(basename "$sev_file") (must open and close with '|')"
+    done
     table_sev=$(sev_of "$COMMON" "$id")
     detail_sev=$(sev_of "$detail_file" "$id")
     if [ -z "${table_sev//[[:space:]]/}" ] || [ -z "${detail_sev//[[:space:]]/}" ]; then
-      drift "$detail severity cell not parseable for row $id (row must end in '|' in both files)"
+      drift "$detail severity cell not parseable for row $id"
     else
       # Ceiling, not text. The compact row legitimately summarizes the detail's
       # wording, so equality would fire on nearly every pair; what must never

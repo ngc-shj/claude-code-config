@@ -257,16 +257,29 @@ regen_digest() {
 }
 
 @test "drift: a detail row without a trailing pipe is refused, not silently mis-parsed" {
-  # $(NF-1) on a row that does not end in `|` returns the PROCEDURE cell, and
-  # most security rules' procedures contain the word "Critical" — so without the
-  # row-shape guard the ceiling check would report agreement it never made.
+  # A rule row must open and close with a pipe. The shared parser tolerates a
+  # missing closing pipe (it normalizes the row), so this is the LINTER's own
+  # policy, asserted separately from the extraction — a malformed row and an
+  # empty severity cell then fail for their own reasons instead of one masking
+  # the other.
   mkdir -p "$FIX/rule-details"
   sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
   printf '%s\n' '# R1 — Alpha' '' '| R1 | Alpha | Procedure mentioning Critical | Major' \
     > "$FIX/rule-details/R1.md"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"severity cell not parseable for row R1"* ]]
+  [[ "$output" == *"not a well-formed table row"* ]]
+}
+
+@test "error: the linter refuses to run without its shared row-parsing library" {
+  # The library is what keeps this linter and the digest generator agreeing. A
+  # missing one is a tool error (exit 2), not rule drift — and it must be named,
+  # because every severity would otherwise read empty and the gate would report
+  # a parse failure per rule instead of the one real cause.
+  mkdir -p "$BATS_TEST_TMPDIR/nolib/lib"
+  cp "$SCRIPT" "$BATS_TEST_TMPDIR/nolib/check-rule-sync.sh"
+  run -2 --separate-stderr bash "$BATS_TEST_TMPDIR/nolib/check-rule-sync.sh" "$FIX"
+  [[ "$stderr" == *"md-rule-rows.awk"* ]]
 }
 
 @test "pass: a literal pipe inside a non-severity cell does not disturb the ceiling read" {
@@ -491,8 +504,13 @@ EOF
 }
 
 @test "drift (7): a digest with no generator beside the linter is rejected" {
-  cp "$SCRIPT" "$BATS_TEST_TMPDIR/lonely-linter.sh"
-  run bash "$BATS_TEST_TMPDIR/lonely-linter.sh" "$FIX"
+  # Stage the shared row parser but NOT the generator, so this reaches the
+  # generator-missing clause it names rather than the library preflight (which
+  # exits 2 and has its own case above).
+  mkdir -p "$BATS_TEST_TMPDIR/lonely/lib"
+  cp "$SCRIPT" "$BATS_TEST_TMPDIR/lonely/check-rule-sync.sh"
+  cp "$(dirname "$SCRIPT")/lib/md-rule-rows.awk" "$BATS_TEST_TMPDIR/lonely/lib/"
+  run bash "$BATS_TEST_TMPDIR/lonely/check-rule-sync.sh" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"digest generator is missing"* ]]
 }
@@ -939,9 +957,13 @@ EOF
 
 stage_installed_layout() {
   STAGE="$BATS_TEST_TMPDIR/inst"
-  mkdir -p "$STAGE/hooks" "$STAGE/skills"
+  mkdir -p "$STAGE/hooks/lib" "$STAGE/skills"
   cp "$SCRIPT" "$STAGE/hooks/check-rule-sync.sh"
   cp "$(dirname "$SCRIPT")/generate-triangulate-rule-digest.sh" "$STAGE/hooks/"
+  # Both scripts read the shared row parser, and install.sh delivers hooks/lib/,
+  # so the twin must carry it — otherwise this stages a layout install.sh never
+  # produces and the "installed defaults are drift-free" claim is about nothing.
+  cp "$(dirname "$SCRIPT")/lib/md-rule-rows.awk" "$STAGE/hooks/lib/"
   cp -r "$REPO_SKILL_DIR" "$STAGE/skills/"
 }
 
