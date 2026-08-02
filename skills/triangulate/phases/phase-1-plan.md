@@ -155,7 +155,7 @@ Plan-specific obligations:
 - **Consumer-flow walkthrough enforcement** (Functionality expert obligation): for every contract that defines an API response shape, persisted-state shape, message payload, event payload, or any other shape consumed by code outside the producer, verify the contract has a per-consumer walkthrough as defined in Step 1-2 (Contracts → Consumer-flow walkthrough). For each consumer named in the walkthrough, verify the listed fields actually appear in the locked shape AND that any operation the consumer performs (URL construction, AAD computation, signature verification, idempotency-key derivation, etc.) is satisfiable from those fields alone. Missing walkthrough OR a walkthrough whose required fields are absent from the locked shape → Major finding; refuse to lock the contract until corrected. A contract that "looks complete on the producer side" but cannot be consumed downstream is the class of bug this check exists to surface.
 - **Member-set derivation cross-check (R42)** (all experts): for every invariant universally quantified over a class ("every/all/each X must Y", "no Z without W"), verify the plan attached a code-derived member-set per Step 1-2 (Invariants → Member-set derivation). Recompute it: `grep -rlE '<defining primitive>' <code roots>` → set A; the plan's applied-member list → set B; any member in `A \ B` is a finding (a member of the class that the control was not applied to). Confirm the derivation includes indirect members (cascade-via-parent, raw SQL, aliased wrappers) the symbol grep alone misses. Treat a plan that anchored its member-set on a prompt/external list rather than code as the finding itself. Security-relevant control + missed member ⇒ Critical (fail-open); refuse to lock the contract until the member-set is code-derived and complete. **Trigger is not limited to plan-declared invariants (R42 trigger (b))**: the class-invariant may arrive from a source other than the plan text — a security-review finding phrased as a single instance ("*this* route lacks the guard"), a CI failure, or a one-line user remark. Whenever such a single-instance signal implies a control that *ought* to hold universally, treat it as declaring the class and run this same member-set cross-check — do not wait for the plan to have spelled out "every/all/each". The seed instance is one member, never the set.
 - **ORM type-shape spot-check** (Functionality expert obligation): when a contract or pseudo-code sketch references an ORM/query-builder write operation, verify the input type used matches the operation. ORMs commonly expose multiple input shapes that LOOK interchangeable but are not — illustrative examples (not exhaustive, not language-specific): single-row vs. bulk write methods often require different input types (relation-form vs. unchecked-form); update vs. upsert vs. create may diverge on which fields are nullable; method overloads selected by argument count change which fields are required. A pseudo-code snippet that compiles in the author's head but type-fails on the actual ORM contract leaks into Phase 2 as a guaranteed deviation. When a contract crosses an ORM boundary, the contract MUST name the input type explicitly (not just the method), and the plan reviewer MUST verify the named type exists in the ORM's surface for the chosen method. Treat undocumented input types as a Major finding — pseudo-code that the ORM will not accept is not a contract.
-- When the plan or existing docs cite an external standard (RFC, NIST SP, OWASP ASVS, OWASP cheat sheet, IETF BCP, W3C, FIPS, ISO/IEC), apply R29 (External spec citation accuracy) — see the table-row procedure for the four-step verification. Hallucinated or wrong-section citations are Major findings regardless of whether they affect runtime behavior, and Critical when they drive a security decision. Specifically check:
+- When the plan or existing docs cite an external standard (RFC, NIST SP, OWASP ASVS, OWASP cheat sheet, IETF BCP, W3C, FIPS, ISO/IEC), apply R29 (Citation and rationale accuracy) — see the table-row procedure for the four-step verification. Hallucinated or wrong-section citations are Major findings regardless of whether they affect runtime behavior, and Critical when they drive a security decision. R29 fires on intra-repo citations too, which is the commoner case in a plan: a computed constant quoted without the command that produced it, a `file:line` or symbol reference, an assertion about what a tool does, and — the one that survives review most often — the RATIONALE attached to an invariant. A false reason under a true conclusion is in class, because the reason is what licenses the next edit. Specifically check:
   - Standards with known renumbering between revisions (e.g., NIST SP 800-63B Rev 3 vs Rev 4; OWASP ASVS 4.0.3 vs 5.0)
   - Quoted phrases in backticks or quotes — must appear verbatim in the source
   - URL anchors — many headings auto-generate anchors that differ from the visible heading text; the link target must resolve to the cited section, not a similarly-named one
@@ -235,7 +235,7 @@ routinely sits in the 90-300 s range). Manual fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R51 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R57 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -266,11 +266,11 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R51)
+- ... (R1-R57)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R51)
+- ... (R1-R57)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
@@ -280,7 +280,7 @@ Review round: [nth]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R51)
+- ... (R1-R57)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -336,7 +336,76 @@ MUST grep-verify — the check is NOT optional.
 
 **Anti-Deferral enforcement (mandatory)**: Any finding marked Skipped / Accepted / Out of scope / Pre-existing MUST be recorded using the mandatory format defined in "Anti-Deferral Rules" below. Entries missing the Anti-Deferral check are invalid — fix the entry before proceeding to the next round.
 
-Return to Step 1-4 until all agents return "No findings", or the maximum of **10 rounds** is reached.
+Return to Step 1-4 until all agents return "No findings", the **saturation criterion** below is met, or the maximum of **10 rounds** is reached.
+
+**Saturation — the second exit, and the one that fires in practice.** Finding COUNT is a poor
+exit signal for plan review: each round adds prose to the plan, prose is itself reviewable
+surface, and past the point where the design is settled a round mostly finds defects the
+previous round's additions introduced. Observed sequences: 43 / 39 / 34 findings across three
+rounds with no convergence in count but a complete change in character; and, on a different
+branch, five consecutive rounds producing more findings against the previous round's fixes
+than against the original design, three of them returning zero design-level findings.
+Judge the finding CHARACTER instead. The plan phase is saturated — proceed to Phase 2 — when ALL
+FOUR hold for the round just completed. This is an exit for a loop that has stopped paying, not
+a shortcut past unfinished work: it never lowers the severity bar, and conditions 1 and 2 are
+what stop it from becoming one.
+
+1. **At least two rounds have completed.** Round 1 is the full review; Round 2+ are incremental.
+   A Round-1 result consisting entirely of prose findings means the design has been looked at
+   once, not that it has settled, so saturation cannot fire before Round 2.
+2. **No Critical or Major finding is open, in ANY category** — design or prose. *Open* means not
+   resolved in the plan file, and a Critical or Major finding carrying any Anti-Deferral
+   disposition (Skipped / Accepted / Out of scope / Pre-existing) is STILL OPEN for this purpose:
+   filing the cost-justification tracks a finding, it does not resolve one, and reading it as a
+   resolution would reinstate the severity-blind exit through a documented format. Severity
+   governs first and this criterion never overrides it: `Critical/Major finding: Must be reflected
+   in the plan file` (above) applies unchanged, and a prose finding is not automatically Minor. A
+   wrong citation is R29, which is **Critical** when it drives a security-tightening or
+   security-loosening decision; a stale justification is what licenses omitting a member from a
+   control's coverage (R42's symmetric-counterpart sub-clause); a predicate that denies
+   conformant code is the R47/R48 class, not document hygiene. Classify by the rule that fires,
+   not by which artifact the text sits in.
+3. **No finding is against the design itself** — the contracts, the control classes, the
+   invariants, the adequacy of the acceptance criteria.
+4. **Every remaining Minor finding is one of exactly two kinds**: (a) prose-only — a wording
+   ambiguity, an unbuildable illustrative example, a redundant restatement — where a further plan
+   revision would add more prose than it removes; or (b) only reachable by BUILDING AND EXECUTING
+   the planned implementation, which is Phase 2 work by definition. Conditions 3 and 4 are a
+   partition, not a conjunction over one finding: a wording ambiguity is (a) and is not reachable
+   only by executing, so requiring both of every finding would make the exit unsatisfiable and
+   push a reader toward the loose reading instead.
+
+**The design/prose classification is made per finding by the expert who filed it**, in that
+expert's own output, using the rule ID that fires. The orchestrator MERGES those labels; it does
+not re-label them. A criterion self-assessed by the party that benefits from exiting is not a
+test — if the orchestrator disagrees with an expert's label, that disagreement is itself a Round
+n+1 input, not an orchestrator override.
+
+Record the saturation call in the review artifact with the round number, the per-finding labels
+as the experts filed them, and the severity of every remaining finding. Then, before proceeding:
+surface the call to the user with the remaining findings and their severities, exactly as the
+10-round cap below does — an early exit is a decision with a cost, and the cost is the user's to
+weigh. Carry each remaining finding forward by writing it into the plan file under a
+`## Carried-Forward Plan Findings` heading, one entry per finding ID, each with an Anti-Deferral
+entry per the mandatory format above and a one-line statement of what would settle it. Phase 2
+Step 2-1 reads that section explicitly. Do NOT route them through `## Implementation Checklist`:
+Phase 2 Step 2-1 item 5 AUTHORS that section from its own impact analysis rather than reading an
+existing one, and Phase 3 reads it as a list of files that must appear in the diff — a finding
+entry there would be either silently ignored or reported as a spurious Phase-3 finding. "Carried
+forward" is not a fifth disposition that escapes the Anti-Deferral format; a finding routed to
+Phase 2 with no entry and no cost-justification is dropped, not deferred.
+
+**Keep the specification and the litigation apart.** The growth this criterion detects has one
+dominant cause: merging two artifacts that should stay separate — the specification (obligations
+and acceptance criteria) and the record of findings with their dispositions. Keep the obligation
+and its acceptance criterion in the plan, cite the finding ID that produced each, and keep "what
+a previous revision said and why it was wrong" in the review artifact. Specify only what the
+toolchain cannot decide for itself — which invariant is platform-enforced versus
+application-enforced, which artifact adjudicates each predicate, which member sets must be
+re-derived, which narrowings are deliberate and at what cost. Exact call shapes, exact statement
+text, and exact line numbers cost a review round each time they are wrong and buy nothing the
+toolchain does not settle in seconds. A revision SHORTER than its predecessor is the healthy
+direction.
 
 If the loop limit is reached with unresolved findings:
 ```
@@ -344,7 +413,12 @@ If the loop limit is reached with unresolved findings:
 Remaining findings: [list with severity]
 Decision needed: Continue manually or accept current state?
 ```
-Consult the user before proceeding.
+Consult the user before proceeding. Whatever the user decides, every finding still open at this
+exit is written into the plan file's `## Carried-Forward Plan Findings` section on the same terms
+the saturation exit uses — finding ID, Anti-Deferral entry, one line on what would settle it. This
+exit can leave a Critical or Major open where saturation cannot, so it is the exit that needs the
+handoff MORE, and Phase 2 Step 2-1 reads the same section either way. A finding that reached the
+round cap and was neither fixed nor recorded there is dropped, not deferred.
 
 ### Step 1-7: Branch Creation and Commit
 

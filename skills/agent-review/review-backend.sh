@@ -67,13 +67,54 @@ _run_ollama() {
   else
     passes=(analyze-functionality analyze-security analyze-testing)
   fi
-  local pass
+  # A pass that dies mid-output still emits partial text under its heading, and a
+  # partial review is shaped exactly like a clean one — so the caller needs some
+  # signal that the pass finished. The ONLY trustworthy one is out of band.
+  #
+  # stdout carries model text about a diff a contributor controls, so anything
+  # in that stream is forgeable by the reviewed content: llm-commands.sh's
+  # END-OF-ANALYSIS sentinel in particular, whose normalizer stops at the FIRST
+  # standalone occurrence and drains the rest, so a diff line echoing it both
+  # truncates the review AND would certify it complete. The sentinel is
+  # therefore stripped as framing and never read as evidence, and the failure
+  # notice goes to stderr rather than into the review stream.
+  #
+  # Each pass's own status is captured before the strip (never the pipe tail's —
+  # R44) and a failing pass reddens the whole run. Declaring the residual (R49):
+  # this is a fail-closed check on the pass PROCESS, not on the completeness of
+  # its text. A backend that stops early and still exits 0 is not detectable
+  # here, and SKILL.md Step 5 says so rather than implying a check that is not
+  # implemented.
+  local pass out body rc failed=0
   for pass in "${passes[@]}"; do
     printf '## %s\n' "${pass#analyze-}"
-    printf '%s' "$diff" | bash "$HOOKS_DIR/llm-commands.sh" "$pass" \
-      | grep -v '^## END-OF-ANALYSIS$' || true
+    rc=0
+    out="$(printf '%s' "$diff" | bash "$HOOKS_DIR/llm-commands.sh" "$pass")" || rc=$?
+    # Strip the framing FIRST and judge emptiness on what is left. Testing the
+    # raw capture would let a pass whose entire output is the sentinel count as
+    # non-empty while contributing no review at all.
+    # `|| true`: a body that filters to nothing makes grep exit 1, which
+    # pipefail+set -e would turn into an abort. It cannot mask a pass failure —
+    # that status was captured above, before the pipe.
+    body="$(printf '%s\n' "$out" | grep -v '^## END-OF-ANALYSIS$' || true)"
+    printf '%s\n' "$body"
+    if [ "$rc" -ne 0 ]; then
+      printf 'review-backend: pass %s failed (exit %d)\n' "${pass#analyze-}" "$rc" >&2
+      failed=1
+    elif [ -z "${body//[[:space:]]/}" ]; then
+      # Emptiness is the OTHER signal, and unlike the sentinel it is sound. A
+      # pass that produced no bytes did not review anything, and llm-commands.sh
+      # documents exactly that as its failure contract — "LLM failure → warning
+      # to stderr, empty stdout, exit 0" — so an unreachable or timed-out local
+      # model lands here with a zero status. It is also not forgeable in the
+      # dangerous direction: diff content can only ADD output, so at worst a
+      # hostile diff pushes a pass toward this failure, never past it.
+      printf 'review-backend: pass %s produced no output\n' "${pass#analyze-}" >&2
+      failed=1
+    fi
     printf '\n'
   done
+  [ "$failed" -eq 0 ]
 }
 
 # --- codex backend (external second opinion; does its own diff) ---

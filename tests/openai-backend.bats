@@ -428,7 +428,10 @@ teardown() {
   source "$SCRIPT"
   openai_available
   grep -q '^http://localhost:8080' "$_OPENAI_HOST_CACHE"
-  ! grep -q '^http://localhost:8000' "$_OPENAI_HOST_CACHE"
+  # `if …; then false; fi` rather than `! …`: bash exempts a `!`-inverted
+  # command from `set -e` unless it is the test's LAST statement, so a
+  # negated assertion in the middle of a test can never fail the test.
+  if grep -q '^http://localhost:8000' "$_OPENAI_HOST_CACHE"; then false; fi
   # :8000 must never even be probed for the implicit localhost default
   run grep -c 'localhost:8000' "$CURL_LOG_FILE"
   [ "$output" -eq 0 ]

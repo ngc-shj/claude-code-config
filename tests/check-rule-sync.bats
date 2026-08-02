@@ -179,6 +179,26 @@ regen_digest() {
   run bash "$SCRIPT" "$REPO_SKILL_DIR"
   [ "$status" -eq 0 ]
   [[ "$output" == OK:* ]]
+  # The verdict must name WHICH tree produced it. The ID range cannot serve as
+  # that evidence: a change extending existing rows adds no ID, so a run against
+  # a stale tree prints an identical range. Without the subject line the caller
+  # has nothing that distinguishes the two.
+  [[ "$output" == *"Subject: $REPO_SKILL_DIR"* ]]
+}
+
+@test "pass: the OK verdict names the subject it was given, not a fixed path" {
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Subject: $FIX"* ]]
+  [[ "$output" != *"Subject: $REPO_SKILL_DIR"* ]]
+}
+
+@test "drift: the failure verdict names the subject too" {
+  sed_i 's/^| R2 | Beta |/| R3 | Beta |/' "$FIX/common-rules.md"
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Subject: $FIX"* ]]
 }
 
 @test "drift: referenced mandatory rule detail is missing" {
@@ -204,6 +224,132 @@ regen_digest() {
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"ID/pattern does not match"* ]]
+}
+
+# Severity CEILING, both directions. The compact row and the digest are what a
+# reviewer routes through; a Critical escalation stated only in the detail file
+# caps the finding at Major for every reader who follows the digest-first
+# protocol. Equality of the severity TEXT is deliberately not asserted — the
+# compact row legitimately summarizes — so each direction needs its own fixture.
+
+@test "drift: detail file states a Critical ceiling the table row does not" {
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' \
+    '| R1 | Alpha | Procedure | Major (Critical when it guards a security boundary) |' \
+    > "$FIX/rule-details/R1.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"severity ceiling disagrees with common-rules.md row R1"* ]]
+  [[ "$output" == *"table Critical=0, detail Critical=1"* ]]
+}
+
+@test "drift: table row states a Critical ceiling the detail file does not" {
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  sed_i 's/^\(| R1 | Alpha |[^|]*|\) Major |/\1 Critical |/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' '| R1 | Alpha | Procedure | Major |' > "$FIX/rule-details/R1.md"
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"severity ceiling disagrees with common-rules.md row R1"* ]]
+  [[ "$output" == *"table Critical=1, detail Critical=0"* ]]
+}
+
+@test "drift: a detail row without a trailing pipe is refused, not silently mis-parsed" {
+  # A rule row must open and close with a pipe. The shared parser tolerates a
+  # missing closing pipe (it normalizes the row), so this is the LINTER's own
+  # policy, asserted separately from the extraction — a malformed row and an
+  # empty severity cell then fail for their own reasons instead of one masking
+  # the other.
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' '| R1 | Alpha | Procedure mentioning Critical | Major' \
+    > "$FIX/rule-details/R1.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not a well-formed table row"* ]]
+}
+
+@test "error: the linter refuses to run without its shared row-parsing library" {
+  # The library is what keeps this linter and the digest generator agreeing. A
+  # missing one is a tool error (exit 2), not rule drift — and it must be named,
+  # because every severity would otherwise read empty and the gate would report
+  # a parse failure per rule instead of the one real cause.
+  mkdir -p "$BATS_TEST_TMPDIR/nolib/lib"
+  cp "$SCRIPT" "$BATS_TEST_TMPDIR/nolib/check-rule-sync.sh"
+  run -2 --separate-stderr bash "$BATS_TEST_TMPDIR/nolib/check-rule-sync.sh" "$FIX"
+  [[ "$stderr" == *"md-rule-rows.awk"* ]]
+}
+
+@test "pass: a literal pipe inside a non-severity cell does not disturb the ceiling read" {
+  # The extraction counts from the END of the row, so pipes in earlier cells are
+  # harmless — four live rows already carry them. Allow side only: a fixed-field
+  # rewrite would read the wrong cell CONSISTENTLY in both files, so this case's
+  # `status -eq 0` oracle cannot see it. The deny-side twin below is what does.
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' '| R1 | Alpha | Procedure with `a|b` inline | Major |' \
+    > "$FIX/rule-details/R1.md"
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
+@test "drift: an ESCAPED pipe inside the severity cell does not hide a Critical" {
+  # `Critical \| Major` is ONE Markdown cell containing "Critical". Splitting on
+  # a bare `|` reads the trailing "Major" and reports no ceiling — so a detail
+  # file could keep its escalation while the compact row dropped it, and the
+  # gate would agree they match.
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' '| R1 | Alpha | Procedure | Critical \| Major |' \
+    > "$FIX/rule-details/R1.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"table Critical=0, detail Critical=1"* ]]
+}
+
+@test "pass: a DOUBLE backslash before a pipe does not smuggle Critical into the ceiling" {
+  # The parity case at the linter. `\\|` is a literal backslash plus a real
+  # delimiter, so R1's severity here is `Major` on BOTH sides and the ceilings
+  # agree. A parser that reads "backslash pipe" as escaped without counting the
+  # run merges the last two cells, and the detail's procedure text — which says
+  # "Critical" — becomes its severity, so the gate reports a ceiling mismatch
+  # that does not exist. Green is the correct verdict; the failure it guards
+  # against is a false DRIFT that would train a reader to wave the check through.
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' \
+    '| R1 | Alpha | Check Critical paths \\| Major |' > "$FIX/rule-details/R1.md"
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
+@test "drift: a pipe-bearing row still has its ceiling compared, not a neighbouring cell" {
+  # The deny-side twin. Same inline pipe, but the ceilings genuinely differ — so
+  # a rewrite that reads a fixed field index (and therefore compares the wrong
+  # cell in both files) stops detecting the disagreement and reds here.
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' \
+    '| R1 | Alpha | Procedure with `a|b` inline | Major (Critical for security) |' \
+    > "$FIX/rule-details/R1.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"table Critical=0, detail Critical=1"* ]]
+}
+
+@test "pass: differently-worded severities with the same ceiling are accepted" {
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' \
+    '| R1 | Alpha | Procedure | Major by default; Minor for cosmetic instances |' \
+    > "$FIX/rule-details/R1.md"
+  regen_digest
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
 }
 
 # ============================================================
@@ -375,8 +521,13 @@ EOF
 }
 
 @test "drift (7): a digest with no generator beside the linter is rejected" {
-  cp "$SCRIPT" "$BATS_TEST_TMPDIR/lonely-linter.sh"
-  run bash "$BATS_TEST_TMPDIR/lonely-linter.sh" "$FIX"
+  # Stage the shared row parser but NOT the generator, so this reaches the
+  # generator-missing clause it names rather than the library preflight (which
+  # exits 2 and has its own case above).
+  mkdir -p "$BATS_TEST_TMPDIR/lonely/lib"
+  cp "$SCRIPT" "$BATS_TEST_TMPDIR/lonely/check-rule-sync.sh"
+  cp "$(dirname "$SCRIPT")/lib/md-rule-rows.awk" "$BATS_TEST_TMPDIR/lonely/lib/"
+  run bash "$BATS_TEST_TMPDIR/lonely/check-rule-sync.sh" "$FIX"
   [ "$status" -eq 1 ]
   [[ "$output" == *"digest generator is missing"* ]]
 }
@@ -823,9 +974,13 @@ EOF
 
 stage_installed_layout() {
   STAGE="$BATS_TEST_TMPDIR/inst"
-  mkdir -p "$STAGE/hooks" "$STAGE/skills"
+  mkdir -p "$STAGE/hooks/lib" "$STAGE/skills"
   cp "$SCRIPT" "$STAGE/hooks/check-rule-sync.sh"
   cp "$(dirname "$SCRIPT")/generate-triangulate-rule-digest.sh" "$STAGE/hooks/"
+  # Both scripts read the shared row parser, and install.sh delivers hooks/lib/,
+  # so the twin must carry it — otherwise this stages a layout install.sh never
+  # produces and the "installed defaults are drift-free" claim is about nothing.
+  cp "$(dirname "$SCRIPT")/lib/md-rule-rows.awk" "$STAGE/hooks/lib/"
   cp -r "$REPO_SKILL_DIR" "$STAGE/skills/"
 }
 
@@ -867,7 +1022,55 @@ stage_installed_layout() {
   [[ "$stderr" == *"could not parse rule tables"* ]]
 }
 
-@test "error: nonexistent skill dir exits 2" {
+@test "error: nonexistent skill dir exits 2 naming the subject it could not resolve" {
+  # Refused at resolution, before the missing-file preflight: the subject must
+  # resolve to an absolute path for the "Subject:" line to identify a tree, and
+  # a subject that does not exist cannot be silently carried as a relative
+  # string into checks that would then report on nothing.
   run -2 --separate-stderr bash "$SCRIPT" "$BATS_TEST_TMPDIR/nope"
-  [[ "$stderr" == *"missing file"* ]]
+  [[ "$stderr" == *"no such subject directory"* ]]
+  [[ "$stderr" == *"$BATS_TEST_TMPDIR/nope"* ]]
+}
+
+# ============================================================
+# The documented fold gate — the caller's invocation form
+#
+# T-03 pinned the linter's OUTPUT; nothing pinned the CALLER. Reverting
+# folding.md to the bare `~/.claude/hooks/check-rule-sync.sh` — the exact
+# regression that made a fold's gate report on the pre-fold installed tree —
+# left the whole suite green. Precedent for asserting skill-document content:
+# tests/check-pre-pr.bats "skill docs reference scripts/pre-pr.sh literally".
+# ============================================================
+
+@test "retrospect's fold gate is documented as repo-local, script and subject" {
+  local repo_root
+  repo_root="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  local f
+  for f in "$repo_root/skills/retrospect/folding.md" "$repo_root/skills/retrospect/pipeline.md"; do
+    # the mandated form: repo-local script AND repo-local subject
+    grep -q 'bash hooks/check-rule-sync\.sh skills/triangulate' "$f"
+    # And no bare installed-copy invocation presented as the gate. Written as an
+    # explicit `if … false` rather than `! grep`: bash exempts a `!`-inverted
+    # command from `set -e` unless it is the test's LAST statement, so inside
+    # this loop body a `! grep` would be live for the final iteration only —
+    # silently unguarding folding.md, which is the file the regression occurred
+    # in. The pattern tolerates a trailing comment, because the historical line
+    # carried one.
+    if grep -qE '^[^#]*bash ~/\.claude/hooks/check-rule-sync\.sh([[:space:]]|#|$)' "$f"; then
+      echo "bare installed-copy invocation presented as the gate in $f"
+      false
+    fi
+  done
+}
+
+@test "the linter resolves a relative subject to an absolute path" {
+  # N-03's whole point: `Subject:` must IDENTIFY a tree, not echo the argument.
+  # Every other call site passes an already-absolute path, so nothing pinned the
+  # resolution itself — a bare existence check keeping the same error and exit
+  # code passed the entire suite.
+  cd "$(dirname "$FIX")"
+  run bash "$SCRIPT" "$(basename "$FIX")"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Subject: $FIX"* ]]
+  [[ "$output" != *"Subject: $(basename "$FIX")"* ]]
 }

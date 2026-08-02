@@ -56,7 +56,7 @@ git diff main...HEAD | bash ~/.claude/hooks/llm-commands.sh analyze-testing     
 echo "TRI_DIR=$TRI_DIR"
 ```
 
-**Truncation-detection check (mandatory)**: each seed file MUST end with the sentinel `## END-OF-ANALYSIS`. A seed file that is (a) empty or (b) non-empty-but-missing-sentinel is treated as "not usable as seed" and the corresponding sub-agent falls back to full-diff review.
+**Truncation-detection check (mandatory)**: each seed file MUST end with the sentinel `## END-OF-ANALYSIS`. A seed file that is (a) empty or (b) non-empty-but-missing-sentinel is treated as "not usable as seed" and the corresponding sub-agent falls back to full-diff review. **The sentinel is a fail-TOWARD-work tripwire, not a completeness certificate** — declare it that way (R49), because the seed is generated from `git diff main...HEAD` and a contributor can put that literal line in the diff. The normalizer that emits it stops at the first standalone occurrence and drains the rest, so an echoed marker truncates the seed AND satisfies this check. That is tolerable HERE and only here: a seed is an unproven hint whose sole failure mode is a sub-agent doing more work than it needed, and the Seed trust advisory plus the mandatory independent Recurring Issue Check already forbid inferring safety from it. Never reuse this check where the marker's presence would license a PASS — see the agent-review skill's Step 5, which reads process exit status and emptiness instead for exactly this reason.
 
 ```bash
 : "${TRI_DIR:?TRI_DIR not set — did Step 3-2b capture fail? Substitute the literal path from the TRI_DIR= line printed at the end of Step 3-2b.}"
@@ -85,7 +85,7 @@ Launch the same three roles in parallel as the plan review.
 
 **Round 1 (incremental verification on top of Phase 2 self-R-check baseline):**
 
-Note: Phase 2 Step 2-5 already ran a focused R1-R51 (+ RS*/RT*) self-check. Round 1 here
+Note: Phase 2 Step 2-5 already ran a focused R1-R57 (+ RS*/RT*) self-check. Round 1 here
 is therefore incremental verification on top of that baseline — surface novel findings
 outside the Recurring Issue Checklist, cross-cutting issues, and any R-rule miss the
 self-check pass overlooked. Do NOT redo the rote R-check pass that Phase 2 already
@@ -95,7 +95,7 @@ for issues those outputs missed.
 ```
 You are a [role name].
 Review the code on the current branch from a [perspective] perspective.
-Phase 2 already ran a focused R1-R51 self-check; treat this round as incremental
+Phase 2 already ran a focused R1-R57 self-check; treat this round as incremental
 verification, surfacing novel issues and any R-rule miss the self-check overlooked.
 
 Scope: [In-scope items for this expert]
@@ -119,7 +119,7 @@ Ollama seed findings (your perspective only — verify each, do not re-report as
      Insert: "Seed unavailable or truncated — perform full-diff review. Read `git diff main...HEAD` directly for this perspective."
 
  (b) File ends with sentinel AND contains exactly `No findings` followed by the sentinel:
-     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R51 Recurring Issue Check using targeted greps."
+     Insert: "Seed analyzer returned No findings for this perspective. Note: an empty seed means either (i) the diff is genuinely safe for this perspective, or (ii) the analyzer missed something. Do NOT assume safety from an empty seed — still perform your full R1-R57 Recurring Issue Check using targeted greps."
 
  (c) File ends with sentinel AND contains finding entries:
      Insert the finding entries verbatim (stripping only the trailing `## END-OF-ANALYSIS` line).
@@ -200,7 +200,7 @@ Sub-agent test validation (mandatory for all experts):
   - Mock return values whose shape doesn't match the actual API response format (e.g., returning an array when the real API returns an object with status fields)
   - Async test functions that do not await the target call — assertions may execute before the async operation completes, always passing
   - Per-test state initialized in a once-before-all hook instead of a per-test hook — causes test-order dependency and intermittent failures
-  - Sub-agent citation hallucination (R29): if the sub-agent's output cites an RFC / NIST / OWASP / W3C / FIPS / ISO section, verify the citation per R29 before accepting — sub-agents are particularly prone to retrofitting plausible-sounding section numbers
+  - Sub-agent citation hallucination (R29): if the sub-agent's output cites an RFC / NIST / OWASP / W3C / FIPS / ISO section, verify the citation per R29 before accepting — sub-agents are particularly prone to retrofitting plausible-sounding section numbers. The same applies to INTRA-REPO citations, which sub-agents produce far more of: a `file:line`, a symbol or helper name, a computed constant, a claim about what a command outputs, and the reason attached to an invariant. Open the cited location or run the cited command; a rationale that is false under a conclusion that is true is still an R29 finding, because the next editor acts on the reason
 
 Severity criteria for [role name]:
   [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]
@@ -316,11 +316,11 @@ Review round: [nth]
 ## Recurring Issue Check
 ### Functionality expert
 - R1: [status]
-- ... (R1-R51)
+- ... (R1-R57)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R51)
+- ... (R1-R57)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
@@ -330,7 +330,7 @@ Review round: [nth]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R51)
+- ... (R1-R57)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]

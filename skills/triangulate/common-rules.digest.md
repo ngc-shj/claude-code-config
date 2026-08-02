@@ -40,15 +40,15 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R26 | Disabled-state UI without visible cue | Minor |
 | R27 | Numeric range hardcoded in user-facing strings | Minor (Major when constant governs any security or privacy policy boundary) |
 | R28 | Grammatical inconsistency in toggle/switch labels | Minor |
-| R29 | External spec citation accuracy | Major (Critical when the hallucinated citation drives a security-tightening or security-loosening decision) |
+| R29 | Citation and rationale accuracy (external spec or intra-repo) | Major (Critical when the hallucinated citation drives a security-tightening or security-loosening decision) |
 | R30 | Markdown autolink footguns in citations | Minor |
 | R31 | Destructive operations without explicit user confirmation | Major (a, b, d) / Critical (c, e, f, g, h, i) |
 | R32 | New long-running runtime artifact merged without real boot smoke test | Major |
 | R33 | CI configuration change applied to one config but not its duplicates | Major (Critical when the drifting gate is a security control) |
 | R34 | Pre-existing bug in adjacent file deferred without Anti-Deferral cost-justification | Major |
 | R35 | Production-deployed component merged without manual test plan | Major; Critical for unvalidated security-sensitive deployed behavior |
-| R36 | Static-analysis warning suppression as substitute for fix | Major |
-| R37 | Internal implementation jargon in user-facing strings | Major when it blocks comprehension or safe recovery; Minor otherwise |
+| R36 | Suppression, or any markerless weakening, as substitute for fix | Major (Critical when the suppressed or out-edited warning is in a security category) |
+| R37 | Internal implementation jargon in user-facing strings | Minor by default; Major when it blocks comprehension or safe recovery, when the string sits in a security-relevant flow, or for stale-organization claims with measurable user impact |
 | R38 | Async state machine: non-terminal state + fail-open supersession | Major (non-terminal state) / Critical (fail-open supersession on auth/session/key/token state) |
 | R39 | Lifecycle secret/metadata zeroization (inverse of R25) | Major (Critical when long-term key material / live tokens survive) |
 | R40 | Cross-boundary serialization shape vs strict consumer | Critical (silent total-path failure or data loss) |
@@ -63,6 +63,12 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R49 | Undeclared control class, or a claim stronger than the implementation | Major; Critical when the overstated control is relied on elsewhere as a boundary — another control was skipped, narrowed, or deferred because this one was believed to close the class |
 | R50 | Verification preconditions unverified (success inferred from a proxy signal) | Major; Critical when the unverified precondition means a security gate never actually ran, ran on the wrong subject, or reported green from a failed toolchain |
 | R51 | Decision bound to a name, not to the object the operation uses | Major; Critical when the interval is attacker-schedulable (a namespace another principal can write, an untrusted command running between check and use) or when the re-resolved object is the subject of a privileged or destructive operation |
+| R52 | Control reach extended without re-auditing the control itself | Major; Critical when the widened control is fail-closed and the latent defect denies a whole class of principals rather than a single request |
+| R53 | Numeric gate threshold set or raised without headroom measurement | Major; Critical when the un-measured threshold gates a security control's coverage, so the enrolment commit either reds the build or admits an unmeasured subject |
+| R54 | Control suspension granted through ambient context state | Major; Critical when the leaked suspension covers an audit, append-only, tenancy, or authorization control, since every statement after the sanctioned call runs unguarded |
+| R55 | In-band sentinel colliding with a legitimate value of its own domain | Major; Critical when a branch on the sentinel disables a security control on the path where the sentinel is the legitimate value (a first run, a reset, an empty corpus) |
+| R56 | Progress-marker heal direction | Major; Critical when the forward heal drops items that no other system retains, or when the widened candidate set of a backward heal crosses a trust or egress boundary |
+| R57 | Ordering or cursor key without a total order | Major; Critical when the skipped rows are an audit, evidence, or reconciliation feed whose consumer treats a page boundary as completeness, or when the new key's write surface is caller-nameable |
 | RS1 | Timing-safe comparison | Critical |
 | RS2 | Rate limiter on new routes | Major |
 | RS3 | Input validation at boundaries | Major |
