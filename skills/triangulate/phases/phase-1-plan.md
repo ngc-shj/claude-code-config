@@ -235,7 +235,7 @@ routinely sits in the 90-300 s range). Manual fallback:
 - Merge findings that describe the same underlying issue from different perspectives
 - Keep the most comprehensive description and note all perspectives that flagged it
 
-**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R51 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
+**Preserve Recurring Issue Check sections (mandatory)**: Each expert's `## Recurring Issue Check` block (R1-R57 + expert-specific RS*/RT*) MUST be preserved verbatim in the merged review file under a top-level `## Recurring Issue Check` section, organized by expert. Do NOT deduplicate these — they are evidence that each check was performed. If an expert's output is missing the Recurring Issue Check section, return the output to the expert for revision before saving the merged file.
 
 Save to `./docs/archive/review/[plan-name]-review.md` (create `./docs/archive/review/` if it doesn't exist).
 
@@ -266,11 +266,11 @@ Review round: [nth]
 ### Functionality expert
 - R1: [status]
 - R2: [status]
-- ... (R1-R51)
+- ... (R1-R57)
 
 ### Security expert
 - R1: [status]
-- ... (R1-R51)
+- ... (R1-R57)
 - RS1: [status]
 - RS2: [status]
 - RS3: [status]
@@ -280,7 +280,7 @@ Review round: [nth]
 
 ### Testing expert
 - R1: [status]
-- ... (R1-R51)
+- ... (R1-R57)
 - RT1: [status]
 - RT2: [status]
 - RT3: [status]
@@ -336,7 +336,41 @@ MUST grep-verify — the check is NOT optional.
 
 **Anti-Deferral enforcement (mandatory)**: Any finding marked Skipped / Accepted / Out of scope / Pre-existing MUST be recorded using the mandatory format defined in "Anti-Deferral Rules" below. Entries missing the Anti-Deferral check are invalid — fix the entry before proceeding to the next round.
 
-Return to Step 1-4 until all agents return "No findings", or the maximum of **10 rounds** is reached.
+Return to Step 1-4 until all agents return "No findings", the **saturation criterion** below is met, or the maximum of **10 rounds** is reached.
+
+**Saturation — the second exit, and the one that fires in practice.** Finding COUNT is a poor
+exit signal for plan review: each round adds prose to the plan, prose is itself reviewable
+surface, and past the point where the design is settled a round mostly finds defects the
+previous round's additions introduced. Observed sequences: 43 / 39 / 34 findings across three
+rounds with no convergence in count but a complete change in character; and, on a different
+branch, five consecutive rounds producing more findings against the previous round's fixes
+than against the original design, three of them returning zero design-level findings.
+Judge the finding CHARACTER instead. The plan phase is saturated — proceed to Phase 2 — when
+BOTH hold for the round just completed:
+
+1. No finding is against the design itself (the contracts, the control classes, the invariants,
+   the acceptance criteria's adequacy). Findings against the document's own prose — a wrong
+   citation, a stale justification, a pattern that denies conformant code, an unbuildable
+   example — do not count as design findings.
+2. Every remaining finding is only reachable by BUILDING AND EXECUTING the planned
+   implementation. A finding that can only be settled by running the code is Phase 2 work; keeping
+   it in the plan loop converts it into more prose.
+
+Record the saturation call in the review artifact with the round number and which of the round's
+findings were design-level (the expected answer is none). Carry the unresolved prose-level
+findings forward as Phase 2 inputs rather than resolving them by another plan revision.
+
+**Keep the specification and the litigation apart.** The growth this criterion detects has one
+dominant cause: merging two artifacts that should stay separate — the specification (obligations
+and acceptance criteria) and the record of findings with their dispositions. Keep the obligation
+and its acceptance criterion in the plan, cite the finding ID that produced each, and keep "what
+a previous revision said and why it was wrong" in the review artifact. Specify only what the
+toolchain cannot decide for itself — which invariant is platform-enforced versus
+application-enforced, which artifact adjudicates each predicate, which member sets must be
+re-derived, which narrowings are deliberate and at what cost. Exact call shapes, exact statement
+text, and exact line numbers cost a review round each time they are wrong and buy nothing the
+toolchain does not settle in seconds. A revision SHORTER than its predecessor is the healthy
+direction.
 
 If the loop limit is reached with unresolved findings:
 ```

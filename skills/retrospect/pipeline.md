@@ -157,8 +157,10 @@ Never place repo paths, URLs, or other config keys in a committed file.
 ## Step 5 — Fold
 
 For each `Novel` and `Extends` item, Read `folding.md` and apply the edit map. Gates
-(both mandatory, in order): `bash ~/.claude/hooks/check-rule-sync.sh` exits 0, then the
-full `bats tests/` is green.
+(both mandatory, in order): `bash ~/.claude/hooks/check-rule-sync.sh "$PWD/skills/triangulate"`
+exits 0 AND prints a maximum rule ID matching the one just added, then the full
+`bats tests/` is green. The path argument is required — bare, the linter checks the
+installed copy under `~/.claude/`, which a fold has not touched.
 
 ## Step 6 — Standard passes 2 and 3
 

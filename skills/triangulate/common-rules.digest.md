@@ -63,6 +63,12 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R49 | Undeclared control class, or a claim stronger than the implementation | Major; Critical when the overstated control is relied on elsewhere as a boundary — another control was skipped, narrowed, or deferred because this one was believed to close the class |
 | R50 | Verification preconditions unverified (success inferred from a proxy signal) | Major; Critical when the unverified precondition means a security gate never actually ran, ran on the wrong subject, or reported green from a failed toolchain |
 | R51 | Decision bound to a name, not to the object the operation uses | Major; Critical when the interval is attacker-schedulable (a namespace another principal can write, an untrusted command running between check and use) or when the re-resolved object is the subject of a privileged or destructive operation |
+| R52 | Control reach extended without re-auditing the control itself | Major; Critical when the widened control is fail-closed and the latent defect denies a whole class of principals rather than a single request |
+| R53 | Numeric gate threshold set or raised without headroom measurement | Major; Critical when the un-measured threshold gates a security control's coverage, so the enrolment commit either reds the build or admits an unmeasured subject |
+| R54 | Control suspension granted through ambient context state | Major; Critical when the leaked suspension covers an audit, append-only, tenancy, or authorization control, since every statement after the sanctioned call runs unguarded |
+| R55 | In-band sentinel colliding with a legitimate value of its own domain | Major; Critical when a branch on the sentinel disables a security control on the path where the sentinel is the legitimate value (a first run, a reset, an empty corpus) |
+| R56 | Progress-marker heal direction | Major; Critical when the forward heal drops items that no other system retains, or when the widened candidate set of a backward heal crosses a trust or egress boundary |
+| R57 | Ordering or cursor key without a total order | Major; Critical when the skipped rows are an audit, evidence, or reconciliation feed whose consumer treats a page boundary as completeness, or when the new key's write surface is caller-nameable |
 | RS1 | Timing-safe comparison | Critical |
 | RS2 | Rate limiter on new routes | Major |
 | RS3 | Input validation at boundaries | Major |

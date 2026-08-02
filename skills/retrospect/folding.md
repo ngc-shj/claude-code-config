@@ -105,9 +105,18 @@ so the next round does not re-litigate it.
 ## 4. Gates (mandatory, in order)
 
 ```bash
-bash ~/.claude/hooks/check-rule-sync.sh        # must exit 0 — all sync points consistent
-bats tests/                                    # full suite green, including new tests
+bash ~/.claude/hooks/check-rule-sync.sh "$PWD/skills/triangulate"   # must exit 0
+bats tests/                                                        # full suite green
 ```
+
+**The path argument is mandatory, not decoration.** `check-rule-sync.sh` defaults its
+subject to `<dir of the script>/../skills/triangulate`, so the bare invocation checks the
+INSTALLED copy under `~/.claude/`. A fold edits the repository source, and the installed
+copy is stale until `install.sh` runs — so the bare form reports on the pre-fold tree and
+cannot fail for the reason the gate claims. Read the range the linter prints (`R1-R<n> /
+RS1-RS<n> / RT1-RT<n>`) and confirm the maximum matches the ID just added: a green quoting
+the previous maximum means the gate ran on the wrong subject (R50 clause iii), not that the
+edit map is consistent.
 
 A rule-sync failure means the edit map above was applied incompletely — fix the named
 sync point; never silence the linter. Judge each gate by its OWN exit status (R44): run
