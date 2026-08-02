@@ -330,31 +330,45 @@ teardown() {
 # caught none of ten plausible bare spellings.
 RULE_SYNC_ANY='(bash |\./)[^ ]*check-rule-sync\.sh'
 RULE_SYNC_OK='(bash |\./)[^ ]*check-rule-sync\.sh( skills/triangulate| \*\))'
+# A line carrying this marker is prose ABOUT the gate — a negative example, an
+# allow-list pattern being discussed — not a prescription to run it. Excluded
+# from both counters so documenting the wrong form never forces the repair that
+# would widen RULE_SYNC_OK into "whatever anyone wrote".
+RULE_SYNC_EXEMPT='rule-sync-example'
+
+# Scanned scope. `docs/archive/` holds past review artifacts that quote whatever
+# the gate looked like at the time and must not be rewritten; `tests/` is this
+# file. Everything else that could prescribe the gate is in scope, README
+# included — a bare invocation pasted there sends a retro round at the installed
+# copy just as surely as one in the skill.
+RULE_SYNC_SCOPE=(skills global hooks README.md CLAUDE.md)
 
 @test "retrospect: the rule-sync gate is prescribed with an explicit skill directory" {
   # Without the directory argument, check-rule-sync.sh resolves its target
   # relative to its own location, so the installed ~/.claude copy is linted
   # instead of the repo — and it prints the same OK line either way. Every
-  # file that prescribes the gate must carry the argument, or a retro round's
-  # first green has the wrong subject (R50).
+  # file in RULE_SYNC_SCOPE that prescribes the gate must carry the argument,
+  # or a retro round's first green has the wrong subject (R50).
   #
   # The accepted forms are `... check-rule-sync.sh skills/triangulate` and the
   # settings.json allow-pattern `Bash(bash hooks/check-rule-sync.sh *)`, which
   # folding.md quotes while explaining why it is deliberately NOT added.
 
-  # Derive the subject set rather than hardcoding it, so a third file that
+  # Derive the subject set rather than hardcoding it, so a further file that
   # starts prescribing the gate is claimed automatically (R42). An empty set
   # would make every assertion below vacuous, so assert it is non-empty.
   local files
-  files=$(cd "$REPO_DIR" && grep -rlE "$RULE_SYNC_ANY" skills/ global/ 2>/dev/null)
+  files=$(cd "$REPO_DIR" && grep -rlE "$RULE_SYNC_ANY" "${RULE_SYNC_SCOPE[@]}" 2>/dev/null)
   [ -n "$files" ]
 
   local f tot ok
   while IFS= read -r f; do
     [ -f "$REPO_DIR/$f" ]
-    tot=$(grep -oE "$RULE_SYNC_ANY" "$REPO_DIR/$f" | wc -l | tr -d ' ')
-    ok=$(grep -oE "$RULE_SYNC_OK" "$REPO_DIR/$f" | wc -l | tr -d ' ')
-    [ "$tot" -gt 0 ]
+    tot=$(grep -v "$RULE_SYNC_EXEMPT" "$REPO_DIR/$f" | grep -oE "$RULE_SYNC_ANY" | wc -l | tr -d ' ')
+    ok=$(grep -v "$RULE_SYNC_EXEMPT" "$REPO_DIR/$f" | grep -oE "$RULE_SYNC_OK" | wc -l | tr -d ' ')
+    # Emit the values, not just the assertion: bats prints only the failing
+    # source line, and `$output` is empty for a plain `[ ... ]` test.
+    echo "rule-sync scan: f=$f tot=$tot ok=$ok" >&3
     [ "$tot" -eq "$ok" ]
   done <<< "$files"
 }
@@ -391,4 +405,30 @@ EOF
   ok=$(grep -oE "$RULE_SYNC_OK" "$fixture" | wc -l | tr -d ' ')
   [ "$tot" -eq 1 ]
   [ "$ok" -eq 1 ]
+}
+
+@test "retrospect: the rule-sync exemption marker excludes prose, and only prose" {
+  # A bare invocation written as a NEGATIVE EXAMPLE — which folding.md, the file
+  # that documents why bare invocations are wrong, is the likeliest place to
+  # grow — must not red the scan. Without the marker the only obvious repair is
+  # to add the spelling to RULE_SYNC_OK, which turns the whitelist into
+  # "whatever anyone wrote" and destroys the guard.
+  local fixture="$BATS_TEST_TMPDIR/marked.md"
+  local tot ok
+
+  # Deny side: an UNMARKED bare invocation still counts, and still fails.
+  printf 'bash hooks/check-rule-sync.sh lints the installed copy.\n' > "$fixture"
+  tot=$(grep -v "$RULE_SYNC_EXEMPT" "$fixture" | grep -oE "$RULE_SYNC_ANY" | wc -l | tr -d ' ')
+  ok=$(grep -v "$RULE_SYNC_EXEMPT" "$fixture" | grep -oE "$RULE_SYNC_OK" | wc -l | tr -d ' ')
+  echo "unmarked: tot=$tot ok=$ok" >&3
+  [ "$tot" -eq 1 ]
+  [ "$ok" -eq 0 ]
+
+  # Allow side, adjacent to the boundary: the SAME line, marked, counts nowhere.
+  printf 'bash hooks/check-rule-sync.sh lints the installed copy. <!-- rule-sync-example -->\n' > "$fixture"
+  tot=$(grep -v "$RULE_SYNC_EXEMPT" "$fixture" | grep -oE "$RULE_SYNC_ANY" | wc -l | tr -d ' ')
+  ok=$(grep -v "$RULE_SYNC_EXEMPT" "$fixture" | grep -oE "$RULE_SYNC_OK" | wc -l | tr -d ' ')
+  echo "marked: tot=$tot ok=$ok" >&3
+  [ "$tot" -eq 0 ]
+  [ "$ok" -eq 0 ]
 }

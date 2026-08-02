@@ -1,5 +1,34 @@
 # Code Review: retro/2026-08-02-control-scope-and-fixture-adjacency
 Date: 2026-08-02
+Review rounds: 3, plus a mechanical self-audit
+Rounds recorded below in order; Round 1 is the full template, Rounds 2-3 and the
+self-audit are appended per `phases/phase-3-review.md` Step 3-7.
+
+## Round summary
+
+| Round | Findings | Major | Character |
+|---|---|---|---|
+| 1 | 18 | 9 | Substantive defects in the folded rule text |
+| 2 | 19 | 5 | Defects in Round 1's own fixes; one named the generator (no `Extends` path in folding.md) |
+| 3 | 16 | 6 | Almost entirely sync-point misses, found by applying Round 2's new nine-item list |
+| self-audit | 6 | — | Remaining sync-point misses, found by running that list over all seven rules |
+| **total** | **59** | **20** | |
+
+The rounds did not converge in count, but they converged in kind: Round 1 found wrong
+rules, Round 3 found rules that were right but incompletely propagated. The nine-item
+`Extends` list added in Round 2 is what made the last two passes mechanical, and it
+earned its place — it found six more misses after three agent rounds had run.
+
+Recurring shape across all three rounds, four separate instances: **a fix applied to the
+site the finding named, not to the set** (R42 trigger (b)). F1 (pipeline.md kept the bad
+gate), F9 (RT7.md kept the unbound mutation), T-21 (the RT10 row kept "three grammars"
+after the cross-port was fixed), and item 7 of the self-audit (the row kept the paper
+tightening after test-gen was fixed). The same defect this branch's own R42 edit is about.
+
+---
+
+# Round 1
+Date: 2026-08-02
 Review round: 1
 
 ## Changes from Previous Round
@@ -298,3 +327,180 @@ Two items outside this branch's scope are recorded rather than deferred silently
 - The scrubber's `[A-Za-z0-9+_=-]{20,}` false-positive rate, whose fix trades away UUID
   redaction and therefore needs its own change with a red fixture. Reasoning recorded in
   the retrospective document.
+
+---
+
+# Round 2
+Date: 2026-08-02
+Review round: 2
+
+## Changes from Previous Round
+
+Incremental review of `bffefc6`, the commit resolving Round 1. Three of Round 1's own
+fixes were defective, and one finding named the mechanism that produced them.
+
+## Findings and Resolution Status
+
+### F9 Major — the T-05 subject-binding fix had a third site
+`rule-details/RT7.md` shapes (d) and (g) still prescribed the unbound scratch-copy
+mutation, so a reviewer following the canonical procedure reproduces the wrong-subject
+green T-05 identified. Same seed-not-set shape as F1.
+- Action: shape (d) now points at shape (g); shape (g) gained criterion (vi).
+
+### F10 Major — folding.md's edit map had no `Extends` path
+`pipeline.md` Step 5 routes both `Novel` and `Extends` items to §2, but §2 is written for
+*adding* a rule. Nothing told the folder to re-check a widened rule's pattern name,
+template branches, `rule-details/`, Extended obligations, phase mirrors, cross-ports, or
+sibling citations. This omission generated F2 and F9.
+- Action: an eight-item re-check list added to §1 with an explicit record-the-outcome
+  rule (a ninth item was added in Round 3 — see S-09).
+
+### F11 / F12 / F13 / F14 / F15 Minor
+- F11: obligation 16's preamble reworded; marker step reconciled with applied-SINGLY.
+- F12: the F2 entry renumbered to 627/631/640 with the reason.
+- F13: failure identifiers corrected (`check-deny-only-guard.bats:339`, assertion `:342`;
+  retro-prescreen file-ordinals 23/24) with the enumerating commands shipped.
+- F14: R38's template `Checked` branch now requires the exit be unreachable by the
+  restrained party.
+- F15: the RT10 row now says the hook covers only the PAIRING half of clause 1.
+
+### T-08 Major — the new bats test was close to vacuous
+Its negative assertion enumerated three terminators and caught none of ten plausible bare
+invocations, and the pattern was never exercised against a string it must match — a
+deny-only guard on absence, violating obligation 17(a) added in the same commit.
+- Action: inverted to a whitelist; subject set derived by grep; a second test supplies the
+  allow case over all ten spellings plus a boundary-adjacent accepted one. Both assertions
+  red-proved with a verified single mutant.
+
+### T-09 / T-10 / T-11 / T-12 / T-13 / T-14 / T-15
+- T-09 Major: obligation 17 declared adjacency symmetric while testing only the deny side;
+  the allow-side one-step-tightening mirror added.
+- T-10 Major: obligation 18's three forms were all single-file though RT9 targets
+  multi-script loaders; the region is now drawn over the loader's file set.
+- T-11: whole-file equality scoped to verbatim copies — RT9's typed-twin archetype has two
+  forms, not three.
+- T-12: bats does not print `$output` on failure; noted (corrected again in Round 3, T-16).
+- T-13: the decorative assertion removed in the rewrite.
+- T-14: subject set derived rather than hardcoded, non-emptiness asserted.
+- T-15: "three grammars" corrected to two file flavors (the authoritative row was missed
+  here and fixed in Round 3, T-21).
+
+### S-03 Minor continuing — the RS4 fix annotated the file it was measuring
+Writing the reproducing command and the seven matched strings into the document added
+eight more matches, so the shipped command printed 19 against a recorded 11.
+- Action: restated as 19 spans across 14 lines with the self-inclusive property named, so
+  a re-derivation that disagrees means the document changed.
+
+### S-04 Minor — R38's out-of-band bar keyed on the state's name
+Of the five persisted deny states R38 enumerates, only the pin was covered; a lockout or
+quarantine with a self-service in-band clear passed steps 3-4.
+- Action: rebound to reachability. R51 applied to this catalog's own text.
+
+### S-05 / S-06 Minor
+- S-05: RS3's Critical cell listed three of the four sinks its body enumerates; the
+  template sink added.
+- S-06: obligation 16's whole-tree copy named no mode discipline and contradicted
+  obligation 15; `mktemp -d` (0700) required (lifetime bound added in Round 3).
+
+---
+
+# Round 3
+Date: 2026-08-03
+Review round: 3
+
+## Changes from Previous Round
+
+Incremental review of `ded1d01`. Findings are almost entirely sync-point misses — the
+class the Round-2 nine-item list exists to catch. The functionality expert was asked to
+apply that list to all seven extended rules and found four misses the prompt had not named.
+
+## Findings and Resolution Status
+
+### Major
+- **S-07** — R38's row bound the exit rule to "the party whose action SET the state" while
+  Part 3 step 5 and the template line said "the party the state RESTRAINS". Two predicates,
+  diverging on three of five state types: an automated quarantine has no setting party
+  (under-blocks), an operator-set lockout must stay operator-clearable (over-blocks, and
+  contradicts the row's own operator-console carve-out), and a TOFU pin is set by the
+  legitimate first-contact ceremony (forbids the remedy R38 mandates). R48 written into the
+  catalog that documents R48. *Action:* row rebound to "restrains", with the three
+  counter-cases spelled out.
+- **F16** — RT7 shape (g) still said "all five hold" after gaining criterion (vi), and (vi)
+  sat after unrelated prose. *Action:* "all six", (vi) moved to follow (v).
+- **F17** — folding.md §1's "run §2 steps 1 and 7" misdescribed step 1 (a six-bullet
+  composite containing the ADD-only template line) and wrongly excluded step 6, which
+  §1's own item 6 requires. *Action:* rewritten to name step 1's first two bullets and to
+  subject item-6 edits to step 6's terminator constraints.
+- **F18** — R25's row and digest pattern name were never widened, disagreeing with its own
+  checklist line. Item 1 of the list, missed. *Action:* renamed, digest regenerated.
+- **F19** — R42's opt-in-control sub-clause landed only in `rule-details/R42.md`; the
+  Extended-obligations procedure and the checklist `Checked` branch still certified
+  derivation alone — the thing the sub-clause calls insufficient. *Action:* step 4 added to
+  the procedure, checklist branch extended.
+- **F20** — the review artifact stopped at Round 1. *Action:* this document.
+- **T-16** — obligation 16's bats marker prescription was inert: `$output` is populated
+  only by `run`, and both new tests use plain `[ … ]`. The reviewer proved it empirically.
+  *Action:* prescribe echoing the mutated variables; corrected wording propagated to RT7.
+- **T-17** — obligation 16 never required proving the mutant DIFFERS. A no-op rewrite runs
+  green and the procedure reads that as "the test does not catch this". The reviewer hit
+  this with a `sed` delimiter slip; the orchestrator hit it twice earlier in this same
+  branch. *Action:* `cmp`/`diff` must exit non-zero before the mutant is run.
+
+### Minor
+- **S-08** — the row's "the previous sentence's conditions" resolved to the newly inserted
+  rule. *Action:* positional anaphora removed, conditions named inline.
+- **S-06 continuing** — no lifetime bound on the scratch tree, and RT7's cross-port attached
+  the `mktemp` requirement only to the whole-tree branch. *Action:* removal registered at
+  creation in both; the requirement now covers any scratch destination. Recorded
+  deliberately: excluding `.git` or gitignored files is NOT adopted — it would break the
+  `git status --porcelain` proof and strip what the runner needs, reintroducing the
+  wrong-subject defect the clause prevents.
+- **S-09** — the nine-item list had no item for the row's Mechanical-detection paragraph.
+  *Action:* item 9 added.
+- **F21** — folding.md overstated what the linter ignores; it does compare the row's pattern
+  against a `rule-details/<ID>.md` heading. *Action:* narrowed.
+- **F22** — R38's row/digest/checklist name listed two modes against an Extended-obligations
+  title listing three. *Action:* aligned.
+- **F23** — phase-3's R29 mirror was still external-standard-gated. *Action:* widened to
+  codebase-derived counts; the R29 severity cell generalised.
+- **F24** — phase-2's RT10 pre-step had the deny-side symmetry but not the allow-side mirror.
+- **F25** — obligation 16 attributed to obligation 10 a rule it does not state. *Action:*
+  re-anchored to R21's carve-out.
+- **F26** — RT7's compact row summarised five criteria against a six-criterion procedure.
+- **F27** — R25's severity cell was flat Major after a widening whose own text says the
+  signature is a silent skip. *Action:* Critical branch added.
+- **T-18** — the whitelist redded on a legitimate negative example, and the obvious repair
+  would widen `RULE_SYNC_OK` into "whatever anyone wrote". *Action:* an inline exemption
+  marker, with both sides fixture-pinned.
+- **T-19** — the scanned scope was `skills/ global/` while the comment claimed every file.
+  *Action:* widened to `skills global hooks README.md CLAUDE.md`; red-proved against a
+  README bare invocation.
+- **T-20 / T-21** — the tightening mirror lacked "not on paper", and the RT10 row kept
+  "three grammars" after the cross-port was corrected. *Action:* both applied to the row.
+
+---
+
+# Mechanical self-audit (nine-item `Extends` list × seven rules)
+
+Run by the orchestrator after Round 3, at the user's direction, in place of a fourth agent
+round — the remaining defect class is enumerable and the list added in Round 2 enumerates
+it. Six further misses were found *after* three agent rounds:
+
+| Item | Miss |
+|---|---|
+| 1 pattern name | R38's template name still carried the two-mode form; R25 had a spacing divergence |
+| 2 severity cell | R29's cell still said "hallucinated citation" only — the body had been widened, the cell had not |
+| 3 template branches | R25's `N/A` still read "no persisted-state field additions", missing a diff that changes an existing item's storage attributes |
+| 7 cross-ports | the RT10 row's tightening mirror still lacked "not on paper" — fixed in test-gen only |
+| 9 mechanical detection | RS3's hook-coverage sentence said nothing about the cast sub-clause, so a clean run appears to discharge it |
+
+Items 4, 5, 6 and 8 were clean. Two of the six (items 7 and 9) are again the
+fixed-the-site-not-the-set shape, bringing that count to four in one branch.
+
+## Gates (final)
+
+- `bash hooks/check-rule-sync.sh skills/triangulate` → exit 0, read unpiped,
+  `OK: R1-R51 / RS1-RS6 / RT1-RT11 consistent across all sync points`. Max IDs unchanged
+  from `main` (R51 / RS6 / RT11): this branch adds no rule ID.
+- `bats tests/` — counts quoted in the Round-1 Environment Verification Report and re-run
+  after every round; the three failures are byte-identical on `main` throughout.

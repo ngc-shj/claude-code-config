@@ -200,7 +200,7 @@ Sub-agent test validation (mandatory for all experts):
   - Mock return values whose shape doesn't match the actual API response format (e.g., returning an array when the real API returns an object with status fields)
   - Async test functions that do not await the target call — assertions may execute before the async operation completes, always passing
   - Per-test state initialized in a once-before-all hook instead of a per-test hook — causes test-order dependency and intermittent failures
-  - Sub-agent citation hallucination (R29): if the sub-agent's output cites an RFC / NIST / OWASP / W3C / FIPS / ISO section, verify the citation per R29 before accepting — sub-agents are particularly prone to retrofitting plausible-sounding section numbers
+  - Sub-agent citation hallucination (R29): if the sub-agent's output cites an RFC / NIST / OWASP / W3C / FIPS / ISO section, verify the citation per R29 before accepting — sub-agents are particularly prone to retrofitting plausible-sounding section numbers. The same obligation covers CODEBASE-DERIVED numbers, which R29 treats identically: when a finding or a deferral justification states a count ("only 3 call sites do X", a member cardinality, a coverage figure), require the reproducing command and re-run it — "derived from the code" carries the same false authority a section number does, and a sub-agent's count is as retrofittable as its citation
 
 Severity criteria for [role name]:
   [Populate with the full table for this expert from "Severity Classification Reference" in Common Rules. Do NOT use a reference — copy the actual table here.]

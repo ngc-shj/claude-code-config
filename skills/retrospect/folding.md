@@ -28,9 +28,11 @@ Derive the next free ID from the tables in `skills/triangulate/common-rules.md`
 **`Extends` is not a smaller `Novel` — it has its own edit set, and §2 below does not
 cover it.** §2 is written for *adding* a rule: its steps append a row, append a template
 line, bump a range string. Widening an EXISTING rule leaves every one of those in place
-and stale, and `check-rule-sync.sh` cannot see it — the linter compares rule IDs, never
-the pattern names, the `N/A` / `Checked` wording, or whether a phase file's manual check
-still mirrors the row. That blind spot is not hypothetical: it is how a run has shipped a
+and stale, and `check-rule-sync.sh` mostly cannot see it. The linter compares rule IDs,
+and the row's pattern against a `rule-details/<ID>.md` heading — and nothing else. It
+never compares the pattern name carried in the Recurring Issue Check template line or in
+the digest's own row, never the `N/A` / `Checked` wording, and never whether a phase
+file's manual check still mirrors the row. That blind spot is not hypothetical: it is how a run has shipped a
 widened row whose Recurring Issue Check line still let a reviewer answer `N/A` on exactly
 the case the widening added, and a widened rule whose `rule-details/<ID>.md` still
 prescribed the superseded procedure.
@@ -58,10 +60,22 @@ For each `Extends-<id>`, walk this list and record the outcome of every item, in
    here, the copy there is now drift.
 8. **Sibling rules that cite this one.** Grep for the ID: a cross-reference written
    against the old scope may now point at the wrong rule, or need the new clause named.
+9. **The row's `**Mechanical detection**` paragraph and the hook it names.** Does the
+   coverage/limitations sentence still bound what the widened row claims? A hook that was
+   an honest partial detector for the narrow rule becomes an R49 overstatement the moment
+   the rule grows past it: the reviewer runs it, gets a clean run, and reads that against
+   the *new* claim. Either widen the hook, or say explicitly which part of the widened
+   obligation it does not see. This item exists because a round shipped a widened RT10
+   whose coverage sentence still read "It covers neither RT10 clause", which by then was
+   both stale and wrong in the dangerous direction.
 
-Then run §2 steps 1 and 7 (the table row itself, and the digest regeneration). §2's
-remaining steps — new template line, range-string bumps, `steps:`/`step_ids:` front
-matter — apply only when an ID was ADDED.
+Then run §2 step 1's FIRST TWO bullets (the table row, and the `rule-details/<ID>.md`
+pointer and identity) and §2 step 7 (digest regeneration). Any phase-file edit item 6
+produces is additionally subject to §2 step 6's two constraints — text lands above the
+`## END-OF-PHASE-<N>` terminator, and a new `### Step` heading obliges the front-matter
+update. §2's remaining items — step 1's *new* template line, the RS/RT bracket bump and
+range-string bullets, and the range strings in steps 2-5 — apply only when an ID was
+ADDED.
 
 ## 2. Sync-point edit map (ALL points, in this order)
 
