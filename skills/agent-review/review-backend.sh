@@ -85,17 +85,31 @@ _run_ollama() {
   # its text. A backend that stops early and still exits 0 is not detectable
   # here, and SKILL.md Step 5 says so rather than implying a check that is not
   # implemented.
-  local pass out rc failed=0
+  local pass out body rc failed=0
   for pass in "${passes[@]}"; do
     printf '## %s\n' "${pass#analyze-}"
     rc=0
     out="$(printf '%s' "$diff" | bash "$HOOKS_DIR/llm-commands.sh" "$pass")" || rc=$?
-    # `|| true`: a pass whose body is only the sentinel filters to nothing and
-    # grep exits 1, which pipefail+set -e would turn into an abort. It cannot
-    # mask a pass failure — that status was captured above, before the pipe.
-    printf '%s\n' "$out" | grep -v '^## END-OF-ANALYSIS$' || true
+    # Strip the framing FIRST and judge emptiness on what is left. Testing the
+    # raw capture would let a pass whose entire output is the sentinel count as
+    # non-empty while contributing no review at all.
+    # `|| true`: a body that filters to nothing makes grep exit 1, which
+    # pipefail+set -e would turn into an abort. It cannot mask a pass failure —
+    # that status was captured above, before the pipe.
+    body="$(printf '%s\n' "$out" | grep -v '^## END-OF-ANALYSIS$' || true)"
+    printf '%s\n' "$body"
     if [ "$rc" -ne 0 ]; then
       printf 'review-backend: pass %s failed (exit %d)\n' "${pass#analyze-}" "$rc" >&2
+      failed=1
+    elif [ -z "${body//[[:space:]]/}" ]; then
+      # Emptiness is the OTHER signal, and unlike the sentinel it is sound. A
+      # pass that produced no bytes did not review anything, and llm-commands.sh
+      # documents exactly that as its failure contract — "LLM failure → warning
+      # to stderr, empty stdout, exit 0" — so an unreachable or timed-out local
+      # model lands here with a zero status. It is also not forgeable in the
+      # dangerous direction: diff content can only ADD output, so at worst a
+      # hostile diff pushes a pass toward this failure, never past it.
+      printf 'review-backend: pass %s produced no output\n' "${pass#analyze-}" >&2
       failed=1
     fi
     printf '\n'

@@ -138,25 +138,34 @@ transcripts; re-run file-scoped with one reviewer per subject, the same four pro
 confirm the run finished, using signals the backend actually produces:
 
 - **`review-backend.sh run` exited non-zero.** A FAILED RUN in every case, for
-  every backend. For `ollama` this is per-pass: any pass whose process failed
-  reddens the whole run and names itself on **stderr**
-  (`review-backend: pass <name> failed (exit <n>)`), so run the backend with
-  stderr captured separately and read it.
-- **A near-empty or obviously truncated transcript.** The only remaining signal,
-  and a judgement rather than a check.
+  every backend, and the only signal no diff content can influence. For `ollama`
+  this is per-pass: a pass reddens the whole run when its process failed OR when
+  it produced no output at all, and names itself on stderr
+  (`review-backend: pass <name> failed (exit <n>)` /
+  `review-backend: pass <name> produced no output`). Redirect stderr to its own
+  file (`… 2> "$err"`) and read it, so the reason is available; the exit status
+  alone tells you only that something failed. If you run the backend in the
+  background per Step 3, the task's output merges both streams — in that case
+  treat any `review-backend:` line as advisory only, since merged text is
+  forgeable by the reviewed diff, and let the exit status carry the verdict.
+- **A near-empty or obviously truncated transcript.** A judgement rather than a
+  check, and the only signal available for `codex` / `claude`.
 
 Either is a FAILED RUN: report it as such and re-run, never as `approve`.
 
-**Declare what this does NOT cover (R49).** The check is on the reviewing
-PROCESS, not on the completeness of its text. A backend that stops early and
-still exits 0 is not detectable from here, and nothing in the review stream can
-be used to close that gap: stdout carries model text about a contributor's diff,
-so any in-band marker — including `llm-commands.sh`'s `## END-OF-ANALYSIS`
-sentinel, whose normalizer stops at the first standalone occurrence and drains
-the rest — is forgeable by the reviewed content, and reading one as a completeness
-certificate would let a diff both truncate its own review and certify it clean.
-Say so in the summary rather than implying a check that is not implemented. The
-mitigation for silent truncation is structural, not a signal:
+**Declare what this does NOT cover (R49).** The checks above are on the reviewing
+PROCESS and on whether a pass produced anything — not on whether what it produced
+is COMPLETE. A backend that emits half its findings and exits 0 is not detectable
+from here, and no marker inside the review stream can close that gap: stdout
+carries model text about a contributor's diff, so an in-band marker is forgeable
+by the reviewed content. `llm-commands.sh`'s `## END-OF-ANALYSIS` sentinel is the
+concrete case — its normalizer stops at the first standalone occurrence and drains
+the rest, so a diff line echoing it would both truncate the review and, if the
+sentinel were read as evidence, certify the truncation as complete. It is stripped
+as framing and never read here. Emptiness is different and IS used: a diff can only
+add output, so it can push a pass toward the empty-and-failed verdict but never
+past it. Say the residual in the summary rather than implying a check that is not
+implemented. The mitigation for silent truncation is structural, not a signal:
 when the diff is large enough that exhaustion is plausible,
 partition the subject up front (one reviewer per file or per subsystem) rather than
 issuing one unscoped whole-diff review, and say in the summary which subjects were

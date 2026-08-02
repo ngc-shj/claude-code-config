@@ -44,7 +44,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # byte-identically when the caller's cwd differs, which is the confusion the
 # line exists to remove.
 SKILL_DIR="${1:-$SCRIPT_DIR/../skills/triangulate}"
-SKILL_DIR="$(cd "$SKILL_DIR" 2>/dev/null && pwd)" || {
+SKILL_DIR="$(cd -P -- "$SKILL_DIR" >/dev/null 2>&1 && pwd)" || {
   echo "Error: no such subject directory: ${1:-$SCRIPT_DIR/../skills/triangulate}" >&2
   exit 2
 }
@@ -299,9 +299,29 @@ if [ -d "$SKILL_DIR/rule-details" ]; then
     # comparison would then report agreement it never made. Require the row to
     # end in a pipe, and require both cells to parse non-empty, before comparing:
     # a check that cannot say what it read is the shape this rule set calls out.
-    table_sev=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" && /\|[[:space:]]*$/ {print $(NF-1); exit}' "$COMMON")
-    detail_sev=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" && /\|[[:space:]]*$/ {print $(NF-1); exit}' "$detail_file")
-    if [ -z "${table_sev// /}" ] || [ -z "${detail_sev// /}" ]; then
+    # An ESCAPED pipe (`\|`) is one Markdown cell, not a delimiter — a severity
+    # written `Critical \| Major` is a single cell containing "Critical", but a
+    # naive split reads the trailing `Major` and reports no ceiling. Protect
+    # escaped pipes before splitting, restore them after, and lowercase inside
+    # awk: `${var,,}` is bash 4+, and this repo targets the bash 3.2 that ships
+    # on macOS (see the associative-array note above), where it is a hard
+    # `bad substitution` that would take the whole gate down.
+    sev_of() {
+      awk -v id="$2" '
+        index($0, "| " id " |") == 1 && /\|[[:space:]]*$/ {
+          line = $0
+          gsub(/\\\|/, "\001", line)
+          n = split(line, a, "|")
+          if (n < 3) next
+          sev = a[n-1]
+          gsub(/\001/, "\\|", sev)
+          print tolower(sev)
+          exit
+        }' "$1"
+    }
+    table_sev=$(sev_of "$COMMON" "$id")
+    detail_sev=$(sev_of "$detail_file" "$id")
+    if [ -z "${table_sev//[[:space:]]/}" ] || [ -z "${detail_sev//[[:space:]]/}" ]; then
       drift "$detail severity cell not parseable for row $id (row must end in '|' in both files)"
     else
       # Ceiling, not text. The compact row legitimately summarizes the detail's
@@ -312,8 +332,8 @@ if [ -d "$SKILL_DIR/rule-details" ]; then
       # its trigger to something unreachable still passes. Narrowing a Critical
       # clause is R36 spelling (c) applied to this gate and is human review.
       table_crit=0; detail_crit=0
-      case "${table_sev,,}"  in *critical*) table_crit=1 ;; esac
-      case "${detail_sev,,}" in *critical*) detail_crit=1 ;; esac
+      case "$table_sev"  in *critical*) table_crit=1 ;; esac
+      case "$detail_sev" in *critical*) detail_crit=1 ;; esac
       if [ "$table_crit" -ne "$detail_crit" ]; then
         drift "$detail severity ceiling disagrees with common-rules.md row $id (table Critical=$table_crit, detail Critical=$detail_crit)"
       fi

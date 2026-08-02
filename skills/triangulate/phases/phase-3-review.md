@@ -56,7 +56,7 @@ git diff main...HEAD | bash ~/.claude/hooks/llm-commands.sh analyze-testing     
 echo "TRI_DIR=$TRI_DIR"
 ```
 
-**Truncation-detection check (mandatory)**: each seed file MUST end with the sentinel `## END-OF-ANALYSIS`. A seed file that is (a) empty or (b) non-empty-but-missing-sentinel is treated as "not usable as seed" and the corresponding sub-agent falls back to full-diff review.
+**Truncation-detection check (mandatory)**: each seed file MUST end with the sentinel `## END-OF-ANALYSIS`. A seed file that is (a) empty or (b) non-empty-but-missing-sentinel is treated as "not usable as seed" and the corresponding sub-agent falls back to full-diff review. **The sentinel is a fail-TOWARD-work tripwire, not a completeness certificate** — declare it that way (R49), because the seed is generated from `git diff main...HEAD` and a contributor can put that literal line in the diff. The normalizer that emits it stops at the first standalone occurrence and drains the rest, so an echoed marker truncates the seed AND satisfies this check. That is tolerable HERE and only here: a seed is an unproven hint whose sole failure mode is a sub-agent doing more work than it needed, and the Seed trust advisory plus the mandatory independent Recurring Issue Check already forbid inferring safety from it. Never reuse this check where the marker's presence would license a PASS — see the agent-review skill's Step 5, which reads process exit status and emptiness instead for exactly this reason.
 
 ```bash
 : "${TRI_DIR:?TRI_DIR not set — did Step 3-2b capture fail? Substitute the literal path from the TRI_DIR= line printed at the end of Step 3-2b.}"

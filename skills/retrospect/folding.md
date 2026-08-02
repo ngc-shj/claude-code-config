@@ -119,6 +119,14 @@ not only to its subject: a fold that changes the linter itself — adding a chec
 a new sync point — would run the pre-fold linter against post-fold rules and pass because
 the new check does not exist in the copy being executed. Invoke both from the repo.
 
+**This invocation prompts, deliberately.** `settings.json` allowlists the linter only at its
+installed absolute path, because that copy sits under `~/.claude/hooks/` where
+`block-sensitive-files.sh` keeps a session from rewriting it. A relative-path allow entry would be
+cwd-independent and this file is `install.sh`-merged into the GLOBAL `~/.claude/settings.json`, so
+`Bash(bash hooks/check-rule-sync.sh *)` would pre-approve executing whatever any repository ships
+at that path — laundering the deny and ask lists in every project on the machine. One permission
+prompt per fold is the correct price; do not "fix" it by adding the entry.
+
 Then read the `Subject:` line the linter prints and confirm it is the tree you edited. That
 is the check, not the ID range: a fold consisting only of `Extends` items adds no rule ID, so
 the stale-subject run and the correct run print a byte-identical `R1-R<n>` range and comparing

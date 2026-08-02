@@ -271,8 +271,9 @@ regen_digest() {
 
 @test "pass: a literal pipe inside a non-severity cell does not disturb the ceiling read" {
   # The extraction counts from the END of the row, so pipes in earlier cells are
-  # harmless — four live rows already carry them. Pin that, so a future rewrite
-  # to a fixed field index reds here rather than in production.
+  # harmless — four live rows already carry them. Allow side only: a fixed-field
+  # rewrite would read the wrong cell CONSISTENTLY in both files, so this case's
+  # `status -eq 0` oracle cannot see it. The deny-side twin below is what does.
   mkdir -p "$FIX/rule-details"
   sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
   printf '%s\n' '# R1 — Alpha' '' '| R1 | Alpha | Procedure with `a|b` inline | Major |' \
@@ -280,6 +281,34 @@ regen_digest() {
   regen_digest
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 0 ]
+}
+
+@test "drift: an ESCAPED pipe inside the severity cell does not hide a Critical" {
+  # `Critical \| Major` is ONE Markdown cell containing "Critical". Splitting on
+  # a bare `|` reads the trailing "Major" and reports no ceiling — so a detail
+  # file could keep its escalation while the compact row dropped it, and the
+  # gate would agree they match.
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' '| R1 | Alpha | Procedure | Critical \| Major |' \
+    > "$FIX/rule-details/R1.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"table Critical=0, detail Critical=1"* ]]
+}
+
+@test "drift: a pipe-bearing row still has its ceiling compared, not a neighbouring cell" {
+  # The deny-side twin. Same inline pipe, but the ceilings genuinely differ — so
+  # a rewrite that reads a fixed field index (and therefore compares the wrong
+  # cell in both files) stops detecting the disagreement and reds here.
+  mkdir -p "$FIX/rule-details"
+  sed_i 's/check a/check a **Mandatory full procedure**: `rule-details\/R1.md`/' "$FIX/common-rules.md"
+  printf '%s\n' '# R1 — Alpha' '' \
+    '| R1 | Alpha | Procedure with `a|b` inline | Major (Critical for security) |' \
+    > "$FIX/rule-details/R1.md"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"table Critical=0, detail Critical=1"* ]]
 }
 
 @test "pass: differently-worded severities with the same ceiling are accepted" {
@@ -981,9 +1010,28 @@ stage_installed_layout() {
   for f in "$repo_root/skills/retrospect/folding.md" "$repo_root/skills/retrospect/pipeline.md"; do
     # the mandated form: repo-local script AND repo-local subject
     grep -q 'bash hooks/check-rule-sync\.sh skills/triangulate' "$f"
-    # and no bare installed-copy invocation presented as the gate. The prose
-    # explains why that form is wrong, so match only an invocation line — a
-    # `bash ` prefix with nothing between it and the installed path.
-    ! grep -qE '^[^#]*bash ~/\.claude/hooks/check-rule-sync\.sh[[:space:]]*$' "$f"
+    # And no bare installed-copy invocation presented as the gate. Written as an
+    # explicit `if … false` rather than `! grep`: bash exempts a `!`-inverted
+    # command from `set -e` unless it is the test's LAST statement, so inside
+    # this loop body a `! grep` would be live for the final iteration only —
+    # silently unguarding folding.md, which is the file the regression occurred
+    # in. The pattern tolerates a trailing comment, because the historical line
+    # carried one.
+    if grep -qE '^[^#]*bash ~/\.claude/hooks/check-rule-sync\.sh([[:space:]]|#|$)' "$f"; then
+      echo "bare installed-copy invocation presented as the gate in $f"
+      false
+    fi
   done
+}
+
+@test "the linter resolves a relative subject to an absolute path" {
+  # N-03's whole point: `Subject:` must IDENTIFY a tree, not echo the argument.
+  # Every other call site passes an already-absolute path, so nothing pinned the
+  # resolution itself — a bare existence check keeping the same error and exit
+  # code passed the entire suite.
+  cd "$(dirname "$FIX")"
+  run bash "$SCRIPT" "$(basename "$FIX")"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Subject: $FIX"* ]]
+  [[ "$output" != *"Subject: $(basename "$FIX")"* ]]
 }

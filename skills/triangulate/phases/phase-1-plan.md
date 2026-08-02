@@ -413,7 +413,12 @@ If the loop limit is reached with unresolved findings:
 Remaining findings: [list with severity]
 Decision needed: Continue manually or accept current state?
 ```
-Consult the user before proceeding.
+Consult the user before proceeding. Whatever the user decides, every finding still open at this
+exit is written into the plan file's `## Carried-Forward Plan Findings` section on the same terms
+the saturation exit uses — finding ID, Anti-Deferral entry, one line on what would settle it. This
+exit can leave a Critical or Major open where saturation cannot, so it is the exit that needs the
+handoff MORE, and Phase 2 Step 2-1 reads the same section either way. A finding that reached the
+round cap and was neither fixed nor recorded there is dropped, not deferred.
 
 ### Step 1-7: Branch Creation and Commit
 

@@ -102,6 +102,88 @@ ADDED Major triggers. No secrets or PII.
 
 ---
 
+# Round 3 — incremental review of the round-2 fixes, plus the user's own review
+
+Subject: `git diff HEAD~1 HEAD` (commit 930c63d), then the working tree. Twenty-two findings —
+one Critical, nine Major — from the three experts plus three Major raised directly by the user.
+All resolved.
+
+**The Critical was mine, and the user caught it independently.** Round 2 added a relative-path
+`check-rule-sync.sh` entry to `settings.json` so the newly-mandated repo-local gate would not
+prompt. But that file is `install.sh`-merged into the user's GLOBAL settings, and a relative-path
+allow entry is cwd-independent: it pre-approves executing whatever ANY repository ships at
+`hooks/check-rule-sync.sh`, in every project, with the deny and ask lists anchored on the leading
+`bash` token and unable to see inside. The pre-existing entries name the installed absolute path,
+which `block-sensitive-files.sh` keeps a session from rewriting — that is why they are safe and the
+new ones were not. Both were removed, and `folding.md` now records that the gate prompts
+deliberately so the next round does not "fix" it again. (S-18, escalate: true.)
+
+## Round-3 findings, by fate
+
+**Resolved in the round-2 fixes, verified by re-execution rather than accepted:** N-02 (superseded
+by S-18's removal), N-03/N-04/S-13/S-14, S-11/S-12 in part, N-06/S-17, N-08, S-16, and all six of
+round 2's red-proof claims, each reproduced exactly.
+
+**New or continuing, all fixed this round:**
+
+- **S-18 Critical** — the global permission widening, above.
+- **F-01 / S-17 Major** — the round-2 narrowing removed BOTH directions of the sentinel test, but
+  only one was forgeable. "Sentinel present ⇒ complete" is forgeable by the reviewed diff and was
+  correctly removed; "body empty ⇒ the pass did not run" is forgeable only toward failure and was
+  not. `llm-commands.sh` documents empty-stdout-exit-0 as its own failure contract, so an
+  unreachable local model mapped to `verdict: approve`. Emptiness is now fail-closed, with the
+  asymmetry stated: a diff can add output, never remove it.
+- **User-reported Major — the empty check read the RAW capture.** The first version of that fix
+  tested the capture before the sentinel strip, so a pass whose entire output was the framing line
+  counted as non-empty — and the test written alongside it asserted that as correct, pinning the
+  defect. Emptiness is now judged on the stripped body; the test is inverted and gained an
+  allow-side twin.
+- **User-reported Major — the ceiling check was bypassable with an escaped pipe.** `Critical \|
+  Major` is ONE Markdown cell containing "Critical", but the split on a bare `|` read the trailing
+  "Major", so a detail file could keep its escalation while the compact row dropped it. Escaped
+  pipes are protected before splitting, with a deny-side test.
+- **User-reported Major — a bash 4 construct in a bash 3.2 script.** The case-folding expansion the
+  ceiling check used is bash 4+, in a script that twice declares support for the bash 3.2 shipped
+  on macOS; the mandatory gate would have died there with `bad substitution`. Lowercasing moved
+  into `awk`'s `tolower()`, and a sweep confirms no other bash-4 construct in either changed hook.
+- **F-02 Major** — `phase-2-coding.md` cited a Phase-3 enforcer that does not exist. Dispositions
+  now land in the deviation log, which Phase 3's expert prompts already read.
+- **S-19 Major** — the R36 carve-out still enumerated a CLOSED spelling list, leaving channel
+  suppression and severity-threshold raising open. The admissibility test is now stated on the
+  OUTCOME, with the four named letters as instances rather than the definition.
+- **T-11 Major** — the sentinel test did not discriminate: its oracle was `status -ne 0`, which the
+  stub's non-zero exit satisfied unconditionally, so deleting the sentinel from the fixture left it
+  green. Rewritten to exit 0 and assert on content. R55's degenerate-oracle shape, inside a test
+  written to enforce it.
+- **T-12 Major** — the fold-gate test's negative half was inoperative for `folding.md`: bash exempts
+  a `!`-inverted command from `set -e` unless it is the test's LAST statement, so inside a
+  two-iteration loop it guarded only the second file — the wrong one. Rewritten as
+  `if …; then false; fi`. **Derived as a class (R42):** a sweep of all 17 negated assertions in
+  `tests/` found 8 dead; the other 7 were converted too, and one was red-proven live afterwards.
+- **T-13 Major** — the absolute-path resolution's success path was unpinned; replacing it with a
+  bare existence check left all 1019 tests green. A case now passes a relative argument from the
+  parent directory and asserts the printed subject is absolute.
+- **T-14 / T-15 / T-16 / F-03 / F-04 / F-05 / F-06 / S-20 / S-21 / S-22 / S-23 Minor** — a
+  deny-side twin for the pipe-in-cell case (whose comment claimed a red-proof that did not hold); a
+  case pinning that each failing pass reports its OWN exit code; a case for a pass emitting no bytes;
+  the 10-round-cap exit now carries findings forward on the same terms as saturation; R37's detail
+  severity CELL aligned, not only its prose; Step 5 now names a stderr redirection the caller can
+  actually use and states that the merged-stream case makes the notice advisory; phase-3's seed
+  sentinel declared a fail-toward-work tripwire so it no longer contradicts the agent-review skill;
+  R36's two colliding `(a)-(d)` enumerations disambiguated; `cd -P --` with stdout silenced against
+  `CDPATH` and option-shaped arguments; and Phase 2 now checks each carried-forward entry's
+  provenance against this run's review artifact, since the plan file is committed and a contributor
+  could pre-seed one.
+
+## Round-3 gates
+
+`bash hooks/check-rule-sync.sh skills/triangulate` → exit 0, `R1-R57`, `Subject:` absolute.
+`bats tests/` → exit 0, **1025 passed / 0 failed / 30 files** (1019 before this round).
+Every fix red-proven by an executed mutation, bounded by `timeout` and restored by a `trap`;
+`git status --porcelain` clean between and after each.
+
+---
+
 # Round 1
 
 ## Changes from Previous Round
