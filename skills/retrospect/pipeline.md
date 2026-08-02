@@ -157,10 +157,12 @@ Never place repo paths, URLs, or other config keys in a committed file.
 ## Step 5 — Fold
 
 For each `Novel` and `Extends` item, Read `folding.md` and apply the edit map. Gates
-(both mandatory, in order): `bash hooks/check-rule-sync.sh skills/triangulate` exits 0,
-then the full `bats tests/` is green. The skill-directory argument is load-bearing — see
-folding.md §4; without it the linter lints the installed tree and reports the same `OK`
-line whatever the repo says.
+(both mandatory, in order): `bash hooks/check-rule-sync.sh skills/triangulate` exits 0 AND
+prints a `Subject:` line naming the tree just edited, then the full `bats tests/` is green.
+Invoke the repo's linter on the repo's tree: the installed copy under `~/.claude/` is what
+both the bare script path and the bare subject resolve to, and a fold has touched neither.
+Read the `Subject:` line rather than the ID range — an `Extends`-only fold adds no rule ID,
+so the range is identical whichever tree was checked.
 
 ## Step 6 — Standard passes 2 and 3
 

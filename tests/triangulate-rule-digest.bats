@@ -21,8 +21,12 @@ SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/generate-triang
 
 @test "installed-layout defaults work outside a git repository" {
   work="$BATS_TEST_TMPDIR/installed"
-  mkdir -p "$work/hooks" "$work/skills/triangulate" "$work/cwd"
+  mkdir -p "$work/hooks/lib" "$work/skills/triangulate" "$work/cwd"
   cp "$SCRIPT" "$work/hooks/generate-triangulate-rule-digest.sh"
+  # install.sh copies hooks/lib/ (everything but node_modules), so the installed
+  # layout carries the shared row parser too — stage it or this exercises a
+  # layout that install.sh never produces.
+  cp "$(dirname "$SCRIPT")/lib/md-rule-rows.awk" "$work/hooks/lib/"
   printf '%s\n' '| R1 | Rule | Check | Major |' > "$work/skills/triangulate/common-rules.md"
 
   run bash -c 'cd "$1" && bash "$2"' _ "$work/cwd" "$work/hooks/generate-triangulate-rule-digest.sh"
@@ -97,4 +101,71 @@ SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/generate-triang
   grep -q '^| RS3 | Boundary validation | Major |$' "$digest"
   grep -q '^| RS6 | Escape ordering | Major (Critical at injection sinks) |$' "$digest"
   grep -q '^| RT6 | Export coverage | Major |$' "$digest"
+}
+
+@test "an ESCAPED pipe inside the severity cell survives into the digest" {
+  # `Critical \| Major` is ONE Markdown cell containing "Critical". Splitting on
+  # a bare pipe emits only the trailing "Major", so the escalation disappears
+  # from the digest — the routing index a reviewer reads FIRST. And because
+  # check-rule-sync.sh compares the digest against this generator's own output,
+  # the staleness check confirms the truncated value rather than catching it:
+  # the two agree because they are wrong the same way. That is why the parsing
+  # lives in one shared library instead of a copy per caller.
+  work="$BATS_TEST_TMPDIR/escaped"
+  mkdir -p "$work"
+  source="$work/common.md"
+  digest="$work/digest.md"
+  printf '%s\n' \
+    '| R1 | Alpha | Ordinary procedure | Critical \| Major |' \
+    '| R2 | Beta | Procedure with `a|b` inline | Major \| Minor |' > "$source"
+
+  run bash "$SCRIPT" "$source" "$digest"
+  [ "$status" -eq 0 ]
+  grep -q '^| R1 | Alpha | Critical \\| Major |$' "$digest"
+  grep -q '^| R2 | Beta | Major \\| Minor |$' "$digest"
+  # the failure mode this pins: the ceiling silently reduced to the trailing cell
+  if grep -q '^| R1 | Alpha | Major |$' "$digest"; then false; fi
+}
+
+@test "a DOUBLE backslash before a pipe is a delimiter, not an escape" {
+  # The parity case, and the dangerous direction. `\|` is an escaped pipe, but
+  # `\\|` is a literal backslash followed by a real delimiter — so R2's severity
+  # is `Major`, not the whole procedure cell. A parser that matches "backslash
+  # pipe" without counting the run treats both as escaped and merges the last
+  # two cells, which makes a Procedure cell mentioning "Critical" read as the
+  # severity: a ceiling check would then pass on text it never examined, in the
+  # digest AND in the linter comparing against it.
+  work="$BATS_TEST_TMPDIR/parity"
+  mkdir -p "$work"
+  source="$work/common.md"
+  digest="$work/digest.md"
+  printf '%s\n' \
+    '| R1 | Alpha | one backslash is an escape `a \| b` | Critical \| Major |' \
+    '| R2 | Beta | Check Critical paths \\| Major |' \
+    '| R3 | Gamma | three is escape again `x \\\| y` | Minor |' > "$source"
+
+  run bash "$SCRIPT" "$source" "$digest"
+  [ "$status" -eq 0 ]
+  # odd run: the pipe stays inside the severity cell
+  grep -q '^| R1 | Alpha | Critical \\| Major |$' "$digest"
+  # even run: the pipe splits, so the severity is just the trailing cell
+  grep -q '^| R2 | Beta | Major |$' "$digest"
+  grep -q '^| R3 | Gamma | Minor |$' "$digest"
+  # the defect: R2's procedure text swallowed into the severity, carrying a
+  # "Critical" that is not a ceiling at all
+  if grep -q 'Check Critical paths' "$digest"; then false; fi
+}
+
+@test "the generator refuses to run without its shared row-parsing library" {
+  # The library is what makes the generator and the linter agree. If it can go
+  # missing and the generator still emits something, the digest becomes a
+  # different parse of the same table — silently, since the row-count guard only
+  # notices when EVERY row is lost.
+  work="$BATS_TEST_TMPDIR/nolib"
+  mkdir -p "$work/hooks/lib"
+  cp "$SCRIPT" "$work/hooks/"
+  printf '%s\n' '| R1 | Alpha | Procedure | Major |' > "$work/common.md"
+  run bash "$work/hooks/$(basename "$SCRIPT")" "$work/common.md" "$work/digest.md"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"md-rule-rows.awk"* ]]
 }

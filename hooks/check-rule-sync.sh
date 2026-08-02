@@ -38,7 +38,24 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve to an absolute path so the "Subject:" line printed at the end
+# IDENTIFIES a tree. A relative argument echoed back does not: the repo-local
+# `skills/triangulate` and the installed `~/.claude/skills/triangulate` print
+# byte-identically when the caller's cwd differs, which is the confusion the
+# line exists to remove.
 SKILL_DIR="${1:-$SCRIPT_DIR/../skills/triangulate}"
+SKILL_DIR="$(cd -P -- "$SKILL_DIR" >/dev/null 2>&1 && pwd)" || {
+  echo "Error: no such subject directory: ${1:-$SCRIPT_DIR/../skills/triangulate}" >&2
+  exit 2
+}
+
+# Shared with generate-triangulate-rule-digest.sh — see the note at the severity
+# comparison below for why the parsing must not be duplicated. Fail closed: a
+# missing library would make every severity read empty, and "empty" is a state
+# this linter reports as drift, so the gate would fail loudly rather than pass
+# blind — but naming the real cause is cheaper than diagnosing that.
+AWK_LIB="$SCRIPT_DIR/lib/md-rule-rows.awk"
+[ -f "$AWK_LIB" ] || { echo "Error: missing $AWK_LIB" >&2; exit 2; }
 
 COMMON="$SKILL_DIR/common-rules.md"
 SKILL="$SKILL_DIR/SKILL.md"
@@ -274,6 +291,51 @@ if [ -d "$SKILL_DIR/rule-details" ]; then
     detail_row_pattern=$(awk -F'[|]' -v id="$id" '$2 ~ "^ " id " $" {p=$3; gsub(/^ +| +$/, "", p); print p; exit}' "$detail_file")
     if [ -z "$table_pattern" ] || [ "$detail_heading" != "$table_pattern" ] || [ "$detail_row_pattern" != "$table_pattern" ]; then
       drift "$detail ID/pattern does not match common-rules.md row $id"
+    fi
+    # Severity CEILING, not severity text. The compact row is a routing summary
+    # and legitimately words its severity differently from the detail's full
+    # sentence, so an equality test would fire on almost every pair. What must
+    # never differ is whether the rule can reach Critical: the digest and the
+    # compact row are what a reviewer routes through, and a ceiling present only
+    # in the detail caps a security escalation at Major for every reader who
+    # follows the documented digest-first protocol. Compared case-insensitively
+    # in both directions so either side losing the escalation is caught.
+    # $(NF-1) is the last cell of a row that ends in `|`, so it counts from the
+    # end and is unaffected by pipes inside earlier cells — including ESCAPED
+    # ones, which are part of a cell rather than delimiters. That parsing is in
+    # lib/md-rule-rows.awk, shared with the digest generator: two copies drifted
+    # once already, and because the generator's output IS what the staleness
+    # check compares against, both agreed on a severity that had lost its
+    # Critical. The lowercasing happens inside awk because `${var,,}` is bash 4+
+    # and this script targets the bash 3.2 that ships on macOS (see the
+    # associative-array note above), where it is a hard `bad substitution`.
+    sev_of() { awk -v want=severity -v id="$2" -f "$AWK_LIB" "$1"; }
+    # Row SHAPE is this linter's policy, not the library's, so assert it here and
+    # separately: a rule row must open and close with a pipe. Kept distinct from
+    # the extraction so a malformed row and an empty cell fail for their own
+    # reasons rather than one masking the other.
+    for sev_file in "$COMMON" "$detail_file"; do
+      grep -qE "^\| $id \|.*\|[[:space:]]*\$" "$sev_file" || \
+        drift "$detail row $id is not a well-formed table row in $(basename "$sev_file") (must open and close with '|')"
+    done
+    table_sev=$(sev_of "$COMMON" "$id")
+    detail_sev=$(sev_of "$detail_file" "$id")
+    if [ -z "${table_sev//[[:space:]]/}" ] || [ -z "${detail_sev//[[:space:]]/}" ]; then
+      drift "$detail severity cell not parseable for row $id"
+    else
+      # Ceiling, not text. The compact row legitimately summarizes the detail's
+      # wording, so equality would fire on nearly every pair; what must never
+      # differ is whether the rule can reach Critical, because the digest and the
+      # compact row are what a reviewer routes through. Known limit (R49): this
+      # is a token-presence test, so a row that KEEPS the word while narrowing
+      # its trigger to something unreachable still passes. Narrowing a Critical
+      # clause is R36 spelling (c) applied to this gate and is human review.
+      table_crit=0; detail_crit=0
+      case "$table_sev"  in *critical*) table_crit=1 ;; esac
+      case "$detail_sev" in *critical*) detail_crit=1 ;; esac
+      if [ "$table_crit" -ne "$detail_crit" ]; then
+        drift "$detail severity ceiling disagrees with common-rules.md row $id (table Critical=$table_crit, detail Critical=$detail_crit)"
+      fi
     fi
   done
 fi
@@ -594,6 +656,7 @@ done
 
 if [ "$fail" -ne 0 ]; then
   echo ""
+  echo "Subject: $SKILL_DIR"
   echo "Rule-ID drift detected. Sync points: common-rules.md table + template"
   echo "block, the Extended-obligations pointer sentence, phase-1/phase-3"
   echo "'- RSn/RTn: [status]' lines, and every 'R1-Rn'/'RS1-RSn'/'RT1-RTn'"
@@ -604,5 +667,11 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
+# Name the subject. A caller cannot otherwise tell WHICH tree was checked, and
+# the default resolves to the installed copy under ~/.claude — so a run against
+# a stale tree prints a verdict indistinguishable from a run against the tree
+# the caller just edited. The ID range is not a substitute: a change that adds
+# no new rule ID (extending existing rows) prints the same range either way.
 echo "OK: R1-R$MAX_R / RS1-RS$MAX_RS / RT1-RT$MAX_RT consistent across all sync points"
+echo "Subject: $SKILL_DIR"
 exit 0

@@ -2,7 +2,13 @@
 # Detect static-analysis warning suppressions added without a written
 # justification.
 #
-# R36 (Static-analysis warning suppression as substitute for fix) calls
+# This hook covers only R36's MARKER-BEARING half. R36 also fires on
+# weakenings that leave no marker at all (a gate's matched source reworded,
+# its pattern softened, its subject narrowed, a load-bearing command's
+# stderr discarded, an expectation file regenerated from live state) — those
+# are human review by construction, so a clean run here is not an R36 pass.
+#
+# R36 (Suppression, or any markerless weakening, as substitute for fix) calls
 # out the case where reviewers paper over a lint / type-check / SAST
 # warning by silencing it instead of fixing the underlying code. The
 # rule's allowed escape valve is "suppression IS acceptable when

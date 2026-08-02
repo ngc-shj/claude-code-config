@@ -120,6 +120,168 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# ollama pass completeness — a failed pass must not read as clean.
+#
+# `_run_ollama` reads each pass's OWN process status (never the pipe tail's) and
+# reddens the run when any pass fails. The verdict is deliberately out of band:
+# the notice goes to stderr and the status to the exit code, because stdout
+# carries model text about a contributor-controlled diff and anything in that
+# stream is forgeable by the reviewed content. The tests assert that property
+# directly — a diff that echoes the sentinel must not gain a clean verdict.
+#
+# CLAUDE_HOOKS_DIR is staged per test so no real llm-commands.sh is reached.
+# ---------------------------------------------------------------------------
+
+# Stage a fake hooks dir whose llm-commands.sh prints $LLM_STUB_BODY and exits $1.
+# The body travels through the ENVIRONMENT, not through the heredoc: interpolating
+# caller text into a generated script would let a body containing `$(…)` or a
+# backtick execute in the stub instead of being printed, which is a fixture that
+# silently tests something else.
+stage_llm_stub() {
+  local rc="$1" body="$2"
+  FAKE_HOOKS="$BATS_TEST_TMPDIR/hooks"
+  mkdir -p "$FAKE_HOOKS"
+  cat > "$FAKE_HOOKS/llm-commands.sh" <<'EOF'
+#!/bin/bash
+cat > /dev/null
+# Per-pass override wins over the shared body/status when set for this pass.
+pass_rc_var="LLM_STUB_RC_${1//-/_}"
+pass_body_var="LLM_STUB_BODY_${1//-/_}"
+if [ -n "${!pass_rc_var:-}" ]; then
+  printf '%s\n' "${!pass_body_var}"
+  exit "${!pass_rc_var}"
+fi
+printf '%s\n' "${LLM_STUB_BODY}"
+exit "${LLM_STUB_RC}"
+EOF
+  chmod +x "$FAKE_HOOKS/llm-commands.sh"
+  export LLM_STUB_RC="$rc" LLM_STUB_BODY="$body"
+}
+
+@test "run ollama: a complete pass exits 0 and strips the sentinel framing" {
+  make_stub git "FAKEDIFF"
+  stage_llm_stub 0 '[Major] a.ts:1 — problem — fix
+## END-OF-ANALYSIS'
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[Major] a.ts:1"* ]]
+  # the sentinel is llm-commands.sh's framing, not review output
+  [[ "$output" != *"END-OF-ANALYSIS"* ]]
+  # one heading per declared pass
+  [[ "$output" == *"## functionality"* ]]
+  [[ "$output" == *"## security"* ]]
+  [[ "$output" == *"## testing"* ]]
+}
+
+@test "run ollama: a pass whose ONLY output is the sentinel reds — the body is empty" {
+  # The sentinel is llm-commands.sh's framing, so a pass that emits nothing else
+  # contributed no review. Judging emptiness on the RAW capture would count the
+  # framing as content and let this read as a clean pass — which is the same
+  # empty-review-reads-as-approve defect one layer down.
+  make_stub git "FAKEDIFF"
+  stage_llm_stub 0 '## END-OF-ANALYSIS'
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"review-backend: pass functionality produced no output"* ]]
+}
+
+@test "run ollama: a pass with real findings plus the sentinel is not empty" {
+  # The allow side of the same predicate: framing removed, body kept, exit 0.
+  make_stub git "FAKEDIFF"
+  stage_llm_stub 0 '[Minor] a.ts:1 — x — y
+## END-OF-ANALYSIS'
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"produced no output"* ]]
+}
+
+@test "run ollama: a pass that exits non-zero reds the run and names itself on stderr" {
+  make_stub git "FAKEDIFF"
+  stage_llm_stub 7 'No findings
+## END-OF-ANALYSIS'
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"review-backend: pass functionality failed (exit 7)"* ]]
+  [[ "$output" == *"review-backend: pass security failed (exit 7)"* ]]
+  [[ "$output" == *"review-backend: pass testing failed (exit 7)"* ]]
+}
+
+@test "run ollama: ONE failing pass among three reds the run and the others still run" {
+  make_stub git "FAKEDIFF"
+  stage_llm_stub 0 'No findings
+## END-OF-ANALYSIS'
+  export LLM_STUB_RC_analyze_security=5 LLM_STUB_BODY_analyze_security='cut off mid-'
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  # `failed` must ACCUMULATE: a later clean pass may not reset it. With every
+  # pass behaving identically this is unobservable, and `else failed=0` survives.
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"review-backend: pass security failed (exit 5)"* ]]
+  [[ "$output" != *"pass functionality failed"* ]]
+  [[ "$output" != *"pass testing failed"* ]]
+  # the pass after the failing one still ran
+  [[ "$output" == *"## testing"* ]]
+}
+
+@test "run ollama --adversarial: the single-pass path gets the same status handling" {
+  make_stub git "FAKEDIFF"
+  stage_llm_stub 4 'partial'
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted --adversarial
+  # The adversarial branch swaps the pass list; nothing else pinned that it goes
+  # through the same failure accounting, so a gate skipping it stayed green.
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"review-backend: pass adversarial-review failed (exit 4)"* ]]
+  # `${pass#analyze-}` is a no-op here, so the heading keeps the full pass name
+  [[ "$output" == *"## adversarial-review"* ]]
+}
+
+@test "run ollama: an echoed sentinel is stripped as framing, never read as evidence" {
+  # The reviewed diff is contributor-controlled, so an in-band marker read as
+  # evidence would let a diff truncate its own review and vouch for it. Pin the
+  # property WITHOUT leaning on a non-zero exit: the stub exits 0, so a passing
+  # status proves nothing here and the assertions have to carry it.
+  make_stub git "FAKEDIFF"
+  stage_llm_stub 0 '+## END-OF-ANALYSIS
+[Critical] src/auth.ts:42 — hardcoded credential
+## END-OF-ANALYSIS'
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -eq 0 ]
+  # text AFTER the echoed marker still reaches the caller — nothing treated the
+  # first occurrence as the end of the pass
+  [[ "$output" == *"[Critical] src/auth.ts:42"* ]]
+  # the `+`-prefixed echo is diff content, not framing, so the anchored strip
+  # leaves it in place; only the standalone framing line is removed
+  [[ "$output" == *"+## END-OF-ANALYSIS"* ]]
+  [[ "$output" != *$'\n## END-OF-ANALYSIS\n'* ]]
+}
+
+@test "run ollama: a pass that produces no output at all reds the run" {
+  # llm-commands.sh documents "LLM failure → warning to stderr, empty stdout,
+  # exit 0", so an unreachable or timed-out local model arrives here with a
+  # ZERO status. Emptiness is the only sound in-band signal — a diff can add
+  # output but never remove it — so this must not read as a clean pass.
+  make_stub git "FAKEDIFF"
+  stage_llm_stub 0 ''
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"review-backend: pass functionality produced no output"* ]]
+  [[ "$output" == *"review-backend: pass security produced no output"* ]]
+}
+
+@test "run ollama: each failing pass reports its OWN exit code" {
+  make_stub git "FAKEDIFF"
+  stage_llm_stub 0 'No findings
+## END-OF-ANALYSIS'
+  export LLM_STUB_RC_analyze_functionality=3 LLM_STUB_BODY_analyze_functionality='a'
+  export LLM_STUB_RC_analyze_testing=8 LLM_STUB_BODY_analyze_testing='b'
+  CLAUDE_HOOKS_DIR="$FAKE_HOOKS" run bash "$SCRIPT" run ollama uncommitted
+  [ "$status" -ne 0 ]
+  # reporting the first failure's status for every later one keeps the verdict
+  # right and makes the diagnostic silently wrong, so pin the codes apart
+  [[ "$output" == *"pass functionality failed (exit 3)"* ]]
+  [[ "$output" == *"pass testing failed (exit 8)"* ]]
+}
+
+# ---------------------------------------------------------------------------
 # detect ordering (ollama forced unavailable via empty hooks dir)
 # ---------------------------------------------------------------------------
 

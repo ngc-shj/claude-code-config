@@ -157,28 +157,33 @@ so the next round does not re-litigate it.
 ## 4. Gates (mandatory, in order)
 
 ```bash
-bash hooks/check-rule-sync.sh skills/triangulate   # must exit 0 — all sync points consistent
-bats tests/                                        # full suite green, including new tests
+bash hooks/check-rule-sync.sh skills/triangulate   # repo-local, both halves
+bats tests/                                        # full suite green
 ```
 
-**Pass the skill directory explicitly, and run the repo's copy of the hook.** With no
-directory argument the linter resolves its target relative to its own location, so the
-installed hook invoked bare lints `~/.claude/skills/triangulate` — the *installed* copy,
-which does not contain the edits just made. It prints the same
-`OK: R1-R… consistent` line either way. That is the R50 shape this file's own gate
-instruction used to have: a green whose subject was the wrong tree. Prove the subject
-before trusting the status — e.g. grep the regenerated digest in the repo for a string
-from this round's edit and confirm the installed digest lacks it.
+**Run the repo's own linter against the repo's own tree — both halves matter.**
+`check-rule-sync.sh` defaults its subject to `<dir of the script>/../skills/triangulate`,
+so `bash ~/.claude/hooks/check-rule-sync.sh` with no argument <!-- rule-sync-example -->
+checks the INSTALLED copy under `~/.claude/`. A fold edits the repository source and the installed copy is stale
+until `install.sh` runs, so that form reports on the pre-fold tree and cannot fail for the
+reason the gate claims (R50 clause iii). The same staleness argument applies to the SCRIPT,
+not only to its subject: a fold that changes the linter itself — adding a check, teaching it
+a new sync point — would run the pre-fold linter against post-fold rules and pass because
+the new check does not exist in the copy being executed. Invoke both from the repo.
 
-This command is deliberately NOT in `settings.json`'s allow list, so it prompts once per
-round. A `Bash(bash hooks/check-rule-sync.sh *)` entry would be cwd-relative and would
-auto-approve executing whatever `hooks/check-rule-sync.sh` happens to exist in any
-repository the session is opened in — a wider grant than the gate is worth. The installed
-form accepts the same argument (`bash ~/.claude/hooks/check-rule-sync.sh skills/triangulate`)
-and is already allow-listed, but it runs the INSTALLED linter against repo content, so it
-is only equivalent while `install.sh` is current; prefer the repo copy and accept the
-prompt.
+**This invocation prompts, deliberately.** `settings.json` allowlists the linter only at its
+installed absolute path, because that copy sits under `~/.claude/hooks/` where
+`block-sensitive-files.sh` keeps a session from rewriting it. A relative-path allow entry would be
+cwd-independent and this file is `install.sh`-merged into the GLOBAL `~/.claude/settings.json`, so
+`Bash(bash hooks/check-rule-sync.sh *)` would pre-approve executing whatever any repository ships
+at that path — laundering the deny and ask lists in every project on the machine. One permission
+prompt per fold is the correct price; do not "fix" it by adding the entry.
 
+Then read the `Subject:` line the linter prints and confirm it is the tree you edited. That
+is the check, not the ID range: a fold consisting only of `Extends` items adds no rule ID, so
+the stale-subject run and the correct run print a byte-identical `R1-R<n>` range and comparing
+it discriminates nothing. When the fold DOES add an ID, confirm the printed maximum matches it
+as a second, cheaper signal.
 A rule-sync failure means the edit map above was applied incompletely — fix the named
 sync point; never silence the linter. Judge each gate by its OWN exit status (R44): run
 it unpiped, or redirect output to a file and inspect afterwards — piping a gate through

@@ -278,7 +278,10 @@ EOF
   grep -q 'check-pre-pr.sh run' "$phase2"
   grep -q 'check-pre-pr.sh run' "$phase3"
 
-  ! grep -qE 'bash [^ ]*scripts/pre-pr\.sh' "$phase2"
+  # `if …; then false; fi` rather than `! …`: bash exempts a `!`-inverted
+  # command from `set -e` unless it is the test's LAST statement, so a
+  # negated assertion in the middle of a test can never fail the test.
+  if grep -qE 'bash [^ ]*scripts/pre-pr\.sh' "$phase2"; then false; fi
   ! grep -qE 'bash [^ ]*scripts/pre-pr\.sh' "$phase3"
 }
 

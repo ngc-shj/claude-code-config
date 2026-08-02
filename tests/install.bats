@@ -240,10 +240,13 @@ teardown() {
   # A root CLAUDE.md is auto-loaded as this repo's project instructions on
   # top of the installed global copy. Keeping the global content out of it
   # is what prevents every line loading twice in sessions opened here.
-  ! diff -q "$REPO_DIR/CLAUDE.md" "$REPO_DIR/global/CLAUDE.md" >/dev/null
+  # `if …; then false; fi` rather than `! …`: bash exempts a `!`-inverted
+  # command from `set -e` unless it is the test's LAST statement, so a
+  # negated assertion in the middle of a test can never fail the test.
+  if diff -q "$REPO_DIR/CLAUDE.md" "$REPO_DIR/global/CLAUDE.md" >/dev/null; then false; fi
   # The heaviest global-only sections must not reappear at the root.
-  ! grep -q '^## Model Routing' "$REPO_DIR/CLAUDE.md"
-  ! grep -q 'Privacy posture' "$REPO_DIR/CLAUDE.md"
+  if grep -q '^## Model Routing' "$REPO_DIR/CLAUDE.md"; then false; fi
+  if grep -q 'Privacy posture' "$REPO_DIR/CLAUDE.md"; then false; fi
   ! grep -q '^@RTK.md' "$REPO_DIR/CLAUDE.md"
 }
 
@@ -304,9 +307,9 @@ teardown() {
   # not inline. Re-inlining them silently doubles the per-session cost.
   run env HOME="$TEST_HOME" bash "$STAGING/install.sh"
   [ "$status" -eq 0 ]
-  ! grep -q '^@RTK.md' "$TEST_HOME/.claude/CLAUDE.md"
-  ! grep -q 'gpt-oss:120b' "$TEST_HOME/.claude/CLAUDE.md"
-  ! grep -q 'telemetry' "$TEST_HOME/.claude/CLAUDE.md"
+  if grep -q '^@RTK.md' "$TEST_HOME/.claude/CLAUDE.md"; then false; fi
+  if grep -q 'gpt-oss:120b' "$TEST_HOME/.claude/CLAUDE.md"; then false; fi
+  if grep -q 'telemetry' "$TEST_HOME/.claude/CLAUDE.md"; then false; fi
   grep -q 'model-routing.md' "$TEST_HOME/.claude/CLAUDE.md"
   grep -q 'RTK.md' "$TEST_HOME/.claude/CLAUDE.md"
 }
