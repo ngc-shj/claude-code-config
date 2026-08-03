@@ -36,11 +36,11 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R22 | Perspective inversion for established helpers | Major |
 | R23 | Mid-stroke input mutation in UI controls | Major |
 | R24 | Single migration mixing additive + strict constraint | Major |
-| R25 | Persist / hydrate symmetry | Major |
+| R25 | Persist / hydrate symmetry + access scope | Major; Critical when the unreadable item is what a security control consults, so the excluded process skips the check rather than failing closed |
 | R26 | Disabled-state UI without visible cue | Minor |
 | R27 | Numeric range hardcoded in user-facing strings | Minor (Major when constant governs any security or privacy policy boundary) |
 | R28 | Grammatical inconsistency in toggle/switch labels | Minor |
-| R29 | Citation and rationale accuracy (external spec or intra-repo) | Major (Critical when the hallucinated citation drives a security-tightening or security-loosening decision) |
+| R29 | Citation, derived-claim, and rationale accuracy (external spec or intra-repo) | Major (Critical when the hallucinated citation, or an unreproducible codebase-derived figure, drives a security-tightening or security-loosening decision) |
 | R30 | Markdown autolink footguns in citations | Minor |
 | R31 | Destructive operations without explicit user confirmation | Major (a, b, d) / Critical (c, e, f, g, h, i) |
 | R32 | New long-running runtime artifact merged without real boot smoke test | Major |
@@ -49,7 +49,7 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R35 | Production-deployed component merged without manual test plan | Major; Critical for unvalidated security-sensitive deployed behavior |
 | R36 | Suppression, or any markerless weakening, as substitute for fix | Major (Critical when the suppressed or out-edited warning is in a security category) |
 | R37 | Internal implementation jargon in user-facing strings | Minor by default; Major when it blocks comprehension or safe recovery, when the string sits in a security-relevant flow, or for stale-organization claims with measurable user impact |
-| R38 | Async state machine: non-terminal state + fail-open supersession | Major (non-terminal state) / Critical (fail-open supersession on auth/session/key/token state) |
+| R38 | Async or persisted state machine: non-terminal state, fail-open supersession, persisted fail-closed wedge | Major (non-terminal state; persisted fail-closed state with no reset path) / Critical (fail-open supersession on auth/session/key/token state, or a persisted fail-closed wedge that a legitimate rotation of the pinned material triggers for every user at once) |
 | R39 | Lifecycle secret/metadata zeroization (inverse of R25) | Major (Critical when long-term key material / live tokens survive) |
 | R40 | Cross-boundary serialization shape vs strict consumer | Critical (silent total-path failure or data loss) |
 | R41 | Declared capability without a working backing path | Major (Critical when the declared path never worked at all) |
@@ -71,7 +71,7 @@ Also extract a rule's Extended obligations section when the selected row points 
 | R57 | Ordering or cursor key without a total order | Major; Critical when the skipped rows are an audit, evidence, or reconciliation feed whose consumer treats a page boundary as completeness, or when the new key's write surface is caller-nameable |
 | RS1 | Timing-safe comparison | Critical |
 | RS2 | Rate limiter on new routes | Major |
-| RS3 | Input validation at boundaries | Major |
+| RS3 | Input validation at boundaries | Major; Critical when an unvalidated off-type value can reach a query operator, a credential comparison, an object-merge/assign sink, or a template / HTML-interpolation sink |
 | RS4 | Personal-identifying data in committed artifacts | Critical for secrets or exploitable identity data; Major otherwise |
 | RS5 | Untrusted externally-supplied security parameter without floor/whitelist | Major (Critical when no transport pinning/TOFU mitigates the MITM vector) |
 | RS6 | Incomplete sanitization — escape-character ordering | Major (Critical when the unsanitized output crosses into an interpolation/injection sink — SQL, shell, HTML attribute, template) |

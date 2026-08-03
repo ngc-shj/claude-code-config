@@ -28,7 +28,7 @@
 #      SKILL.md declares the manifest keys and terminator stems that every
 #      other comparison here is made against
 #
-# Usage: bash check-rule-sync.sh [triangulate-skill-dir]
+# Usage: bash check-rule-sync.sh [triangulate-skill-dir]   # rule-sync-example: interface, not a prescription
 #   The default dir resolves to ../skills/triangulate relative to this
 #   script, which works both in the repo layout and the installed
 #   ~/.claude layout.
