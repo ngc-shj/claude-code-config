@@ -354,6 +354,12 @@ teardown() {
 setup_artifacts_repo() {
   local repo="$BATS_TEST_TMPDIR/sibling-repo"
   mkdir -p "$repo/docs/archive/review"
+  # The prescreen containment-checks every candidate with realpath, so the paths it
+  # emits are symlink-resolved. On macOS $TMPDIR is /var/folders/... symlinked
+  # to /private/var/folders/..., so a caller comparing against the unresolved
+  # fixture path never matches. Resolve here, at the single point every
+  # artifacts test derives its paths from.
+  repo="$(cd -P "$repo" && pwd)"
   write_config --arg r "$repo" '.sources.artifacts.repos = [$r] | .sources.github.enabled = false'
   printf '%s' "$repo"
 }

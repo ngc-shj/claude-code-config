@@ -81,6 +81,13 @@ EOF
 setup() {
   FIX="$BATS_TEST_TMPDIR/skill"
   mkdir -p "$FIX/phases"
+  # The linter resolves its subject with `cd -P` so the Subject: line identifies
+  # a tree rather than echoing back whatever spelling it was handed. On macOS
+  # $TMPDIR is /var/folders/... symlinked to /private/var/folders/..., so an
+  # unresolved $FIX never equals what the hook prints. Resolve once here rather
+  # than at each assertion — three tests compare against it, and one of them is
+  # a NEGATIVE assertion that would otherwise pass for the wrong reason.
+  FIX="$(cd -P "$FIX" && pwd)"
 
   cat > "$FIX/common-rules.md" <<'EOF'
 **All experts must check:**

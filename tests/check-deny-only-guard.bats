@@ -336,7 +336,12 @@ big_paired_bats() {
   MID="$(git rev-parse HEAD)"
   git mv tests/old.bats tests/renamed.bats
   # Drop only the allow test; the rest is untouched, so git reports R.
-  head -n -4 tests/renamed.bats > tmp && mv tmp tests/renamed.bats
+  # `head -n -N` is a GNU extension — BSD head rejects a negative count, leaves
+  # an empty `tmp`, and the file becomes empty rather than shortened, so git
+  # scores the change as a rewrite and the R assertion below fails for a reason
+  # that has nothing to do with the guard. Compute the keep-count instead.
+  head -n "$(( $(wc -l < tests/renamed.bats) - 4 ))" tests/renamed.bats > tmp \
+    && mv tmp tests/renamed.bats
   git add -A >/dev/null
   git commit -qm rename >/dev/null
   [ "$(git diff --name-status "$MID" | cut -c1)" = "R" ]
