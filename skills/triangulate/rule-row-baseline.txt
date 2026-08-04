@@ -31,6 +31,13 @@
 # act as installing its inspector, and a rule that has absorbed several rounds
 # of text while staying `no-inspector` is the signature of that confusion.
 #
+# What that column does NOT cover: this file lists only over-ceiling rows whose
+# procedure is still inline, so the annotation answers for about a sixth of the
+# rule set and is silent for the rest — including every extracted rule, which
+# names its detector in the detail page rather than in the row. Absence from
+# this file is not evidence of a detector. Across the whole set, 16 rules of 74
+# have one anywhere.
+#
 # Format: <rule-id><TAB>inspector|no-inspector   (# comments and blanks ignored)
 
 R19	no-inspector
