@@ -82,19 +82,41 @@ missed the defect entirely in 3 of 8 runs, Arm F in 0 of 16.
 This replicated on a second fixture **before** being written down, which the two
 retracted claims did not.
 
-## The weakness in this result, stated plainly
+## Round 5: the rubric was too small, and round 4's headline was wrong
 
-**The rubric is derived from R54's own text, so Arm F is scored against the
-document it was handed.** Part of its advantage is definitional, and a stronger
-design would have the correct remedy defined independently of the rule before any
-run.
+Round 4's rubric came from R54's own text, so the arm holding R54 was scored
+against the document it had been handed. Round 5 fixed that: ten agents, five per
+defect variant, given only the defective code and asked to enumerate every
+property a correct fix must have. None saw the rule set; each had the whole task
+to itself. Full method and result: `evals/rule-ablation/independent-rubric.md`.
 
-What keeps the result meaningful despite that: the three clauses are load-bearing
-engineering, not arbitrary recitation — a suspension not restored on the throw
-path is a live defect, and a test written in a fresh context is the exact false
-green R54 exists to name. An unaided competent reviewer reaches at most two of
-them, never three, across sixteen runs and two domains. Something is being
-transmitted; how much of the measured size is real remains open.
+**The good news for round 4.** Its three clauses — scoped construct, restore on
+the error path, test the next write in the same context — were all required by a
+panel that had never read R54. They are not an artifact of self-scoring.
+
+**The bad news.** The panel demanded **six more**, unanimously, and R54 taught
+none of them: restore the *previous* value rather than a hardcoded off; **await**
+the covered work before restoring; do not mutate caller-shared state; abort if
+the restore itself fails; test the throw path; test nesting or concurrency.
+
+One panellist named the consequence precisely: **a naive `try/finally` on the
+shared object passes the return-path and throw-path tests and fails only the
+concurrency one.** The two tests R54 asks for certify exactly the wrong fix.
+
+So round 4's headline was wrong in the direction I had not guarded against. Not
+"the rules produce a complete fix and their absence does not", but:
+
+> Carrying the rules reliably produces **the three properties the rule contains**.
+> A correct fix needs about nine. **Neither arm produced those.**
+
+R54 has been extended with the six (`skills/triangulate/rule-details/R54.md`).
+That extension is a fold made under this eval's own standard — direct evidence
+that sixteen reviewers holding the rule still fixed it wrong — and it is owed its
+own ablation before anyone claims it works.
+
+The blinded re-score of the 32 round-4 fixes against the nine-property rubric is
+set up (`evals/rule-ablation/score/rubric.md`) and **not run**. Scoring them by
+hand would reintroduce the bias round 5 exists to remove.
 
 ## Other limits
 
@@ -112,12 +134,16 @@ without naming the leak past the call, and are scored misses.
 
 ## What follows
 
-1. **Re-score with an independent rubric.** Have the correct remedy defined by
-   someone/something that has not seen R54, then re-run the comparison. That is
-   the one change that would settle how much of round 4's effect is real.
-2. **Extend to a second rule** whose procedure prescribes a remedy — R51 and R38
-   are the obvious candidates.
-3. **Do not shrink rows to digest names.** Arm B measured exactly that and scored
+1. **Run the blinded re-score.** The rubric is checked in; the 32 round-4 fixes
+   need arm identity stripped and scoring by agents that do not know which arm
+   wrote what. That quantifies how far short of nine each arm actually falls.
+2. **Ablate the R54 extension.** It was added on this eval's own standard, which
+   makes it the first fold here with real evidence behind it — and the standard
+   applies to it too.
+3. **Run the independent-panel step for a second rule.** If R51 and R38 are also
+   missing half of what a panel demands, the finding is about the rule set rather
+   than about R54.
+4. **Do not shrink rows to digest names.** Arm B measured exactly that and scored
    identically to carrying nothing.
-4. **Ablate before folding**, and report n. Two claims from this eval died on
-   replication; the third was replicated first.
+5. **Report n, and replicate before writing.** Three claims from this eval have
+   now been corrected by the round that followed them.
