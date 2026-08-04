@@ -58,8 +58,12 @@ this rubric — which pre-dates the extension, so scoring the extended arm
 against it is not self-scoring. The extension's properties went 4.12/5 and
 5.00/5 with it versus 0.25/5 and 1.75/5 without; P9, the clause this file said
 mattered most, went 16/16 vs 0/16; the original three clauses stayed saturated
-in both arms. One clause under-transmits: P5's connection-handle wording
-reached 1/8 on the GUC fixture even when carried.
+in both arms. One clause under-transmitted: P5's connection-handle wording
+reached 1/8 on the GUC fixture even when carried. Round 9 reworded it into
+named per-variant forms and P5 saturated (8/8) with no regression — while the
+same-batch control also showed the old wording's baseline is unstable across
+batches (1/8 vs 5/8 on identical materials), so the honest claim is
+saturation, not a 1/8→8/8 effect size.
 
 ## The blinded re-score (run 2026-08-05)
 
