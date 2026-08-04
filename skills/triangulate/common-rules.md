@@ -157,10 +157,20 @@ All experts MUST use this ID scheme. The orchestrator rejects any review that mi
 - Evidence: [grep output, code snippet, or specific observation]
 - Problem: [Concrete description — what is wrong and why]
 - Impact: [What breaks, what data is at risk, what users experience]
-- Fix: [Specific code change or approach — not "consider improving"]
+- Fix: [Specific code change or approach — not "consider improving"; carries the Remedy Floor clauses below]
 ```
 
 Findings that omit Evidence or provide a vague Fix are returned to the expert for revision.
+
+### Remedy Floor
+
+**Every `Fix:` carries the five clauses below, whichever rule the finding was routed through.** They are stated once here because they are not any one rule's property: five independent panels, each asked what a correct fix for a different defect must satisfy without being shown the rule set, demanded all five for R44, RT8, R56, RT9 and R54 alike (`evals/rule-ablation`). Each rule's own procedure carried between two and five of the ten-to-fifteen properties its panel required, and the commonest gaps were these — every one of which this catalogue already states *somewhere else*, in a rule the reviewer did not route to. Adding them per-rule would be five paragraphs times seventy-four; the reader is expected to apply this section to whatever rule fired.
+
+1. **Pair the deny side with the allow side.** A remedy that only tightens is unmeasured in the direction that gets controls switched off. State the case that must still SUCCEED and pin it: the gate's stub exiting 0 still reports PASS; the authorised caller's spy still records the write; the in-tolerance input is still a byte-identical no-op; the valid token still authenticates. Absent this, a fix that always denies satisfies every other clause. (Generalises RT10.)
+2. **Red-prove each clause of the remedy separately, by execution.** One mutation per clause, run and observed — not one mutation that reddens everything, and not reasoning about what would fail. A remedy with three parts needs three mutations that redden three different assertions. (RT7's obligation, applied to the fix rather than to the gate.)
+3. **Fail loudly when the check cannot run.** Enumerate the outcomes that are neither pass nor fail — the tool missing or not executable, the subject unresolvable, the input absent, the bound exceeded, the interpreter unavailable — and route every one to a refusal that names itself. "Examined nothing" must not be spelled the same as "found nothing". (R50 clause ii, which most rules do not cite.)
+4. **Do not fix by deleting what made the defect visible, or what made the feature useful.** Widening the tolerance is not repairing the heal direction; dropping the log truncation is not fixing the exit status; removing the assertion is not fixing the test. Name the behaviour the fix must preserve, and say so in the `Fix:` line. (R36's shape, applied to remedies.)
+5. **Name the boundary and the tie.** Where the fix introduces or moves a comparison, state which side the boundary value falls on and what happens when two subjects share it — the event at exactly the watermark, the token whose `nbf` is exactly now, the page cut through equal keys. An unstated boundary is where the next defect of the same class enters. (Generalises R57.)
 
 ### Anti-Deferral Rules
 
