@@ -683,7 +683,16 @@ rows_over=$(LC_ALL=C awk -v ceil="$ROW_CEILING" '
   /^\| (R|RS|RT)[0-9]+ \|/ {
     if (length($0) <= ceil) next
     id = $0; sub(/^\| /, "", id); sub(/ \|.*$/, "", id)
-    tag = (index($0, "**Mechanical detection**") > 0) ? "inspector" : "no-inspector"
+    # Match the bold OPENING, not the whole closed marker. Rows qualify their
+    # detector inside the bold run — `**Mechanical detection (partial)**`,
+    # `**Mechanical detection (advisory)**` — and an exact-string test read all
+    # three of those as having no detector at all. That is the wrong direction
+    # to be wrong in: the annotation is what folding.md routes on, so a rule
+    # with an honest partial detector looked like one with none, and the next
+    # fold would be sent to write a hook that already exists. The qualifier is
+    # also precisely the rows most worth finding — a detector that states its
+    # own limits.
+    tag = (index($0, "**Mechanical detection") > 0) ? "inspector" : "no-inspector"
     print id "\t" tag
   }' "$COMMON" | sort)
 
@@ -705,7 +714,7 @@ else
     if [ -z "$want" ]; then
       drift "common-rules.md row $id is over the ${ROW_CEILING}-byte row ceiling and is not declared in rule-row-baseline.txt — move the procedure into rule-details/$id.md and leave the row a routing summary"
     elif [ "$want" != "$tag" ]; then
-      drift "rule-row-baseline.txt records $id as '$want' but its row reads '$tag' — a row that gained or lost its **Mechanical detection** paragraph must update the declaration"
+      drift "rule-row-baseline.txt records $id as '$want' but its row reads '$tag' — a row that gained or lost a **Mechanical detection** paragraph (in any qualified form) must update the declaration"
     fi
   done <<< "$rows_over"
 

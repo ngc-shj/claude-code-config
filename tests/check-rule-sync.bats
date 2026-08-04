@@ -1242,3 +1242,38 @@ write_baseline() {
   grep -qE '^(R|RS|RT)[0-9]+'$'\t''no-inspector$' \
     "$repo_root/skills/triangulate/rule-row-baseline.txt"
 }
+
+@test "9m: a detector qualified inside the bold run still annotates as inspector" {
+  # Rows state their detector's limits INSIDE the marker — `**Mechanical
+  # detection (partial)**`, `**Mechanical detection (advisory)**`. An exact
+  # match on the closed marker read all three such rows as having no detector,
+  # which is the wrong direction to be wrong in: the annotation is what
+  # folding.md routes on, so a rule with an honest partial detector looked like
+  # one with none and the next fold would be sent to rewrite it. Found by
+  # running the check against the repo's own rules, not by reading the code.
+  set_row_len R2 1400
+  sed_i 's/check b/check b **Mechanical detection (partial)**: some-hook.sh/' "$FIX/common-rules.md"
+  regen_digest
+  write_baseline "R2	inspector"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
+@test "9n: the repo's own rows agree with the baseline's inspector column" {
+  # The live-tree counterpart to 9m. `pass: live repo files are drift-free`
+  # covers the exit status; this one fails naming the rule, which is what a fold
+  # that added or removed a detector needs to read.
+  local repo_root actual declared
+  repo_root="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  actual="$(LC_ALL=C awk -v ceil=1200 '
+    /^\| (R|RS|RT)[0-9]+ \|/ {
+      if (length($0) <= ceil) next
+      id = $0; sub(/^\| /, "", id); sub(/ \|.*$/, "", id)
+      print id "\t" ((index($0, "**Mechanical detection") > 0) ? "inspector" : "no-inspector")
+    }' "$repo_root/skills/triangulate/common-rules.md" | sort)"
+  declared="$(grep -vE '^[[:space:]]*(#|$)' "$repo_root/skills/triangulate/rule-row-baseline.txt" | sort)"
+  [ "$actual" = "$declared" ]
+  # At least one row must carry a QUALIFIED marker, or this test would still
+  # pass with the exact-match bug restored.
+  grep -q '\*\*Mechanical detection (' "$repo_root/skills/triangulate/common-rules.md"
+}

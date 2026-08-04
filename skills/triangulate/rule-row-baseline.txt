@@ -57,9 +57,9 @@ R55	no-inspector
 R56	no-inspector
 R57	no-inspector
 RS3	inspector
-RS5	no-inspector
-RS6	no-inspector
+RS5	inspector
+RS6	inspector
 RT6	inspector
 RT9	no-inspector
-RT10	no-inspector
+RT10	inspector
 RT11	no-inspector
