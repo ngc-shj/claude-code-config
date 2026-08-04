@@ -178,28 +178,33 @@ re-argued, but a fold that adds prose to it anyway must say what the new paragra
 that the previous ones did not.
 
 **Ablate before folding.** A gate in this repo is red-proved — delete what it checks and
-it must fail. A rule had no equivalent until `evals/rule-ablation/` (62 runs,
-`docs/archive/audit/2026-08-04-rule-ablation.md`). On five of six fixtures the review
-found the defect just as reliably *without* the rule; on the sixth — a security-control
-suspension buried in an 8-file diff — the full procedure detected 8/8 at Critical rank 1
-while both the name-only arm and the no-catalogue arm managed 6/8 and scattered from Major
-rank 7 to Critical rank 2.
+it must fail. A rule had no equivalent until `evals/rule-ablation/` (78 runs, eight
+fixtures, `docs/archive/audit/2026-08-04-rule-ablation.md`). The result there is blunt:
+**no arm-level difference has survived replication.** Two effects were found and written
+up with their n stated, and both dissolved when tested again — including one where the
+full procedure appeared to detect 8/8 against 6/8, on a fixture whose shape was then
+reproduced in a second domain and showed nothing.
 
-So the premise "the round missed this because it was not written down" is not free, and a
-fold asserting it should show its work: a fixture holding the defect, an oracle written
-down FIRST, and runs with and without the rule. Record the outcome either way, and record
-n — that round's one retracted claim came from three trials, which was enough to see a
-difference that a run at n=8 showed was not there.
+So the premise a fold rests on — "the round missed this because it was not written down" —
+has no evidence behind it, and a fold asserting it carries the burden: a fixture holding
+the defect, an oracle written down FIRST, runs with and without the rule, and **n reported
+beside every number**. A single round is a look, not a result.
 
-Two results from it bear on what a fold may do:
+Three things that eval settled, and one it did not:
 
-- **Do not shrink a row to its digest name to save bytes.** Arm B *was* that move, and it
-  scored identically to carrying no catalogue at all. Whatever the rules buy, they buy it
-  with the procedure, not the name.
-- **A rule whose only measured contribution is severity belongs in a severity cue**, not a
-  full procedure — but measure before concluding that, since the fixtures were written by
-  someone who knew the rule, which makes a null result the weaker reading and a positive
-  result the stronger one.
+- **Do not shrink a row to its digest name to save bytes.** The name-only arm scored
+  identically to carrying no catalogue at all — so the name is not where any value would
+  live, and cutting to it is not a cheap saving, it is a removal.
+- **Expect a null.** Arm-level differences at moderate n have been noise both times.
+  Budget for replication before writing a claim down.
+- **A null is the WEAKER reading here.** The fixtures were written by someone who knew the
+  target rule, and that bias runs toward legibility, so "no difference on a diff I
+  constructed" is a much softer statement than "no difference".
+- **What was never scored is the remedy.** Every oracle so far asks only whether the
+  review FOUND the defect. Much of what these rules contain is what to DO about it — the
+  call-scoped grant, the error path, the same-context test — and no run has looked at
+  that. A rule whose value is in the fix is invisible to everything measured so far, so do
+  not read these nulls as a verdict on the rule set.
 
 1. Author `hooks/check-<slug>.sh` modeled on the existing `check-*.sh` hooks: header
    comment stating the rule ID, detection logic, severity, and usage

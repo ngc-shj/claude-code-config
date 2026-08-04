@@ -47,6 +47,13 @@ findable defect and the run says nothing about the rule.
 | `fixtures/F5-RT9.diff` | RT9 | 8 files, ~280 lines | the frame-source check landed only on the twin the tests import, not on the file the manifest loads |
 | `fixtures/F6-R54.diff` | R54 | 8 files, ~425 lines | `withElevatedRead` never clears the GUC, so later statements in the transaction stay elevated |
 | `fixtures/F8-RT9hard.diff` | RT9 | 8 files, ~425 lines | the issuer/nbf tightening landed only in `src/auth/verify.ts`; the deploy config routes every request through `edge/handler.js`, which carries its own copy |
+| `fixtures/F9-R54b.diff` | R54 | 8 files, ~437 lines | `enterSystemOperation()` sets the audit-skip flag on the request context and never clears it, so every write after the staging step runs unaudited |
+
+F9 is F6's shape in a different domain — same rule, same "control suspension
+leaking past its intended scope, buried in a large diff", but an
+`AsyncLocalStorage` flag in a Node importer rather than a Postgres session
+variable. It exists to test whether F6's arm difference belonged to the rule or
+to the fixture. It belonged to the fixture.
 
 F8 exists because F5 turned out to be a weak fixture: both of its files carry a
 comment naming the twin relationship, which is realistic and also the strongest
@@ -93,3 +100,14 @@ The fixtures are written by someone who knows the rule, which is a legibility
 bias no amount of added noise removes. The honest reading of a null result is
 "this rule adds nothing *on a fixture I wrote*", and the honest reading of a
 positive one is stronger, because the bias runs the other way.
+
+**The oracle scores detection only.** It asks whether the review named the
+defect. It never asks whether the review got the *remedy* right — and a large
+part of what these rules carry is remedy, not recognition. A rule whose value is
+in the fix is invisible to every run this harness has done. Scoring the fix is
+the obvious next design, and it needs a different oracle: the proposed change,
+compared against the procedure's prescription.
+
+**One arm has never been run.** Arm A always supplies a single rule with nothing
+competing for attention. The deployed configuration loads all 74 at once, which
+is the condition least favourable to them, and it remains unmeasured.
