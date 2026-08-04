@@ -8,6 +8,12 @@ rg -n '^\| (R1|R3|RS2|RT4) \|' skills/triangulate/common-rules.md
 ```
 If `rg` is unavailable, use the environment's Grep/search tool with the same anchored pattern.
 
+Every `Fix:` you write must also satisfy the **Remedy Floor** — five clauses every rule's remedy inherits. Extract that section once per review:
+
+```bash
+awk '/^### Remedy Floor/,/^### Anti-Deferral/' skills/triangulate/common-rules.md
+```
+
 Also extract a rule's Extended obligations section when the selected row points to it. Do not read the full rules file unless targeted extraction is inconclusive.
 
 | ID | Pattern | Severity if missed |

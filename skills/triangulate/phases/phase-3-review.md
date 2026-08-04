@@ -154,7 +154,7 @@ Requirements:
 - Only specific and actionable findings within your scope (vague findings are prohibited)
 - If you encounter an issue outside your scope but with potential impact, flag it as: [Adjacent] Severity: Problem — this may overlap with [other expert]'s scope
 - Classify each finding by severity using YOUR expert-specific criteria (see below)
-- For each finding, specify file name, line number, severity, problem, and recommended fix
+- For each finding, specify file name, line number, severity, problem, and recommended fix. Every recommended fix for a Critical/Major finding must satisfy the Remedy Floor (Common Rules) — extract that section once per review with `awk '/^### Remedy Floor/,/^### Anti-Deferral/' skills/triangulate/common-rules.md`; anchored row extraction never surfaces it
 - Consider the deviation log when reviewing
 - Do not duplicate issues already caught by local LLM pre-screening
 - Cross-check the plan's "Implementation Checklist" section against the git diff. Report any file listed in the checklist that does not appear in the diff as a finding
@@ -232,7 +232,7 @@ Requirements:
 - Report any previously overlooked issues within your scope
 - Flag out-of-scope issues with potential impact as: [Adjacent] Severity: Problem — this may overlap with [other expert]'s scope
 - Classify each finding by severity using YOUR expert-specific criteria
-- For each finding, specify file name, line number, severity, problem, and recommended fix
+- For each finding, specify file name, line number, severity, problem, and recommended fix. Every recommended fix for a Critical/Major finding must satisfy the Remedy Floor (Common Rules) — extract that section once per review with `awk '/^### Remedy Floor/,/^### Anti-Deferral/' skills/triangulate/common-rules.md`; anchored row extraction never surfaces it
 - Indicate status from previous round (resolved, new, continuing)
 - **Fix-induced boundary-widening check (R43, all experts)**: for each fix in this round's diff, compare every security-boundary predicate it touches (delivery/broadcast scope, origin/frame/tenant gate, allowlist entry, permission/entitlement scope, input-acceptance predicate) against the PREVIOUS round's state — not only against main — and flag any widening, including reverts of an earlier round's tightening made to restore functionality. Evaluate per R43: widening that delivers credentials/secrets/privileged operations to added recipients is Critical. **Include handler-RESIDENCY changes in this diff, not only send-site predicates**: making a listener resident in more contexts (all frames/windows/processes rather than one) widens a broadcast's recipient set with no diff at any send site, so a send-site-only comparison reports no change. Review recipient scope as an axis distinct from sender authenticity — an authenticity gate proves where a message came FROM and bounds nothing about who receives it, and treating the two as one is how this widening gets cleared on review. A sibling path safely sharing the same broadcast is not precedent when its safety rests on a payload-carried allowlist each recipient self-verifies and the payload class under review admits no such per-recipient gate.
 - If there are no findings, explicitly state "No findings"

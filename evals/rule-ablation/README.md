@@ -28,6 +28,14 @@ it and see whether the finding disappears.
      extract-what-matches protocol from SKILL.md. This is the arrangement the
      skill actually ships, and the only one that measures retrieval under load
      rather than recall of a rule someone already picked.
+   - **W / N** (round 7, Remedy Floor) — W is the deployed materials plus one
+     digest line wiring the Remedy Floor (extract the section; every `Fix:`
+     satisfies it); N is the deployed materials with the floor section removed
+     and the `Fix:` template pointer reverted. The arms differ only in the
+     shipped files, never in the prompt. W exists because a probe of the
+     as-merged configuration showed the floor is a section no routing path
+     names — zero of four reviewers read it — so ablating F-as-merged against
+     N would have compared two arms that both lack the floor in practice.
 4. **Trials.** Three per arm is a look, not a result. The one claim this eval has
    had to retract came from n=3 and vanished at n=8. Report n beside every
    number, and take any arm-to-arm difference at n=3 as a reason to run more
@@ -121,7 +129,33 @@ compared against the procedure's prescription.
 
 **The remedy rubric came from the rule.** Round 4's three clauses were read off
 R54's own procedure, so the arm holding R54 is scored against the text it was
-given, and part of its measured advantage is definitional. Re-deriving the
-correct remedy independently — from someone or something that has not seen the
-rule — is the single change that would settle how much of that effect is real.
-It is the first item in the audit's "what follows".
+given, and part of its measured advantage is definitional. Round 5 rebuilt the
+rubric with a panel that never saw the rule (`independent-rubric.md`), and the
+round-6.5 blinded re-score then scored the 32 round-4 fixes against it with arm
+identity stripped — which confirmed the F6 effect, halved the F9 one, and
+corrected round 4's F9 error-path count. Self-scoring had erred in both
+directions.
+
+## Round 7: scoring a cross-cutting section, not a rule
+
+The Remedy Floor is inherited by every `Fix:` rather than routed to by a
+pattern match, so its ablation differs from a rule's in three ways, all
+recorded before the runs in the round-7 protocol:
+
+1. **Reachability is a separate question from content**, and it comes first. A
+   probe of the deployed arm (tool-call traces, not output reading) settles
+   whether the section is read at all; if it is not, the ablation must compare
+   a wired arm (W) against absence (N), or it measures nothing.
+2. **The rubric is the fixture-rule's merged panel rubric** (≥3/4 of four
+   round-6 panellists; `score/R44-merged.md`, `score/RT8-merged.md`), split
+   into a floor-mapped subset (primary metric) and a mechanism subset
+   (control) — the mapping written before any output is read. The floor should
+   move its own clauses and leave mechanism flat; a mechanism shift would mean
+   the arms differ in more than the section under test.
+3. **Fixtures must avoid rules the floor's sibling changes touched** (F1/F3,
+   not the R54 fixtures #125 extended), or the arm difference conflates two
+   folds.
+
+Result (2026-08-05, audit doc): floor-mapped W−N of +1.6/8 on F1 and +3.6/5 on
+F3, mechanism flat on both, scorer agreement ≥89.8%. The wiring line the W arm
+tested is now emitted by the digest generator.

@@ -56,10 +56,13 @@ itself a fold made under this eval's own standard — direct evidence that revie
 holding the rule fixed it wrong — and it is owed its own ablation before anyone
 claims it works.
 
-## Not yet run
+## The blinded re-score (run 2026-08-05)
 
-The blinded re-score. `score/rubric.md` holds the nine properties in the form a
-scorer needs; the remaining work is to strip arm identity from the 32 round-4
-`Fix:` texts, shuffle them, and have agents that do not know which arm produced
-what score each against all nine. Doing that by hand would reintroduce exactly
-the bias this round exists to remove, so it is left set up rather than half-done.
+The 32 round-4 `Fix:` texts, arm identity stripped, shuffled, scored by three
+agents blind to provenance, majority vote per property (agreement 94.6–99.6%).
+It confirmed the F6 effect (6.25 vs 4.40 mean, plus three arm-C detection
+misses), halved the F9 one (7.25 vs 6.75), and corrected round 4's self-scored
+claim that F9 arm C lost the error path 7 times in 8 — blind, that cell is
+8/8, because the `AsyncLocalStorage` idiom restores on throw by construction.
+P9 (nesting/concurrency) is 0/29 across all arms: the panel's sharpest warning
+holds blind. Full tables: the audit doc, round 6.5.

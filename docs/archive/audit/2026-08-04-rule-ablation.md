@@ -168,15 +168,91 @@ once and inherited by every `Fix:`. Five paragraphs instead of five times
 seventy-four: total prose down, per-rule transmission up. It is not yet ablated,
 and under `folding.md`'s own rule it does not get to claim it works until it is.
 
+## Round 6.5 (2026-08-05): the blinded re-score, and what it corrects
+
+The 32 round-4 fixes, recovered verbatim from the session transcript, arm
+identity redacted (protocol headers, rule IDs, catalogue vocabulary, fixture
+filenames), shuffled with a fixed seed, and scored by three independent agents
+against the nine-property rubric in different orders. Majority vote per
+property; pairwise scorer agreement 94.6–99.6%.
+
+| | n | no-fix | mean /9 |
+|---|---|---|---|
+| F6 · Arm F | 8 | 0 | **6.25** |
+| F6 · Arm C | 8 | **3** | 4.40 |
+| F9 · Arm F | 8 | 0 | 7.25 |
+| F9 · Arm C | 8 | 0 | 6.75 |
+
+**What survives.** On F6 the arm-F advantage is real and blind: three arm-C runs
+never fixed the defect at all, and among those that did, the same-context test
+(P7) went 8/8 vs 0/5 and restore-previous-value (P3) 3/8 vs 0/5.
+
+**What gets corrected.** Round 4 scored F9 arm C's error path at 1/8. Blind,
+P2 is **8/8** for that same cell — the `AsyncLocalStorage` mechanism arm C
+reviewers proposed restores on throw by construction, and the self-score missed
+it. The F9 gap is a quarter of round 4's headline (7.25 vs 6.75), and six of
+eight F9 arm-C runs carry all three of R54's original clauses. The honest
+statement is now: **the rules' remedy advantage is real where the defect is
+buried and the mechanism unfamiliar (F6), and marginal where the platform's
+idiom already encodes the fix (F9).**
+
+**What is confirmed.** P8 (throw-path test) is 2/16 for F and 0/13 for C; P9
+(nesting/concurrency — the property a naive fix uniquely fails) is **0/29
+across every arm and fixture**. Round 5's conviction stands blind: what no rule
+teaches, no reviewer produces, with or without the catalogue.
+
+## Round 7 (2026-08-05): the Remedy Floor — unreachable as merged, effective when wired
+
+Protocol, pre-registered mappings, and preambles:
+`evals/rule-ablation/` (round-7 section of the README) — metric subsets and the
+floor mapping were written before any run output was read.
+
+**The wiring gap.** The floor merged in #126 as a section of `common-rules.md`
+that no routing path names: the digest doesn't mention it, SKILL.md's loading
+protocol extracts triggered rows and named sections only, and phase-3's expert
+requirements never cite it. A 4-run probe of the deployed configuration (F1,
+varied preambles) confirmed by tool-call trace: **zero of four reviewers read
+the section.** As merged, the floor was dead wiring.
+
+**The ablation.** Arm W: HEAD materials plus one digest line wiring the floor
+(extract the section, every Fix: satisfies it). Arm N: HEAD materials with the
+floor section removed and the template pointer reverted. Same prompts, eight
+paired preambles per fixture, n=8 per cell, on F1 (R44, shell gate) and F3
+(RT8, vacuous denial test) — two rules untouched by #125, detection saturated,
+panels demanding ~13/~11 properties of which the rules carry 2. Outputs
+redacted (including the token "Remedy Floor"), shuffled, blind-scored by three
+agents against the round-6 panels' merged majority rubrics; scorer agreement
+89.8–95.7%.
+
+| | floor-mapped subset | mechanism subset |
+|---|---|---|
+| F1 · W | **6.75**/8 | 8.62/11 |
+| F1 · N | 5.12/8 | 7.75/11 |
+| F3 · W | **3.88**/5 | 3.12/6 |
+| F3 · N | 0.25/5 | 2.88/6 |
+
+The discriminating properties are exactly the floor's clauses: on F3, the
+positive control (7/8 vs 2/8), the wiring-break guarantee (8/8 vs 0/8), and
+executed red-proof with the failure landing on the side-effect assertion
+(8/8 vs 0/8 twice); on F1, the allow-side test (8/8 vs 0/8) and executed
+red-proof (8/8 vs 1/8) — while the floor items R44's own routing already
+covers (fail-loud via R50) sit saturated in both arms. The mechanism subsets
+move a fraction of a point. **The floor transmits its own clauses, nothing
+else, and only when routed to.**
+
+Replicated on both fixtures in different domains before being written down.
+Action taken: the digest generator now emits the wiring line round 7 tested,
+and phase-3's expert requirements cite the floor. What this round does NOT
+show: any detection change (saturated by design), and any effect of the floor
+*without* the wiring — that condition measured zero reads.
+
 ## What follows
 
-1. **Ablate the Remedy Floor.** It is the largest single change this eval has
-   produced and it currently rests on panel agreement, not on a measured
-   difference in output.
-2. **Run the blinded re-score.** The rubric is checked in; the 32 round-4 fixes
-   need arm identity stripped and scoring by agents blind to which arm wrote what.
-3. **Ablate the R54 extension**, on the same standard.
-4. **Do not shrink rows to digest names.** Arm B measured exactly that and scored
+1. **Ablate the R54 extension** (#125's six properties), on the same standard.
+   P8/P9 sitting at ~0 in the blinded re-score says the extension is where the
+   remaining value would be — if carrying it moves those properties.
+2. **Do not shrink rows to digest names.** Arm B measured exactly that and scored
    identically to carrying nothing.
-5. **Report n, and replicate before writing.** Three claims from this eval have
-   been corrected by the round that followed them.
+3. **Report n, and replicate before writing.** Four claims from this eval have
+   now been corrected by the round that followed them — round 4's F9 error-path
+   count joined the list under the blinded re-score.

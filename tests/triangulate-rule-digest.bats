@@ -156,6 +156,45 @@ SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/generate-triang
   if grep -q 'Check Critical paths' "$digest"; then false; fi
 }
 
+@test "the digest wires the Remedy Floor, and its extraction command extracts it" {
+  # The Remedy Floor is a section, not a row, so anchored row extraction never
+  # surfaces it — without this pointer the section is unreachable in deployment
+  # (round-7 probe: zero of four reviewers read it; ablation: reviewers carrying
+  # the pointer produce the floor's clauses, reviewers without it do not).
+  root="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  digest="$root/skills/triangulate/common-rules.digest.md"
+  rules="$root/skills/triangulate/common-rules.md"
+
+  grep -q 'Every `Fix:` you write must also satisfy the \*\*Remedy Floor\*\*' "$digest"
+  grep -qF "awk '/^### Remedy Floor/,/^### Anti-Deferral/'" "$digest"
+
+  # The extraction contract: the command the digest tells reviewers to run must
+  # yield the section — non-empty, starting at its heading, containing all five
+  # clauses, and bounded (not the rest of the file).
+  section="$(awk '/^### Remedy Floor/,/^### Anti-Deferral/' "$rules")"
+  [ -n "$section" ]
+  [ "$(printf '%s\n' "$section" | head -1)" = '### Remedy Floor' ]
+  printf '%s\n' "$section" | grep -q 'Pair the deny side with the allow side'
+  printf '%s\n' "$section" | grep -q 'Red-prove each clause of the remedy separately'
+  printf '%s\n' "$section" | grep -q 'Fail loudly when the check cannot run'
+  printf '%s\n' "$section" | grep -q 'deleting what made the defect visible'
+  printf '%s\n' "$section" | grep -q 'Name the boundary and the tie'
+  [ "$(printf '%s\n' "$section" | tail -1)" = '### Anti-Deferral Rules' ]
+}
+
+@test "the generator emits the Remedy Floor pointer for any source" {
+  # The pointer is generator header text, not derived from the source rows — a
+  # regeneration from any rules file must carry it, or a future header edit can
+  # silently drop the only route to the section.
+  work="$BATS_TEST_TMPDIR/floorptr"
+  mkdir -p "$work"
+  printf '%s\n' '| R1 | Rule | Check | Major |' > "$work/common.md"
+  run bash "$SCRIPT" "$work/common.md" "$work/digest.md"
+  [ "$status" -eq 0 ]
+  grep -q 'Remedy Floor' "$work/digest.md"
+  grep -qF "awk '/^### Remedy Floor/,/^### Anti-Deferral/'" "$work/digest.md"
+}
+
 @test "the generator refuses to run without its shared row-parsing library" {
   # The library is what makes the generator and the linter agree. If it can go
   # missing and the generator still emits something, the digest becomes a

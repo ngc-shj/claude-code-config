@@ -29,6 +29,17 @@ trap 'rm -f "$TMP"' EXIT
   echo '```'
   echo "If \`rg\` is unavailable, use the environment's Grep/search tool with the same anchored pattern."
   echo
+  # The Remedy Floor is a section, not a row, so anchored row extraction never
+  # surfaces it. Without this pointer the section is unreachable in deployment:
+  # a 4-run probe of the deployed protocol showed zero reads of it, and the
+  # round-7 ablation showed reviewers carrying this pointer produce the floor's
+  # remedy properties while reviewers without it do not (evals/rule-ablation).
+  echo 'Every `Fix:` you write must also satisfy the **Remedy Floor** — five clauses every rule'"'"'s remedy inherits. Extract that section once per review:'
+  echo
+  echo '```bash'
+  echo "awk '/^### Remedy Floor/,/^### Anti-Deferral/' skills/triangulate/common-rules.md"
+  echo '```'
+  echo
   echo "Also extract a rule's Extended obligations section when the selected row points to it. Do not read the full rules file unless targeted extraction is inconclusive."
   echo
   echo '| ID | Pattern | Severity if missed |'
