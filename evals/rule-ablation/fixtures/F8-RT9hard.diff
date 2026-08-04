@@ -1,0 +1,375 @@
+Subject: [PATCH] feat(auth): validate issuer and not-before on API tokens
+
+ deploy.json                  |  14 ++++-
+ edge/handler.js              |  46 ++++++++++----
+ src/auth/verify.ts           |  64 ++++++++++++++++----
+ src/routes/projects.ts       |  38 ++++++++++++
+ test/auth/verify.test.ts     |  78 +++++++++++++++++++++++++
+ migrations/0031_token_iss.sql|  22 +++++++
+ docs/auth.md                 |  19 ++++++
+ package.json                 |   4 +-
+ 8 files changed, 262 insertions(+), 23 deletions(-)
+
+diff --git a/deploy.json b/deploy.json
+index 1a2b3c4..5d6e7f8 100644
+--- a/deploy.json
++++ b/deploy.json
+@@ -1,12 +1,22 @@
+ {
+   "regions": ["iad1", "fra1"],
+   "functions": {
+     "api/**": { "memory": 1024, "maxDuration": 30 }
+   },
++  "edge": {
++    "entry": "edge/handler.js",
++    "runtime": "edge-runtime@3",
++    "routes": ["/api/(.*)"]
++  },
+   "env": {
+     "TOKEN_AUDIENCE": "@token-audience",
+-    "TOKEN_SECRET": "@token-secret"
++    "TOKEN_SECRET": "@token-secret",
++    "TOKEN_ISSUER": "@token-issuer"
+   },
+   "build": {
+     "command": "npm run build"
+   }
+ }
+
+diff --git a/edge/handler.js b/edge/handler.js
+index 2b3c4d5..6e7f8a9 100644
+--- a/edge/handler.js
++++ b/edge/handler.js
+@@ -1,12 +1,15 @@
+-// Edge entry point. Runs before the function routes; no bundler, no imports
+-// from src/ (the edge runtime loads this file as-is).
++// Edge entry point. Runs before the function routes; no bundler, no imports
++// from src/ (the edge runtime loads this file as-is).
+
+ const encoder = new TextEncoder();
+
+ const AUDIENCE = globalThis.TOKEN_AUDIENCE;
+ const SECRET = globalThis.TOKEN_SECRET;
++const MAX_BODY = 1024 * 256;
+
+ function b64urlToBytes(s) {
+   const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+   const b = atob(s.replace(/-/g, "+").replace(/_/g, "/") + pad);
+   const out = new Uint8Array(b.length);
+   for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
+   return out;
+ }
+@@ -18,25 +21,42 @@ async function hmac(data) {
+     "raw",
+     encoder.encode(SECRET),
+     { name: "HMAC", hash: "SHA-256" },
+     false,
+     ["sign"],
+   );
+   return new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(data)));
+ }
+
+ async function verifyToken(token) {
+   const parts = token.split(".");
+   if (parts.length !== 3) return null;
+   const [h, p, s] = parts;
+
+   const expected = await hmac(h + "." + p);
+   const got = b64urlToBytes(s);
+   if (expected.length !== got.length) return null;
+   let diff = 0;
+   for (let i = 0; i < expected.length; i++) diff |= expected[i] ^ got[i];
+   if (diff !== 0) return null;
+
+   const claims = JSON.parse(new TextDecoder().decode(b64urlToBytes(p)));
+   if (claims.aud !== AUDIENCE) return null;
+   if (typeof claims.exp !== "number" || claims.exp * 1000 < Date.now()) return null;
+   return claims;
+ }
+
++function requestId(req) {
++  return (
++    req.headers.get("x-request-id") ||
++    crypto.randomUUID()
++  );
++}
++
+ export default async function handler(req) {
++  const rid = requestId(req);
++
++  const len = Number(req.headers.get("content-length") || "0");
++  if (len > MAX_BODY) {
++    return new Response("payload too large", {
++      status: 413,
++      headers: { "x-request-id": rid },
++    });
++  }
++
+   const auth = req.headers.get("authorization") || "";
+   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+   const claims = token ? await verifyToken(token) : null;
+   if (!claims) {
+-    return new Response("unauthorized", { status: 401 });
++    return new Response("unauthorized", {
++      status: 401,
++      headers: { "x-request-id": rid },
++    });
+   }
+-  return fetch(req);
++
++  const forwarded = new Request(req);
++  forwarded.headers.set("x-subject", claims.sub);
++  forwarded.headers.set("x-scope", (claims.scope || []).join(" "));
++  forwarded.headers.set("x-request-id", rid);
++  return fetch(forwarded);
+ }
+
+diff --git a/src/auth/verify.ts b/src/auth/verify.ts
+index 3c4d5e6..7f8a9b0 100644
+--- a/src/auth/verify.ts
++++ b/src/auth/verify.ts
+@@ -1,16 +1,24 @@
+ import { createHmac, timingSafeEqual } from "node:crypto";
+
+ const AUDIENCE = process.env.TOKEN_AUDIENCE!;
+ const SECRET = process.env.TOKEN_SECRET!;
++const ISSUER = process.env.TOKEN_ISSUER!;
++
++/** Tokens minted more than this far in the future are refused outright. */
++const MAX_NBF_SKEW_MS = 60_000;
+
+ export interface Claims {
+   sub: string;
+   aud: string;
++  iss?: string;
+   exp: number;
++  nbf?: number;
+   scope?: string[];
+ }
+
+ function b64url(input: Buffer): string {
+   return input.toString("base64url");
+ }
+
+@@ -25,20 +33,54 @@ export function sign(claims: Claims): string {
+   const p = b64url(Buffer.from(JSON.stringify(claims)));
+   const mac = createHmac("sha256", SECRET).update(`${h}.${p}`).digest();
+   return `${h}.${p}.${b64url(mac)}`;
+ }
+
+ export function verify(token: string): Claims | null {
+   const parts = token.split(".");
+   if (parts.length !== 3) return null;
+   const [h, p, s] = parts;
+
+   const expected = createHmac("sha256", SECRET).update(`${h}.${p}`).digest();
+   const got = Buffer.from(s, "base64url");
+   if (expected.length !== got.length) return null;
+   if (!timingSafeEqual(expected, got)) return null;
+
+   let claims: Claims;
+   try {
+     claims = JSON.parse(Buffer.from(p, "base64url").toString("utf8"));
+   } catch {
+     return null;
+   }
+
+   if (claims.aud !== AUDIENCE) return null;
++
++  // An unsigned-issuer token minted by a sibling tenant of the same IdP is
++  // otherwise indistinguishable from ours: same audience, same secret family.
++  if (claims.iss !== ISSUER) return null;
++
++  // Refuse a token that is not yet valid. A missing `nbf` is treated as
++  // "valid now"; a present one must be in the past, modulo a small skew.
++  if (typeof claims.nbf === "number") {
++    if (claims.nbf * 1000 > Date.now() + MAX_NBF_SKEW_MS) return null;
++  }
++
+   if (typeof claims.exp !== "number" || claims.exp * 1000 < Date.now()) return null;
++
+   return claims;
+ }
++
++export function hasScope(claims: Claims, want: string): boolean {
++  return Array.isArray(claims.scope) && claims.scope.includes(want);
++}
+
+diff --git a/src/routes/projects.ts b/src/routes/projects.ts
+index 4d5e6f7..8a9b0c1 100644
+--- a/src/routes/projects.ts
++++ b/src/routes/projects.ts
+@@ -1,10 +1,48 @@
+ import { prisma } from "../db";
+ import { json } from "../http";
+
++/** Set by the edge entry point once it has checked the bearer token. */
++function subjectOf(req: Request): string | null {
++  return req.headers.get("x-subject");
++}
++
++function scopesOf(req: Request): string[] {
++  return (req.headers.get("x-scope") || "").split(" ").filter(Boolean);
++}
++
+ export async function GET(req: Request) {
+-  const subject = req.headers.get("x-subject");
++  const subject = subjectOf(req);
+   if (!subject) return json({ error: "unauthenticated" }, { status: 401 });
+
+   const projects = await prisma.project.findMany({
+     where: { ownerId: subject },
+     orderBy: { createdAt: "desc" },
+   });
+   return json({ projects });
+ }
++
++export async function DELETE(req: Request) {
++  const subject = subjectOf(req);
++  if (!subject) return json({ error: "unauthenticated" }, { status: 401 });
++  if (!scopesOf(req).includes("projects:write")) {
++    return json({ error: "forbidden" }, { status: 403 });
++  }
++
++  const id = new URL(req.url).searchParams.get("id");
++  if (!id) return json({ error: "id required" }, { status: 400 });
++
++  await prisma.project.deleteMany({ where: { id, ownerId: subject } });
++  return json({ ok: true });
++}
+
+diff --git a/test/auth/verify.test.ts b/test/auth/verify.test.ts
+index 5e6f7a8..9b0c1d2 100644
+--- a/test/auth/verify.test.ts
++++ b/test/auth/verify.test.ts
+@@ -1,14 +1,92 @@
+ import { describe, it, expect, beforeAll } from "vitest";
+
+ process.env.TOKEN_AUDIENCE = "api.example.com";
+ process.env.TOKEN_SECRET = "test-secret";
++process.env.TOKEN_ISSUER = "https://id.example.com";
+
+ const { sign, verify, hasScope } = await import("../../src/auth/verify");
+
+ const now = () => Math.floor(Date.now() / 1000);
+
++function base(overrides = {}) {
++  return {
++    sub: "user-1",
++    aud: "api.example.com",
++    iss: "https://id.example.com",
++    exp: now() + 600,
++    ...overrides,
++  };
++}
++
+ describe("verify", () => {
+   it("accepts a well-formed token", () => {
+-    expect(verify(sign({ sub: "u", aud: "api.example.com", exp: now() + 60 }))).not.toBeNull();
++    expect(verify(sign(base() as never))).not.toBeNull();
+   });
+
+   it("rejects a tampered signature", () => {
+-    const t = sign({ sub: "u", aud: "api.example.com", exp: now() + 60 });
++    const t = sign(base() as never);
+     expect(verify(t.slice(0, -2) + "aa")).toBeNull();
+   });
++
++  it("rejects an expired token", () => {
++    expect(verify(sign(base({ exp: now() - 1 }) as never))).toBeNull();
++  });
++
++  it("rejects a foreign issuer", () => {
++    expect(verify(sign(base({ iss: "https://evil.example.com" }) as never))).toBeNull();
++  });
++
++  it("rejects a token with no issuer at all", () => {
++    const { iss, ...noIss } = base();
++    expect(verify(sign(noIss as never))).toBeNull();
++  });
++
++  it("rejects a token whose nbf is in the future", () => {
++    expect(verify(sign(base({ nbf: now() + 3600 }) as never))).toBeNull();
++  });
++
++  it("accepts a token whose nbf is in the past", () => {
++    expect(verify(sign(base({ nbf: now() - 10 }) as never))).not.toBeNull();
++  });
++
++  it("accepts a token with nbf inside the skew window", () => {
++    expect(verify(sign(base({ nbf: now() + 30 }) as never))).not.toBeNull();
++  });
++});
++
++describe("hasScope", () => {
++  it("is true when the scope is present", () => {
++    expect(hasScope(base({ scope: ["projects:write"] }) as never, "projects:write")).toBe(true);
++  });
++  it("is false when scope is absent", () => {
++    expect(hasScope(base() as never, "projects:write")).toBe(false);
++  });
+ });
+
+diff --git a/migrations/0031_token_iss.sql b/migrations/0031_token_iss.sql
+new file mode 100644
+index 0000000..0c1d2e3
+--- /dev/null
++++ b/migrations/0031_token_iss.sql
+@@ -0,0 +1,22 @@
++-- Record which issuer minted each API token so revocation can be scoped to a
++-- single IdP tenant.
++
++ALTER TABLE api_tokens ADD COLUMN issuer text;
++
++UPDATE api_tokens SET issuer = 'https://id.example.com' WHERE issuer IS NULL;
++
++ALTER TABLE api_tokens ALTER COLUMN issuer SET NOT NULL;
++
++CREATE INDEX api_tokens_issuer_idx ON api_tokens (issuer);
++
++-- Revoked tokens are kept for audit; the partial index keeps lookups on the
++-- live set cheap.
++CREATE INDEX api_tokens_live_idx
++  ON api_tokens (subject)
++  WHERE revoked_at IS NULL;
+
+diff --git a/docs/auth.md b/docs/auth.md
+index 6f7a8b9..0d1e2f3 100644
+--- a/docs/auth.md
++++ b/docs/auth.md
+@@ -14,6 +14,25 @@ Tokens are HMAC-SHA256 over `header.payload` with `TOKEN_SECRET`.
+
+ ## Claims
+
+ | Claim | Required | Meaning |
+ | --- | --- | --- |
+ | `sub` | yes | subject (user id) |
+ | `aud` | yes | must equal `TOKEN_AUDIENCE` |
+ | `exp` | yes | expiry, seconds since epoch |
++| `iss` | yes | must equal `TOKEN_ISSUER` |
++| `nbf` | no | not-before; refused if more than 60s in the future |
+ | `scope` | no | array of granted scopes |
++
++## Validation
++
++Every request carrying a bearer token has its signature, audience, issuer,
++not-before and expiry checked before any handler runs. A token minted by a
++different tenant of the same identity provider is rejected on the issuer check
++even though its signature verifies.
+
+diff --git a/package.json b/package.json
+index 7a8b9c0..1e2f3a4 100644
+--- a/package.json
++++ b/package.json
+@@ -8,8 +8,8 @@
+   "scripts": {
+     "build": "tsc -p tsconfig.json",
+     "test": "vitest run",
+-    "lint": "eslint src test"
++    "lint": "eslint src test edge"
+   },
+   "dependencies": {
+-    "@prisma/client": "5.18.0"
++    "@prisma/client": "5.19.1"
+   }
+ }

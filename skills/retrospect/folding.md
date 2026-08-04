@@ -177,6 +177,37 @@ The exit is per fold, not per rule: a class recorded undecidable once does not h
 re-argued, but a fold that adds prose to it anyway must say what the new paragraph does
 that the previous ones did not.
 
+**Ablate before folding, and score the REMEDY.** A gate here is red-proved — delete what
+it checks and it must fail. A rule had no equivalent until `evals/rule-ablation/` (110
+runs, eight fixtures, `docs/archive/audit/2026-08-04-rule-ablation.md`). What it found,
+in the order it found it:
+
+- **Detection is not where the rules pay.** Across six fixtures and three rounds, no
+  detection difference survived replication. Two headline claims were written up with
+  their n stated and both dissolved on retest.
+- **The remedy is.** Scoring what each arm proposes to DO — under the deployed
+  configuration, all 74 rules loaded through SKILL.md's routing protocol — every run
+  carrying the rules produced the complete prescribed fix (16/16); no run without them
+  did (0/16), on two fixtures in different domains. The unaided reviewer reaches two of
+  the three prescribed clauses and which two it drops varies by fixture.
+
+So a fold may not rest on "the round would have missed this". It should rest on "the round
+would have fixed it wrong", and it carries the burden either way: a fixture holding the
+defect, the correct remedy written down FIRST, runs with and without the rule, and **n
+beside every number**. A single round is a look, not a result — write the claim only after
+it replicates.
+
+Three standing cautions:
+
+- **Do not shrink a row to its digest name to save bytes.** The name-only arm measured
+  exactly that move and scored identically to carrying nothing. Whatever the rules buy,
+  the procedure buys it.
+- **Write the remedy rubric independently of the rule**, or the comparison scores the
+  rule against its own text. Round 4 did not manage this and says so.
+- **A null is the WEAKER reading.** The fixtures are written by someone who knows the
+  target rule, so the bias runs toward legibility: "no difference on a diff I constructed"
+  is a much softer statement than "no difference".
+
 1. Author `hooks/check-<slug>.sh` modeled on the existing `check-*.sh` hooks: header
    comment stating the rule ID, detection logic, severity, and usage
    (`bash check-<slug>.sh [base-ref]`); `set -u`; operate on `git diff <base>...HEAD`;

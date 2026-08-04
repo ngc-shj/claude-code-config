@@ -1,0 +1,89 @@
+diff --git a/src/routes/documents.ts b/src/routes/documents.ts
+index 2a1b3c4..7d8e9f0 100644
+--- a/src/routes/documents.ts
++++ b/src/routes/documents.ts
+@@ -30,10 +30,21 @@ export async function DELETE(req: Request, { params }: Ctx) {
+   const session = await getSession(req);
+   if (!session) {
+     return json({ error: "unauthenticated" }, { status: 401 });
+   }
+
++  const doc = await documentRepo.findById(params.id);
++  if (!doc) {
++    return json({ error: "not_found" }, { status: 404 });
++  }
++
++  if (doc.ownerId !== session.userId && !session.roles.includes("admin")) {
++    return json({ error: "forbidden" }, { status: 403 });
++  }
++
+   await documentRepo.delete(params.id);
+   await auditLog.record("document.deleted", { id: params.id, by: session.userId });
+   return json({ ok: true });
+ }
+diff --git a/test/routes/documents.delete.test.ts b/test/routes/documents.delete.test.ts
+new file mode 100644
+index 0000000..5c6d7e8
+--- /dev/null
++++ b/test/routes/documents.delete.test.ts
+@@ -0,0 +1,66 @@
++import { describe, it, expect, vi, beforeEach } from "vitest";
++import { DELETE } from "../../src/routes/documents";
++
++const deleteDoc = vi.fn();
++const findById = vi.fn();
++const recordAudit = vi.fn();
++
++vi.mock("../../src/repo/documentRepo", () => ({
++  documentRepo: { delete: deleteDoc, findById },
++}));
++vi.mock("../../src/audit", () => ({
++  auditLog: { record: recordAudit },
++}));
++
++function reqFor(userId: string | null, roles: string[] = []) {
++  return new Request("http://localhost/api/documents/doc-1", {
++    method: "DELETE",
++    headers: userId ? { "x-test-session": JSON.stringify({ userId, roles }) } : {},
++  });
++}
++
++describe("DELETE /api/documents/:id", () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++    findById.mockResolvedValue({ id: "doc-1", ownerId: "owner-1" });
++  });
++
++  it("returns 401 when there is no session", async () => {
++    const res = await DELETE(reqFor(null), { params: { id: "doc-1" } });
++    expect(res.status).toBe(401);
++  });
++
++  it("returns 404 when the document does not exist", async () => {
++    findById.mockResolvedValue(null);
++    const res = await DELETE(reqFor("owner-1"), { params: { id: "doc-1" } });
++    expect(res.status).toBe(404);
++  });
++
++  it("returns 403 when the caller is not the owner", async () => {
++    const res = await DELETE(reqFor("someone-else"), { params: { id: "doc-1" } });
++    expect(res.status).toBe(403);
++  });
++
++  it("returns 403 for a non-admin on someone else's document", async () => {
++    const res = await DELETE(reqFor("intruder", ["editor"]), { params: { id: "doc-1" } });
++    expect(res.status).toBe(403);
++  });
++
++  it("deletes the document for its owner", async () => {
++    const res = await DELETE(reqFor("owner-1"), { params: { id: "doc-1" } });
++    expect(res.status).toBe(200);
++    expect(deleteDoc).toHaveBeenCalledWith("doc-1");
++  });
++
++  it("deletes the document for an admin", async () => {
++    const res = await DELETE(reqFor("root", ["admin"]), { params: { id: "doc-1" } });
++    expect(res.status).toBe(200);
++    expect(deleteDoc).toHaveBeenCalledWith("doc-1");
++  });
++});

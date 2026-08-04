@@ -1,0 +1,73 @@
+diff --git a/src/sync/watermark.ts b/src/sync/watermark.ts
+index 3f1a2b1..9c4d5e6 100644
+--- a/src/sync/watermark.ts
++++ b/src/sync/watermark.ts
+@@ -12,6 +12,8 @@ import { db } from "../db";
+ import { logger } from "../logger";
+
+ const FLOOR = new Date("2024-01-01T00:00:00Z");
++/** Clock skew we tolerate on a stored watermark before treating it as corrupt. */
++const SKEW_TOLERANCE_MS = 5 * 60 * 1000;
+
+ export interface SyncCursor {
+   sourceId: string;
+@@ -24,18 +26,53 @@ export async function loadCursor(sourceId: string): Promise<SyncCursor> {
+   const row = await db.syncCursor.findUnique({ where: { sourceId } });
+   if (!row) {
+     return { sourceId, lastSeenAt: FLOOR };
+   }
+   return { sourceId, lastSeenAt: row.lastSeenAt };
+ }
+
++/**
++ * A watermark in the future means the stored value is not trustworthy — a bad
++ * clock on the writer, a restored snapshot, or a manual edit. Bring it back
++ * into a sane range so the next poll can make progress instead of selecting
++ * nothing forever.
++ */
++export function repairCursor(cursor: SyncCursor, now: Date): SyncCursor {
++  const ahead = cursor.lastSeenAt.getTime() - now.getTime();
++
++  if (ahead > SKEW_TOLERANCE_MS) {
++    logger.warn(
++      { sourceId: cursor.sourceId, lastSeenAt: cursor.lastSeenAt },
++      "watermark ahead of now, clamping",
++    );
++    return { ...cursor, lastSeenAt: now };
++  }
++
++  if (cursor.lastSeenAt.getTime() < FLOOR.getTime()) {
++    return { ...cursor, lastSeenAt: FLOOR };
++  }
++
++  return cursor;
++}
++
+ export async function pollSource(sourceId: string): Promise<number> {
+-  const cursor = await loadCursor(sourceId);
++  const cursor = repairCursor(await loadCursor(sourceId), new Date());
++
+   const events = await db.event.findMany({
+     where: { sourceId, occurredAt: { gt: cursor.lastSeenAt } },
+     orderBy: { occurredAt: "asc" },
+     take: 500,
+   });
+
+   if (events.length === 0) {
++    logger.info({ sourceId }, "source drained");
+     return 0;
+   }
+
+   for (const event of events) {
+     await handleEvent(event);
+   }
+
+   const newest = events[events.length - 1].occurredAt;
+   await db.syncCursor.upsert({
+     where: { sourceId },
+     create: { sourceId, lastSeenAt: newest },
+     update: { lastSeenAt: newest },
+   });
+
+   return events.length;
+ }

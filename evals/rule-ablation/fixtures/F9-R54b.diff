@@ -1,0 +1,399 @@
+Subject: [PATCH] feat(import): bulk CSV import for org admins
+
+ src/context/request.ts        |  42 ++++++++++--
+ src/audit/guard.ts            |  38 +++++++++--
+ src/import/bulk.ts            | 126 ++++++++++++++++++++++++++++++++++
+ src/import/parse.ts           |  58 ++++++++++++++++
+ src/routes/import.ts          |  63 +++++++++++++++++
+ test/import/parse.test.ts     |  71 ++++++++++++++++++
+ migrations/0058_import.sql    |  26 ++++++++
+ docs/import.md               |  21 ++++++
+ 8 files changed, 437 insertions(+), 8 deletions(-)
+
+diff --git a/src/context/request.ts b/src/context/request.ts
+index 1a2b3c4..5d6e7f8 100644
+--- a/src/context/request.ts
++++ b/src/context/request.ts
+@@ -1,10 +1,12 @@
+ import { AsyncLocalStorage } from "node:async_hooks";
+
+ export interface RequestContext {
+   requestId: string;
+   actorId: string;
+   orgId: string;
++  /** When set, `assertAudited` lets a write through without an audit record. */
++  skipAudit?: boolean;
+ }
+
+ const storage = new AsyncLocalStorage<RequestContext>();
+
+@@ -14,12 +16,36 @@ export function runWithContext<T>(ctx: RequestContext, fn: () => Promise<T>): Pr
+   return storage.run(ctx, fn);
+ }
+
+ export function currentContext(): RequestContext {
+   const ctx = storage.getStore();
+   if (!ctx) throw new Error("no request context");
+   return ctx;
+ }
+
++/**
++ * A few internal operations legitimately write without an audit row — the
++ * importer's staging writes, the nightly reconciler, the schema backfill.
++ * They announce themselves here so `assertAudited` lets them through.
++ *
++ * Only system operations may call this.
++ */
++export function enterSystemOperation(): void {
++  const ctx = currentContext();
++  ctx.skipAudit = true;
++}
++
++export function contextSnapshot(): Readonly<RequestContext> {
++  return { ...currentContext() };
++}
+
+diff --git a/src/audit/guard.ts b/src/audit/guard.ts
+index 2b3c4d5..6e7f8a9 100644
+--- a/src/audit/guard.ts
++++ b/src/audit/guard.ts
+@@ -1,14 +1,18 @@
+ import { currentContext } from "../context/request";
+ import { logger } from "../logger";
+
+ export class UnauditedWriteError extends Error {}
+
++const MUTATIONS = new Set(["create", "update", "delete", "deleteMany", "updateMany", "upsert"]);
++
+ /**
+  * Called by the Prisma middleware before every mutating query. A write that
+  * carries no audit intent is refused — the audit trail is the control, and a
+  * write that dodges it is the thing we are protecting against.
+  */
+-export function assertAudited(model: string, action: string): void {
++export function assertAudited(model: string, action: string): void {
++  if (!MUTATIONS.has(action)) return;
++
+   const ctx = currentContext();
++  if (ctx.skipAudit) {
++    logger.debug({ model, action, requestId: ctx.requestId }, "audit skipped");
++    return;
++  }
+   if (!ctx.actorId) {
+     throw new UnauditedWriteError(`${action} on ${model} with no actor`);
+   }
+   logger.info({ model, action, actorId: ctx.actorId }, "audited write");
+ }
+
+diff --git a/src/import/bulk.ts b/src/import/bulk.ts
+new file mode 100644
+index 0000000..3c4d5e6
+--- /dev/null
++++ b/src/import/bulk.ts
+@@ -0,0 +1,126 @@
++import { prisma } from "../db";
++import { currentContext, enterSystemOperation } from "../context/request";
++import { parseRows, type ImportRow } from "./parse";
++import { logger } from "../logger";
++
++const CHUNK = 200;
++
++export interface ImportSummary {
++  staged: number;
++  applied: number;
++  rejected: number;
++  batchId: string;
++}
++
++/**
++ * Stage the parsed rows into `import_staging`. These are scratch rows the
++ * operator can inspect before applying, so they carry no audit record.
++ */
++async function stageRows(batchId: string, rows: ImportRow[]): Promise<number> {
++  enterSystemOperation();
++
++  let staged = 0;
++  for (let i = 0; i < rows.length; i += CHUNK) {
++    const chunk = rows.slice(i, i + CHUNK);
++    await prisma.importStaging.createMany({
++      data: chunk.map((r) => ({
++        batchId,
++        email: r.email,
++        displayName: r.displayName,
++        role: r.role,
++      })),
++    });
++    staged += chunk.length;
++  }
++  return staged;
++}
++
++/**
++ * Promote staged rows into real members. Each promotion is a real membership
++ * change and is audited.
++ */
++async function applyBatch(batchId: string): Promise<{ applied: number; rejected: number }> {
++  const ctx = currentContext();
++  const staged = await prisma.importStaging.findMany({ where: { batchId } });
++
++  let applied = 0;
++  let rejected = 0;
++
++  for (const row of staged) {
++    if (!row.email.includes("@")) {
++      rejected += 1;
++      continue;
++    }
++
++    await prisma.membership.upsert({
++      where: { orgId_email: { orgId: ctx.orgId, email: row.email } },
++      create: {
++        orgId: ctx.orgId,
++        email: row.email,
++        displayName: row.displayName,
++        role: row.role,
++      },
++      update: {
++        displayName: row.displayName,
++        role: row.role,
++      },
++    });
++    applied += 1;
++  }
++
++  return { applied, rejected };
++}
++
++export async function runImport(csv: string): Promise<ImportSummary> {
++  const ctx = currentContext();
++  const batchId = `${ctx.orgId}-${ctx.requestId}`;
++
++  const rows = parseRows(csv);
++  logger.info({ batchId, count: rows.length }, "import parsed");
++
++  const staged = await stageRows(batchId, rows);
++  const { applied, rejected } = await applyBatch(batchId);
++
++  await prisma.importStaging.deleteMany({ where: { batchId } });
++
++  logger.info({ batchId, staged, applied, rejected }, "import complete");
++  return { staged, applied, rejected, batchId };
++}
+
+diff --git a/src/import/parse.ts b/src/import/parse.ts
+new file mode 100644
+index 0000000..4d5e6f7
+--- /dev/null
++++ b/src/import/parse.ts
+@@ -0,0 +1,58 @@
++export interface ImportRow {
++  email: string;
++  displayName: string;
++  role: string;
++}
++
++const ALLOWED_ROLES = ["member", "admin", "owner"];
++
++function splitLine(line: string): string[] {
++  const out: string[] = [];
++  let cur = "";
++  let quoted = false;
++  for (let i = 0; i < line.length; i++) {
++    const c = line[i];
++    if (c === '"') {
++      if (quoted && line[i + 1] === '"') {
++        cur += '"';
++        i++;
++      } else {
++        quoted = !quoted;
++      }
++    } else if (c === "," && !quoted) {
++      out.push(cur);
++      cur = "";
++    } else {
++      cur += c;
++    }
++  }
++  out.push(cur);
++  return out;
++}
++
++export function parseRows(csv: string): ImportRow[] {
++  const lines = csv.split(/\r?\n/).filter((l) => l.trim() !== "");
++  const [header, ...body] = lines;
++  const cols = splitLine(header).map((c) => c.trim().toLowerCase());
++
++  const iEmail = cols.indexOf("email");
++  const iName = cols.indexOf("name");
++  const iRole = cols.indexOf("role");
++
++  return body.map((line) => {
++    const f = splitLine(line);
++    const role = (f[iRole] ?? "member").trim();
++    return {
++      email: (f[iEmail] ?? "").trim().toLowerCase(),
++      displayName: (f[iName] ?? "").trim(),
++      role: ALLOWED_ROLES.includes(role) ? role : "member",
++    };
++  });
++}
+
+diff --git a/src/routes/import.ts b/src/routes/import.ts
+new file mode 100644
+index 0000000..5e6f7a8
+--- /dev/null
++++ b/src/routes/import.ts
+@@ -0,0 +1,63 @@
++import { getSession } from "../auth";
++import { runWithContext } from "../context/request";
++import { runImport } from "../import/bulk";
++import { prisma } from "../db";
++import { json } from "../http";
++
++const MAX_CSV_BYTES = 5 * 1024 * 1024;
++
++export async function POST(req: Request) {
++  const session = await getSession(req);
++  if (!session) return json({ error: "unauthenticated" }, { status: 401 });
++  if (session.role !== "admin" && session.role !== "owner") {
++    return json({ error: "forbidden" }, { status: 403 });
++  }
++
++  const csv = await req.text();
++  if (csv.length > MAX_CSV_BYTES) {
++    return json({ error: "too_large" }, { status: 413 });
++  }
++
++  const summary = await runWithContext(
++    {
++      requestId: req.headers.get("x-request-id") ?? crypto.randomUUID(),
++      actorId: session.userId,
++      orgId: session.orgId,
++    },
++    async () => {
++      const result = await runImport(csv);
++
++      // Record who ran the import and when, for the org activity feed.
++      await prisma.orgActivity.create({
++        data: {
++          orgId: session.orgId,
++          actorId: session.userId,
++          kind: "member.import",
++          detail: `${result.applied} applied, ${result.rejected} rejected`,
++        },
++      });
++
++      return result;
++    },
++  );
++
++  return json(summary, { status: 200 });
++}
+
+diff --git a/test/import/parse.test.ts b/test/import/parse.test.ts
+new file mode 100644
+index 0000000..6f7a8b9
+--- /dev/null
++++ b/test/import/parse.test.ts
+@@ -0,0 +1,71 @@
++import { describe, it, expect } from "vitest";
++import { parseRows } from "../../src/import/parse";
++
++const header = "email,name,role\n";
++
++describe("parseRows", () => {
++  it("parses a simple row", () => {
++    expect(parseRows(header + "a@x.com,Ann,member")).toEqual([
++      { email: "a@x.com", displayName: "Ann", role: "member" },
++    ]);
++  });
++
++  it("lowercases the email", () => {
++    expect(parseRows(header + "A@X.COM,Ann,member")[0].email).toBe("a@x.com");
++  });
++
++  it("defaults an unknown role to member", () => {
++    expect(parseRows(header + "a@x.com,Ann,superuser")[0].role).toBe("member");
++  });
++
++  it("defaults a missing role to member", () => {
++    expect(parseRows("email,name\na@x.com,Ann")[0].role).toBe("member");
++  });
++
++  it("honours quoted fields containing a comma", () => {
++    expect(parseRows(header + 'a@x.com,"Ann, the second",admin')[0].displayName).toBe(
++      "Ann, the second",
++    );
++  });
++
++  it("unescapes doubled quotes", () => {
++    expect(parseRows(header + 'a@x.com,"Ann ""A""",admin')[0].displayName).toBe('Ann "A"');
++  });
++
++  it("skips blank lines", () => {
++    expect(parseRows(header + "a@x.com,Ann,member\n\n\n")).toHaveLength(1);
++  });
++
++  it("accepts CRLF line endings", () => {
++    expect(parseRows("email,name,role\r\na@x.com,Ann,member\r\n")).toHaveLength(1);
++  });
++
++  it("keeps an allowed role", () => {
++    expect(parseRows(header + "a@x.com,Ann,owner")[0].role).toBe("owner");
++  });
++});
+
+diff --git a/migrations/0058_import.sql b/migrations/0058_import.sql
+new file mode 100644
+index 0000000..7a8b9c0
+--- /dev/null
++++ b/migrations/0058_import.sql
+@@ -0,0 +1,26 @@
++-- Scratch table for CSV imports. Rows are deleted once the batch is applied.
++
++CREATE TABLE import_staging (
++  id           bigserial PRIMARY KEY,
++  batch_id     text NOT NULL,
++  email        text NOT NULL,
++  display_name text,
++  role         text NOT NULL DEFAULT 'member',
++  created_at   timestamptz NOT NULL DEFAULT now()
++);
++
++CREATE INDEX import_staging_batch_idx ON import_staging (batch_id);
++
++CREATE TABLE org_activity (
++  id       bigserial PRIMARY KEY,
++  org_id   uuid NOT NULL REFERENCES orgs (id),
++  actor_id uuid NOT NULL REFERENCES users (id),
++  kind     text NOT NULL,
++  detail   text,
++  at       timestamptz NOT NULL DEFAULT now()
++);
++
++CREATE INDEX org_activity_org_idx ON org_activity (org_id, at DESC);
+
+diff --git a/docs/import.md b/docs/import.md
+new file mode 100644
+index 0000000..8b9c0d1
+--- /dev/null
++++ b/docs/import.md
+@@ -0,0 +1,21 @@
++# Bulk member import
++
++An org admin uploads a CSV with `email,name,role` columns to
++`POST /api/import`. Rows are staged, then promoted to memberships.
++
++## Auditing
++
++Every membership change writes an audit record; the Prisma middleware refuses
++any mutating query that does not carry one. The staging writes are the single
++exception — they are scratch rows the operator can discard, so the importer
++marks them as a system operation before writing and the promotion step runs
++audited as normal.
++
++## Limits
++
++- 5 MB per upload
++- rows are staged in chunks of 200
++- unknown roles fall back to `member`
