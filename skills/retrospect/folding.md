@@ -185,11 +185,24 @@ in the order it found it:
 - **Detection is not where the rules pay.** Across six fixtures and three rounds, no
   detection difference survived replication. Two headline claims were written up with
   their n stated and both dissolved on retest.
-- **The remedy is.** Scoring what each arm proposes to DO — under the deployed
-  configuration, all 74 rules loaded through SKILL.md's routing protocol — every run
-  carrying the rules produced the complete prescribed fix (16/16); no run without them
-  did (0/16), on two fixtures in different domains. The unaided reviewer reaches two of
-  the three prescribed clauses and which two it drops varies by fixture.
+- **The remedy is — where the mechanism is unfamiliar.** Blind-rescored against the
+  independent nine-property rubric (round 6.5, scorer agreement ≥94.6%), the deployed
+  configuration beat no-catalogue clearly on the buried, unfamiliar-mechanism fixture
+  (6.25 vs 4.40 mean, plus 3/8 outright detection misses without the rules) and
+  marginally where the platform idiom already encodes the fix (7.25 vs 6.75). The
+  round-4 self-scored version of this claim (16/16 vs 0/16) overstated it — self-scoring
+  erred in both directions, which is why the re-score is part of the standard.
+- **What no rule teaches, no reviewer produces.** The panel's nine-property rubric has
+  properties every arm scored 0 on across 29 blind-scored runs (nesting/concurrency —
+  the one a naive fix uniquely fails). Carrying rules transmits the rules' own clauses,
+  nothing more.
+- **A section nothing routes to is dead wiring.** The Remedy Floor merged as prose no
+  routing path named; a probe of the deployed protocol showed zero of four reviewers
+  read it. Wired by one digest line, it moved exactly its own clauses (floor-mapped
+  subset 6.75 vs 5.12 and 3.88 vs 0.25 on two fixtures, n=8/cell, blind) while the
+  mechanism control stayed flat. A fold into `common-rules.md` is not folded until the
+  loading protocol names it — and its ablation must probe reachability FIRST, or W-vs-N
+  compares two arms that both lack the content.
 
 So a fold may not rest on "the round would have missed this". It should rest on "the round
 would have fixed it wrong", and it carries the burden either way: a fixture holding the

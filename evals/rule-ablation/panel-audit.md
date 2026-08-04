@@ -65,8 +65,14 @@ That is a fold made under this eval's own standard: direct evidence, on four
 rules and sixteen panels, that reviewers routed to a rule fix the defect
 incompletely in a way the rule does not warn about.
 
-## Owed
+## Owed — paid (round 7, 2026-08-05)
 
-The Remedy Floor has not been ablated. Under `folding.md`'s rule it does not get
-to claim it works until a run shows reviewers carrying it produce fixes that
-reviewers without it do not. That run is the next thing.
+The Remedy Floor's ablation ran under the standard this file set, with one
+finding this file did not anticipate: **as merged, the floor was unreachable** —
+a section no routing path names, and a probe showed zero of four deployed-arm
+reviewers read it. Wired (one digest line), reviewers carrying it produced the
+floor's clauses and reviewers without it did not, on both fixtures, with the
+mechanism control flat: floor-mapped subset 6.75 vs 5.12 on F1 (R44) and 3.88
+vs 0.25 on F3 (RT8), n=8 per cell, blind-scored against this file's merged
+panel rubrics. The wiring line now ships in the digest. Full protocol and
+tables: the audit doc, round 7.
