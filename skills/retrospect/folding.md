@@ -177,34 +177,36 @@ The exit is per fold, not per rule: a class recorded undecidable once does not h
 re-argued, but a fold that adds prose to it anyway must say what the new paragraph does
 that the previous ones did not.
 
-**Ablate before folding.** A gate in this repo is red-proved — delete what it checks and
-it must fail. A rule had no equivalent until `evals/rule-ablation/` (78 runs, eight
-fixtures, `docs/archive/audit/2026-08-04-rule-ablation.md`). The result there is blunt:
-**no arm-level difference has survived replication.** Two effects were found and written
-up with their n stated, and both dissolved when tested again — including one where the
-full procedure appeared to detect 8/8 against 6/8, on a fixture whose shape was then
-reproduced in a second domain and showed nothing.
+**Ablate before folding, and score the REMEDY.** A gate here is red-proved — delete what
+it checks and it must fail. A rule had no equivalent until `evals/rule-ablation/` (110
+runs, eight fixtures, `docs/archive/audit/2026-08-04-rule-ablation.md`). What it found,
+in the order it found it:
 
-So the premise a fold rests on — "the round missed this because it was not written down" —
-has no evidence behind it, and a fold asserting it carries the burden: a fixture holding
-the defect, an oracle written down FIRST, runs with and without the rule, and **n reported
-beside every number**. A single round is a look, not a result.
+- **Detection is not where the rules pay.** Across six fixtures and three rounds, no
+  detection difference survived replication. Two headline claims were written up with
+  their n stated and both dissolved on retest.
+- **The remedy is.** Scoring what each arm proposes to DO — under the deployed
+  configuration, all 74 rules loaded through SKILL.md's routing protocol — every run
+  carrying the rules produced the complete prescribed fix (16/16); no run without them
+  did (0/16), on two fixtures in different domains. The unaided reviewer reaches two of
+  the three prescribed clauses and which two it drops varies by fixture.
 
-Three things that eval settled, and one it did not:
+So a fold may not rest on "the round would have missed this". It should rest on "the round
+would have fixed it wrong", and it carries the burden either way: a fixture holding the
+defect, the correct remedy written down FIRST, runs with and without the rule, and **n
+beside every number**. A single round is a look, not a result — write the claim only after
+it replicates.
 
-- **Do not shrink a row to its digest name to save bytes.** The name-only arm scored
-  identically to carrying no catalogue at all — so the name is not where any value would
-  live, and cutting to it is not a cheap saving, it is a removal.
-- **Expect a null.** Arm-level differences at moderate n have been noise both times.
-  Budget for replication before writing a claim down.
-- **A null is the WEAKER reading here.** The fixtures were written by someone who knew the
-  target rule, and that bias runs toward legibility, so "no difference on a diff I
-  constructed" is a much softer statement than "no difference".
-- **What was never scored is the remedy.** Every oracle so far asks only whether the
-  review FOUND the defect. Much of what these rules contain is what to DO about it — the
-  call-scoped grant, the error path, the same-context test — and no run has looked at
-  that. A rule whose value is in the fix is invisible to everything measured so far, so do
-  not read these nulls as a verdict on the rule set.
+Three standing cautions:
+
+- **Do not shrink a row to its digest name to save bytes.** The name-only arm measured
+  exactly that move and scored identically to carrying nothing. Whatever the rules buy,
+  the procedure buys it.
+- **Write the remedy rubric independently of the rule**, or the comparison scores the
+  rule against its own text. Round 4 did not manage this and says so.
+- **A null is the WEAKER reading.** The fixtures are written by someone who knows the
+  target rule, so the bias runs toward legibility: "no difference on a diff I constructed"
+  is a much softer statement than "no difference".
 
 1. Author `hooks/check-<slug>.sh` modeled on the existing `check-*.sh` hooks: header
    comment stating the rule ID, detection logic, severity, and usage

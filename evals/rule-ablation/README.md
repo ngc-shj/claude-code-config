@@ -18,20 +18,31 @@ it and see whether the finding disappears.
 2. **Oracle, written before any run.** One sentence naming what the review must
    state. Fixing it afterwards is fitting the oracle to the data.
 3. **Arms.** Same reviewer prompt, differing only in the catalogue material:
-   - **A** — the pattern-name index plus the target rule's full procedure.
-   - **B** — the pattern-name index only (the rule's name is present, its
-     procedure is not). This is what shrinking a row to its digest line buys.
+   - **A** — the pattern-name index plus the target rule's full procedure. One
+     rule, spotlit, nothing competing — the condition most favourable to it.
+   - **B** — the pattern-name index only. This is what shrinking a row to its
+     digest line buys.
    - **C** — no catalogue.
-   Single-file fixtures were run with a two-arm form (A: the rule alone; C: no
-   catalogue), which is the condition *most* favourable to the rule.
+   - **F** — the **deployed configuration**: the digest as routing index, all 74
+     rows available for anchored extraction, `rule-details/` pages, and the
+     extract-what-matches protocol from SKILL.md. This is the arrangement the
+     skill actually ships, and the only one that measures retrieval under load
+     rather than recall of a rule someone already picked.
 4. **Trials.** Three per arm is a look, not a result. The one claim this eval has
    had to retract came from n=3 and vanished at n=8. Report n beside every
    number, and take any arm-to-arm difference at n=3 as a reason to run more
    trials rather than as an outcome.
-5. **Score.** Detection against the oracle, and the finding's severity and rank
-   in the emitted list. Rank matters: a Major at position 6 of 16 is a different
-   outcome from a Critical at position 1, because the fix loop treats them
-   differently.
+5. **Score.** Two things, and the second turned out to be the one that moves:
+   - **Detection** against the oracle, plus the finding's severity and rank.
+   - **Remedy.** Ask both arms for a `Fix:` on every Critical and Major, then
+     score it against the clauses the rule prescribes, one binary each. For R54
+     that is: call-scoped grant (not "reset afterwards"), restore on the error
+     path, and a test asserting the control still refuses in the SAME context
+     right after the sanctioned call.
+
+   Write the remedy rubric **before** the runs, and — the part round 4 failed to
+   do — derive it from something other than the rule's own text, or the arm
+   holding the rule is being scored against the document it was handed.
 
 Arm A is also the positive control. If it misses, the fixture does not contain a
 findable defect and the run says nothing about the rule.
@@ -108,6 +119,9 @@ in the fix is invisible to every run this harness has done. Scoring the fix is
 the obvious next design, and it needs a different oracle: the proposed change,
 compared against the procedure's prescription.
 
-**One arm has never been run.** Arm A always supplies a single rule with nothing
-competing for attention. The deployed configuration loads all 74 at once, which
-is the condition least favourable to them, and it remains unmeasured.
+**The remedy rubric came from the rule.** Round 4's three clauses were read off
+R54's own procedure, so the arm holding R54 is scored against the text it was
+given, and part of its measured advantage is definitional. Re-deriving the
+correct remedy independently — from someone or something that has not seen the
+rule — is the single change that would settle how much of that effect is real.
+It is the first item in the audit's "what follows".
