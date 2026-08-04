@@ -132,18 +132,51 @@ Oracles were fixed in writing before each run. Four detection trials named an
 adjacent R54 clause — the GUC is unregistered, so the authority is a convention —
 without naming the leak past the call, and are scored misses.
 
+## Round 6: the deficit is the catalogue's, not R54's
+
+The panel method applied to four more rules — R44, RT8, R56, RT9 — with four
+panellists each. Full result: `evals/rule-ablation/panel-audit.md`.
+
+| Rule | Properties the panel required | Present in the rule |
+|---|---|---|
+| R44 | ~13 | 2 |
+| RT8 | ~11 | 2 |
+| R56 | ~15 | 5 |
+| RT9 | ~14 | 5 |
+| R54 | 9 | 3 |
+
+Every rule carries a quarter to a third of what an unhurried panel requires for
+the defect it names.
+
+**And the missing content is mostly already here, in a rule the reviewer did not
+route to.** The same five classes were absent from all four: the allow-side case
+that must still succeed (RT10), red-proof executed per clause (RT7), failing
+loudly when the check cannot run (R50 ii), not fixing by deleting the useful
+behaviour (R36's shape), and naming the boundary and the tie (R57).
+
+The rules do not fail for lack of knowledge. Each is written as though its reader
+will also apply the other seventy-three, and the reviewer applies the one they
+routed to.
+
+Sharpest instance: **RT8 — whose whole subject is "your test is vacuous" —
+prescribes a vacuous remedy.** Its negative assertion passes unconditionally when
+the mock wiring breaks, and it never asks for the positive control. All four
+panellists did.
+
+**Action:** `common-rules.md` gains a **Remedy Floor** — the five clauses stated
+once and inherited by every `Fix:`. Five paragraphs instead of five times
+seventy-four: total prose down, per-rule transmission up. It is not yet ablated,
+and under `folding.md`'s own rule it does not get to claim it works until it is.
+
 ## What follows
 
-1. **Run the blinded re-score.** The rubric is checked in; the 32 round-4 fixes
-   need arm identity stripped and scoring by agents that do not know which arm
-   wrote what. That quantifies how far short of nine each arm actually falls.
-2. **Ablate the R54 extension.** It was added on this eval's own standard, which
-   makes it the first fold here with real evidence behind it — and the standard
-   applies to it too.
-3. **Run the independent-panel step for a second rule.** If R51 and R38 are also
-   missing half of what a panel demands, the finding is about the rule set rather
-   than about R54.
+1. **Ablate the Remedy Floor.** It is the largest single change this eval has
+   produced and it currently rests on panel agreement, not on a measured
+   difference in output.
+2. **Run the blinded re-score.** The rubric is checked in; the 32 round-4 fixes
+   need arm identity stripped and scoring by agents blind to which arm wrote what.
+3. **Ablate the R54 extension**, on the same standard.
 4. **Do not shrink rows to digest names.** Arm B measured exactly that and scored
    identically to carrying nothing.
 5. **Report n, and replicate before writing.** Three claims from this eval have
-   now been corrected by the round that followed them.
+   been corrected by the round that followed them.
