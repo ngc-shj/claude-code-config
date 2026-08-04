@@ -1141,7 +1141,7 @@ write_baseline() {
   write_baseline "R3	no-inspector"
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"row R2 is over the 1200-byte row ceiling"* ]]
+  [[ "$output" == *"row R2 is over the 1200-byte ceiling with its whole procedure inline"* ]]
   [[ "$output" == *"rule-details/R2.md"* ]]
 }
 
@@ -1205,10 +1205,10 @@ write_baseline() {
   set_row_len R2 1201
   run bash "$SCRIPT" "$FIX"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"row R2 is over the 1200-byte row ceiling"* ]]
+  [[ "$output" == *"row R2 is over the 1200-byte ceiling with its whole procedure inline"* ]]
 }
 
-@test "9k: the repo's own baseline is exactly the set of oversized rows" {
+@test "9k: the repo's own baseline is exactly its un-extracted oversized rows" {
   # The live-tree assertion. `pass: live repo files are drift-free` covers the
   # aggregate exit status; this one fails with a diff naming the rows, which is
   # what a fold that grew a row actually needs to see.
@@ -1218,13 +1218,22 @@ write_baseline() {
     /^\| (R|RS|RT)[0-9]+ \|/ {
       if (length($0) <= ceil) next
       id = $0; sub(/^\| /, "", id); sub(/ \|.*$/, "", id)
+      if (index($0, "rule-details/" id ".md") > 0) next
       print id
     }' "$REPO_SKILL_DIR/common-rules.md" | sort)"
   declared="$(grep -vE '^[[:space:]]*(#|$)' "$REPO_SKILL_DIR/rule-row-baseline.txt" | cut -f1 | sort)"
   [ "$actual" = "$declared" ]
-  # Not vacuous: the repo genuinely carries this debt today, so an empty
-  # comparison would mean the extraction broke rather than the debt cleared.
+  # Not vacuous in either direction: the repo still carries un-extracted debt,
+  # AND it carries extracted rows over the ceiling — so the exemption is being
+  # exercised rather than merely available, and an empty `actual` would mean the
+  # extraction test broke rather than the debt clearing.
   [ -n "$actual" ]
+  [ "$(LC_ALL=C awk -v ceil=1200 '
+    /^\| (R|RS|RT)[0-9]+ \|/ {
+      if (length($0) <= ceil) next
+      id = $0; sub(/^\| /, "", id); sub(/ \|.*$/, "", id)
+      if (index($0, "rule-details/" id ".md") > 0) n++
+    } END { print n+0 }' "$REPO_SKILL_DIR/common-rules.md")" -gt 0 ]
 }
 
 @test "9l: folding.md's inspector gate points at a file that exists and a real annotation" {
@@ -1241,4 +1250,99 @@ write_baseline() {
   grep -q 'no-inspector' "$f"
   grep -qE '^(R|RS|RT)[0-9]+'$'\t''no-inspector$' \
     "$repo_root/skills/triangulate/rule-row-baseline.txt"
+}
+
+@test "9m: a detector qualified inside the bold run still annotates as inspector" {
+  # Rows state their detector's limits INSIDE the marker — `**Mechanical
+  # detection (partial)**`, `**Mechanical detection (advisory)**`. An exact
+  # match on the closed marker read all three such rows as having no detector,
+  # which is the wrong direction to be wrong in: the annotation is what
+  # folding.md routes on, so a rule with an honest partial detector looked like
+  # one with none and the next fold would be sent to rewrite it. Found by
+  # running the check against the repo's own rules, not by reading the code.
+  set_row_len R2 1400
+  sed_i 's/check b/check b **Mechanical detection (partial)**: some-hook.sh/' "$FIX/common-rules.md"
+  regen_digest
+  write_baseline "R2	inspector"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
+@test "9n: the repo's own rows agree with the baseline's inspector column" {
+  # The live-tree counterpart to 9m. `pass: live repo files are drift-free`
+  # covers the exit status; this one fails naming the rule, which is what a fold
+  # that added or removed a detector needs to read.
+  local repo_root actual declared
+  repo_root="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  actual="$(LC_ALL=C awk -v ceil=1200 '
+    /^\| (R|RS|RT)[0-9]+ \|/ {
+      if (length($0) <= ceil) next
+      id = $0; sub(/^\| /, "", id); sub(/ \|.*$/, "", id)
+      if (index($0, "rule-details/" id ".md") > 0) next
+      print id "\t" ((index($0, "**Mechanical detection") > 0) ? "inspector" : "no-inspector")
+    }' "$repo_root/skills/triangulate/common-rules.md" | sort)"
+  declared="$(grep -vE '^[[:space:]]*(#|$)' "$repo_root/skills/triangulate/rule-row-baseline.txt" | sort)"
+  [ "$actual" = "$declared" ]
+  # At least one row must carry a QUALIFIED marker, or this test would still
+  # pass with the exact-match bug restored.
+  grep -q '\*\*Mechanical detection (' "$repo_root/skills/triangulate/common-rules.md"
+}
+
+# Build a rule-details page for $1 whose heading, pattern and severity ceiling
+# match the fixture row, so the extraction-exemption cases exercise check 9
+# rather than tripping the detail-identity checks beside it.
+write_detail() {
+  local id="$1" pattern="$2" severity="$3"
+  mkdir -p "$FIX/rule-details"
+  {
+    printf '# %s — %s\n\n' "$id" "$pattern"
+    printf 'Full normative procedure for `%s`.\n\n' "$id"
+    printf '## Full rule\n\n'
+    printf '| ID | Pattern | Procedure | Severity if missed |\n'
+    printf '|---|---|---|---|\n'
+    printf '| %s | %s | the full procedure | %s |\n' "$id" "$pattern" "$severity"
+  } > "$FIX/rule-details/$id.md"
+}
+
+@test "9o: an oversized row that extracted its procedure needs no declaration" {
+  # The exemption, and the reason the ceiling is not a flat byte ban: what the
+  # rule actually asks is whether the full procedure lives where a reader can
+  # fetch it separately. Measuring bytes alone made 25 extractions look like
+  # almost no progress, which is a metric reporting on the wrong property.
+  write_detail R2 Beta Major
+  set_row_len R2 1400
+  sed_i 's|check b|check b **Mandatory full procedure**: `rule-details/R2.md`.|' "$FIX/common-rules.md"
+  regen_digest
+  write_baseline
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
+@test "9p: citing ANOTHER rule's detail page does not count as extraction" {
+  # Otherwise a row crosses the ceiling by mentioning a procedure that belongs
+  # to some other rule, and the exemption becomes a phrase rather than a fact.
+  write_detail R3 Gamma Major
+  set_row_len R2 1400
+  sed_i 's|check b|check b see `rule-details/R3.md`.|' "$FIX/common-rules.md"
+  sed_i 's|check c (full set R1-R3)|check c (full set R1-R3) **Mandatory full procedure**: `rule-details/R3.md`.|' "$FIX/common-rules.md"
+  regen_digest
+  write_baseline
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row R2 is over the 1200-byte ceiling with its whole procedure inline"* ]]
+}
+
+@test "9q: a declaration for a row that has since been extracted is drift" {
+  # Direction 2 under the new semantics: extraction, not only shrinking, is a
+  # reason a line must leave the file. Without this the baseline would keep
+  # every ID it ever held and stop being a measure of anything.
+  write_detail R2 Beta Major
+  set_row_len R2 1400
+  sed_i 's|check b|check b **Mandatory full procedure**: `rule-details/R2.md`.|' "$FIX/common-rules.md"
+  regen_digest
+  write_baseline "R2	no-inspector"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"still declares R2"* ]]
+  [[ "$output" == *"has its procedure extracted"* ]]
 }
