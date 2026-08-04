@@ -202,8 +202,14 @@ Three standing cautions:
 - **Do not shrink a row to its digest name to save bytes.** The name-only arm measured
   exactly that move and scored identically to carrying nothing. Whatever the rules buy,
   the procedure buys it.
-- **Write the remedy rubric independently of the rule**, or the comparison scores the
-  rule against its own text. Round 4 did not manage this and says so.
+- **Write the remedy rubric independently of the rule.** Round 4 scored the rule against
+  its own text; round 5 rebuilt the rubric with a panel that had never seen it. That
+  panel confirmed all three of the rule's clauses AND demanded six more the rule never
+  taught — including the one that matters most, since a naive save/restore passes both
+  tests the rule asks for and fails only the concurrency case it does not. **A panel of
+  this kind is the cheapest audit of a rule this repo has**: it costs ten read-only
+  agents and it tells you what the rule is missing, which no amount of mining more
+  review artifacts will.
 - **A null is the WEAKER reading.** The fixtures are written by someone who knows the
   target rule, so the bias runs toward legibility: "no difference on a diff I constructed"
   is a much softer statement than "no difference".
