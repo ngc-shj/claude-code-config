@@ -288,13 +288,45 @@ fixtures, with the control unmoved.** Together they close the question rounds
 quality" — it is the specific, literal transmission of the clauses the routed
 rule states. A rule is worth exactly what it says.
 
+## Round 9 (2026-08-05): rewording obligation (c) — and what the same-batch control caught
+
+Round 8 left one clause under-transmitting: P5 (isolation) at 1/8 on the GUC
+fixture even when carried. The fix: (c) rewritten into two named variants —
+FRESH FRAME for the context-carried flag, ONE HANDLE for the connection-scoped
+setting, with the pooled-connection failure mode stated concretely and "name
+which variant applies" made explicit.
+
+**Arms.** Cnew: HEAD with the reworded (c). Cold: round-8 arm E materials
+re-run fresh, so the F6 comparison is same-batch. Cells: F6×Cnew, F6×Cold
+(n=8 each), F9×Cnew (n=8, regression check). Blind-scored as before; redaction
+additionally strips the rewording's CAPS anchors and obligation-letter
+references. Agreement 99.1–100%.
+
+| cell | P5 | everything else |
+|---|---|---|
+| F6 · Cnew | **8/8** | saturated (P4 7/8; P6 2/8) |
+| F6 · Cold | 5/8 | saturated (P6 1/8) |
+| F9 · Cnew | 8/8 | **all nine at 8/8** — no regression |
+
+The pre-registered bar is met: P5 rises on F6, nothing regresses, F9 stays at
+ceiling. The rewording ships.
+
+**What the same-batch control caught.** Cold's P5 came out 5/8 — against 1/8
+in round 8, on byte-identical materials. A blind-scored baseline moved four
+points between batches with nothing changed. Had round 9 compared Cnew only
+against round 8's stored number, it would have claimed a 1/8→8/8 effect;
+the defensible claim is "Cnew saturates P5 (8/8) against a same-batch 5/8,
+direction as predicted". Round 8's P5-specific point estimate carries this
+caveat now; its headline (extension properties E vs O, all cells within one
+batch) is unaffected. The lesson joins the standing set: **arm comparisons are
+valid within a batch; a stored cross-batch number is context, not a control.**
+
 ## What follows
 
-1. **Reword R54 obligation (c)** so the isolation clause transmits for the
-   connection-scoped variant as well as the context-frame variant (P5, F6·E
-   1/8) — then re-ablate that clause alone before claiming the fix.
-2. **Do not shrink rows to digest names.** Arm B measured exactly that and scored
+1. **Do not shrink rows to digest names.** Arm B measured exactly that and scored
    identically to carrying nothing.
-3. **Report n, and replicate before writing.** Four claims from this eval have
-   been corrected by the round that followed them — round 4's F9 error-path
-   count joined the list under the blinded re-score.
+2. **Report n, and replicate before writing.** Five claims from this eval have
+   been corrected by the round that followed them — round 8's P5 point estimate
+   joined the list when the same-batch control moved it from 1/8 to 5/8.
+3. **Compare within the batch.** Round 9's same-batch control is the difference
+   between an honest saturation claim and an inflated 1/8→8/8 one.

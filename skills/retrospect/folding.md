@@ -199,8 +199,12 @@ in the order it found it:
   and 0/16 without, on both fixtures, with the rule's original clauses saturated in
   both arms (round 8, n=8/cell, blind). A rule transmits exactly what it states —
   no more, and at full rate when it states it plainly. The residual: a clause whose
-  wording fits one platform idiom under-transmits on the other (P5, 1/8 carried), so
-  write cross-platform clauses in per-variant words.
+  wording fits one platform idiom under-transmits on the other, so write cross-platform
+  clauses in per-variant words — round 9 reworded the clause into named variants and it
+  saturated (8/8) with nothing regressing. Round 9 also added a standing caution:
+  **compare arms within one batch.** A blind-scored baseline moved 1/8→5/8 across
+  batches on byte-identical materials; a stored cross-batch number is context, never
+  the control arm.
 - **A section nothing routes to is dead wiring.** The Remedy Floor merged as prose no
   routing path named; a probe of the deployed protocol showed zero of four reviewers
   read it. Wired by one digest line, it moved exactly its own clauses (floor-mapped
