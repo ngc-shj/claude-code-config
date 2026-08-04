@@ -246,13 +246,55 @@ and phase-3's expert requirements cite the floor. What this round does NOT
 show: any detection change (saturated by design), and any effect of the floor
 *without* the wiring — that condition measured zero reads.
 
+## Round 8 (2026-08-05): the R54 extension — taught, they produce it
+
+The counterpart to round 6.5's conviction. The blinded re-score showed the
+concurrency test (P9) at 0/29 across every arm — nothing any reviewer carried
+taught it, and no reviewer produced it. #125 extended R54 with six obligations
+on exactly that evidence, and the extension was owed its own ablation.
+
+**Arms.** E: HEAD materials (wired floor, extended R54). O: identical, except
+`rule-details/R54.md` reverted to its pre-#125 content. One variable; the floor
+stays wired in both. Same prompts, eight paired preambles, F6 + F9, n=8/cell.
+Scored blind against the round-5 independent nine-property rubric (which
+pre-dates and is independent of the extension), 32 outputs redacted and
+shuffled into one set, three scorers, majority vote. Agreement 99.7–100%.
+
+Pre-registered split: extension properties P3/P4/P5/P8/P9; control P1/P2/P7
+(the original clauses, expected saturated in both arms).
+
+| | ext (P3,P4,P5,P8,P9) /5 | orig (P1,P2,P7) /3 | total /9 |
+|---|---|---|---|
+| F6 · E | **4.12** | 3.00 | 7.50 |
+| F6 · O | 0.25 | 3.00 | 3.62 |
+| F9 · E | **5.00** | 3.00 | 9.00 |
+| F9 · O | 1.75 | 3.00 | 5.75 |
+
+- **P9 — the property that was 0/29 everywhere — is 16/16 with the extension
+  and 0/16 without it.** P8 (throw-path test): 16/16 vs 1/16. P4 (await before
+  restore): 16/16 vs 0/16.
+- The control is exactly flat: P1/P2/P7 saturate at 3.00 in all four cells.
+  The arms differ only in what the extension teaches.
+- The honest exception: P5 (isolation — same connection handle for the GUC,
+  fresh frame for ALS) reaches only 1/8 in F6·E against 8/8 in F9·E. The ALS
+  phrasing ("fresh frame") lands; the Postgres phrasing ("same handle
+  throughout") mostly does not. The one extension clause that under-transmits
+  is the one whose wording is platform-split.
+
+Round 6.5 established: what no rule teaches, no reviewer produces. Round 8
+establishes the converse: **taught, they produce it — at full rate, on both
+fixtures, with the control unmoved.** Together they close the question rounds
+1–3 could not: the catalogue's value is not detection and not general "remedy
+quality" — it is the specific, literal transmission of the clauses the routed
+rule states. A rule is worth exactly what it says.
+
 ## What follows
 
-1. **Ablate the R54 extension** (#125's six properties), on the same standard.
-   P8/P9 sitting at ~0 in the blinded re-score says the extension is where the
-   remaining value would be — if carrying it moves those properties.
+1. **Reword R54 obligation (c)** so the isolation clause transmits for the
+   connection-scoped variant as well as the context-frame variant (P5, F6·E
+   1/8) — then re-ablate that clause alone before claiming the fix.
 2. **Do not shrink rows to digest names.** Arm B measured exactly that and scored
    identically to carrying nothing.
 3. **Report n, and replicate before writing.** Four claims from this eval have
-   now been corrected by the round that followed them — round 4's F9 error-path
+   been corrected by the round that followed them — round 4's F9 error-path
    count joined the list under the blinded re-score.

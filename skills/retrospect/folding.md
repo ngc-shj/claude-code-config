@@ -192,10 +192,15 @@ in the order it found it:
   marginally where the platform idiom already encodes the fix (7.25 vs 6.75). The
   round-4 self-scored version of this claim (16/16 vs 0/16) overstated it — self-scoring
   erred in both directions, which is why the re-score is part of the standard.
-- **What no rule teaches, no reviewer produces.** The panel's nine-property rubric has
-  properties every arm scored 0 on across 29 blind-scored runs (nesting/concurrency —
-  the one a naive fix uniquely fails). Carrying rules transmits the rules' own clauses,
-  nothing more.
+- **What no rule teaches, no reviewer produces — and taught, they produce it.** The
+  panel's nine-property rubric has properties every arm scored 0 on across 29
+  blind-scored runs (nesting/concurrency — the one a naive fix uniquely fails). After
+  the rule was extended to teach them, the same property went 16/16 with the extension
+  and 0/16 without, on both fixtures, with the rule's original clauses saturated in
+  both arms (round 8, n=8/cell, blind). A rule transmits exactly what it states —
+  no more, and at full rate when it states it plainly. The residual: a clause whose
+  wording fits one platform idiom under-transmits on the other (P5, 1/8 carried), so
+  write cross-platform clauses in per-variant words.
 - **A section nothing routes to is dead wiring.** The Remedy Floor merged as prose no
   routing path named; a probe of the deployed protocol showed zero of four reviewers
   read it. Wired by one digest line, it moved exactly its own clauses (floor-mapped
