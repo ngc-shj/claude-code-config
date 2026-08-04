@@ -178,18 +178,28 @@ re-argued, but a fold that adds prose to it anyway must say what the new paragra
 that the previous ones did not.
 
 **Ablate before folding.** A gate in this repo is red-proved — delete what it checks and
-it must fail. A rule had no equivalent until `evals/rule-ablation/`, and the first round
-(38 runs, `docs/archive/audit/2026-08-04-rule-ablation.md`) found that on six rules the
-review found the defect *without* the rule in 17 of 18 trials; what the rule changed was
-severity and rank, not detection. So the premise "the round missed this because it was not
-written down" is not free, and a fold asserting it should show its work: a fixture holding
-the defect, an oracle written down first, and a run with and without the rule row. Record
-the outcome in the retrospective doc either way. A rule whose only measured contribution
-is severity belongs in a severity cue, not a full procedure. Two cautions from that round,
-both of which cut against the tidy conclusion: the fixtures were written by someone who
-knew the rule, so a null result is weaker evidence than a positive one; and the arm given
-the pattern NAME without its procedure scored worse than the arm given nothing at all,
-which is the reason a row is not to be shrunk to its digest line on convenience grounds.
+it must fail. A rule had no equivalent until `evals/rule-ablation/` (62 runs,
+`docs/archive/audit/2026-08-04-rule-ablation.md`). On five of six fixtures the review
+found the defect just as reliably *without* the rule; on the sixth — a security-control
+suspension buried in an 8-file diff — the full procedure detected 8/8 at Critical rank 1
+while both the name-only arm and the no-catalogue arm managed 6/8 and scattered from Major
+rank 7 to Critical rank 2.
+
+So the premise "the round missed this because it was not written down" is not free, and a
+fold asserting it should show its work: a fixture holding the defect, an oracle written
+down FIRST, and runs with and without the rule. Record the outcome either way, and record
+n — that round's one retracted claim came from three trials, which was enough to see a
+difference that a run at n=8 showed was not there.
+
+Two results from it bear on what a fold may do:
+
+- **Do not shrink a row to its digest name to save bytes.** Arm B *was* that move, and it
+  scored identically to carrying no catalogue at all. Whatever the rules buy, they buy it
+  with the procedure, not the name.
+- **A rule whose only measured contribution is severity belongs in a severity cue**, not a
+  full procedure — but measure before concluding that, since the fixtures were written by
+  someone who knew the rule, which makes a null result the weaker reading and a positive
+  result the stronger one.
 
 1. Author `hooks/check-<slug>.sh` modeled on the existing `check-*.sh` hooks: header
    comment stating the rule ID, detection logic, severity, and usage

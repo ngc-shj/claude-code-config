@@ -24,8 +24,10 @@ it and see whether the finding disappears.
    - **C** — no catalogue.
    Single-file fixtures were run with a two-arm form (A: the rule alone; C: no
    catalogue), which is the condition *most* favourable to the rule.
-4. **Trials.** Three per arm. Reviews are non-deterministic; one run measures
-   nothing.
+4. **Trials.** Three per arm is a look, not a result. The one claim this eval has
+   had to retract came from n=3 and vanished at n=8. Report n beside every
+   number, and take any arm-to-arm difference at n=3 as a reason to run more
+   trials rather than as an outcome.
 5. **Score.** Detection against the oracle, and the finding's severity and rank
    in the emitted list. Rank matters: a Major at position 6 of 16 is a different
    outcome from a Critical at position 1, because the fix loop treats them
@@ -44,6 +46,15 @@ findable defect and the run says nothing about the rule.
 | `fixtures/F4-R54.diff` | R54 | single file, ~90 lines | `SET LOCAL` leaks the append-only bypass to the rest of the transaction |
 | `fixtures/F5-RT9.diff` | RT9 | 8 files, ~280 lines | the frame-source check landed only on the twin the tests import, not on the file the manifest loads |
 | `fixtures/F6-R54.diff` | R54 | 8 files, ~425 lines | `withElevatedRead` never clears the GUC, so later statements in the transaction stay elevated |
+| `fixtures/F8-RT9hard.diff` | RT9 | 8 files, ~425 lines | the issuer/nbf tightening landed only in `src/auth/verify.ts`; the deploy config routes every request through `edge/handler.js`, which carries its own copy |
+
+F8 exists because F5 turned out to be a weak fixture: both of its files carry a
+comment naming the twin relationship, which is realistic and also the strongest
+possible cue. F8 removes every cue — no comment, no shared basename, the pairing
+discoverable only by reading the deploy config against the test imports. All the
+evidence is still inside the diff, including a hunk touching the deployed file
+for an unrelated reason, so the reviewer sees that file and its copy of the
+logic. It changed nothing: three arms, nine runs, all Critical at rank 1.
 
 `names.txt` (the arm-A/B index) is generated, not stored:
 
