@@ -68,6 +68,17 @@ For each `Extends-<id>`, walk this list and record the outcome of every item, in
    obligation it does not see. This item exists because a round shipped a widened RT10
    whose coverage sentence still read "It covers neither RT10 clause", which by then was
    both stale and wrong in the dangerous direction.
+10. **The row's size, and whether it has an inspector at all.**
+   `skills/triangulate/rule-row-baseline.txt` lists every row already over the row-size
+   ceiling, annotated `inspector` / `no-inspector`, and `check-rule-sync.sh` check 9
+   enforces both directions. Two consequences for an `Extends`:
+   - If the widened row crosses the ceiling, the procedure moves to
+     `rule-details/<ID>.md` — the row stays a routing summary. Adding a line to the
+     baseline instead is how the debt grew in the first place; do it only with a stated
+     reason in the retrospective doc.
+   - If the target is listed `no-inspector`, **§3's gate applies before the prose does**.
+     A rule that has absorbed several rounds of text without ever acquiring a detector is
+     not one more paragraph short of working.
 
 Then run §2 step 1's FIRST TWO bullets (the table row, and the `rule-details/<ID>.md`
 pointer and identity) and §2 step 7 (digest regeneration). Any phase-file edit item 6
@@ -118,6 +129,34 @@ Ask first: can a regex/AST scan over a diff decide this with low false positives
 skip — a noisy hook is worse than none. Record the answer either way: a lesson folded
 without a hook should say in the retrospective doc why it is not mechanically decidable,
 so the next round does not re-litigate it.
+
+**Naming a class is not the same act as installing its inspector**, and this skill's
+default output — more rule text — is the shape that confuses the two. The observed
+failure is a review that identified the same dominant class every round, wrote a fresh
+paragraph about it every round, and only stopped producing instances of it in the round
+that produced a checker. Prose is not a control: code passes through lint, type-check,
+test and build, and the documents written *about* the code pass through nothing, so a
+rule that exists only as text is enforced solely by the attention of whoever remembers to
+apply it — which is exactly the thing that failed.
+
+So a **repeat** `Extends` — one targeting a rule that `rule-row-baseline.txt` annotates
+`no-inspector` — does not discharge on prose. Take one of three exits, and name which in
+the retrospective doc:
+
+- **Author the detector** (§3.1 below). Even a partial one, with its coverage bound
+  stated in the row. Then flip the rule's annotation in the baseline; check 9 fails if
+  the annotation and the row disagree, so this is not a step that can be forgotten.
+- **Install the obligation somewhere a machine already looks** — a gate block in a phase
+  file, a required field in a template, a linter clause — rather than a paragraph a
+  reader is trusted to recall.
+- **Record the class as undecidable**, naming the specific step no scan can perform.
+  "Hard to detect" is not that; "the defect is in whether the cited fact *reaches* the
+  conclusion, which is an inference and not a property of any string" is. An undecidable
+  class is a legitimate outcome — it is the *unexamined* third round of prose that is not.
+
+The exit is per fold, not per rule: a class recorded undecidable once does not have to be
+re-argued, but a fold that adds prose to it anyway must say what the new paragraph does
+that the previous ones did not.
 
 1. Author `hooks/check-<slug>.sh` modeled on the existing `check-*.sh` hooks: header
    comment stating the rule ID, detection logic, severity, and usage
