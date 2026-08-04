@@ -1,65 +1,47 @@
-# Row-size ratchet baseline — machine-read by hooks/check-rule-sync.sh (check 9).
+# Extraction ratchet baseline — machine-read by hooks/check-rule-sync.sh (check 9).
 #
 # A rule row in common-rules.md is a ROUTING SUMMARY. When the procedure is
-# large it belongs in rule-details/<ID>.md, which the row points at; the ten
-# rows that follow that convention measure 370-992 bytes. This file lists the
-# rows that do NOT, and therefore exceed the 1200-byte ceiling.
+# large it belongs in rule-details/<ID>.md, which the row points at. This file
+# lists the rows that are over the byte ceiling with the whole procedure still
+# inline — the ones whose extraction has not happened yet.
 #
-# It exists because the convention was written down for a long time without
-# anything measuring it, and a convention nobody measures is a wish. The linter
-# enforces the ratchet in BOTH directions:
+# It exists because that convention sat in folding.md for a long time with
+# nothing measuring it, and a convention nobody measures is a wish. The linter
+# enforces the ratchet in both directions:
 #
-#   - a row over the ceiling that is absent here is drift (no silent growth)
-#   - a line here whose row now fits is drift (the list can only shrink)
+#   - a row over the ceiling with no rule-details/<ID>.md pointer, absent from
+#     this file, is drift (no silent growth)
+#   - a line here whose row now fits or has been extracted is drift (the list
+#     can only shrink)
 #   - the annotation must match the row (see below)
 #
 # So the way to remove a line is to move that rule's procedure into
 # rule-details/<ID>.md, not to edit this file.
 #
-# Column 2 records whether the row names a **Mechanical detection** paragraph.
-# It is the input folding.md consults before letting a repeated `Extends` land
-# as still more prose: naming a class is not the same act as installing its
-# inspector, and a rule that has absorbed several rounds of prose while staying
-# `no-inspector` is the signature of that confusion. 30 of the 37 rows below are
-# `no-inspector`, and every rule from R44 onward is — the recent folds produced
-# text and no detectors.
+# A first version measured bytes alone. It was the wrong instrument: extracting
+# 25 procedures cut the table by 40 KB and moved the over-ceiling count by four,
+# because a routing summary for a rule with sub-clauses and a detector to
+# describe legitimately costs more than one for a rule without. What the ceiling
+# is really asking is whether the full procedure lives somewhere a reader can
+# fetch separately — so that, and not the byte count alone, is what is checked.
+#
+# Column 2 records whether the row names a **Mechanical detection** paragraph,
+# in any qualified form. It is the input folding.md consults before letting a
+# repeated `Extends` land as still more prose: naming a class is not the same
+# act as installing its inspector, and a rule that has absorbed several rounds
+# of text while staying `no-inspector` is the signature of that confusion.
 #
 # Format: <rule-id><TAB>inspector|no-inspector   (# comments and blanks ignored)
 
-R2	inspector
-R3	inspector
-R4	inspector
-R7	no-inspector
 R19	no-inspector
 R24	no-inspector
-R25	no-inspector
 R27	no-inspector
-R29	inspector
 R30	inspector
 R31	no-inspector
-R34	no-inspector
-R38	no-inspector
-R39	no-inspector
-R40	no-inspector
 R41	no-inspector
-R44	no-inspector
 R45	no-inspector
 R46	no-inspector
-R47	no-inspector
-R48	no-inspector
-R49	no-inspector
-R50	no-inspector
-R51	no-inspector
-R52	no-inspector
-R53	no-inspector
-R54	no-inspector
 R55	no-inspector
-R56	no-inspector
 R57	no-inspector
-RS3	inspector
 RS5	inspector
-RS6	inspector
 RT6	inspector
-RT9	no-inspector
-RT10	inspector
-RT11	no-inspector

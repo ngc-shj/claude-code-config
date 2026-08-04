@@ -27,9 +27,9 @@
 #      unique / correctly numbered / last with no lookalike above it, and
 #      SKILL.md declares the manifest keys and terminator stems that every
 #      other comparison here is made against
-#   9. the row-size ratchet: no rule row grows past the byte ceiling without
-#      being declared in rule-row-baseline.txt, and no declaration outlives
-#      the row that earned it
+#   9. the extraction ratchet: a rule row past the byte ceiling carries a
+#      rule-details/<ID>.md pointer, or is declared in rule-row-baseline.txt,
+#      and no declaration outlives the row that earned it
 #
 # Usage: bash check-rule-sync.sh [triangulate-skill-dir]   # rule-sync-example: interface, not a prescription
 #   The default dir resolves to ../skills/triangulate relative to this
@@ -657,21 +657,28 @@ for pf in "$SKILL_DIR"/phases/phase-*.md; do
     drift "$base: line $loose is a step-shaped heading the manifest scan does not count"
 done
 
-# --- 9. row-size ratchet: a rule row is a routing summary, not the procedure ---
+# --- 9. extraction ratchet: a large rule row must have its procedure elsewhere ---
 #
-# folding.md already says to keep the row short and put a large procedure in
-# rule-details/<ID>.md. Ten rows follow it (370-992 bytes); the rest have grown
-# to 5.5 KB because NOTHING MEASURED THEM. Writing the convention down was never
-# the same act as installing its inspector — which is the general shape of how
-# this rule set got here, applied to the rule set itself.
+# folding.md already says to keep the row a routing summary and put a large
+# procedure in rule-details/<ID>.md. It went unfollowed for a long time because
+# NOTHING MEASURED IT — writing a convention down was never the same act as
+# installing its inspector, which is the general shape of how this rule set got
+# here, applied to the rule set itself.
 #
-# The ratchet is deliberately not a flat ban: the rows already over the ceiling
-# are real debt that gets drained by moving procedures into rule-details/, not
-# in one commit. rule-row-baseline.txt DECLARES that debt, so a fold cannot add
-# to it silently, and a declaration that stops being true is itself drift — the
-# file can only shrink. The annotation column records whether the row names a
-# mechanical detector, which is what folding.md consults before letting a
-# repeated `Extends` land as still more prose.
+# What is measured is deliberately NOT "no row exceeds N bytes". That version
+# shipped first and was the wrong instrument: extracting 25 procedures cut the
+# table by 40 KB and moved the over-ceiling count by four, because a routing
+# summary for a rule with sub-clauses and a detector to describe legitimately
+# costs more than one for a rule without. The property that actually matters is
+# whether the full procedure lives where a reader can get it separately. So:
+# a row over the ceiling must carry a `rule-details/<ID>.md` pointer. Rows over
+# it with everything still inline are the debt, rule-row-baseline.txt declares
+# them, and the list can only shrink — an undeclared one is drift, and so is a
+# declaration that has stopped being true.
+#
+# The annotation column records whether the row names a mechanical detector,
+# which is what folding.md consults before letting a repeated `Extends` land as
+# still more prose.
 ROW_CEILING=1200
 BASELINE="$SKILL_DIR/rule-row-baseline.txt"
 
@@ -683,6 +690,10 @@ rows_over=$(LC_ALL=C awk -v ceil="$ROW_CEILING" '
   /^\| (R|RS|RT)[0-9]+ \|/ {
     if (length($0) <= ceil) next
     id = $0; sub(/^\| /, "", id); sub(/ \|.*$/, "", id)
+    # Its OWN detail file. A row may legitimately cite a sibling rule detail
+    # page, and crediting that as extraction would let a row cross the ceiling
+    # by mentioning a procedure belonging to some other rule.
+    if (index($0, "rule-details/" id ".md") > 0) next
     # Match the bold OPENING, not the whole closed marker. Rows qualify their
     # detector inside the bold run — `**Mechanical detection (partial)**`,
     # `**Mechanical detection (advisory)**` — and an exact-string test read all
@@ -702,7 +713,7 @@ if [ ! -f "$BASELINE" ]; then
   # undeclared-row branch below report it would point at every oversized row
   # instead of at the single deletion that caused them all.
   [ -z "$rows_over" ] || \
-    drift "rule-row-baseline.txt is missing from $SKILL_DIR but $(printf '%s\n' "$rows_over" | wc -l | tr -d ' ') rows exceed the ${ROW_CEILING}-byte ceiling — the ratchet cannot be evaluated"
+    drift "rule-row-baseline.txt is missing from $SKILL_DIR but $(printf '%s\n' "$rows_over" | wc -l | tr -d ' ') rows exceed the ${ROW_CEILING}-byte ceiling with their procedure still inline — the ratchet cannot be evaluated"
 else
   baseline_rows=$(grep -vE '^[[:space:]]*(#|$)' "$BASELINE" | sort)
 
@@ -712,7 +723,7 @@ else
     [ -n "$id" ] || continue
     want=$(printf '%s\n' "$baseline_rows" | awk -F'\t' -v id="$id" '$1==id {print $2; exit}')
     if [ -z "$want" ]; then
-      drift "common-rules.md row $id is over the ${ROW_CEILING}-byte row ceiling and is not declared in rule-row-baseline.txt — move the procedure into rule-details/$id.md and leave the row a routing summary"
+      drift "common-rules.md row $id is over the ${ROW_CEILING}-byte ceiling with its whole procedure inline and is not declared in rule-row-baseline.txt — move the procedure into rule-details/$id.md and leave the row a routing summary"
     elif [ "$want" != "$tag" ]; then
       drift "rule-row-baseline.txt records $id as '$want' but its row reads '$tag' — a row that gained or lost a **Mechanical detection** paragraph (in any qualified form) must update the declaration"
     fi
@@ -725,7 +736,7 @@ else
     if ! grep -qE "^\| $id \|" "$COMMON"; then
       drift "rule-row-baseline.txt declares $id, which is not a rule row in common-rules.md"
     elif ! printf '%s\n' "$rows_over" | awk -F'\t' -v id="$id" '$1==id {f=1} END {exit !f}'; then
-      drift "rule-row-baseline.txt still declares $id, whose row now fits the ${ROW_CEILING}-byte ceiling — delete the line so the ratchet cannot slip back"
+      drift "rule-row-baseline.txt still declares $id, whose row now fits the ${ROW_CEILING}-byte ceiling or has its procedure extracted — delete the line so the ratchet cannot slip back"
     fi
   done <<< "$baseline_rows"
 fi

@@ -69,13 +69,18 @@ For each `Extends-<id>`, walk this list and record the outcome of every item, in
    whose coverage sentence still read "It covers neither RT10 clause", which by then was
    both stale and wrong in the dangerous direction.
 10. **The row's size, and whether it has an inspector at all.**
-   `skills/triangulate/rule-row-baseline.txt` lists every row already over the row-size
-   ceiling, annotated `inspector` / `no-inspector`, and `check-rule-sync.sh` check 9
-   enforces both directions. Two consequences for an `Extends`:
-   - If the widened row crosses the ceiling, the procedure moves to
-     `rule-details/<ID>.md` — the row stays a routing summary. Adding a line to the
-     baseline instead is how the debt grew in the first place; do it only with a stated
-     reason in the retrospective doc.
+   `check-rule-sync.sh` check 9 measures every row: past the byte ceiling it must carry a
+   `rule-details/<ID>.md` pointer, and the rows that do not are declared in
+   `skills/triangulate/rule-row-baseline.txt` with an `inspector` / `no-inspector`
+   annotation. The ratchet runs both ways, so the file can only shrink. Two consequences
+   for an `Extends`:
+   - If the widened row crosses the ceiling, **extract the procedure** into
+     `rule-details/<ID>.md` and leave the row a routing summary. Adding a line to the
+     baseline instead is how the debt grew in the first place; do that only with a stated
+     reason in the retrospective doc. Note the ceiling asks about extraction, not about
+     brevity for its own sake — a summary that must name sub-clauses and describe a
+     detector legitimately costs more than one that need not, and trimming substance to
+     get under a number is the wrong response to this gate.
    - If the target is listed `no-inspector`, **§3's gate applies before the prose does**.
      A rule that has absorbed several rounds of text without ever acquiring a detector is
      not one more paragraph short of working.
