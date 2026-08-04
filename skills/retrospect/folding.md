@@ -84,6 +84,20 @@ For each `Extends-<id>`, walk this list and record the outcome of every item, in
    - If the target is listed `no-inspector`, **§3's gate applies before the prose does**.
      A rule that has absorbed several rounds of text without ever acquiring a detector is
      not one more paragraph short of working.
+   - **Coverage bound on that column, and it is narrow**: the baseline lists only the rows
+     over the ceiling with their procedure still inline, so the annotation answers for
+     about a sixth of the rule set and is SILENT for every other rule — including every
+     rule whose procedure has been extracted. Absence from the file is not evidence of a
+     detector. For any target not listed, determine it directly, remembering that an
+     extracted rule names its detector in the detail page rather than in the row:
+
+     ```bash
+     grep -l '\*\*Mechanical detection' skills/triangulate/common-rules.md \
+       skills/triangulate/rule-details/<ID>.md 2>/dev/null
+     ```
+
+     Across the whole set 16 rules of 74 have a detector anywhere. Assume `no-inspector`
+     and check, rather than reading silence as coverage.
 
 Then run §2 step 1's FIRST TWO bullets (the table row, and the `rule-details/<ID>.md`
 pointer and identity) and §2 step 7 (digest regeneration). Any phase-file edit item 6
