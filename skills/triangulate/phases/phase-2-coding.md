@@ -253,6 +253,17 @@ bash ~/.claude/hooks/check-migrations.sh
 # PRE_PR_CACHE_TTL / PRE_PR_CACHE_EXTRA_PATHS. Without a declaration the
 # gate always runs — an arbitrary aggregate script may depend on inputs
 # the tree fingerprint cannot see.
+# 3c. Citation-rot gate over the plan and deviation log (R29, mechanical half).
+# Implementation moves the very lines the plan cites by file:line, and no gate
+# above reads prose — a plan that was accurate when written is what Phase 3
+# reviews against, so its stale citations become Phase 3's findings. SHIFTED
+# means the cited line still exists but no longer holds the text it held at
+# [base-ref]; re-read the code and correct the sentence, not just the number.
+# The gate is the pipe TAIL, so its own status is the observed one (R44).
+cat ./docs/archive/review/[plan-name]-*.md 2>/dev/null \
+  | bash ~/.claude/hooks/verify-references.sh --root . --base [base-ref] --strict \
+  || { echo "citation gate: SHIFTED/MISSING references above — correct the plan/deviation prose before reporting completion"; exit 1; }
+
 bash ~/.claude/hooks/check-pre-pr.sh run \
   || { echo "pre-PR gate did not pass — see output above; fix before proceeding"; exit 1; }
 

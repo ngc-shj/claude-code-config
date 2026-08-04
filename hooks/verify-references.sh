@@ -1,6 +1,7 @@
 #!/bin/bash
 # verify-references: Check file:line references in sub-agent output.
-# Usage: echo "$output" | bash ~/.claude/hooks/verify-references.sh [--root <dir>]
+# Usage: echo "$output" | bash ~/.claude/hooks/verify-references.sh \
+#          [--root <dir>] [--base <ref>] [--strict]
 #
 # Reads text on stdin, extracts path:line and path:line-line references,
 # and reports which ones exist and which are stale. Zero Claude tokens.
@@ -11,7 +12,31 @@
 #   MISSING      path/to/gone.ts:10
 #   OUT-OF-RANGE path/to/file.ts:9999 (file has 150 lines)
 #   OUT-OF-ROOT  ../outside.txt:1
-#   --- Summary: total=4, ok=1, issues=3 ---
+#   SHIFTED      path/to/file.ts:42 (line 42 differs from <base>; re-verify)
+#   --- Summary: total=5, ok=1, issues=4, shifted=1 ---
+#
+# --base <ref>: a citation that EXISTS is not therefore still TRUE. Prose is
+#   correct the moment it is written and rots when its subject moves, and
+#   existence plus line-count are both blind to that: line 42 still being
+#   present says nothing about whether line 42 is still the code the sentence
+#   describes. With --base, a ref into a file this branch changed is re-read at
+#   <ref> and reported SHIFTED when the cited line's text is no longer what it
+#   was — the mechanical half of "re-verify every citation whose target you
+#   edited". Unchanged files, and files that did not exist at <ref>, are cheap
+#   no-ops, so the report fires on movement rather than on every edited file.
+#   Semantics are BASE-relative: it answers "does this citation still point at
+#   the same text it pointed at in <ref>", which is the question for a document
+#   written early in a branch and re-read after later rounds edited its
+#   subjects. A citation authored mid-branch against an intermediate state is
+#   the false-positive direction — pass the ref it was written against.
+#   Known blind spots, both fail-open: a RENAMED file is listed at its new path,
+#   so `git show <ref>:<new path>` finds nothing and the ref reads as
+#   "did not exist at base"; and only the START line of a range is compared, as
+#   in the existence check above.
+#
+# --strict: exit 1 when any reference is an issue (the default exit is always 0,
+#   because the original caller is an advisory post-pass over sub-agent text).
+#   Gates that must be able to go red pass this.
 #
 # Security model:
 #   stdin is UNTRUSTED (originates from sub-agent / LLM output, potentially
@@ -26,11 +51,15 @@
 set -euo pipefail
 
 ROOT="."
+BASE=""
+STRICT=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --root) ROOT="$2"; shift 2 ;;
+    --base) BASE="$2"; shift 2 ;;
+    --strict) STRICT=1; shift ;;
     -h|--help)
-      echo "Usage: $0 [--root <dir>]  (reads stdin)" >&2
+      echo "Usage: $0 [--root <dir>] [--base <ref>] [--strict]  (reads stdin)" >&2
       exit 0
       ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
@@ -52,10 +81,49 @@ ROOT_ABS=$(cd -P -- "$ROOT" 2>/dev/null && pwd -P) || {
 # the safe direction, but it is still wrong.
 [ "$ROOT_ABS" = "/" ] && ROOT_ABS=""
 
+# --base setup. Resolved once: a bad ref, or a ROOT outside any repository, is a
+# configuration error for the whole run rather than a per-reference condition,
+# and reporting every ref OK because the comparison silently never ran is the
+# exact false-green this flag exists to remove (a gate that examined nothing and
+# a gate that found nothing wrong print the same status otherwise).
+REPO_TOP=""
+CHANGED=""
+NL=$'\n'
+if [ -n "$BASE" ]; then
+  if [ -z "$ROOT_ABS" ]; then
+    echo "Error: --base needs a ROOT inside a repository, not the filesystem root" >&2
+    exit 1
+  fi
+  # A leading dash would reach git as an OPTION rather than as the revision it
+  # is meant to be. Refuse the shape outright instead of relying on each git
+  # subcommand to reject it — `rev-parse` and `show` do not parse argv alike,
+  # so "the validation call errored, therefore the value is safe" is a
+  # conclusion about the wrong command.
+  case "$BASE" in
+    -*) echo "Error: --base must name a commit, not an option ('$BASE')" >&2; exit 1 ;;
+  esac
+  REPO_TOP=$(git -C "$ROOT_ABS" rev-parse --show-toplevel 2>/dev/null) || {
+    echo "Error: --base given but ROOT '$ROOT' is not inside a git repository" >&2
+    exit 1
+  }
+  git -C "$REPO_TOP" rev-parse --verify --quiet "$BASE^{commit}" >/dev/null 2>&1 || {
+    echo "Error: --base '$BASE' does not name a commit in $REPO_TOP" >&2
+    exit 1
+  }
+  # Base-to-WORKTREE, not base-to-HEAD: the citing document is checked at the
+  # moment the fixes land, and a fix that is still uncommitted has already moved
+  # the line the prose points at.
+  # core.quotePath=false because the membership test below is an exact string
+  # match: with quoting on, a path holding a non-ASCII byte comes back wrapped in
+  # quotes and escaped, matches nothing, and the ref is silently passed as OK —
+  # a fail-open on exactly the paths a reader is least able to eyeball.
+  CHANGED=$(git -C "$REPO_TOP" -c core.quotePath=false diff --name-only "$BASE" -- 2>/dev/null || true)
+fi
+
 INPUT=$(cat)
 if [ -z "$INPUT" ]; then
   echo "=== Reference Verification ==="
-  echo "--- Summary: total=0, ok=0, issues=0 ---"
+  echo "--- Summary: total=0, ok=0, issues=0, shifted=0 ---"
   exit 0
 fi
 
@@ -69,13 +137,14 @@ REFS=$(printf '%s' "$INPUT" \
 
 if [ -z "$REFS" ]; then
   echo "=== Reference Verification ==="
-  echo "--- Summary: total=0, ok=0, issues=0 ---"
+  echo "--- Summary: total=0, ok=0, issues=0, shifted=0 ---"
   exit 0
 fi
 
 TOTAL=0
 OK_COUNT=0
 ISSUE_COUNT=0
+SHIFTED_COUNT=0
 OUTPUT=""
 
 while IFS= read -r ref; do
@@ -176,13 +245,53 @@ while IFS= read -r ref; do
     OUTPUT="${OUTPUT}OUT-OF-RANGE ${ref} (file has ${file_lines} lines)
 "
     ISSUE_COUNT=$((ISSUE_COUNT + 1))
-  else
-    OUTPUT="${OUTPUT}OK           ${ref}
-"
-    OK_COUNT=$((OK_COUNT + 1))
+    continue
   fi
+
+  # The reference resolves. Whether it is still TRUE is a separate question, and
+  # only --base can ask it.
+  if [ -n "$BASE" ] && [ "$start_line" -ge 1 ]; then
+    # Repo-root-relative, derived from the CANONICAL path — `git diff
+    # --name-only` names paths from the repository root regardless of ROOT, and
+    # the raw stdin spelling is untrusted besides. A path that canonicalizes
+    # outside the repository (ROOT above the top level) has no base version to
+    # compare and falls through to OK.
+    rel=""
+    case "$full_abs/" in
+      "$REPO_TOP/"*) rel="${full_abs#"$REPO_TOP"/}" ;;
+    esac
+    # Cheap filter first: a file this branch never touched cannot have moved the
+    # cited line, so it costs no `git show`.
+    if [ -n "$rel" ] && case "$NL$CHANGED$NL" in *"$NL$rel$NL"*) true ;; *) false ;; esac; then
+      if base_blob=$(git -C "$REPO_TOP" show "$BASE:$rel" 2>/dev/null); then
+        base_line=$(printf '%s\n' "$base_blob" | sed -n "${start_line}p")
+        cur_line=$(sed -n "${start_line}p" "$full_abs")
+        if [ "$base_line" != "$cur_line" ]; then
+          OUTPUT="${OUTPUT}SHIFTED      ${ref} (line ${start_line} differs from ${BASE}; re-verify)
+"
+          ISSUE_COUNT=$((ISSUE_COUNT + 1))
+          SHIFTED_COUNT=$((SHIFTED_COUNT + 1))
+          continue
+        fi
+      fi
+      # `git show` failing means the path did not exist at BASE, so nothing it
+      # once pointed at can have moved — not an issue.
+    fi
+  fi
+
+  OUTPUT="${OUTPUT}OK           ${ref}
+"
+  OK_COUNT=$((OK_COUNT + 1))
 done <<< "$REFS"
 
 echo "=== Reference Verification ==="
 printf '%s' "$OUTPUT"
-echo "--- Summary: total=${TOTAL}, ok=${OK_COUNT}, issues=${ISSUE_COUNT} ---"
+echo "--- Summary: total=${TOTAL}, ok=${OK_COUNT}, issues=${ISSUE_COUNT}, shifted=${SHIFTED_COUNT} ---"
+
+# Default exit stays 0 for the advisory caller. --strict is what makes this a
+# gate rather than a report, and a gate that cannot return non-zero is one no
+# caller can fail on.
+if [ "$STRICT" -eq 1 ] && [ "$ISSUE_COUNT" -gt 0 ]; then
+  exit 1
+fi
+exit 0

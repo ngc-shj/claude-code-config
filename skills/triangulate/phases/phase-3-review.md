@@ -405,6 +405,24 @@ bash ~/.claude/hooks/check-migrations.sh
 # Run production build to catch compilation/bundling/type errors not covered by tests
 [build command]
 
+# Citation-rot gate over this round's own prose (R29, mechanical half).
+# Code is filtered by lint, tests, and the build; the DOCUMENTS WRITTEN ABOUT
+# the code pass through nothing. This round's fixes just moved lines that the
+# review log, the plan, and the deviation log cite by file:line — and a citation
+# is correct the moment it is written, then rots silently when its subject
+# moves. Nothing above catches that, which is why prose findings outnumber
+# behaviour findings by an order of magnitude in late rounds.
+# SHIFTED = the cited line still exists and is still in range, but no longer
+# holds the text it held at [base-ref]. Open each one, re-read the code, and
+# correct the SENTENCE — not the line number alone: a citation re-pointed at a
+# line that does not support the claim is a precise reference to the wrong
+# thing, which reads more authoritative than the vague version it replaced.
+# The gate is the pipe TAIL, so its own exit status is the observed one (R44);
+# do not append a filter after it.
+cat ./docs/archive/review/[plan-name]-*.md 2>/dev/null \
+  | bash ~/.claude/hooks/verify-references.sh --root . --base [base-ref] --strict \
+  || { echo "citation gate: SHIFTED/MISSING references above — re-verify and correct the prose before commit"; exit 1; }
+
 # Project pre-PR aggregate script (if present) — same contract as Step 2-4 item 3b.
 # Catches repo-specific gates (forbidden-pattern greps, count checks,
 # license-header validation, etc.) that the individual lint/test/build
