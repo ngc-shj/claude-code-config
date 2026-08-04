@@ -1081,3 +1081,164 @@ stage_installed_layout() {
   [[ "$output" == *"Subject: $FIX"* ]]
   [[ "$output" != *"Subject: $(basename "$FIX")"* ]]
 }
+
+# ============================================================
+# Check 9 — row-size ratchet
+#
+# The convention "keep the row a routing summary, put the procedure in
+# rule-details/<ID>.md" existed in folding.md for a long time with nothing
+# measuring it, and rows grew to 5.5 KB. These fixtures pin the measurement,
+# both directions of the ratchet, and the boundary — a ceiling that is only
+# ever probed from far above never shows where it actually sits.
+# ============================================================
+
+# Pad the named row's PROCEDURE cell so the whole row is exactly $2 bytes.
+# The severity cell is left alone on purpose: changing it would move the digest
+# too, and check 7 would then fire alongside whatever the test is probing.
+set_row_len() {
+  local id="$1" want="$2" tmp
+  tmp="$(mktemp)"
+  LC_ALL=C awk -v id="$id" -v want="$want" '
+    $0 ~ "^\\| " id " \\|" {
+      need = want - length($0) - 1
+      if (need > 0) {
+        pad = ""
+        while (length(pad) < need) pad = pad "x"
+        sub(/ \|[^|]*\|$/, " " pad " | Major |")
+      }
+      print; next
+    }
+    { print }
+  ' "$FIX/common-rules.md" > "$tmp" && mv "$tmp" "$FIX/common-rules.md"
+  regen_digest
+}
+
+write_baseline() {
+  printf '# fixture baseline\n' > "$FIX/rule-row-baseline.txt"
+  printf '%s\n' "$@" >> "$FIX/rule-row-baseline.txt"
+}
+
+@test "9a: no baseline and no oversized row is not drift" {
+  # The file declares debt. A tree that owes nothing legitimately has no file,
+  # and demanding one would make every consumer of this linter carry an empty
+  # artifact. Paired with 9b so the absence is shown to be conditional.
+  [ ! -f "$FIX/rule-row-baseline.txt" ]
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
+@test "9b: oversized row with no baseline names the missing file once" {
+  set_row_len R2 1400
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"rule-row-baseline.txt is missing"* ]]
+  # One line about the file, not one line per oversized row.
+  [ "$(printf '%s\n' "$output" | grep -c 'is not declared in rule-row-baseline.txt')" -eq 0 ]
+}
+
+@test "9c: undeclared oversized row is drift and names the remedy" {
+  set_row_len R2 1400
+  write_baseline "R3	no-inspector"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row R2 is over the 1200-byte row ceiling"* ]]
+  [[ "$output" == *"rule-details/R2.md"* ]]
+}
+
+@test "9d: declared oversized row is accepted" {
+  # Allow side. Without it the check could be "any oversized row is drift" and
+  # every other case here would still pass.
+  set_row_len R2 1400
+  write_baseline "R2	no-inspector"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
+@test "9e: declaration for a row that fits is drift — the list can only shrink" {
+  write_baseline "R2	no-inspector"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"still declares R2, whose row now fits"* ]]
+}
+
+@test "9f: declaration naming a rule that does not exist is drift" {
+  set_row_len R2 1400
+  write_baseline "R2	no-inspector" "R9	no-inspector"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"declares R9, which is not a rule row"* ]]
+}
+
+@test "9g: annotation disagreeing with the row is drift" {
+  # The annotation is what folding.md reads to decide whether a repeated
+  # `Extends` may land as more prose, so a stale one is worse than none.
+  set_row_len R2 1400
+  write_baseline "R2	inspector"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"records R2 as 'inspector' but its row reads 'no-inspector'"* ]]
+}
+
+@test "9h: a row naming a mechanical detector is annotated inspector" {
+  set_row_len R2 1400
+  sed_i 's/check b/check b **Mechanical detection**: some-hook.sh/' "$FIX/common-rules.md"
+  regen_digest
+  write_baseline "R2	inspector"
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
+@test "9i: the ceiling is exclusive — a row exactly at it is not over" {
+  # Boundary, paired with 9j one byte away. Every other fixture sits 200 bytes
+  # above the line, so an off-by-one would not show up in any of them. Both
+  # carry an empty (comment-only) baseline so the pair differs in the row length
+  # alone — without it 9j would drift on the MISSING FILE and read as green for
+  # the wrong clause.
+  write_baseline
+  set_row_len R2 1200
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 0 ]
+}
+
+@test "9j: one byte past the ceiling is over" {
+  write_baseline
+  set_row_len R2 1201
+  run bash "$SCRIPT" "$FIX"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"row R2 is over the 1200-byte row ceiling"* ]]
+}
+
+@test "9k: the repo's own baseline is exactly the set of oversized rows" {
+  # The live-tree assertion. `pass: live repo files are drift-free` covers the
+  # aggregate exit status; this one fails with a diff naming the rows, which is
+  # what a fold that grew a row actually needs to see.
+  run bash "$SCRIPT" "$REPO_SKILL_DIR"
+  [ "$status" -eq 0 ]
+  actual="$(LC_ALL=C awk -v ceil=1200 '
+    /^\| (R|RS|RT)[0-9]+ \|/ {
+      if (length($0) <= ceil) next
+      id = $0; sub(/^\| /, "", id); sub(/ \|.*$/, "", id)
+      print id
+    }' "$REPO_SKILL_DIR/common-rules.md" | sort)"
+  declared="$(grep -vE '^[[:space:]]*(#|$)' "$REPO_SKILL_DIR/rule-row-baseline.txt" | cut -f1 | sort)"
+  [ "$actual" = "$declared" ]
+  # Not vacuous: the repo genuinely carries this debt today, so an empty
+  # comparison would mean the extraction broke rather than the debt cleared.
+  [ -n "$actual" ]
+}
+
+@test "9l: folding.md's inspector gate points at a file that exists and a real annotation" {
+  # folding.md tells a fold to consult the baseline's annotation before letting a
+  # repeat `Extends` land as prose. Renaming the file or the annotation token
+  # would leave that instruction pointing at nothing, and a fold gate nobody can
+  # execute is the failure the gate was written to stop.
+  local repo_root f
+  repo_root="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  f="$repo_root/skills/retrospect/folding.md"
+  grep -q 'rule-row-baseline\.txt' "$f"
+  [ -f "$repo_root/skills/triangulate/rule-row-baseline.txt" ]
+  # The token folding.md routes on must be one the file actually uses.
+  grep -q 'no-inspector' "$f"
+  grep -qE '^(R|RS|RT)[0-9]+'$'\t''no-inspector$' \
+    "$repo_root/skills/triangulate/rule-row-baseline.txt"
+}

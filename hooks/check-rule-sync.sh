@@ -27,6 +27,9 @@
 #      unique / correctly numbered / last with no lookalike above it, and
 #      SKILL.md declares the manifest keys and terminator stems that every
 #      other comparison here is made against
+#   9. the row-size ratchet: no rule row grows past the byte ceiling without
+#      being declared in rule-row-baseline.txt, and no declaration outlives
+#      the row that earned it
 #
 # Usage: bash check-rule-sync.sh [triangulate-skill-dir]   # rule-sync-example: interface, not a prescription
 #   The default dir resolves to ../skills/triangulate relative to this
@@ -654,6 +657,70 @@ for pf in "$SKILL_DIR"/phases/phase-*.md; do
     drift "$base: line $loose is a step-shaped heading the manifest scan does not count"
 done
 
+# --- 9. row-size ratchet: a rule row is a routing summary, not the procedure ---
+#
+# folding.md already says to keep the row short and put a large procedure in
+# rule-details/<ID>.md. Ten rows follow it (370-992 bytes); the rest have grown
+# to 5.5 KB because NOTHING MEASURED THEM. Writing the convention down was never
+# the same act as installing its inspector — which is the general shape of how
+# this rule set got here, applied to the rule set itself.
+#
+# The ratchet is deliberately not a flat ban: the rows already over the ceiling
+# are real debt that gets drained by moving procedures into rule-details/, not
+# in one commit. rule-row-baseline.txt DECLARES that debt, so a fold cannot add
+# to it silently, and a declaration that stops being true is itself drift — the
+# file can only shrink. The annotation column records whether the row names a
+# mechanical detector, which is what folding.md consults before letting a
+# repeated `Extends` land as still more prose.
+ROW_CEILING=1200
+BASELINE="$SKILL_DIR/rule-row-baseline.txt"
+
+# LC_ALL=C so the measure is bytes on every machine. Under a UTF-8 locale awk
+# counts characters, and these rows are full of em-dashes and arrows — the same
+# row would then measure differently depending on the caller's environment,
+# which is not a property a declared baseline can be checked against.
+rows_over=$(LC_ALL=C awk -v ceil="$ROW_CEILING" '
+  /^\| (R|RS|RT)[0-9]+ \|/ {
+    if (length($0) <= ceil) next
+    id = $0; sub(/^\| /, "", id); sub(/ \|.*$/, "", id)
+    tag = (index($0, "**Mechanical detection**") > 0) ? "inspector" : "no-inspector"
+    print id "\t" tag
+  }' "$COMMON" | sort)
+
+if [ ! -f "$BASELINE" ]; then
+  # The file declares debt, so a tree with no oversized row legitimately has
+  # none. When there IS debt, name the missing file in one line: letting the
+  # undeclared-row branch below report it would point at every oversized row
+  # instead of at the single deletion that caused them all.
+  [ -z "$rows_over" ] || \
+    drift "rule-row-baseline.txt is missing from $SKILL_DIR but $(printf '%s\n' "$rows_over" | wc -l | tr -d ' ') rows exceed the ${ROW_CEILING}-byte ceiling — the ratchet cannot be evaluated"
+else
+  baseline_rows=$(grep -vE '^[[:space:]]*(#|$)' "$BASELINE" | sort)
+
+  # Direction 1: a row over the ceiling that nobody declared, or whose declared
+  # inspector state disagrees with the row.
+  while IFS="$(printf '\t')" read -r id tag; do
+    [ -n "$id" ] || continue
+    want=$(printf '%s\n' "$baseline_rows" | awk -F'\t' -v id="$id" '$1==id {print $2; exit}')
+    if [ -z "$want" ]; then
+      drift "common-rules.md row $id is over the ${ROW_CEILING}-byte row ceiling and is not declared in rule-row-baseline.txt — move the procedure into rule-details/$id.md and leave the row a routing summary"
+    elif [ "$want" != "$tag" ]; then
+      drift "rule-row-baseline.txt records $id as '$want' but its row reads '$tag' — a row that gained or lost its **Mechanical detection** paragraph must update the declaration"
+    fi
+  done <<< "$rows_over"
+
+  # Direction 2: a declaration that is no longer true. Without this the file is
+  # write-only and the debt it records can never be observed to shrink.
+  while IFS="$(printf '\t')" read -r id tag; do
+    [ -n "$id" ] || continue
+    if ! grep -qE "^\| $id \|" "$COMMON"; then
+      drift "rule-row-baseline.txt declares $id, which is not a rule row in common-rules.md"
+    elif ! printf '%s\n' "$rows_over" | awk -F'\t' -v id="$id" '$1==id {f=1} END {exit !f}'; then
+      drift "rule-row-baseline.txt still declares $id, whose row now fits the ${ROW_CEILING}-byte ceiling — delete the line so the ratchet cannot slip back"
+    fi
+  done <<< "$baseline_rows"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo ""
   echo "Subject: $SKILL_DIR"
@@ -661,9 +728,10 @@ if [ "$fail" -ne 0 ]; then
   echo "block, the Extended-obligations pointer sentence, phase-1/phase-3"
   echo "'- RSn/RTn: [status]' lines, and every 'R1-Rn'/'RS1-RSn'/'RT1-RTn'"
   echo "range string in the five checked files, common-rules.digest.md,"
-  echo "mandatory rule-details references/files/ID-pattern identities, and the"
+  echo "mandatory rule-details references/files/ID-pattern identities, the"
   echo "phase manifest (front matter vs '### Step' headings, terminators, and"
-  echo "SKILL.md's declaration of the keys and stems readers rely on)."
+  echo "SKILL.md's declaration of the keys and stems readers rely on), and the"
+  echo "row-size ratchet declared in rule-row-baseline.txt."
   exit 1
 fi
 
