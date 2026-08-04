@@ -51,10 +51,15 @@ not". It is:
 > Carrying the rules reliably produces **the three properties the rule contains**.
 > A correct fix needs about nine. Neither arm produced those.
 
-R54 has been extended with the six (see `rule-details/R54.md`). That extension is
-itself a fold made under this eval's own standard — direct evidence that reviewers
-holding the rule fixed it wrong — and it is owed its own ablation before anyone
-claims it works.
+R54 has been extended with the six (see `rule-details/R54.md`). That extension
+was owed its own ablation, and got it: round 8 (audit doc) compared extended
+against pre-extension R54 with everything else held fixed, blind-scored against
+this rubric — which pre-dates the extension, so scoring the extended arm
+against it is not self-scoring. The extension's properties went 4.12/5 and
+5.00/5 with it versus 0.25/5 and 1.75/5 without; P9, the clause this file said
+mattered most, went 16/16 vs 0/16; the original three clauses stayed saturated
+in both arms. One clause under-transmits: P5's connection-handle wording
+reached 1/8 on the GUC fixture even when carried.
 
 ## The blinded re-score (run 2026-08-05)
 

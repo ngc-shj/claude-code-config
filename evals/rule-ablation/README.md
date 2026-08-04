@@ -36,6 +36,12 @@ it and see whether the finding disappears.
      as-merged configuration showed the floor is a section no routing path
      names — zero of four reviewers read it — so ablating F-as-merged against
      N would have compared two arms that both lack the floor in practice.
+   - **E / O** (round 8, R54 extension) — E is the deployed materials at HEAD
+     (wired floor, extended R54); O is identical except `rule-details/R54.md`
+     reverted to its pre-#125 content. One variable per round: the floor stays
+     wired in both arms, so the pair measures only what #125's six obligations
+     add. Scored against the round-5 independent rubric, which pre-dates the
+     extension — the extended arm is not being graded against its own text.
 4. **Trials.** Three per arm is a look, not a result. The one claim this eval has
    had to retract came from n=3 and vanished at n=8. Report n beside every
    number, and take any arm-to-arm difference at n=3 as a reason to run more
