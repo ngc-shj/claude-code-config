@@ -1,0 +1,79 @@
+diff --git a/ci/verify-release.sh b/ci/verify-release.sh
+new file mode 100755
+index 0000000..1a2b3c4
+--- /dev/null
++++ b/ci/verify-release.sh
+@@ -0,0 +1,74 @@
++#!/bin/bash
++# Release verification: runs the policy scanner and the migration check, then
++# writes a machine-readable summary for the deploy job to consume.
++set -u
++
++ARTIFACT_DIR="${ARTIFACT_DIR:-./build}"
++SUMMARY="${ARTIFACT_DIR}/verify-summary.json"
++SCANNER="./tools/policy-scan"
++
++mkdir -p "$ARTIFACT_DIR"
++
++log() { printf '[verify] %s\n' "$1"; }
++
++# ---------------------------------------------------------------------------
++# 1. Policy scanner. The scanner is chatty on stdout (one line per file it
++#    walks), so trim the output to the last 40 lines for the CI log.
++# ---------------------------------------------------------------------------
++run_policy_scan() {
++  log "running policy scanner over ${ARTIFACT_DIR}"
++  "$SCANNER" --strict --root "$ARTIFACT_DIR" 2>&1 | tail -n 40
++  if [ $? -eq 0 ]; then
++    log "policy scan PASS"
++    return 0
++  fi
++  log "policy scan FAIL"
++  return 1
++}
++
++# ---------------------------------------------------------------------------
++# 2. Pending-migration check. Fails when a migration exists that the target
++#    database has not applied.
++# ---------------------------------------------------------------------------
++run_migration_check() {
++  log "checking for unapplied migrations"
++  ./tools/migrate status --json > "${ARTIFACT_DIR}/migrations.json"
++  local pending
++  pending=$(grep -c '"applied": false' "${ARTIFACT_DIR}/migrations.json")
++  if [ "$pending" -gt 0 ]; then
++    log "migration check FAIL (${pending} pending)"
++    return 1
++  fi
++  log "migration check PASS"
++  return 0
++}
++
++POLICY_RESULT=fail
++MIGRATION_RESULT=fail
++
++if run_policy_scan; then
++  POLICY_RESULT=pass
++fi
++
++if run_migration_check; then
++  MIGRATION_RESULT=pass
++fi
++
++cat > "$SUMMARY" <<JSON
++{
++  "policy_scan": "${POLICY_RESULT}",
++  "migration_check": "${MIGRATION_RESULT}",
++  "artifact_dir": "${ARTIFACT_DIR}"
++}
++JSON
++
++log "summary written to ${SUMMARY}"
++
++if [ "$POLICY_RESULT" = pass ] && [ "$MIGRATION_RESULT" = pass ]; then
++  log "release verification PASS"
++  exit 0
++fi
++
++log "release verification FAIL"
++exit 1

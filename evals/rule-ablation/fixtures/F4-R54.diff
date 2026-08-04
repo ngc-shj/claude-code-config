@@ -1,0 +1,80 @@
+diff --git a/src/jobs/retention.ts b/src/jobs/retention.ts
+index 4b5c6d7..8e9f0a1 100644
+--- a/src/jobs/retention.ts
++++ b/src/jobs/retention.ts
+@@ -1,12 +1,15 @@
+ import { prisma } from "../db";
+ import { logger } from "../logger";
+
+ /**
+- * Retention sweep. Runs nightly.
++ * Retention sweep. Runs nightly, inside one transaction so a partial sweep
++ * never leaves half-expired tenants behind.
+  */
+
+ const BATCH = 500;
+
++type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
++
+ export interface SweepResult {
+   tenantsProcessed: number;
+   rowsExpired: number;
+@@ -20,26 +23,72 @@ export async function runRetentionSweep(): Promise<SweepResult> {
+   let rowsExpired = 0;
+
+   await prisma.$transaction(async (tx) => {
+     const tenants = await tx.tenant.findMany({ where: { retentionDays: { gt: 0 } } });
+
+     for (const tenant of tenants) {
+       const cutoff = new Date(Date.now() - tenant.retentionDays * 86_400_000);
+-      const deleted = await tx.record.deleteMany({
+-        where: { tenantId: tenant.id, createdAt: { lt: cutoff } },
+-      });
++      const deleted = await expireTenantRecords(tx, tenant.id, cutoff);
+       rowsExpired += deleted.count;
+       tenantsProcessed += 1;
+     }
++
++    // Roll up per-tenant counters after the sweep so the dashboard reflects
++    // the post-expiry state in the same transaction.
++    await refreshRetentionCounters(tx);
+   });
+
+   logger.info({ tenantsProcessed, rowsExpired }, "retention sweep complete");
+   return { tenantsProcessed, rowsExpired };
+ }
++
++/**
++ * The `records` table carries an append-only trigger that rejects DELETE for
++ * ordinary application traffic. The retention sweep is the one sanctioned
++ * deleter, so it announces itself to the trigger before issuing the delete.
++ */
++async function expireTenantRecords(tx: Tx, tenantId: string, cutoff: Date) {
++  await tx.$executeRawUnsafe(`SET LOCAL app.retention_sweep = 'on'`);
++
++  const deleted = await tx.record.deleteMany({
++    where: { tenantId, createdAt: { lt: cutoff } },
++  });
++
++  logger.debug({ tenantId, count: deleted.count }, "tenant records expired");
++  return deleted;
++}
++
++/**
++ * Recomputes the per-tenant retention counters the admin dashboard reads.
++ * Uses a delete-then-insert because the counter table has no natural key to
++ * upsert on.
++ */
++async function refreshRetentionCounters(tx: Tx) {
++  await tx.retentionCounter.deleteMany({});
++
++  const rows = await tx.$queryRawUnsafe<Array<{ tenant_id: string; n: bigint }>>(
++    `SELECT tenant_id, count(*)::bigint AS n FROM records GROUP BY tenant_id`,
++  );
++
++  for (const row of rows) {
++    await tx.retentionCounter.create({
++      data: { tenantId: row.tenant_id, recordCount: Number(row.n) },
++    });
++  }
++}

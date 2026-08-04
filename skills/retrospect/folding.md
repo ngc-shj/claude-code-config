@@ -177,6 +177,20 @@ The exit is per fold, not per rule: a class recorded undecidable once does not h
 re-argued, but a fold that adds prose to it anyway must say what the new paragraph does
 that the previous ones did not.
 
+**Ablate before folding.** A gate in this repo is red-proved — delete what it checks and
+it must fail. A rule had no equivalent until `evals/rule-ablation/`, and the first round
+(38 runs, `docs/archive/audit/2026-08-04-rule-ablation.md`) found that on six rules the
+review found the defect *without* the rule in 17 of 18 trials; what the rule changed was
+severity and rank, not detection. So the premise "the round missed this because it was not
+written down" is not free, and a fold asserting it should show its work: a fixture holding
+the defect, an oracle written down first, and a run with and without the rule row. Record
+the outcome in the retrospective doc either way. A rule whose only measured contribution
+is severity belongs in a severity cue, not a full procedure. Two cautions from that round,
+both of which cut against the tidy conclusion: the fixtures were written by someone who
+knew the rule, so a null result is weaker evidence than a positive one; and the arm given
+the pattern NAME without its procedure scored worse than the arm given nothing at all,
+which is the reason a row is not to be shrunk to its digest line on convenience grounds.
+
 1. Author `hooks/check-<slug>.sh` modeled on the existing `check-*.sh` hooks: header
    comment stating the rule ID, detection logic, severity, and usage
    (`bash check-<slug>.sh [base-ref]`); `set -u`; operate on `git diff <base>...HEAD`;

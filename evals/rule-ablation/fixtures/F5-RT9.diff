@@ -1,0 +1,396 @@
+Subject: [PATCH] feat(popup): export selected findings to CSV, and tighten the frame-origin check
+
+ manifest.json               |   6 +-
+ content/sanitize.js         |  18 ++++-
+ src/sanitize.ts             |  34 +++++++--
+ test/sanitize.test.ts       |  46 ++++++++++++
+ popup/export.ts             | 132 ++++++++++++++++++++++++++++++++++
+ popup/export.css            |  41 +++++++++++
+ popup/index.html            |   9 ++-
+ docs/CHANGELOG.md           |   8 +++
+ 8 files changed, 281 insertions(+), 13 deletions(-)
+
+diff --git a/manifest.json b/manifest.json
+index 1a2b3c4..5d6e7f8 100644
+--- a/manifest.json
++++ b/manifest.json
+@@ -12,10 +12,14 @@
+   "content_scripts": [
+     {
+       "matches": ["https://*/*"],
+-      "js": ["content/sanitize.js"],
++      "js": ["content/sanitize.js", "content/collect.js"],
+       "run_at": "document_idle"
+     }
+   ],
+   "action": {
+     "default_popup": "popup/index.html"
+   },
++  "web_accessible_resources": [
++    { "resources": ["popup/export.css"], "matches": ["https://*/*"] }
++  ],
+   "permissions": ["storage", "activeTab"]
+ }
+
+diff --git a/content/sanitize.js b/content/sanitize.js
+index 2b3c4d5..6e7f8a9 100644
+--- a/content/sanitize.js
++++ b/content/sanitize.js
+@@ -1,10 +1,12 @@
+ /* Content script. Loaded directly by the browser from manifest.json — this
+-   file is plain ES5-compatible JS on purpose, there is no build step for it. */
++   file is plain ES5-compatible JS on purpose, there is no build step for it.
++   Keep in sync with src/sanitize.ts, which the unit tests import. */
+
+ var ALLOWED_ORIGINS = [
+   "https://app.example.com",
+   "https://admin.example.com",
++  "https://reports.example.com",
+ ];
+
+ function isAllowedOrigin(origin) {
+@@ -14,10 +16,22 @@ function isAllowedOrigin(origin) {
+   return ALLOWED_ORIGINS.indexOf(origin) !== -1;
+ }
+
++function normalizeText(value) {
++  if (typeof value !== "string") return "";
++  return value.replace(/\s+/g, " ").trim();
++}
++
+ window.addEventListener("message", function (event) {
+   if (!isAllowedOrigin(event.origin)) {
+     return;
+   }
++  if (!event.data || typeof event.data !== "object") {
++    return;
++  }
+   var payload = event.data;
+-  chrome.runtime.sendMessage({ type: "finding", payload: payload });
++  chrome.runtime.sendMessage({
++    type: "finding",
++    payload: {
++      title: normalizeText(payload.title),
++      detail: normalizeText(payload.detail),
++    },
++  });
+ });
+
+diff --git a/src/sanitize.ts b/src/sanitize.ts
+index 3c4d5e6..7f8a9b0 100644
+--- a/src/sanitize.ts
++++ b/src/sanitize.ts
+@@ -1,20 +1,44 @@
+-/* Typed twin of content/sanitize.js. The unit tests import THIS file; the
+-   browser loads the plain-JS copy. */
++/* Typed twin of content/sanitize.js. The unit tests import THIS file; the
++   browser loads the plain-JS copy listed in manifest.json. */
+
+ export const ALLOWED_ORIGINS = [
+   "https://app.example.com",
+   "https://admin.example.com",
++  "https://reports.example.com",
+ ] as const;
+
++/**
++ * A message is only trusted when it comes from an allowed origin AND from a
++ * frame we actually embedded. `event.origin` alone is satisfied by any frame
++ * on an allowed host, including one an attacker got injected into a
++ * subresource, so the source window must match a frame we own.
++ */
+ export function isAllowedOrigin(origin: string): boolean {
+   if (!origin) return false;
+   return (ALLOWED_ORIGINS as readonly string[]).includes(origin);
+ }
+
++export function isTrustedSource(
++  event: MessageEvent,
++  ownedFrames: readonly Window[],
++): boolean {
++  if (!isAllowedOrigin(event.origin)) return false;
++  if (!event.source) return false;
++  return ownedFrames.indexOf(event.source as Window) !== -1;
++}
++
+ export function normalizeText(value: unknown): string {
+   if (typeof value !== "string") return "";
+   return value.replace(/\s+/g, " ").trim();
+ }
+
+-export function handleMessage(event: MessageEvent): Finding | null {
+-  if (!isAllowedOrigin(event.origin)) return null;
++export function handleMessage(
++  event: MessageEvent,
++  ownedFrames: readonly Window[] = [],
++): Finding | null {
++  if (!isTrustedSource(event, ownedFrames)) return null;
+   if (!event.data || typeof event.data !== "object") return null;
+   const payload = event.data as Record<string, unknown>;
+   return {
+     title: normalizeText(payload.title),
+     detail: normalizeText(payload.detail),
+   };
+ }
+
+diff --git a/test/sanitize.test.ts b/test/sanitize.test.ts
+index 4d5e6f7..8a9b0c1 100644
+--- a/test/sanitize.test.ts
++++ b/test/sanitize.test.ts
+@@ -1,10 +1,56 @@
+ import { describe, it, expect } from "vitest";
+-import { handleMessage, isAllowedOrigin, normalizeText } from "../src/sanitize";
++import {
++  handleMessage,
++  isAllowedOrigin,
++  isTrustedSource,
++  normalizeText,
++} from "../src/sanitize";
+
+ const frameA = {} as Window;
+ const frameB = {} as Window;
+
+ function msg(origin: string, data: unknown, source: Window | null = frameA) {
+   return { origin, data, source } as unknown as MessageEvent;
+ }
+
+ describe("isAllowedOrigin", () => {
+   it("accepts a listed origin", () => {
+     expect(isAllowedOrigin("https://app.example.com")).toBe(true);
+   });
++
++  it("accepts the newly listed reports origin", () => {
++    expect(isAllowedOrigin("https://reports.example.com")).toBe(true);
++  });
++
+   it("rejects an unlisted origin", () => {
+     expect(isAllowedOrigin("https://evil.example.com")).toBe(false);
+   });
+ });
+
++describe("isTrustedSource", () => {
++  it("accepts an allowed origin from a frame we own", () => {
++    expect(isTrustedSource(msg("https://app.example.com", {}), [frameA])).toBe(true);
++  });
++
++  it("rejects an allowed origin from a frame we do not own", () => {
++    expect(isTrustedSource(msg("https://app.example.com", {}, frameB), [frameA])).toBe(false);
++  });
++
++  it("rejects a message with no source window", () => {
++    expect(isTrustedSource(msg("https://app.example.com", {}, null), [frameA])).toBe(false);
++  });
++});
++
++describe("handleMessage", () => {
++  it("returns a finding for a trusted message", () => {
++    const out = handleMessage(msg("https://app.example.com", { title: " a  b ", detail: "x" }), [frameA]);
++    expect(out).toEqual({ title: "a b", detail: "x" });
++  });
++
++  it("returns null when the frame is not ours", () => {
++    const out = handleMessage(msg("https://app.example.com", { title: "a" }, frameB), [frameA]);
++    expect(out).toBeNull();
++  });
++
++  it("returns null for a disallowed origin", () => {
++    const out = handleMessage(msg("https://evil.example.com", { title: "a" }), [frameA]);
++    expect(out).toBeNull();
++  });
++});
++
+ describe("normalizeText", () => {
+   it("collapses whitespace", () => {
+     expect(normalizeText("  a   b ")).toBe("a b");
+   });
++  it("returns empty string for non-strings", () => {
++    expect(normalizeText(42)).toBe("");
++  });
+ });
+
+diff --git a/popup/export.ts b/popup/export.ts
+new file mode 100644
+index 0000000..9b0c1d2
+--- /dev/null
++++ b/popup/export.ts
+@@ -0,0 +1,132 @@
++import type { Finding } from "../src/types";
++
++const CSV_HEADER = ["title", "detail", "url", "capturedAt"];
++
++interface ExportOptions {
++  includeUrls: boolean;
++  delimiter: "," | ";" | "\t";
++}
++
++const DEFAULTS: ExportOptions = { includeUrls: true, delimiter: "," };
++
++function quote(field: string, delimiter: string): string {
++  if (field.includes(delimiter) || field.includes('"') || field.includes("\n")) {
++    return '"' + field.replace(/"/g, '""') + '"';
++  }
++  return field;
++}
++
++export function toCsv(findings: Finding[], opts: Partial<ExportOptions> = {}): string {
++  const o = { ...DEFAULTS, ...opts };
++  const header = o.includeUrls ? CSV_HEADER : CSV_HEADER.filter((h) => h !== "url");
++  const lines = [header.join(o.delimiter)];
++
++  for (const f of findings) {
++    const row = [
++      quote(f.title ?? "", o.delimiter),
++      quote(f.detail ?? "", o.delimiter),
++    ];
++    if (o.includeUrls) {
++      row.push(quote(f.url ?? "", o.delimiter));
++    }
++    row.push(quote(f.capturedAt ?? "", o.delimiter));
++    lines.push(row.join(o.delimiter));
++  }
++
++  return lines.join("\r\n");
++}
++
++export async function loadSelected(): Promise<Finding[]> {
++  const { findings = [], selected = [] } = await chrome.storage.local.get([
++    "findings",
++    "selected",
++  ]);
++  const ids = new Set<string>(selected);
++  return (findings as Finding[]).filter((f) => ids.has(f.id));
++}
++
++function filenameFor(count: number): string {
++  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
++  return `findings-${count}-${stamp}.csv`;
++}
++
++export async function runExport(root: HTMLElement): Promise<void> {
++  const status = root.querySelector<HTMLElement>("#export-status");
++  const button = root.querySelector<HTMLButtonElement>("#export-run");
++  if (!status || !button) return;
++
++  button.disabled = true;
++  status.textContent = "Preparing export…";
++
++  const findings = await loadSelected();
++  if (findings.length === 0) {
++    status.textContent = "Nothing selected.";
++    button.disabled = false;
++    return;
++  }
++
++  const csv = toCsv(findings);
++  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
++  const url = URL.createObjectURL(blob);
++
++  const a = document.createElement("a");
++  a.href = url;
++  a.download = filenameFor(findings.length);
++  a.click();
++  URL.revokeObjectURL(url);
++
++  status.innerHTML =
++    "Exported <strong>" + findings.length + "</strong> findings from " +
++    findings[0].url + ".";
++  button.disabled = false;
++}
++
++export function mountExport(root: HTMLElement): void {
++  const button = root.querySelector<HTMLButtonElement>("#export-run");
++  button?.addEventListener("click", () => {
++    runExport(root);
++  });
++}
++
++export function summarize(findings: Finding[]): string {
++  const byHost = new Map<string, number>();
++  for (const f of findings) {
++    let host = "unknown";
++    try {
++      host = new URL(f.url ?? "").host || "unknown";
++    } catch {
++      host = "unknown";
++    }
++    byHost.set(host, (byHost.get(host) ?? 0) + 1);
++  }
++  return [...byHost.entries()]
++    .sort((a, b) => b[1] - a[1])
++    .map(([host, n]) => `${host}: ${n}`)
++    .join(", ");
++}
+
+diff --git a/popup/export.css b/popup/export.css
+new file mode 100644
+index 0000000..0c1d2e3
+--- /dev/null
++++ b/popup/export.css
+@@ -0,0 +1,41 @@
++.export-panel {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  padding: 12px;
++  border-top: 1px solid var(--rule, #ddd);
++}
++
++.export-panel button {
++  align-self: flex-start;
++  padding: 6px 14px;
++  font: inherit;
++  cursor: pointer;
++}
++
++.export-panel button[disabled] {
++  cursor: default;
++}
++
++.export-status {
++  font-size: 12px;
++  color: #555;
++  min-height: 1.2em;
++}
++
++@media (prefers-color-scheme: dark) {
++  .export-panel {
++    border-top-color: #444;
++  }
++  .export-status {
++    color: #bbb;
++  }
++}
+
+diff --git a/popup/index.html b/popup/index.html
+index 5e6f7a8..9c0d1e2 100644
+--- a/popup/index.html
++++ b/popup/index.html
+@@ -8,6 +8,15 @@
+   <body>
+     <main id="app"></main>
++
++    <section class="export-panel" id="export">
++      <button id="export-run" type="button">Export selected to CSV</button>
++      <p class="export-status" id="export-status"></p>
++    </section>
++
++    <link rel="stylesheet" href="export.css" />
+     <script type="module" src="./index.js"></script>
+   </body>
+ </html>
+
+diff --git a/docs/CHANGELOG.md b/docs/CHANGELOG.md
+index 6f7a8b9..0d1e2f3 100644
+--- a/docs/CHANGELOG.md
++++ b/docs/CHANGELOG.md
+@@ -1,5 +1,13 @@
+ # Changelog
+
++## Unreleased
++
++- Popup can export the selected findings to CSV.
++- `reports.example.com` added to the content-script origin allowlist.
++- Frame-origin check tightened: a message is now trusted only when it arrives
++  from an allowed origin AND from a frame the extension itself embedded.
++- Content script now normalizes `title`/`detail` before forwarding.
++
+ ## 1.4.0
