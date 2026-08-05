@@ -216,7 +216,7 @@ in the order it found it:
 **Measure firing before folding.** `evals/rule-firing/measure.py` counts, per rule,
 how often it produced a finding across every review artifact the sibling repos have
 accumulated — one command, no fixtures, no agents. The 2026-08-05 run found the median
-rule fires in 0.50% of the reviews where it existed, 48 of 74 fire in under 1%, and
+rule fires in 0.40% of the reviews where it existed, 49 of 74 fire in under 1%, and
 eight have never fired at all despite being checked 96–270 times each. Run it before
 adding a rule: a catalogue whose median row fires twice a year should make "a reviewer
 once missed this" a weak argument for growing it, and the tool will also say whether the

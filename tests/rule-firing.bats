@@ -78,6 +78,47 @@ setup() {
   [ "$output" = "0" ]
 }
 
+@test "a requirement ID is not counted as a rule citation" {
+  # These repos number their requirements NF-R2, F-R5, Func-R2, T-R2. A hyphen
+  # is a word boundary, so a plain \b on the left scored every one of them as a
+  # rule firing — this was measured, not imagined: it is what inflated R1 and
+  # R2 in the first run of this tool.
+  printf '%s\n' \
+    '### F1 [Major] NF-R2 and Func-R1 contradict the plan' \
+    '- Problem: real' > "$REVIEWS/g-review.md"
+
+  run python3 "$TOOL" --catalogue "$CAT" --glob "$REVIEWS/*-review.md" --tsv
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'R1\t'*$'\t0\t0\t'* ]]
+  [[ "$output" == *$'R2\t'*$'\t0\t0\t'* ]]
+}
+
+@test "a range reference credits neither endpoint with a finding" {
+  # "R1-R2 N/A" says a span was checked, not that either rule fired. Counting
+  # the endpoints turned every Recurring Issue Check header into two findings.
+  printf '%s\n' \
+    '### F1 [Major] rules R1-R2 were reviewed for this change' \
+    '- Problem: real' > "$REVIEWS/h-review.md"
+
+  run python3 "$TOOL" --catalogue "$CAT" --glob "$REVIEWS/*-review.md" --tsv
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'R1\t'*$'\t0\t0\t'* ]]
+  [[ "$output" == *$'R2\t'*$'\t0\t0\t'* ]]
+}
+
+@test "a hyphenated finding ID still counts as a citation" {
+  # The guard above must not swallow `R2-F1: ...`, which is a genuine reference
+  # written as rule-then-finding-number. Without this pair, tightening the
+  # pattern until every count reached zero would look like success.
+  printf '%s\n' \
+    '### F1 [Major] R2-F1: constant duplicated across modules' \
+    '- Problem: real' > "$REVIEWS/i-review.md"
+
+  run python3 "$TOOL" --catalogue "$CAT" --glob "$REVIEWS/*-review.md" --tsv
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'R2\t'*$'\t1\t1\t'* ]]
+}
+
 @test "an ID embedded in a longer token is not counted" {
   # Both anchors carry weight and each fails differently: without the leading
   # one, "ERROR1" scores R1; without the trailing one, "R1x" does. R10 is a

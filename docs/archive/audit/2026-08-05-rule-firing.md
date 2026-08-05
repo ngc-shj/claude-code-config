@@ -24,9 +24,9 @@ down*, and that theory has a cheap observational test.
 
 | | |
 |---|---|
-| median firing rate | **0.50%** of the reviews where the rule existed |
-| rules firing in under 1% of their opportunities | **48 of 74** |
-| highest rate among mature rules | R2 at 5.36% (55 findings / 1026 opportunities) |
+| median firing rate | **0.40%** of the reviews where the rule existed |
+| rules firing in under 1% of their opportunities | **49 of 74** |
+| highest count among mature rules | R3 — 37 findings / 1026 opportunities (3.61%) |
 
 The routing protocol is being followed — RT1 was cited in 628 of its 1026
 opportunities, R3 in 582 — so the low rates are not reviewers skipping the
@@ -36,13 +36,35 @@ Top by findings produced:
 
 | rule | fire% | findings | checked | opportunities |
 |---|---|---|---|---|
-| R2 | 5.36 | 55 | 486 | 1026 |
-| R3 | 4.97 | 51 | 582 | 1026 |
-| RT1 | 2.83 | 29 | 628 | 1026 |
-| R1 | 2.73 | 28 | 579 | 1026 |
-| RT5 | 3.38 | 23 | 333 | 680 |
-| R19 | 2.24 | 23 | 387 | 1026 |
-| RT7 | 4.68 | 21 | 244 | 449 |
+| R3 | 3.61 | 37 | 565 | 1026 |
+| R2 | 2.83 | 29 | 434 | 1026 |
+| RT1 | 2.83 | 29 | 568 | 1026 |
+| RT5 | 3.38 | 23 | 316 | 680 |
+| R19 | 2.24 | 23 | 384 | 1026 |
+| R1 | 2.24 | 23 | 469 | 1026 |
+| RT7 | 4.68 | 21 | 235 | 449 |
+
+## Correction, same day: the first numbers were inflated
+
+The first run of this tool matched rule IDs with a plain `\b` anchor on both
+sides. A hyphen is a word boundary, so every requirement ID these repositories
+use — `NF-R2`, `F-R5`, `Func-R2`, `T-R2` — scored as a rule citation, and both
+endpoints of every range reference (`R1-R35`, `RS1-RS3`, `RT1-RT5`) scored too.
+
+It surfaced within the hour, and only because the next step began by reading
+the actual findings the tool had pointed at: R1's supposed hits turned out to
+be `NF-R1` requirement references and `R1-R13` spans. The pattern now rejects a
+preceding word character or hyphen, and rejects a trailing hyphen followed by
+another rule ID, while still admitting `R2-F1`-style finding IDs.
+
+What moved: R2 from 55 findings to **29**, R3 from 51 to **37**, R1 from 28 to
+**23** — and the top rank changed hands from R2 to R3. Every table above is the
+corrected run.
+
+What did not move: **the eight dead rules, all eight, unchanged.** A false
+positive can only add a finding, so a rule sitting at zero was never at risk
+from this bug. The deletion-candidate list is the one part of the first run
+that was safe by construction.
 
 ## Eight rules have never fired, with every chance to
 
@@ -89,9 +111,12 @@ these codebases, not about circular dependencies.
 
 ## What follows
 
-1. **Panel-audit where the firing is**, not alphabetically: R2, R3, RT1, R1,
-   RT5, R19, RT7 account for the bulk of findings and are where a missing
-   clause costs the most. That is seven defect sketches, not seventy-four.
+1. **Panel-audit where the firing is**, not alphabetically: R3, R2, RT1, RT5,
+   R19, R1, RT7 account for the bulk of findings and are where a missing clause
+   costs the most. That is seven defect sketches, not seventy-four. Note that
+   RT1 and R1 are one-sentence rules carrying 29 and 23 findings apiece —
+   rounds 8–9 showed a rule transmits exactly what it states, so a rule this
+   short firing this often is the sharpest gap the catalogue has.
 2. **Decide the eight deliberately.** The honest options are delete, demote to
    a non-routed appendix, or keep and accept the routing cost — and the
    self-fulfilling-demotion trap means the choice should be made once, on the
