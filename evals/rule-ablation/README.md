@@ -119,6 +119,10 @@ three trials are not three samples of one prompt.
 
 `docs/archive/audit/2026-08-04-rule-ablation.md`.
 
+Every number there is re-derivable: `protocols/` holds the pre-registration
+files for rounds 7-9, `scores/` the scorer sheets and arm mappings, and
+`score.py --round <n>` recomputes the published table from them.
+
 ## What this cannot answer
 
 The fixtures are written by someone who knows the rule, which is a legibility

@@ -1,0 +1,16 @@
+F1S01: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=y Q14=y Q15=n Q16=y Q17=n Q18=y Q19=n total=15
+F1S02: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=y Q14=y Q15=n Q16=n Q17=n Q18=n Q19=n total=13
+F1S03: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=n Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=y Q14=y Q15=n Q16=y Q17=n Q18=y Q19=n total=14
+F1S04: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=y Q13=y Q14=y Q15=n Q16=y Q17=n Q18=y Q19=n total=16
+F1S05: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=n Q14=y Q15=n Q16=n Q17=n Q18=n Q19=n total=12
+F1S06: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=y Q14=y Q15=n Q16=y Q17=n Q18=y Q19=n total=15
+F1S07: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=y Q14=y Q15=n Q16=n Q17=n Q18=y Q19=n total=14
+F1S08: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=y Q14=y Q15=n Q16=n Q17=n Q18=n Q19=n total=13
+F1S09: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=n Q14=y Q15=n Q16=n Q17=n Q18=n Q19=n total=12
+F1S10: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=y Q13=y Q14=y Q15=n Q16=y Q17=n Q18=y Q19=n total=15
+F1S11: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=y Q14=y Q15=n Q16=n Q17=n Q18=n Q19=n total=13
+F1S12: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=y Q13=n Q14=y Q15=n Q16=y Q17=n Q18=y Q19=n total=14
+F1S13: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=y Q14=y Q15=n Q16=n Q17=n Q18=n Q19=n total=13
+F1S14: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=n Q7=y Q8=y Q9=y Q10=y Q11=y Q12=y Q13=y Q14=y Q15=n Q16=y Q17=n Q18=y Q19=n total=15
+F1S15: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=y Q13=y Q14=y Q15=n Q16=y Q17=n Q18=y Q19=n total=16
+F1S16: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=y Q11=y Q12=n Q13=y Q14=y Q15=n Q16=n Q17=n Q18=n Q19=n total=13
