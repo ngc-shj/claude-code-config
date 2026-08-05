@@ -47,6 +47,20 @@ how many opportunities a zero needs before it counts as evidence.
   1026 opportunities) show the citation convention is followed closely enough
   to trust, but it is a convention, not an instrument.
 
-## Result
+## Panel audits pointed by this measurement
 
-`docs/archive/audit/2026-08-05-rule-firing.md`.
+`sketches/` holds defect sketches derived from real findings in the corpus, and
+`rubrics/` the merged panel rubrics built from them — the round-5/6 method
+aimed where the firing data says the catalogue actually earns its keep, rather
+than alphabetically.
+
+A sketch is much cheaper than an ablation fixture: the panel does no detection,
+so the code needs no burial and no competing defects, only the defect itself in
+its real shape. Twenty to forty lines is enough.
+
+## Results
+
+- `docs/archive/audit/2026-08-05-rule-firing.md` — the firing measurement.
+- `docs/archive/audit/2026-08-05-panel-audit-oneliners.md` — RT1 and R1
+  audited against it: 30 and 29 majority properties against one-sentence rules,
+  and both panels finding the rule names the symptom rather than the hazard.
