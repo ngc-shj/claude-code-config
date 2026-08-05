@@ -86,6 +86,26 @@ not. The rubrics above are the scoring instrument that ablation would use, and
 the sketches are its fixtures. That run is the next thing, exactly as #126 was
 owed #127.
 
+## Folded (same day)
+
+Both rules were extended from their rubrics — `rule-details/RT1.md` and
+`rule-details/R1.md`, with the rows pointing at them and carrying the
+"necessary and not sufficient" statement inline so a reader who never opens the
+details file still gets the correction.
+
+RT1 gains eight clauses, of which (c) and (d) — a constant double cannot
+support an oracle; assert against an independently written expected value — are
+the ones the shape requirement cannot reach. R1 gains six, of which (e) — ask
+what the duplicate's existence implies about the call site, and name the failure
+the dedup does not address — is the one "search for the helper" cannot reach.
+
+This fold rests on #128, not on the panels alone: that round showed, replicated
+across two fixtures, that extending a rule transmits the clauses added (the
+property that was 0/29 everywhere went 16/16). The panels establish *what* is
+missing; #128 establishes that writing it down is a mechanism that works. What
+is not yet measured is whether these particular clauses transmit, which is the
+same debt every extension carries.
+
 ## What follows
 
 1. **Ablate the candidate clause** against these two rubrics, W/N, n=8 per cell,

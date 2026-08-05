@@ -18,7 +18,7 @@ Also extract a rule's Extended obligations section when the selected row points 
 
 | ID | Pattern | Severity if missed |
 |---|---|---|
-| R1 | Shared utility reimplementation | Major |
+| R1 | Shared utility reimplementation | Major; Critical when the duplicated behaviour is a security control or the call site's unaddressed hazard is one |
 | R2 | Constants hardcoded in multiple places | Major |
 | R3 | Incomplete pattern propagation | Critical if security-relevant, Major otherwise |
 | R4 | Event/notification dispatch gaps | Major |
@@ -81,7 +81,7 @@ Also extract a rule's Extended obligations section when the selected row points 
 | RS4 | Personal-identifying data in committed artifacts | Critical for secrets or exploitable identity data; Major otherwise |
 | RS5 | Untrusted externally-supplied security parameter without floor/whitelist | Major (Critical when no transport pinning/TOFU mitigates the MITM vector) |
 | RS6 | Incomplete sanitization — escape-character ordering | Major (Critical when the unsanitized output crosses into an interpolation/injection sink — SQL, shell, HTML attribute, template) |
-| RT1 | Mock-reality divergence | Critical |
+| RT1 | Mock-reality divergence | Critical when the divergence hides a security or correctness control; Major otherwise |
 | RT2 | Testability verification | — (reject finding if untestable) |
 | RT3 | Shared constant in tests | Major |
 | RT4 | Race-test vacuous-pass guard | Critical |
