@@ -24,9 +24,9 @@ down*, and that theory has a cheap observational test.
 
 | | |
 |---|---|
-| median firing rate | **0.40%** of the reviews where the rule existed |
+| median firing rate | **0.39%** of the reviews where the rule existed |
 | rules firing in under 1% of their opportunities | **49 of 74** |
-| highest count among mature rules | R3 — 37 findings / 1026 opportunities (3.61%) |
+| highest count among mature rules | RT1 — 29 findings / 1026 opportunities (2.83%) |
 
 The routing protocol is being followed — RT1 was cited in 628 of its 1026
 opportunities, R3 in 582 — so the low rates are not reviewers skipping the
@@ -36,13 +36,13 @@ Top by findings produced:
 
 | rule | fire% | findings | checked | opportunities |
 |---|---|---|---|---|
-| R3 | 3.61 | 37 | 565 | 1026 |
-| R2 | 2.83 | 29 | 434 | 1026 |
 | RT1 | 2.83 | 29 | 568 | 1026 |
-| RT5 | 3.38 | 23 | 316 | 680 |
+| R3 | 2.63 | 27 | 547 | 1026 |
+| RT5 | 3.38 | 23 | 314 | 680 |
 | R19 | 2.24 | 23 | 384 | 1026 |
-| R1 | 2.24 | 23 | 469 | 1026 |
-| RT7 | 4.68 | 21 | 235 | 449 |
+| R1 | 1.95 | 20 | 469 | 1026 |
+| RT7 | 4.01 | 18 | 234 | 449 |
+| R12 | 1.75 | 18 | 315 | 1026 |
 
 ## Correction, same day: the first numbers were inflated
 
@@ -57,16 +57,26 @@ be `NF-R1` requirement references and `R1-R13` spans. The pattern now rejects a
 preceding word character or hyphen, and rejects a trailing hyphen followed by
 another rule ID, while still admitting `R2-F1`-style finding IDs.
 
-What moved: R2 from 55 findings to **29**, R3 from 51 to **37**, R1 from 28 to
-**23** — and the top rank changed hands from R2 to R3. Every table above is the
-corrected run.
+**A second correction, hours later.** Sampling finding bodies for the panel
+audit showed a third class the first fix had deliberately preserved: `R2-F1`,
+`R3-S1`, `R2-#1` read as "rule R2, finding 1" and are not — in this corpus the
+`R<n>` of a finding ID is the review **round**. That reading survived because it
+was checked against an invented example rather than the corpus, and it inflated
+R2 by 88 heading occurrences and R3 by 43.
 
-What did not move: **the eight dead rules, all eight, unchanged.** A false
-positive can only add a finding, so a rule sitting at zero was never at risk
-from this bug. The deletion-candidate list is the one part of the first run
-that was safe by construction.
+Cumulative effect across both corrections: R2 from 55 findings to **15**, R3
+from 51 to **27**, R1 from 28 to **20**, and the top rank moved from R2 to R3
+to **RT1**, which no form of this contamination ever touched. Every table above
+is the twice-corrected run.
 
-## Eight rules have never fired, with every chance to
+What did not move, either time: **the dead-rule list never lost a member.** A
+false positive can only add a finding, so a rule sitting at zero was never at
+risk; the second correction moved R13 from one finding to none and the list
+grew from eight to **nine**. The deletion-candidate list is the one part of this
+measurement that is safe by construction, which is why it was the one part
+recorded as actionable.
+
+## Nine rules have never fired, with every chance to
 
 Zero findings across every review that postdates them, each checked in the
 Recurring Issue Check dozens to hundreds of times, in six repositories:
@@ -81,6 +91,7 @@ Recurring Issue Check dozens to hundreds of times, in six repositories:
 | R33 | 2026-04-29 | 977 | 166 | **0** |
 | RS6 | 2026-07-04 | 297 | 100 | **0** |
 | R40 | 2026-06-14 | 449 | 96 | **0** |
+| R13 | 2026-04-23 | 1026 | 203 | **0** |
 
 Spot-checked: every one of R10's 270 citations is a checklist line — `R10: N/A
 — flat shell sourcing, no cycles`, `R10: checked, unidirectional` — and none is
@@ -111,13 +122,13 @@ these codebases, not about circular dependencies.
 
 ## What follows
 
-1. **Panel-audit where the firing is**, not alphabetically: R3, R2, RT1, RT5,
-   R19, R1, RT7 account for the bulk of findings and are where a missing clause
+1. **Panel-audit where the firing is**, not alphabetically: RT1, R3, RT5, R19,
+   R1, RT7, R12 account for the bulk of findings and are where a missing clause
    costs the most. That is seven defect sketches, not seventy-four. Note that
    RT1 and R1 are one-sentence rules carrying 29 and 23 findings apiece —
    rounds 8–9 showed a rule transmits exactly what it states, so a rule this
    short firing this often is the sharpest gap the catalogue has.
-2. **Decide the eight deliberately.** The honest options are delete, demote to
+2. **Decide the nine deliberately.** The honest options are delete, demote to
    a non-routed appendix, or keep and accept the routing cost — and the
    self-fulfilling-demotion trap means the choice should be made once, on the
    record, rather than drifting.

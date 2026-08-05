@@ -106,17 +106,35 @@ setup() {
   [[ "$output" == *$'R2\t'*$'\t0\t0\t'* ]]
 }
 
-@test "a hyphenated finding ID still counts as a citation" {
-  # The guard above must not swallow `R2-F1: ...`, which is a genuine reference
-  # written as rule-then-finding-number. Without this pair, tightening the
-  # pattern until every count reached zero would look like success.
+@test "a round-numbered finding ID is not a rule citation" {
+  # `R2-F1` reads as "rule R2, finding 1" and is not: in this corpus the R<n>
+  # of a finding ID is the review ROUND — round 2 finding 1, round 3 security
+  # finding 1. An earlier version of the guard kept these on the shape-based
+  # reading and inflated R2 by 88 heading occurrences and R3 by 43. The lesson
+  # is in measure.py: check a pattern against sampled corpus contexts, not
+  # against what the token looks like it should mean.
   printf '%s\n' \
-    '### F1 [Major] R2-F1: constant duplicated across modules' \
+    '### R2-F1 [Major] constant duplicated across modules' \
+    '- Problem: real' \
+    '### R3-S1 [Major] cache key missing a scope component' \
     '- Problem: real' > "$REVIEWS/i-review.md"
 
   run python3 "$TOOL" --catalogue "$CAT" --glob "$REVIEWS/*-review.md" --tsv
   [ "$status" -eq 0 ]
+  [[ "$output" == *$'R2\t'*$'\t0\t0\t'* ]]
+}
+
+@test "a bare ID adjacent to punctuation still counts" {
+  # The counterweight: tightening until nothing counts would also look green.
+  # These are the forms a genuine citation takes in the corpus.
+  printf '%s\n' \
+    '### F1 [Major] duplicated constant (R2), and see R1.' \
+    '- Problem: real' > "$REVIEWS/j-review.md"
+
+  run python3 "$TOOL" --catalogue "$CAT" --glob "$REVIEWS/*-review.md" --tsv
+  [ "$status" -eq 0 ]
   [[ "$output" == *$'R2\t'*$'\t1\t1\t'* ]]
+  [[ "$output" == *$'R1\t'*$'\t1\t1\t'* ]]
 }
 
 @test "an ID embedded in a longer token is not counted" {

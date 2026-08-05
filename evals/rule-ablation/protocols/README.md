@@ -10,6 +10,13 @@ rather than taken on trust — a pre-registration you cannot produce is not one.
 | `round-7.md` | does the Remedy Floor work when wired? | W (wired) / N (absent) | floor-mapped vs mechanism, per fixture |
 | `round-8.md` | does #125's R54 extension transmit? | E (extended) / O (pre-#125) | extension properties vs the original three |
 | `round-9.md` | does the reworded obligation (c) transmit for the GUC variant? | Cnew / Cold | P5 vs the rest |
+| `round-10.md` | does expert SPECIALISATION buy anything over REPETITION? | S (3 roles) / G (3 identical) | remedy rubric coverage; detection as control |
+
+`round-10.md` is the first round to vary the skill's STRUCTURE rather than its
+catalogue. Both arms run three agents on the same fixture with the same
+materials, so the comparison isolates specialisation from multiplicity —
+"three experts vs one reviewer" would have measured the latter, which wins
+trivially.
 
 `round-7.md` also carries the probe result recorded before the ablation was
 designed — four deployed-arm reviewers, zero reads of the Remedy Floor — which
