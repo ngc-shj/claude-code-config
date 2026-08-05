@@ -1,0 +1,16 @@
+W01: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=n Q22=y Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=26
+W02: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=n Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=n Q22=y Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=y Q32=n Q33=y Q34=n total=26
+W03: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=n Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=n Q22=y Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=y Q32=n Q33=y Q34=n total=26
+W04: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=n Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=n Q22=y Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=25
+W05: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=n Q22=n Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=25
+W06: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=n Q22=y Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=y Q32=n Q33=y Q34=n total=27
+W07: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=n Q22=n Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=25
+W08: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=n Q22=n Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=25
+W09: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=n Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=n Q19=y Q20=y Q21=n Q22=y Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=24
+W10: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=n Q20=y Q21=n Q22=y Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=25
+W11: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=n Q20=y Q21=n Q22=n Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=24
+W12: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=n Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=n Q19=y Q20=y Q21=n Q22=y Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=24
+W13: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=y Q22=y Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=27
+W14: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=n Q22=n Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=25
+W15: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=n Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=n Q20=y Q21=n Q22=n Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=23
+W16: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=y Q8=y Q9=y Q10=n Q11=y Q12=y Q13=y Q14=y Q15=y Q16=y Q17=n Q18=y Q19=y Q20=y Q21=n Q22=n Q23=y Q24=n Q25=y Q26=y Q27=y Q28=y Q29=y Q30=n Q31=n Q32=n Q33=y Q34=n total=25

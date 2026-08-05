@@ -241,14 +241,34 @@ Three standing cautions:
   this kind is the cheapest audit of a rule this repo has**: it costs ten read-only
   agents and it tells you what the rule is missing, which no amount of mining more
   review artifacts will.
-- **Who reads the rule does not change what the review says.** Round 10 varied the
-  skill's structure rather than its catalogue: three specialised experts against three
-  identical generalists, equal compute, same materials. Coverage came out 6.25 vs 6.50
-  of 11 — no difference, with the point estimate favouring the *unspecialised* arm — and
-  both arms missed the same three properties. Routing is decided by matching the diff
-  against pattern names, so every reviewer arrives at the same row whatever their role.
-  Before adding a perspective, a phase, or an expert, measure it the way a rule is
-  measured; structure is the most expensive thing here and was the last thing tested.
+- **Who reads the rule does not change what the review says.** Rounds 10 and 11 varied
+  the skill's structure rather than its catalogue: three specialised experts against
+  three identical generalists, equal compute, same materials, both prompts rendered from
+  one template. On a testing-flavoured defect, coverage came out 6.25 vs 6.50 of 11 —
+  the point estimate favouring the *unspecialised* arm. Replicated on a security-flavoured
+  defect, where the security expert should have had the advantage: **24.88 vs 24.88 of
+  34**, with the two pre-registered subsets differing by under four tenths in opposite
+  directions. Both arms miss the same properties in both rounds. Routing is decided by
+  matching the diff against pattern names, so every reviewer arrives at the same row
+  whatever their role. Before adding a perspective, a phase, or an expert, measure it the
+  way a rule is measured; structure is the most expensive thing here and was the last
+  thing tested.
+- **Write "and", never "or", in an obligation.** R54's clause (f) says *test nesting OR
+  concurrent use*. Across sixteen blind-scored reviews in both arms, the nesting test
+  appears 16/16 and the concurrency test 0/16 — and concurrency is the branch that
+  matters, since the round-5 panel showed a naive save/restore passes the return-path
+  and throw-path tests and fails only that one. A disjunction transmits its first branch
+  and silently drops the rest, the same way round 9's platform-split wording under-
+  transmitted until it was named per variant. This also revises how round 8's P9 result
+  reads: P9 was itself worded as a disjunction, so its 16/16 was carried by nesting
+  alone. When a clause offers alternatives, either state both as obligations or say which
+  one applies when.
+- **Check the instrument for a ceiling before reusing it.** Round 11 was going to reuse
+  the rubric its fixture already had; that rubric scores the shipped configuration 9.00
+  of 9, so both arms would have tied at ceiling and the null would have meant nothing.
+  A rubric that the current materials already saturate cannot show a difference in
+  either direction. Re-run the previous round's numbers before designing the next one —
+  one command — and if the metric is at ceiling, rebuild it before touching the arms.
 - **A null is the WEAKER reading.** The fixtures are written by someone who knows the
   target rule, so the bias runs toward legibility: "no difference on a diff I constructed"
   is a much softer statement than "no difference".

@@ -41,6 +41,10 @@ ROUNDS = {
     '8': dict(mapping='round-8-mapping.tsv', stem='round-8', props=9, subset=[3, 4, 5, 8, 9]),
     '9': dict(mapping='round-9-mapping.tsv', stem='round-9', props=9, subset=[5]),
     '10': dict(mapping='round-10-mapping.tsv', stem='round-10', props=11, subset=[]),
+    # subset = the properties no material either arm carries states; see
+    # score/F9-merged.md, tagged before any round-11 arm output existed.
+    '11': dict(mapping='round-11-mapping.tsv', stem='round-11', props=34,
+               subset=[8, 10, 14, 18, 19, 22, 25, 26, 31, 32, 33, 34]),
 }
 
 

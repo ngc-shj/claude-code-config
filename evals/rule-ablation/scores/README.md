@@ -6,7 +6,7 @@ submissions themselves were not kept — see `../protocols/README.md`.
 
 ```bash
 ../score.py --round 8      # re-derive round 8's published table
-../score.py --round 7-F1   # ... and every other round: 6.5, 7-F1, 7-F3, 8, 9
+../score.py --round 7-F1   # ... and every other: 6.5, 7-F1, 7-F3, 8, 9, 10, 11
 ```
 
 Each mapping is `sid → fixture, arm, preamble`; each scorer sheet is one line

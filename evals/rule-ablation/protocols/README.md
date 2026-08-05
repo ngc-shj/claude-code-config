@@ -11,12 +11,20 @@ rather than taken on trust — a pre-registration you cannot produce is not one.
 | `round-8.md` | does #125's R54 extension transmit? | E (extended) / O (pre-#125) | extension properties vs the original three |
 | `round-9.md` | does the reworded obligation (c) transmit for the GUC variant? | Cnew / Cold | P5 vs the rest |
 | `round-10.md` | does expert SPECIALISATION buy anything over REPETITION? | S (3 roles) / G (3 identical) | remedy rubric coverage; detection as control |
+| `round-11.md` | ... and does that hold where the SECURITY expert should win? | S / G, on F9 | untaught properties vs material-taught ones |
 
 `round-10.md` is the first round to vary the skill's STRUCTURE rather than its
 catalogue. Both arms run three agents on the same fixture with the same
 materials, so the comparison isolates specialisation from multiplicity —
 "three experts vs one reviewer" would have measured the latter, which wins
 trivially.
+
+`round-11.md` carries two amendments, both written after the rubric was built
+and before the first arm ran, and both recorded as amendments rather than
+edited into the text they revise. It also documents a deviation from round 10's
+plan: the fixture is the one round 10 named, but the instrument is not, because
+F9's existing rubric turned out to be saturated under HEAD materials and a
+ceiling cannot show a difference in either direction.
 
 `round-7.md` also carries the probe result recorded before the ablation was
 designed — four deployed-arm reviewers, zero reads of the Remedy Floor — which
