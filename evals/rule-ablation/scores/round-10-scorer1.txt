@@ -1,0 +1,16 @@
+V01: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V02: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V03: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V04: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=n Q9=y Q10=n Q11=n total=6
+V05: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=n Q9=y Q10=n Q11=n total=6
+V06: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V07: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V08: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V09: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V10: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V11: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V12: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V13: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V14: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+V15: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=8
+V16: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7

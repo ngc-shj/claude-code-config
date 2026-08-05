@@ -241,6 +241,14 @@ Three standing cautions:
   this kind is the cheapest audit of a rule this repo has**: it costs ten read-only
   agents and it tells you what the rule is missing, which no amount of mining more
   review artifacts will.
+- **Who reads the rule does not change what the review says.** Round 10 varied the
+  skill's structure rather than its catalogue: three specialised experts against three
+  identical generalists, equal compute, same materials. Coverage came out 6.25 vs 6.50
+  of 11 — no difference, with the point estimate favouring the *unspecialised* arm — and
+  both arms missed the same three properties. Routing is decided by matching the diff
+  against pattern names, so every reviewer arrives at the same row whatever their role.
+  Before adding a perspective, a phase, or an expert, measure it the way a rule is
+  measured; structure is the most expensive thing here and was the last thing tested.
 - **A null is the WEAKER reading.** The fixtures are written by someone who knows the
   target rule, so the bias runs toward legibility: "no difference on a diff I constructed"
   is a much softer statement than "no difference".

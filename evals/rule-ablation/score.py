@@ -40,6 +40,7 @@ ROUNDS = {
                  subset=[5, 6, 8, 9, 11]),
     '8': dict(mapping='round-8-mapping.tsv', stem='round-8', props=9, subset=[3, 4, 5, 8, 9]),
     '9': dict(mapping='round-9-mapping.tsv', stem='round-9', props=9, subset=[5]),
+    '10': dict(mapping='round-10-mapping.tsv', stem='round-10', props=11, subset=[]),
 }
 
 
