@@ -36,6 +36,14 @@ it and see whether the finding disappears.
      as-merged configuration showed the floor is a section no routing path
      names — zero of four reviewers read it — so ablating F-as-merged against
      N would have compared two arms that both lack the floor in practice.
+   - **S / G** (rounds 10–11, the three-expert split) — the only pair that
+     varies the skill's STRUCTURE rather than its catalogue. S is the three
+     specialised experts phase 3 defines; G is three identical general
+     reviewers. Both arms run THREE agents on the same fixture with the same
+     HEAD materials, and both prompts are rendered from one template, so the
+     manipulation is the role line, the scope/out-of-scope pair, and the
+     `[Adjacent]` obligation — nothing else. Comparing three experts against
+     one reviewer would measure multiplicity, which wins trivially.
    - **E / O** (round 8, R54 extension) — E is the deployed materials at HEAD
      (wired floor, extended R54); O is identical except `rule-details/R54.md`
      reverted to its pre-#125 content. One variable per round: the floor stays
@@ -169,3 +177,29 @@ recorded before the runs in the round-7 protocol:
 Result (2026-08-05, audit doc): floor-mapped W−N of +1.6/8 on F1 and +3.6/5 on
 F3, mechanism flat on both, scorer agreement ≥89.8%. The wiring line the W arm
 tested is now emitted by the digest generator.
+
+## Rounds 10–11: scoring structure, not a rule
+
+`docs/archive/audit/2026-08-05-specialisation-vs-repetition.md`. Two things
+these rounds added to the harness:
+
+**Check the instrument for a ceiling before reusing it.** Round 11 was to
+replicate round 10 on F9. F9's only rubric was the round-5 nine, and under HEAD
+materials that rubric is saturated — `score.py --round 9` shows F9·Cnew at
+9.00/9, every property 8/8. A saturated instrument returns a null whatever the
+arms do. The fixture was kept and the rubric rebuilt by the round-5/6 panel
+method (`score/F9-merged.md`, 34 properties), frozen before the first arm ran.
+
+**`sketches/` holds the panel's input.** A panel does no detection, so it needs
+the defect in its real shape and a neutral sentence stating what is wrong —
+not a fixture with competing defects and burial. Forty to a hundred lines is
+enough, and it is far cheaper than an ablation fixture. Checked in so the
+rubric can be inspected against what produced it.
+
+**Redact whitespace-agnostically.** The replies are hard-wrapped, so a
+line-anchored pattern (`[^\n]*`) removes half of any hand-off clause that
+straddles a newline and leaves the rest — which the role-name pass then
+launders into something that reads clean and is not. Every blinding pattern
+must tolerate a newline anywhere, be bounded rather than greedy, and the run
+must end by re-scanning the redacted set for residual arm-identifying tokens
+and reporting the count.

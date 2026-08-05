@@ -1,12 +1,14 @@
 # Expert specialisation vs repetition — 2026-08-05
 
-Rounds 1–9 varied the rule catalogue and nothing else. This round varies the
+Rounds 1–9 varied the rule catalogue and nothing else. These rounds vary the
 skill's **structure**: the three-expert split, which is the dominant cost of a
 review round — three agents plus a merge, repeated per round — and had never
-been a variable.
+been a variable. Round 10 measures it on a testing-flavoured defect, round 11
+replicates on a security-flavoured one.
 
-Protocol, pre-registered: `evals/rule-ablation/protocols/round-10.md`.
-Scores: `evals/rule-ablation/scores/`, reproducible with `score.py --round 10`.
+Protocols, pre-registered: `evals/rule-ablation/protocols/round-10.md` and
+`round-11.md`. Scores: `evals/rule-ablation/scores/`, reproducible with
+`score.py --round 10` and `--round 11`.
 
 ## The confound this design removes
 
@@ -78,13 +80,125 @@ The pre-registration named these, and the null does not touch them:
 A null here means "specialisation did not change what one review produced on
 this defect, at equal compute". It does not mean the split is worthless.
 
+## Round 11: it replicates, on the fixture where the security expert should win
+
+Protocol, pre-registered: `evals/rule-ablation/protocols/round-11.md`.
+Reproducible with `score.py --round 11`.
+
+F9 (R54, an audit-skip flag set on a request context and never cleared, so every
+later write in the request bypasses the audit guard). Same design: three
+specialised experts against three identical generalists, three agents each, same
+HEAD materials, mechanical union, n=8 per arm, 48 agents. Both arms' prompts are
+rendered from one template, so arm S differs only by the role line, the
+scope/out-of-scope pair, and the `[Adjacent]` obligation.
+
+**The instrument had to be rebuilt first.** F9's existing rubric — the round-5
+nine — is saturated under HEAD materials (`score.py --round 9`: F9·Cnew is
+9.00/9, every property 8/8), and a ceiling cannot show a difference in either
+direction. A fresh four-panellist rubric was built by the round-5/6 method and
+frozen before the first arm agent ran: 34 majority properties
+(`evals/rule-ablation/score/F9-merged.md`), from a sketch of the defect
+(`evals/rule-ablation/sketches/F9-audit-skip.md`).
+
+| arm | untaught (primary) /12 | taught (control) /22 | total /34 |
+|---|---|---|---|
+| **G** (three identical generalists) | 7.38 | 17.50 | **24.88** |
+| **S** (three specialised experts) | **7.75** | 17.12 | **24.88** |
+
+n=8 per arm. Detection saturated: all sixteen reviews named the defect and
+proposed a fix for it; no `no-fix`. Scorer agreement 87.7–94.7%.
+
+The totals are equal to the second decimal place, and the two subsets differ by
+less than four tenths of a point **in opposite directions** — S ahead on the
+properties nothing teaches, G ahead on the properties everything teaches. Of the
+34 properties, 21 are identical between arms, 7 differ by one to three reviews
+out of eight, and 6 sit at zero in both.
+
+Round 10 found the null where the QA expert was on home ground. Round 11 finds
+it where the security expert is. **Two fixtures, two domains, no effect.**
+
+### The pre-registered control condition was not met as written
+
+The protocol said the taught subset should be *saturated* in both arms, and that
+a cell short of ceiling means the arms differ in more than the prompt. It came
+out 17.50 and 17.12 of 22.
+
+The expectation was wrong rather than the arms. Four taught properties sit at
+0/8 in **both** arms, and each has a legible reason:
+
+- **Q24 (executed red-proof) and Q34 (full suite green)** are unreachable on
+  this harness. A reviewer is handed a diff, not a repository; there is nothing
+  to run. Round 7's corresponding property saturated because it was worded less
+  strictly — this panel demands the observed failure output be shown. Do not
+  read 0/8 as the Remedy Floor failing.
+- **Q17 and Q21** are two of the borderline taggings the rubric file names.
+
+What the control was *for* — detecting a difference between arms in
+material-taught content — is satisfied: the taught subset is flat, 17.50 against
+17.12, the same magnitude as the primary difference and in the other direction.
+The comparison stands; the ceiling clause did not.
+
+### What this round found that the null did not: a disjunction transmits its first branch only
+
+The sharpest result here is not the arm comparison. The panel stated nesting and
+concurrency as two properties where round 5 had stated one:
+
+| | Q29 — a nesting test | Q30 — a concurrency test |
+|---|---|---|
+| G | 8/8 | **0/8** |
+| S | 8/8 | **0/8** |
+
+R54's obligation (f) reads *"test nesting **or** concurrent use"*. Sixteen
+reviews out of sixteen took the first branch and none took the second.
+
+That is the branch that matters. Round 5's panel named the consequence in so
+many words: a naive save/restore **passes the return-path and throw-path tests
+and fails only the concurrency one**. And it revises how round 8's headline
+should be read — P9 went 16/16 with the extension, but P9 was itself worded as a
+disjunction, so that 16/16 was carried entirely by nesting. Round 8 scored what
+it defined; the property it certified is weaker than its name suggests.
+
+Round 9 established the repair for exactly this shape: split the clause into
+named variants and it saturates. **Splitting R54 (f) into two obligations is the
+recommended next fold**, and under this eval's own standard it is owed its own
+ablation before anyone claims it works.
+
+### Breadth, recorded and not claimed
+
+Findings per merged review, counted as finding headings before any dedup:
+
+| arm | range | mean |
+|---|---|---|
+| G | 33–43 | 39.1 |
+| S | 27–38 | 32.9 |
+
+The generalist arm reports about six more findings per review. This is the
+tertiary metric and it is not a claim: F9 has no adjudicated defect inventory,
+more findings is not better if they are noise, and an arm with per-expert
+exclusions reporting less is what exclusions are for. It is recorded because it
+runs the same direction as round 10's point estimate.
+
+### What round 11 still does not settle
+
+Everything round 10 could not, unchanged: disagreement between experts, the
+`[Adjacent]` routing (redacted to make scoring blind), escalation, multi-round
+convergence, and the authoring pathway. One further limit is specific to this
+design — arm S's three parts are role-partitioned, so their *shape* differs from
+arm G's three even after every role word is stripped. No redaction removes that,
+and a scorer could in principle infer the arm from it.
+
 ## What follows
 
-1. **Replicate on a security-flavoured fixture** (F9) before acting. A null that
-   holds where the security expert should have the advantage is a much stronger
-   statement than a null on a testing-flavoured defect.
-2. **If it replicates, the cheapest form of this skill is N general reviewers**,
-   with N a budget knob rather than a fixed three — a larger structural change
-   than any rule edit this eval has produced.
-3. **Measure the parts this could not**: disagreement resolution, `[Adjacent]`
-   routing, and whether round 2 of a fix loop behaves differently from round 1.
+1. **The replication is done and it holds.** Specialisation did not change what
+   one review produced, on a testing-flavoured defect or a security-flavoured
+   one, at equal compute.
+2. **The cheapest form of this skill is therefore N general reviewers**, with N a
+   budget knob rather than a fixed three. Before acting on that, measure the
+   dimensions above — this pair of nulls licenses the experiment, not the
+   deletion.
+3. **Split R54's obligation (f).** A disjunctive clause transmits its first
+   branch and drops the branch the round-5 panel said was the one that matters.
+   Then ablate it, the way round 9 ablated its own rewording.
+4. **Check the other disjunctive clauses.** (f) was found by accident, because a
+   panel happened to split one property into two. Nothing has looked for the
+   same shape elsewhere in the catalogue.
