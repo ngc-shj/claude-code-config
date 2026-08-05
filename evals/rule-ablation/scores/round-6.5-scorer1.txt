@@ -1,0 +1,32 @@
+S01: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S02: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S03: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S04: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S05: P1=y P2=y P3=n P4=n P5=y P6=y P7=n P8=n P9=n total=4
+S06: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S07: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S08: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S09: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S10: P1=y P2=y P3=n P4=y P5=y P6=y P7=n P8=n P9=n total=5
+S11: P1=y P2=y P3=n P4=y P5=y P6=y P7=y P8=n P9=n total=6
+S12: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S13: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S14: no-fix
+S15: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S16: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=y P9=n total=8
+S17: P1=y P2=y P3=y P4=y P5=y P6=y P7=n P8=n P9=n total=6
+S18: P1=y P2=y P3=y P4=y P5=y P6=y P7=n P8=n P9=n total=6
+S19: no-fix
+S20: P1=y P2=y P3=n P4=y P5=y P6=y P7=y P8=n P9=n total=6
+S21: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S22: no-fix
+S23: P1=y P2=y P3=n P4=n P5=y P6=y P7=y P8=n P9=n total=5
+S24: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S25: P1=y P2=y P3=n P4=y P5=y P6=y P7=n P8=n P9=n total=5
+S26: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7
+S27: P1=y P2=y P3=n P4=y P5=y P6=y P7=y P8=n P9=n total=6
+S28: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=y P9=n total=8
+S29: P1=y P2=y P3=n P4=y P5=y P6=y P7=y P8=n P9=n total=6
+S30: P1=y P2=y P3=n P4=n P5=y P6=y P7=n P8=n P9=n total=4
+S31: P1=y P2=y P3=n P4=n P5=y P6=y P7=n P8=n P9=n total=4
+S32: P1=y P2=y P3=y P4=y P5=y P6=y P7=y P8=n P9=n total=7

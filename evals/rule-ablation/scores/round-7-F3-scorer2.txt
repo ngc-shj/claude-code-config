@@ -1,0 +1,16 @@
+F3S16: Q1=y Q2=y Q3=y Q4=n Q5=n Q6=n Q7=n Q8=n Q9=n Q10=n Q11=n total=3
+F3S15: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+F3S14: Q1=y Q2=y Q3=y Q4=n Q5=n Q6=n Q7=n Q8=n Q9=n Q10=n Q11=n total=3
+F3S13: Q1=y Q2=y Q3=y Q4=n Q5=n Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=6
+F3S12: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+F3S11: Q1=y Q2=y Q3=y Q4=n Q5=n Q6=n Q7=n Q8=n Q9=n Q10=n Q11=n total=3
+F3S10: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+F3S09: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+F3S08: Q1=y Q2=y Q3=n Q4=n Q5=y Q6=y Q7=n Q8=n Q9=n Q10=n Q11=n total=4
+F3S07: Q1=y Q2=y Q3=y Q4=n Q5=n Q6=n Q7=n Q8=n Q9=n Q10=n Q11=n total=3
+F3S06: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=n Q9=n Q10=n Q11=n total=5
+F3S05: Q1=y Q2=y Q3=y Q4=n Q5=n Q6=n Q7=n Q8=n Q9=n Q10=n Q11=n total=3
+F3S04: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+F3S03: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+F3S02: Q1=y Q2=y Q3=y Q4=n Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=7
+F3S01: Q1=y Q2=y Q3=y Q4=y Q5=y Q6=y Q7=n Q8=y Q9=y Q10=n Q11=n total=8
