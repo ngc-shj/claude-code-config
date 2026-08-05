@@ -40,7 +40,15 @@ DEFAULT_GLOB = os.path.join(os.path.dirname(REPO), '*/docs/archive/review/*-revi
 DEFAULT_CATALOGUE = os.path.join(REPO, 'skills/triangulate/common-rules.md')
 
 SEVERITY = re.compile(r'\[(?:Critical|Major|Minor)\]')
-RULE_ID = re.compile(r'\b(?:R|RS|RT)\d+\b')
+
+# Both guards were paid for in false positives. A plain \b on the left admits
+# the requirement IDs these repos use — NF-R2, F-R5, Func-R2, T-R2 — because a
+# hyphen is a word boundary; the lookbehind rejects any word char OR hyphen.
+# The right-hand guard rejects range references (R1-R35, RS1-RS3, RT1-RT5),
+# which say "I checked this span", not "this rule fired"; without it both
+# endpoints of every range scored. `R2-F1`-style finding IDs survive, since
+# what follows the hyphen there is not another rule ID.
+RULE_ID = re.compile(r'(?<![\w-])(?:R|RS|RT)\d+\b(?!-(?:R|RS|RT)?\d)')
 ROW_ID = re.compile(r'^\|\s*((?:R|RS|RT)\d+)\s*\|', re.M)
 
 
