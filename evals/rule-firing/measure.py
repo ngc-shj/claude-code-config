@@ -41,14 +41,21 @@ DEFAULT_CATALOGUE = os.path.join(REPO, 'skills/triangulate/common-rules.md')
 
 SEVERITY = re.compile(r'\[(?:Critical|Major|Minor)\]')
 
-# Both guards were paid for in false positives. A plain \b on the left admits
-# the requirement IDs these repos use — NF-R2, F-R5, Func-R2, T-R2 — because a
-# hyphen is a word boundary; the lookbehind rejects any word char OR hyphen.
-# The right-hand guard rejects range references (R1-R35, RS1-RS3, RT1-RT5),
-# which say "I checked this span", not "this rule fired"; without it both
-# endpoints of every range scored. `R2-F1`-style finding IDs survive, since
-# what follows the hyphen there is not another rule ID.
-RULE_ID = re.compile(r'(?<![\w-])(?:R|RS|RT)\d+\b(?!-(?:R|RS|RT)?\d)')
+# Both guards were paid for in false positives, twice each.
+#
+# Left: a plain \b admits the requirement IDs these repos use — NF-R2, F-R5,
+# Func-R2, T-R2 — because a hyphen is a word boundary. The lookbehind rejects
+# any word char OR hyphen.
+#
+# Right: `R<n>-<anything>` is never a rule citation in this corpus. It is a
+# range (`R1-R35`, `RS1-RS3` — "I checked this span", not "this rule fired") or
+# a finding ID whose `R<n>` is the REVIEW ROUND (`R2-F1`, `R3-S1`, `R2-#1` —
+# round 2 finding 1). The first version of this guard excluded only ranges,
+# on the assumption that `R2-F1` meant rule R2; sampling the corpus showed it
+# means round 2, and that reading inflated R2 by 88 heading occurrences and R3
+# by 43. Validate any change to this pattern against sampled corpus contexts,
+# never against invented examples.
+RULE_ID = re.compile(r'(?<![\w-])(?:R|RS|RT)\d+\b(?!-\w)')
 ROW_ID = re.compile(r'^\|\s*((?:R|RS|RT)\d+)\s*\|', re.M)
 
 

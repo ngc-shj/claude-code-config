@@ -1,7 +1,7 @@
 # Panel audit of the two one-line rules — 2026-08-05
 
 The firing measurement named where the catalogue actually earns its keep. Two of
-the top seven are one-sentence rules: **RT1** (29 findings) and **R1** (23).
+the top six are one-sentence rules: **RT1** (29 findings, the highest of any rule) and **R1** (20).
 Rounds 8–9 established that a rule transmits exactly what it states, so a rule
 this short firing this often is the sharpest gap the catalogue has. This is the
 round-5/6 panel method pointed at it.

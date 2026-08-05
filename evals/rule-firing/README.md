@@ -43,9 +43,28 @@ how many opportunities a zero needs before it counts as evidence.
 - **The corpus is one person's repositories** — TypeScript/Next.js web apps,
   a Swift client, shell tooling. A rule dead here may be live elsewhere.
 - **Citation is the proxy for firing.** A reviewer who fixes a defect without
-  naming the rule ID is invisible to this. The `checked` counts (up to 628 of
+  naming the rule ID is invisible to this. The `checked` counts (up to 568 of
   1026 opportunities) show the citation convention is followed closely enough
   to trust, but it is a convention, not an instrument.
+
+## Changing the ID pattern
+
+Both guards in `RULE_ID` were paid for in false positives, and both times the
+wrong reading survived because it was checked against an invented example. The
+corpus writes `NF-R2` for a requirement, `R1-R35` for a span, and `R2-F1` for
+round 2's first finding — none of which is a citation, and the last of which
+looks exactly like one.
+
+So: before changing that pattern, sample what the corpus actually puts around
+the token.
+
+```bash
+grep -rhoE '.{20}\bR2\b.{20}' ../../../*/docs/archive/review/*-review.md | shuf -n 20
+```
+
+The dead-rule list is the one output safe from this class of error in either
+direction — a false positive can only *add* a finding, so a rule at zero stays
+at zero. Both corrections left it intact; the second grew it by one.
 
 ## Panel audits pointed by this measurement
 
