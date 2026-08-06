@@ -87,6 +87,28 @@ first prediction's direction, on two reviews. Whether the freed attention lands
 where C's did is the primary metric and is not answered here. **No metric,
 threshold or prediction above was changed after seeing this.**
 
+## Where this round stopped
+
+**Six of the eight pre-registered reviews ran, and the analysis has not.** The
+batch was halted against a budget ceiling. The raw findings are checked in
+(`evals/rule-precision/round-15/`) so the 54 agents already spent are not lost
+with the scratchpad, and a later session can finish from them without re-running
+a single review.
+
+n=6 raises the minimum detectable difference by about 19% against the
+pre-registered n=8 (df 10 rather than 14, and √(2/6) rather than √(2/8)). The two
+missing reviews can be run later, but not in the same batch as the six, so
+completing to n=8 afterwards would mix batches — which this eval treats as
+context rather than control. **The defensible completion is to analyse the six.**
+
+Substituting a different model for the clustering was considered as a way to
+finish inside the ceiling and **rejected**. It was not rejected for adjudication's
+reason — moving the judge would count the primary metric against a mixed
+standard — but for one specific to this round: a clusterer's recognition of a
+restatement **interacts with the arms**, since I restates the base about 29 times
+per review where T and C restate about once. Whatever its recognition rate, it
+lands almost entirely on one arm.
+
 ## What this cannot settle
 
 Everything round 14 could not: no fixes between waves, one fixture, identical
