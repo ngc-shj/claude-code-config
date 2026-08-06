@@ -256,6 +256,17 @@ Three standing cautions:
   keep rediscovering each other's defects (+2.5 from the third), three specialists do not
   (+4.8). **Measure structure on defect coverage, not only on remedy quality**, and
   remember that a metric scoring one seeded defect cannot see the rest of the review.
+- **The commonest bad finding is TRUE and still not a defect.** Of 128 rejected claims,
+  only 5 misread the code; 34 rested on code the change does not contain and 83 were
+  preferences. Reviewers do not hallucinate — they assert requirements a diff cannot
+  support, and an ungrounded requirement reads exactly like a defect and costs the same
+  attention to dismiss. The repair is a **Finding Floor**, wired like the Remedy Floor and
+  measured the same way: point at the evidence inside the change; a requirement you cannot
+  ground is a question and ranks as one; a preference is not a defect. Wired, the
+  Critical/Major findings that are not defects fell **4.12 → 1.62 per review** with the
+  real-defect count flat (16.88 → 16.50) — n=8/arm, blind, above its own MDE. When a fold
+  aims at precision, **pair it with a coverage control**: precision bought by silencing
+  reviewers is worse than the disease, and only the control can tell the two apart.
 - **Precision is the upstream gate, so measure it first.** An inaccurate finding costs the
   fixer exactly what an accurate one costs and buys nothing, and it is invisible to every
   rubric that scores a known defect's remedy. Roughly one finding in four to five is not a

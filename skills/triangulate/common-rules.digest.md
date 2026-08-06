@@ -8,6 +8,12 @@ rg -n '^\| (R1|R3|RS2|RT4) \|' skills/triangulate/common-rules.md
 ```
 If `rg` is unavailable, use the environment's Grep/search tool with the same anchored pattern.
 
+Every finding you write must also satisfy the **Finding Floor** — three clauses every finding inherits. Extract that section once per review:
+
+```bash
+awk '/^### Finding Floor/,/^### Remedy Floor/' skills/triangulate/common-rules.md
+```
+
 Every `Fix:` you write must also satisfy the **Remedy Floor** — five clauses every rule's remedy inherits. Extract that section once per review:
 
 ```bash

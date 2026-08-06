@@ -182,6 +182,44 @@ SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/hooks/generate-triang
   [ "$(printf '%s\n' "$section" | tail -1)" = '### Anti-Deferral Rules' ]
 }
 
+@test "the digest wires the Finding Floor, and its extraction command extracts it" {
+  # Same reachability problem as the Remedy Floor, measured the same way: with
+  # the pointer, the Critical/Major findings that turn out not to be defects
+  # fall from 4.12 per review to 1.62 while genuine defects reached stays flat
+  # (round 12, n=8/arm, blind-adjudicated). Without it the section is a header
+  # nothing routes to.
+  root="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  digest="$root/skills/triangulate/common-rules.digest.md"
+  rules="$root/skills/triangulate/common-rules.md"
+
+  grep -q 'Every finding you write must also satisfy the \*\*Finding Floor\*\*' "$digest"
+  grep -qF "awk '/^### Finding Floor/,/^### Remedy Floor/'" "$digest"
+
+  # The extraction contract: the command the digest names must yield the
+  # section — non-empty, starting at its heading, carrying all three clauses,
+  # and bounded by the next section rather than running to end of file.
+  section="$(awk '/^### Finding Floor/,/^### Remedy Floor/' "$rules")"
+  [ -n "$section" ]
+  [ "$(printf '%s\n' "$section" | head -1)" = '### Finding Floor' ]
+  printf '%s\n' "$section" | grep -q 'Point at the evidence inside the change'
+  printf '%s\n' "$section" | grep -q 'requirement you cannot ground is a QUESTION'
+  printf '%s\n' "$section" | grep -q 'preference is not a defect'
+  [ "$(printf '%s\n' "$section" | tail -1)" = '### Remedy Floor' ]
+}
+
+@test "the generator emits the Finding Floor pointer for any source" {
+  # Header text, not derived from the source rows: a regeneration from any
+  # rules file must carry it, or a future header edit silently drops the only
+  # route to the section.
+  work="$BATS_TEST_TMPDIR/findptr"
+  mkdir -p "$work"
+  printf '%s\n' '| R1 | Rule | Check | Major |' > "$work/common.md"
+  run bash "$SCRIPT" "$work/common.md" "$work/digest.md"
+  [ "$status" -eq 0 ]
+  grep -q 'Finding Floor' "$work/digest.md"
+  grep -qF "awk '/^### Finding Floor/,/^### Remedy Floor/'" "$work/digest.md"
+}
+
 @test "the generator emits the Remedy Floor pointer for any source" {
   # The pointer is generator header text, not derived from the source rows — a
   # regeneration from any rules file must carry it, or a future header edit can
