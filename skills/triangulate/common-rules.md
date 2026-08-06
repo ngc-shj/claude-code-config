@@ -162,6 +162,14 @@ All experts MUST use this ID scheme. The orchestrator rejects any review that mi
 
 Findings that omit Evidence or provide a vague Fix are returned to the expert for revision.
 
+### Finding Floor
+
+**Every finding carries the three clauses below, whichever rule it was routed through.** They are stated once here because they belong to no single rule: an adjudication of 574 findings from sixteen blind-scored reviews found that where a finding was not a defect, the cause was almost never a misreading of the code (5 of 128) — it was a requirement asserted about code the change does not contain (34), or a preference stated as a defect (83).
+
+1. **Point at the evidence inside the change.** Name the file and the line or symbol in the diff that makes the finding true. Where the assertion is that something is MISSING, the evidence is what shows it missing — a call site the guard does not cover, a branch with no counterpart, a declared contract the change contradicts. "It is not in the diff" is not that evidence: a change is a change, not the system, and the limiter, the schema, the policy or the layer you cannot see are the author's to know about rather than yours to assume absent.
+2. **A requirement you cannot ground is a QUESTION, and ranks as one.** Where the finding rests on code the change does not contain, ask rather than assert: record it as Minor, phrase it as a question, and state what answer would close it. Reserve Critical and Major for what the change itself makes true. An ungrounded requirement reads exactly like a defect and costs the same attention to dismiss.
+3. **A preference is not a defect.** Where the change is defensible as written and you would merely have written it differently, say that in those words or do not say it. "Could be extracted", "would be cleaner", "consider using" are not Major.
+
 ### Remedy Floor
 
 **Every `Fix:` carries the five clauses below, whichever rule the finding was routed through.** They are stated once here because they are not any one rule's property: five independent panels, each asked what a correct fix for a different defect must satisfy without being shown the rule set, demanded all five for R44, RT8, R56, RT9 and R54 alike (`evals/rule-ablation`). Each rule's own procedure carried between two and five of the ten-to-fifteen properties its panel required, and the commonest gaps were these — every one of which this catalogue already states *somewhere else*, in a rule the reviewer did not route to. Adding them per-rule would be five paragraphs times seventy-four; the reader is expected to apply this section to whatever rule fired.

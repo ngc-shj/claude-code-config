@@ -29,11 +29,20 @@ trap 'rm -f "$TMP"' EXIT
   echo '```'
   echo "If \`rg\` is unavailable, use the environment's Grep/search tool with the same anchored pattern."
   echo
-  # The Remedy Floor is a section, not a row, so anchored row extraction never
-  # surfaces it. Without this pointer the section is unreachable in deployment:
-  # a 4-run probe of the deployed protocol showed zero reads of it, and the
-  # round-7 ablation showed reviewers carrying this pointer produce the floor's
+  # Both Floors are sections, not rows, so anchored row extraction never
+  # surfaces them. Without these pointers they are unreachable in deployment:
+  # a 4-run probe showed zero reads of the Remedy Floor as merged, and the
+  # round-7 ablation showed reviewers carrying its pointer produce the floor's
   # remedy properties while reviewers without it do not (evals/rule-ablation).
+  # Round 12 measured the Finding Floor the same way: wired, the Critical/Major
+  # findings that turn out not to be defects fall from 4.12 per review to 1.62
+  # while genuine defects reached stays flat (16.88 -> 16.50).
+  echo 'Every finding you write must also satisfy the **Finding Floor** — three clauses every finding inherits. Extract that section once per review:'
+  echo
+  echo '```bash'
+  echo "awk '/^### Finding Floor/,/^### Remedy Floor/' skills/triangulate/common-rules.md"
+  echo '```'
+  echo
   echo 'Every `Fix:` you write must also satisfy the **Remedy Floor** — five clauses every rule'"'"'s remedy inherits. Extract that section once per review:'
   echo
   echo '```bash'

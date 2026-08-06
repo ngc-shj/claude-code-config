@@ -1,0 +1,7 @@
+cluster_id	verdict	reason
+BULK-27	real
+BULK-24	real
+BULK-25	real
+BULK-26	not-a-defect	outside-diff
+PARSE-15	not-a-defect	preference
+PARSE-16	real
