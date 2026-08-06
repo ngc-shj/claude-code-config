@@ -37,6 +37,7 @@ set -u
 
 LOG="${CLAUDE_USAGE_LOG:-$HOME/.claude/usage-log.jsonl}"
 LOCK="$LOG.lock"
+STATE="$LOG.state"      # last ACCEPTED value per window; see append_record
 warn=""
 
 payload="$(cat)"
@@ -63,8 +64,9 @@ fi
 # closed. A lock whose creator died inside that window is never reclaimed
 # automatically; the status line says `usage-log!` until it is removed by hand.
 lock_acquire() {
-  local i lock_pid
-  for i in $(seq 25); do
+  local i=0 lock_pid
+  while [ "$i" -lt 25 ]; do
+    i=$((i + 1))
     if mkdir "$LOCK" 2>/dev/null; then
       printf '%s\n' "$$" 2>/dev/null > "$LOCK/owner" || :
       return 0
@@ -83,7 +85,7 @@ lock_release() { rm -rf "$LOCK" 2>/dev/null; }
 # $1 record JSON, $2 comparison key, $3 "monotonic" to judge windows for staleness.
 # Echoes the record actually written (windows may be nulled), or nothing.
 append_record() {
-  local record="$1" key="$2" mode="${3:-}" last
+  local record="$1" key="$2" mode="${3:-}" last merged newstate
   mkdir -p "$(dirname "$LOG")" 2>/dev/null || return 1
   lock_acquire || return 1
   trap 'lock_release' EXIT
@@ -98,47 +100,77 @@ append_record() {
   last="$(tail -n 1 "$LOG" 2>/dev/null)"
 
   if [ "$mode" = monotonic ]; then
-    # Judge each window against the last line that carried a VALUE for it, not
-    # merely against the previous line — a line whose seven_day is null must not
-    # make the next stale seven_day look like an advance. Twenty lines back is
-    # far more than a render ever needs and keeps this to one tail.
+    # The comparison baseline is a STATE FILE holding the last accepted value
+    # per window, not a slice of the log. Scanning the last N lines made the
+    # "reject a value that went backwards" guarantee depend on N: advance one
+    # window past the lookback and a stale reading of the OTHER window was
+    # accepted as new. The state file has no such horizon and is O(1).
     #
-    # Append only when some window carries a NEW value. Nulling a window is not
-    # itself news: a stale payload that leaves the other window untouched would
-    # otherwise add a line saying nothing.
-    if ! record="$(printf '%s\n' "$(tail -n 20 "$LOG" 2>/dev/null)" "$record" | jq -sc '
-      (.[:-1] | map(select(type == "object"))) as $hist | .[-1] as $b
-      | (["five_hour","seven_day"] | map(. as $w
-          | { key: $w, value: ([$hist[] | .[$w] | select(type == "object")] | last) })
-         | from_entries) as $prev
-      | reduce ("five_hour","seven_day") as $w
-          ({at: $b.at, five_hour: null, seven_day: null, _new: false};
-           ($prev[$w] // null) as $x | ($b[$w] // null) as $y
-           | if   ($y | type) != "object" or ($y.used_percentage == null) then .
-             elif ($x | type) != "object" then .[$w] = $y | ._new = true
-             elif ($y.resets_at // 0) < ($x.resets_at // 0) then .
-             elif ($y.resets_at // 0) == ($x.resets_at // 0)
-                  and ($y.used_percentage < $x.used_percentage) then .
-             else .[$w] = $y | ._new = (._new or ($y != $x)) end)
-      | if ._new then del(._new) else empty end' 2>/dev/null)"; then
+    # If it is absent — first run, or a log that predates it — it is rebuilt
+    # from the whole log once, so an existing history is not silently forgotten.
+    if [ ! -s "$STATE" ] && [ -s "$LOG" ]; then
+      jq -sc '{ five_hour: ([.[] | .five_hour | select(type=="object")] | last),
+                seven_day: ([.[] | .seven_day | select(type=="object")] | last) }' \
+         "$LOG" > "$STATE" 2>/dev/null || :
+      chmod 600 "$STATE" 2>/dev/null
+    fi
+    # --slurpfile fails outright on a missing file, and that failure is
+    # indistinguishable from a real merge error, so make sure one exists.
+    if [ ! -s "$STATE" ]; then
+      printf '{}\n' > "$STATE" 2>/dev/null && chmod 600 "$STATE" 2>/dev/null
+    fi
+
+    # One jq for the merge: it reads the state, judges each window against it,
+    # and emits the record then the new state. A window is valid only when BOTH
+    # used_percentage and resets_at are present — the header calls a missing
+    # field invalid, and recording a percentage with a null boundary would make
+    # the next comparison meaningless.
+    if ! merged="$(printf '%s\n' "$record" \
+        | jq -c --slurpfile s "$STATE" '
+            . as $b
+            | (($s[0] // {}) ) as $a
+            | (["five_hour","seven_day"] | map(. as $w | {key: $w, value:
+                ( ($a[$w] // null) as $x | ($b[$w] // null) as $y
+                  | if   ($y|type) != "object" or $y.used_percentage == null
+                         or $y.resets_at == null then {v: null, new: false}
+                    elif ($x|type) != "object" then {v: $y, new: true}
+                    elif $y.resets_at < $x.resets_at then {v: null, new: false}
+                    elif $y.resets_at == $x.resets_at
+                         and $y.used_percentage < $x.used_percentage then {v: null, new: false}
+                    else {v: $y, new: ($y != $x)} end )})
+               | from_entries) as $j
+            | if ($j.five_hour.new or $j.seven_day.new | not) then empty else
+                ({at: $b.at, five_hour: $j.five_hour.v, seven_day: $j.seven_day.v}),
+                ({five_hour: ($j.five_hour.v // $a.five_hour),
+                  seven_day: ($j.seven_day.v // $a.seven_day)})
+              end' 2>/dev/null)"; then
       lock_release; trap - EXIT; return 1          # the merge itself failed
     fi
-    [ -z "$record" ] && { lock_release; trap - EXIT; return 0; }   # nothing new
-    key="${record#*,}"
+    [ -z "$merged" ] && { lock_release; trap - EXIT; return 0; }   # nothing new
+    record="${merged%%$'\n'*}"
+    newstate="${merged#*$'\n'}"
   fi
 
-  if [ "${last#*,}" = "$key" ]; then
+  if [ "${last#*,}" = "${record#*,}" ]; then
     lock_release; trap - EXIT; return 0                # unchanged
   fi
 
   printf '%s\n' "$record" >> "$LOG" || { lock_release; trap - EXIT; return 1; }
   chmod 600 "$LOG" 2>/dev/null
+  if [ "$mode" = monotonic ]; then
+    printf '%s\n' "$newstate" > "$STATE" 2>/dev/null && chmod 600 "$STATE" 2>/dev/null
+  fi
   lock_release; trap - EXIT
   return 0
 }
 
-# ONE jq invocation on the hot path. It emits two lines: the display fields as
-# TSV, then the candidate record as JSON. `at` is deliberately the FIRST field,
+# TWO jq invocations on the hot path: this one, which turns the payload into the
+# display fields and a candidate record, and the merge in append_record, which
+# judges that candidate against the state file. An earlier comment claimed one,
+# which was true only before the per-window merge existed. Both are needed:
+# nothing can be judged before the lock is held, and the payload cannot be
+# parsed twice for free.
+# It emits two lines: the display fields as TSV, then the candidate as JSON. `at` is deliberately the FIRST field,
 # because the change comparison drops it with `${record#*,}` — a timestamp
 # contains no comma, so what remains is exactly the part that must match.
 now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -151,10 +183,12 @@ out="$(printf '%s' "$payload" | jq -r --arg t "$now" '
       elif .rate_limits then "shape:" + (.rate_limits | keys | join(",")) else "none" end)
    ] | @tsv),
   ({ at: $t,
-     five_hour: (if .rate_limits.five_hour.used_percentage == null then null else
+     five_hour: (if (.rate_limits.five_hour.used_percentage == null
+                      or .rate_limits.five_hour.resets_at == null) then null else
                  { used_percentage: .rate_limits.five_hour.used_percentage,
                    resets_at:       .rate_limits.five_hour.resets_at } end),
-     seven_day: (if .rate_limits.seven_day.used_percentage == null then null else
+     seven_day: (if (.rate_limits.seven_day.used_percentage == null
+                      or .rate_limits.seven_day.resets_at == null) then null else
                  { used_percentage: .rate_limits.seven_day.used_percentage,
                    resets_at:       .rate_limits.seven_day.resets_at } end) } | tojson)
 ' 2>/dev/null)"

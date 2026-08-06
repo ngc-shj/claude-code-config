@@ -128,6 +128,35 @@ JSON
   [ "$(echo "$output" | tr -d ' ')" = "1" ]
 }
 
+@test "a stale window is rejected however long the history has grown" {
+  # The guarantee must not depend on how far back the comparison looks: with a
+  # bounded lookback, advancing one window past it let a stale reading of the
+  # OTHER window through as new.
+  bash "$SCRIPT" < "$(payload 1.0 50.0)" >/dev/null
+  # The intervening lines must carry seven_day = null, or a bounded lookback
+  # still finds the value repeated on every line and the test proves nothing.
+  i=2
+  while [ "$i" -le 25 ]; do
+    bash "$SCRIPT" < "$(payload_one_window "$i.0")" >/dev/null
+    i=$((i + 1))
+  done
+  run jq -s -e 'length >= 22 and (.[5].seven_day == null)' "$CLAUDE_USAGE_LOG"
+  [ "$status" -eq 0 ]
+  before="$(wc -l < "$CLAUDE_USAGE_LOG")"
+  bash "$SCRIPT" < "$(payload 26.0 40.0)" >/dev/null       # 7d went backwards
+  run jq -s -e --argjson n "$before" '.[$n].seven_day == null' "$CLAUDE_USAGE_LOG"
+  [ "$status" -eq 0 ]
+}
+
+@test "a window with no resets_at is not recorded as valid" {
+  # The header calls a missing field invalid; a percentage with a null boundary
+  # would make every later comparison against it meaningless.
+  printf '{"model":{"display_name":"O"},"rate_limits":{"five_hour":{"used_percentage":12.3},"seven_day":{"used_percentage":41.8,"resets_at":1786400000}}}\n' > "$BATS_TEST_TMPDIR/p2.json"
+  bash "$SCRIPT" < "$BATS_TEST_TMPDIR/p2.json" >/dev/null
+  run jq -s -e '.[0] | (.five_hour == null) and (.seven_day.used_percentage == 41.8)' "$CLAUDE_USAGE_LOG"
+  [ "$status" -eq 0 ]
+}
+
 @test "an unobtainable lock fails closed and says so" {
   sleep 30 & live=$!
   mkdir -p "$CLAUDE_USAGE_LOG.lock"
@@ -161,7 +190,9 @@ JSON
 
 @test "concurrency holds without flock, which macOS does not ship" {
   bin="$BATS_TEST_TMPDIR/noflock"; mkdir -p "$bin"
-  for c in cat date mkdir tail basename dirname jq chmod rm sleep seq stat kill; do
+  # deliberately WITHOUT seq: a plain macOS has none, and handing the test a
+  # GNU coreutils seq made it pass while the real platform failed.
+  for c in cat date mkdir tail basename dirname jq chmod rm sleep stat kill; do
     [ -n "$(command -v "$c" || true)" ] && ln -sf "$(command -v "$c")" "$bin/$c"
   done
   [ ! -e "$bin/flock" ]
@@ -240,7 +271,7 @@ JSON
   # jq absent, coreutils present — the realistic failure. Emptying PATH would
   # remove `cat` too and test nothing about jq.
   bin="$BATS_TEST_TMPDIR/bin"; mkdir -p "$bin"
-  for c in cat date mkdir tail basename dirname chmod rm sleep seq stat kill; do
+  for c in cat date mkdir tail basename dirname chmod rm sleep stat kill; do
     [ -n "$(command -v "$c" || true)" ] && ln -sf "$(command -v "$c")" "$bin/$c"
   done
   f="$(payload)"
