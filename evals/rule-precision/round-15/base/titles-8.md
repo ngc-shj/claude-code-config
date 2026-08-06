@@ -1,0 +1,43 @@
+# Findings already reported on this change
+
+Three reviewers have already read this diff. These are the titles of what they reported — titles only, deliberately.
+
+- the audit exemption is set on the live request context and never released, so the audited half of the import runs unaudited
+- any org admin can promote themselves to owner, or demote the existing owner, through the CSV
+- the new `MUTATIONS` allowlist is narrower than the set of mutating actions, and `createMany` — used in this very diff — now bypasses the audit guard entirely
+- stage → apply → delete is three independent commits, so a mid-import failure half-applies the batch and orphans the staging rows forever
+- the batch key is built from an attacker-supplied header, so two requests can be made to share a staging batch
+- the 5 MB cap is applied after the whole body is buffered, measures code units rather than bytes, and bounds no row count
+- every security-relevant symbol in the change ships without a test, including the two new branches of the audit guard itself
+- the docs and comments describe a boundary the code does not implement
+- `contextSnapshot` is exported and never called
+- a CSV whose header lacks an `email` column silently rejects every row and returns 200
+- a quoted field containing a newline is split into two rows before quote handling runs
+- a duplicate email in one CSV is staged twice, upserted twice, and counted twice
+- `enterSystemOperation()` leaks the audit exception to the rest of the request
+- the new `MUTATIONS` allowlist omits `createMany` and the raw-query actions, so the audit guard fails open
+- an org admin can mint or revoke `owner` memberships through the CSV `role` column
+- stage → apply → cleanup is not transactional, so a mid-import failure orphans staging rows and a retry double-applies
+- the size guard reads the body first and measures UTF-16 code units against a byte limit
+- no bound on row count, and promotion is one sequential round-trip per row
+- an empty or header-only body crashes the parser with a 500
+- quoted fields containing a newline are split into two records
+- the audit-guard change and the entire import path ship with no test
+- `docs/import.md` states the audit control is stronger than the implementation
+- a CSV with no `email` header column silently rejects every row
+- `contextSnapshot` is a new export with no caller, no test, and no effect on the mutation it appears to guard against
+- the audit suspension is set on the caller's context frame and never released, so the whole request runs unaudited
+- the new `MUTATIONS` allowlist omits `createMany`, so the audit guard now fails open for a whole class of writes
+- an org admin can grant and revoke `owner` through the CSV, with no bound tying the granted role to the actor's
+- the rationale that licenses skipping the audit is false, and the docs assert a guarantee the code does not provide
+- stage, apply and cleanup are three independent commits, so a failure mid-apply leaves partial memberships and orphaned staging rows that a retry double-applies
+- `batchId` is built from a client-controlled header, so two concurrent same-org imports can be forced to share one staging batch
+- the 5 MB limit is checked after the whole body is buffered, and it counts UTF-16 code units rather than bytes
+- `indexOf`'s `-1` is used as a column index, so a CSV missing the `email` header silently rejects every row and returns 200
+- an empty or blank request body crashes the parser with a TypeError
+- five new exported symbols and a materially changed security gate ship with tests for none of them
+- the staging table has no tenancy column, no uniqueness constraint, and no retention path
+- the apply loop is one sequential round trip per row over an unbounded result set
+- `contextSnapshot` is exported, unused, and its `Readonly` return type promises protection it does not give
+- no rate limit is visible on the new endpoint — is one applied at a layer this diff does not show?
+- `splitLine` cannot represent a quoted field containing a newline, and accepts an unterminated quote silently

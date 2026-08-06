@@ -1,0 +1,45 @@
+# Findings already reported on this change
+
+Three reviewers have already read this diff. These are the titles of what they reported — titles only, deliberately.
+
+- `enterSystemOperation()` mutates the shared request frame, so the audit exception leaks over the whole request
+- an org admin can mint and overwrite `owner` memberships through the CSV
+- `createMany` is missing from `MUTATIONS`, and the new early return turns that omission into a repo-wide bypass
+- `docs/import.md` states a boundary the implementation does not provide, and the audit exception was granted on the strength of it
+- `runImport` commits in three independent steps, so a mid-batch failure leaves memberships half-applied and staging rows orphaned forever
+- `batchId` is built from the caller-supplied `x-request-id`, and staging rows are selected by that key alone
+- the import does unbounded work per request — no row cap, and one sequential `upsert` per row
+- `MAX_CSV_BYTES` is compared against UTF-16 code units, after the entire body has already been buffered
+- every new export except `parseRows` ships with no test, including the security control this change modifies
+- `parseRows` throws on an empty body and silently eats the first row when the header is missing
+- `contextSnapshot` is exported, never called, and its `Readonly<>` reads as a protection it is not
+- the staging migration has no CHECK on `role`, so the role vocabulary lives only in `parse.ts`
+- the audit-suspension flag is set on the request context and never released, so every write after `stageRows` runs unaudited
+- `createMany` is absent from the `MUTATIONS` set, so the audit guard waves through a mutation this very diff performs
+- an org admin can grant `owner` — and overwrite an existing owner's role — through the CSV
+- the audit control is materially changed and gains a bypass path, and the diff adds no test that reaches it
+- no transaction around stage → apply → delete, so a mid-import failure half-applies the batch and orphans the staging rows forever
+- `batchId` is built from a client-supplied header, so two imports can be made to share a staging batch
+- the 5 MB limit is enforced after the body is fully buffered, and it counts UTF-16 code units rather than bytes
+- a CSV whose header lacks the `email` column is imported as a file of empty emails and reported as a successful 200
+- `parseRows` throws a `TypeError` on an empty upload, returning 500 to the caller
+- `docs/import.md` and the guard's own comment claim a control the implementation does not provide
+- `applyBatch` upserts every staged row one at a time with no bound on row count
+- is there a shared rate limiter this new route should be behind?
+- `role` is not case-normalised although `email` is, so `Admin` silently becomes `member`
+- `contextSnapshot` is exported, unused, and its `Readonly` return is shallow
+- `splitLine` cannot represent a newline inside a quoted field, and accepts an unterminated quote
+- `enterSystemOperation` leaks the audit suspension over the rest of the request
+- the audit guard's mutation list omits `createMany` and the raw-query actions — fail-open by omission
+- the "audit record" the docs and the guard promise is never written
+- stage → apply → delete is not transactional, and a failure strands the batch
+- `batchId` is caller-nameable, so concurrent imports steal and delete each other's rows
+- `MAX_CSV_BYTES` counts UTF-16 code units and is checked after the body is fully buffered
+- `parseRows` trusts the header — empty input throws, a missing or BOM-prefixed column silently zeroes every field
+- quoted fields containing a newline are split apart before `splitLine` ever sees them
+- the new route has no rate limiting
+- the audit control changed in this diff ships with no test at all
+- the 401/403 denial path asserts nothing about the writes it is meant to prevent
+- `contextSnapshot` is exported, unused, and promises an immutability it does not provide
+- `role` is compared case-sensitively while `email` is normalised
+- email validity is decided in `applyBatch`, not at the parse boundary
