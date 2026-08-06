@@ -120,6 +120,29 @@ already paid for.
 
 Full write-up: `docs/archive/audit/2026-08-06-reviewer-count.md`.
 
+## Round 14: a second wave that is told what the first found
+
+`round-14/` — the inventory used a fourth time, now to price conditioning. Both
+arms sit on the same fixed base (round 13's first three reviewers); only arm C
+sees it.
+
+| | C (told) | I (blind) |
+|---|---|---|
+| real defects added | **6.62** | 4.62 |
+| Critical/Major non-defects | 4.50 | **2.38** |
+| restating a base claim | **1.12** | 28.88 |
+
+```bash
+evals/rule-precision/round-14/measure.py
+```
+
+Conditioning cuts restatement by 96% and spends the freed attention on more
+ground, less accurately — **+43% real defects, +89% non-defects**. The
+pre-registered rule clears on coverage and fails on cost, so the recorded output
+is both numbers and no recommendation.
+
+Full write-up: `docs/archive/audit/2026-08-06-conditioned-second-wave.md`.
+
 ## What it cannot tell you
 
 - **`real` is a panel's judgement, not ground truth.** Three agents under a
