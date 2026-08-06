@@ -95,6 +95,31 @@ Two things this reuse buys, and they are the reason to build an inventory once:
 
 Full write-up: `docs/archive/audit/2026-08-06-finding-floor.md`.
 
+## Round 13: how many reviewers
+
+`round-13/` — the same inventory used a third time, now as the scale on a
+reviewer-count curve. Eight reviews of six identical generalists, sub-sampled to
+six points from one batch.
+
+| N | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| real defects | 10.8 | 14.3 | 16.4 | 17.9 | 19.1 | 20.0 |
+| Critical/Major non-defects | 0.7 | 1.5 | 2.2 | 2.9 | 3.6 | 4.4 |
+
+```bash
+evals/rule-precision/round-13/measure.py
+```
+
+Coverage decays, cost is linear at +0.7 per reviewer, and **three specialised
+experts reach what five identical generalists reach for 60% of the tokens**.
+
+Two method notes worth carrying to any repeat: sub-sampling is unbiased **only
+for identical reviewers**, and the inventory is what makes a third round nearly
+free — 591 findings produced 6 new claims, so almost all of the adjudication was
+already paid for.
+
+Full write-up: `docs/archive/audit/2026-08-06-reviewer-count.md`.
+
 ## What it cannot tell you
 
 - **`real` is a panel's judgement, not ground truth.** Three agents under a

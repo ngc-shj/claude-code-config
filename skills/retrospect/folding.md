@@ -256,6 +256,17 @@ Three standing cautions:
   keep rediscovering each other's defects (+2.5 from the third), three specialists do not
   (+4.8). **Measure structure on defect coverage, not only on remedy quality**, and
   remember that a metric scoring one seeded defect cannot see the rest of the review.
+- **Before adding a reviewer, check what the split is already doing.** The reviewer-count
+  curve, measured by sub-sampling one batch of six identical reviewers: real defects
+  reached go 10.8 → 14.3 → 16.4 → 17.9 → 19.1 → 20.0, so the gain decays — while the
+  cost is **linear**, every added reviewer bringing 0.7 more Critical/Major findings that
+  are not defects whatever N already is. Signal-to-noise per added reviewer runs 5:1 at
+  the second and 1.3:1 at the sixth, so **an N chosen on coverage alone is chosen on half
+  the evidence**. Against that curve, three specialised experts reach what five identical
+  generalists reach at 60% of the tokens: the split is worth about two reviewers, because
+  75% of what a specialised review finds is found by exactly one of its three roles and
+  only 1% by all three. Sub-sampling is only unbiased for identical reviewers — a
+  2-subset of a role split is a different configuration, not a smaller one.
 - **The commonest bad finding is TRUE and still not a defect.** Of 128 rejected claims,
   only 5 misread the code; 34 rested on code the change does not contain and 83 were
   preferences. Reviewers do not hallucinate — they assert requirements a diff cannot
