@@ -82,53 +82,75 @@ lock_acquire() {
 }
 lock_release() { rm -rf "$LOCK" 2>/dev/null; }
 
-# $1 record JSON, $2 comparison key, $3 "monotonic" to judge windows for staleness.
-# Echoes the record actually written (windows may be nulled), or nothing.
+# $1 record JSON, $2 "monotonic" to judge each window against the baseline.
+#
+# The baseline for that judgement is a STATE file holding the last accepted
+# value per window. A slice of the log will not do: scanning the last N lines
+# made "reject a value that went backwards" depend on N, since advancing one
+# window past the lookback let a stale reading of the OTHER window through.
+#
+# Two files mean a consistency problem, and the state is therefore
+# SELF-VALIDATING: its FIRST line is the log line that was current when it was
+# written, and its second is the baseline. Two plain lines rather than one JSON
+# object so that reading and writing it costs no jq — the hot path stays at two
+# invocations, the payload parse and the merge. If that does not match the log's actual last line — because a state
+# write failed, or the log was edited — the state is rebuilt from the log
+# before anything is judged against it. A failed state write is reported AND
+# repairs itself on the next render, rather than silently biasing every
+# comparison that follows.
 append_record() {
-  local record="$1" key="$2" mode="${3:-}" last merged newstate
+  local record="$1" mode="${2:-}" last merged newstate state_tail baseline
+
   mkdir -p "$(dirname "$LOG")" 2>/dev/null || return 1
   lock_acquire || return 1
   trap 'lock_release' EXIT
+  _fail() { lock_release; trap - EXIT; return 1; }
+  _done() { lock_release; trap - EXIT; return 0; }
 
-  # Before any early return. umask governs creation only, so a log that
-  # predates this guard keeps its old mode forever — and an unchanged or stale
-  # reading, the common cases, both leave without reaching the append.
-  if [ -e "$LOG" ] && ! chmod 600 "$LOG" 2>/dev/null; then
-    lock_release; trap - EXIT; return 1
-  fi
+  # Before any early return: umask governs creation only, so a file predating
+  # this guard keeps its old mode forever — and the unchanged and stale paths,
+  # the common ones, both leave before the append. The state carries the same
+  # figures as the log and gets the same treatment.
+  [ -e "$LOG" ]   && { chmod 600 "$LOG"   2>/dev/null || { _fail; return 1; }; }
+  [ -e "$STATE" ] && { chmod 600 "$STATE" 2>/dev/null || { _fail; return 1; }; }
 
   last="$(tail -n 1 "$LOG" 2>/dev/null)"
 
   if [ "$mode" = monotonic ]; then
-    # The comparison baseline is a STATE FILE holding the last accepted value
-    # per window, not a slice of the log. Scanning the last N lines made the
-    # "reject a value that went backwards" guarantee depend on N: advance one
-    # window past the lookback and a stale reading of the OTHER window was
-    # accepted as new. The state file has no such horizon and is O(1).
-    #
-    # If it is absent — first run, or a log that predates it — it is rebuilt
-    # from the whole log once, so an existing history is not silently forgotten.
-    if [ ! -s "$STATE" ] && [ -s "$LOG" ]; then
-      jq -sc '{ five_hour: ([.[] | .five_hour | select(type=="object")] | last),
-                seven_day: ([.[] | .seven_day | select(type=="object")] | last) }' \
-         "$LOG" > "$STATE" 2>/dev/null || :
-      chmod 600 "$STATE" 2>/dev/null
+    # Rebuild whenever the state is missing or does not answer for the log as
+    # it stands now. A rebuild that FAILS over a non-empty log is fatal: there
+    # is a history and we cannot read it, so continuing with no baseline would
+    # accept anything. Only an empty log yields an empty baseline.
+    state_tail=""; baseline=""
+    # -s first: `wc -l < missing` reports the open() failure to the terminal
+    # before 2>/dev/null is in effect, because bash applies redirections in order.
+    if [ -s "$STATE" ] && [ "$(wc -l 2>/dev/null < "$STATE")" -eq 2 ]; then
+      state_tail="$(head -n 1 "$STATE" 2>/dev/null)"
+      baseline="$(tail -n 1 "$STATE" 2>/dev/null)"
     fi
-    # --slurpfile fails outright on a missing file, and that failure is
-    # indistinguishable from a real merge error, so make sure one exists.
-    if [ ! -s "$STATE" ]; then
-      printf '{}\n' > "$STATE" 2>/dev/null && chmod 600 "$STATE" 2>/dev/null
+    if [ -z "$baseline" ] || [ "$state_tail" != "$last" ]; then
+      if [ -s "$LOG" ]; then
+        baseline="$(jq -sc '
+             { five_hour: ([.[] | .five_hour | select(type=="object")] | last),
+               seven_day: ([.[] | .seven_day | select(type=="object")] | last) }' \
+             "$LOG" 2>/dev/null)" || { _fail; return 1; }
+        [ -z "$baseline" ] && { _fail; return 1; }
+      else
+        baseline='{}'
+      fi
+      printf '%s\n%s\n' "$last" "$baseline" > "$STATE.tmp" 2>/dev/null || { _fail; return 1; }
+      mv -f "$STATE.tmp" "$STATE" 2>/dev/null || { _fail; return 1; }
+      chmod 600 "$STATE" 2>/dev/null
     fi
 
     # One jq for the merge: it reads the state, judges each window against it,
     # and emits the record then the new state. A window is valid only when BOTH
     # used_percentage and resets_at are present — the header calls a missing
-    # field invalid, and recording a percentage with a null boundary would make
-    # the next comparison meaningless.
+    # field invalid, and a percentage recorded against a null boundary makes
+    # every later comparison against it meaningless.
     if ! merged="$(printf '%s\n' "$record" \
-        | jq -c --slurpfile s "$STATE" '
+        | jq -c --argjson a "$baseline" '
             . as $b
-            | (($s[0] // {}) ) as $a
             | (["five_hour","seven_day"] | map(. as $w | {key: $w, value:
                 ( ($a[$w] // null) as $x | ($b[$w] // null) as $y
                   | if   ($y|type) != "object" or $y.used_percentage == null
@@ -144,32 +166,37 @@ append_record() {
                 ({five_hour: ($j.five_hour.v // $a.five_hour),
                   seven_day: ($j.seven_day.v // $a.seven_day)})
               end' 2>/dev/null)"; then
-      lock_release; trap - EXIT; return 1          # the merge itself failed
+      _fail; return 1
     fi
-    [ -z "$merged" ] && { lock_release; trap - EXIT; return 0; }   # nothing new
+    [ -z "$merged" ] && { _done; return 0; }          # nothing new
     record="${merged%%$'\n'*}"
     newstate="${merged#*$'\n'}"
   fi
 
-  if [ "${last#*,}" = "${record#*,}" ]; then
-    lock_release; trap - EXIT; return 0                # unchanged
+  [ "${last#*,}" = "${record#*,}" ] && { _done; return 0; }
+
+  printf '%s\n' "$record" >> "$LOG" || { _fail; return 1; }
+  chmod 600 "$LOG" 2>/dev/null
+
+  if [ "$mode" = monotonic ]; then
+    # Atomic, and fatal if it fails: the log has moved and a state left behind
+    # would judge the next reading against a value that is no longer the
+    # latest. The self-validation above repairs it on the next render, and the
+    # status line says so now.
+    printf '%s\n%s\n' "$record" "$newstate" > "$STATE.tmp" 2>/dev/null || { _fail; return 1; }
+    mv -f "$STATE.tmp" "$STATE" 2>/dev/null || { _fail; return 1; }
+    chmod 600 "$STATE" 2>/dev/null
   fi
 
-  printf '%s\n' "$record" >> "$LOG" || { lock_release; trap - EXIT; return 1; }
-  chmod 600 "$LOG" 2>/dev/null
-  if [ "$mode" = monotonic ]; then
-    printf '%s\n' "$newstate" > "$STATE" 2>/dev/null && chmod 600 "$STATE" 2>/dev/null
-  fi
-  lock_release; trap - EXIT
+  _done
   return 0
 }
 
-# TWO jq invocations on the hot path: this one, which turns the payload into the
-# display fields and a candidate record, and the merge in append_record, which
-# judges that candidate against the state file. An earlier comment claimed one,
-# which was true only before the per-window merge existed. Both are needed:
-# nothing can be judged before the lock is held, and the payload cannot be
-# parsed twice for free.
+# TWO jq invocations on the hot path, and only two: this one, which turns the
+# payload into the display fields and a candidate record, and the merge in
+# append_record, which judges that candidate against the baseline. Reading and
+# writing the state costs none, which is why it is two plain lines rather than
+# a JSON object. A rebuild adds a third, and happens once per inconsistency.
 # It emits two lines: the display fields as TSV, then the candidate as JSON. `at` is deliberately the FIRST field,
 # because the change comparison drops it with `${record#*,}` — a timestamp
 # contains no comma, so what remains is exactly the part that must match.
@@ -203,7 +230,7 @@ case "${state:-none}" in
   ok)
     line="${line} | 5h ${five}% 7d ${seven}%"
     umask 077
-    append_record "$record" "${record#*,}" monotonic || warn=" usage-log!"
+    append_record "$record" monotonic || warn=" usage-log!"
     ;;
   shape:*)
     # rate_limits present but not under the documented path. Record the key
@@ -211,7 +238,7 @@ case "${state:-none}" in
     keys="${state#shape:}"
     umask 077
     append_record "$(printf '{"at":"%s","unexpected_rate_limit_keys":"%s"}' "$now" "$keys")" \
-                  "\"unexpected_rate_limit_keys\":\"$keys\"}" || warn=" usage-log!"
+      || warn=" usage-log!"
     ;;
 esac
 

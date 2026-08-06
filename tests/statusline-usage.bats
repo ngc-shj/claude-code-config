@@ -157,6 +157,57 @@ JSON
   [ "$status" -eq 0 ]
 }
 
+@test "a healthy log with no state rebuilds its baseline correctly" {
+  # The upgrade path: a log written before the state file existed must not lose
+  # its history, or the first reading after the upgrade could go backwards.
+  bash "$SCRIPT" < "$(payload 10.0 50.0)" >/dev/null
+  bash "$SCRIPT" < "$(payload 20.0 60.0)" >/dev/null
+  rm -f "$CLAUDE_USAGE_LOG.state"
+  bash "$SCRIPT" < "$(payload 15.0 55.0)" >/dev/null    # backwards on both
+  run wc -l < "$CLAUDE_USAGE_LOG"
+  [ "$(echo "$output" | tr -d ' ')" = "2" ]
+  run head -n 1 "$CLAUDE_USAGE_LOG.state"
+  [[ "$output" == *'"used_percentage":20'* ]]
+}
+
+@test "a state write that fails is reported, and repairs itself next render" {
+  # Two files mean a consistency problem: a state left behind after the log
+  # moved would judge the next reading against a value that is no longer the
+  # latest, and the duplicate check would stop it ever being noticed.
+  bash "$SCRIPT" < "$(payload 10.0 10.0)" >/dev/null
+  # Block ONLY the state write: making the directory read-only would block the
+  # log append too, and then the warning would prove nothing about the state.
+  mkdir -p "$CLAUDE_USAGE_LOG.state.tmp"
+  run bash "$SCRIPT" < "$(payload 20.0 20.0)"
+  rmdir "$CLAUDE_USAGE_LOG.state.tmp"
+  [[ "$output" == *"usage-log!"* ]]
+
+  # Now a value that went backwards must still be rejected — the stale state is
+  # detected by its log_tail no longer matching the log and is rebuilt.
+  bash "$SCRIPT" < "$(payload 15.0 15.0)" >/dev/null
+  run jq -s -e 'map(.five_hour.used_percentage) | index(15) == null' "$CLAUDE_USAGE_LOG"
+  [ "$status" -eq 0 ]
+}
+
+@test "a state rebuild that fails over a non-empty log is fatal, not fail-open" {
+  bash "$SCRIPT" < "$(payload 10.0 10.0)" >/dev/null
+  printf 'this is not json\n' >> "$CLAUDE_USAGE_LOG"     # rebuild will fail
+  rm -f "$CLAUDE_USAGE_LOG.state"                        # force a rebuild
+  run bash "$SCRIPT" < "$(payload 5.0 5.0)"
+  [[ "$output" == *"usage-log!"* ]]
+  # jq -s over a file that contains the corrupt line would fail on the file,
+  # not on the claim, so check the text directly.
+  if grep -q '"used_percentage":5' "$CLAUDE_USAGE_LOG"; then false; fi
+}
+
+@test "the state file is tightened on the unchanged path too" {
+  bash "$SCRIPT" < "$(payload)" >/dev/null
+  chmod 664 "$CLAUDE_USAGE_LOG.state"
+  bash "$SCRIPT" < "$(payload)" >/dev/null
+  run mode_of "$CLAUDE_USAGE_LOG.state"
+  [ "$output" = "600" ]
+}
+
 @test "an unobtainable lock fails closed and says so" {
   sleep 30 & live=$!
   mkdir -p "$CLAUDE_USAGE_LOG.lock"
@@ -192,12 +243,20 @@ JSON
   bin="$BATS_TEST_TMPDIR/noflock"; mkdir -p "$bin"
   # deliberately WITHOUT seq: a plain macOS has none, and handing the test a
   # GNU coreutils seq made it pass while the real platform failed.
-  for c in cat date mkdir tail basename dirname jq chmod rm sleep stat kill; do
+  # head and wc are needed to READ the state; without them the script rebuilds
+  # on every render, so the test would pass while exercising a path macOS never
+  # takes. Every command the script uses belongs here or the simulation is a
+  # different simulation.
+  for c in cat date mkdir tail head wc basename dirname jq chmod rm mv sleep stat kill; do
     [ -n "$(command -v "$c" || true)" ] && ln -sf "$(command -v "$c")" "$bin/$c"
   done
   [ ! -e "$bin/flock" ]
   f="$(payload)"
-  for _ in $(seq 40); do env PATH="$bin" "$(command -v bash)" "$SCRIPT" < "$f" >/dev/null & done
+  n=0
+  while [ "$n" -lt 40 ]; do
+    env PATH="$bin" "$(command -v bash)" "$SCRIPT" < "$f" >/dev/null &
+    n=$((n + 1))
+  done
   wait
   run wc -l < "$CLAUDE_USAGE_LOG"
   [ "$(echo "$output" | tr -d ' ')" = "1" ]
@@ -232,7 +291,8 @@ JSON
   # Measured before the lock existed: 100 parallel runs of one identical
   # payload wrote six lines.
   f="$(payload)"
-  for _ in $(seq 60); do bash "$SCRIPT" < "$f" >/dev/null & done
+  n=0
+  while [ "$n" -lt 60 ]; do bash "$SCRIPT" < "$f" >/dev/null & n=$((n + 1)); done
   wait
   run wc -l < "$CLAUDE_USAGE_LOG"
   [ "$(echo "$output" | tr -d ' ')" = "1" ]
@@ -271,7 +331,7 @@ JSON
   # jq absent, coreutils present — the realistic failure. Emptying PATH would
   # remove `cat` too and test nothing about jq.
   bin="$BATS_TEST_TMPDIR/bin"; mkdir -p "$bin"
-  for c in cat date mkdir tail basename dirname chmod rm sleep stat kill; do
+  for c in cat date mkdir tail head wc basename dirname chmod rm mv sleep stat kill; do
     [ -n "$(command -v "$c" || true)" ] && ln -sf "$(command -v "$c")" "$bin/$c"
   done
   f="$(payload)"
