@@ -187,15 +187,44 @@ design — arm S's three parts are role-partitioned, so their *shape* differs fr
 arm G's three even after every role word is stripped. No redaction removes that,
 and a scorer could in principle infer the arm from it.
 
+## Correction (2026-08-06): the null is real and the conclusion was too broad
+
+Both tables above stand. What they license does not.
+
+Rounds 10 and 11 scored **the remedy for one seeded defect**, and on that the
+arms are genuinely identical. They never scored how many *other* real defects
+each review reached — the round-11 pre-registration listed breadth as tertiary
+and declined to claim it, because F9 had no adjudicated defect inventory.
+
+One was then built, from this round's own material and with no new reviews:
+574 findings → 83 distinct claims → three blind adjudicators, counts withheld.
+39 claims are real. Against that inventory
+(`2026-08-06-finding-precision.md`):
+
+| | precision | real defects reached, of 39 | N=1 | N=2 | N=3 |
+|---|---|---|---|---|---|
+| G | **81.6%** | 16.8 | 10.5 | 14.2 (+3.7) | 16.8 (+2.5) |
+| S | 73.5% | **19.1** | 8.1 | 14.4 (+6.3) | 19.1 (**+4.8**) |
+
+Specialisation reaches more genuine defects and is less precise getting there,
+and the split's real payoff is in **the marginal reviewer**: three generalists
+keep rediscovering each other's defects, three specialists do not.
+
+So the corrected statement is narrower than "specialisation buys nothing":
+**it does not change the fix produced for the defect that was routed to; it does
+change what else the review finds, and how much a second and third reviewer are
+worth.** The "N general reviewers" conclusion below was drawn from a metric that
+could not see the difference, and is withdrawn pending replication.
+
 ## What follows
 
-1. **The replication is done and it holds.** Specialisation did not change what
-   one review produced, on a testing-flavoured defect or a security-flavoured
-   one, at equal compute.
-2. **The cheapest form of this skill is therefore N general reviewers**, with N a
-   budget knob rather than a fixed three. Before acting on that, measure the
-   dimensions above — this pair of nulls licenses the experiment, not the
-   deletion.
+1. **The replication is done and it holds — for what it measured.**
+   Specialisation did not change the remedy one review produced, on a
+   testing-flavoured defect or a security-flavoured one, at equal compute.
+2. ~~**The cheapest form of this skill is therefore N general reviewers**~~ —
+   withdrawn 2026-08-06, see the correction above. What is licensed is measuring
+   the N curve, which has never been done: nothing chose three, and the
+   specialised arm's third reviewer was still adding +4.8 real defects.
 3. **Split R54's obligation (f).** A disjunctive clause transmits its first
    branch and drops the branch the round-5 panel said was the one that matters.
    Then ablate it, the way round 9 ablated its own rewording.

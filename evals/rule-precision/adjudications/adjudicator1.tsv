@@ -1,0 +1,84 @@
+cluster_id	verdict	reason
+DOC-03	real
+BULK-09	real
+BULK-14	real
+PARSE-09	not-a-defect	preference
+BULK-20	real
+GUARD-01	real
+BULK-22	not-a-defect	outside-diff
+BULK-23	not-a-defect	preference
+PARSE-03	real
+BULK-11	not-a-defect	preference
+ROUTE-04	real
+PARSE-05	real
+BULK-08	real
+MIG-05	not-a-defect	preference
+GUARD-08	real
+DOC-01	real
+BULK-07	not-a-defect	preference
+GUARD-03	real
+MIG-06	not-a-defect	outside-diff
+CTX-05	real
+ROUTE-09	not-a-defect	preference
+ROUTE-10	not-a-defect	scope
+CTX-03	real
+MIG-04	not-a-defect	preference
+ROUTE-01	real
+TEST-01	real
+GUARD-09	real
+PARSE-07	not-a-defect	preference
+MIG-01	real
+BULK-10	real
+MIG-03	not-a-defect	scope
+MIG-02	not-a-defect	preference
+PARSE-02	real
+BULK-17	not-a-defect	preference
+PARSE-13	not-a-defect	outside-diff
+GUARD-02	not-a-defect	outside-diff
+CTX-04	real
+BULK-18	wrong	misreads-code
+ROUTE-11	not-a-defect	preference
+ROUTE-03	real
+PARSE-12	not-a-defect	preference
+DOC-02	real
+ROUTE-05	not-a-defect	outside-diff
+GUARD-07	not-a-defect	outside-diff
+BULK-15	real
+TEST-05	not-a-defect	preference
+PARSE-06	real
+GUARD-04	real
+CTX-06	real
+PARSE-14	not-a-defect	preference
+CTX-07	not-a-defect	outside-diff
+MIG-07	not-a-defect	preference
+BULK-02	real
+ROUTE-06	not-a-defect	preference
+BULK-16	not-a-defect	preference
+TEST-06	not-a-defect	preference
+BULK-03	real
+BULK-04	real
+BULK-05	real
+DOC-04	not-a-defect	preference
+PARSE-04	real
+BULK-01	real
+GUARD-06	real
+BULK-21	not-a-defect	preference
+ROUTE-07	real
+PARSE-01	real
+BULK-06	real
+BULK-12	not-a-defect	outside-diff
+BULK-19	not-a-defect	preference
+GUARD-05	real
+TEST-04	not-a-defect	preference
+BULK-13	not-a-defect	preference
+TEST-02	not-a-defect	preference
+PARSE-11	not-a-defect	preference
+TEST-03	not-a-defect	outside-diff
+CTX-01	real
+CTX-02	real
+ROUTE-12	not-a-defect	preference
+ROUTE-02	not-a-defect	outside-diff
+TEST-07	not-a-defect	preference
+PARSE-10	not-a-defect	preference
+ROUTE-08	not-a-defect	preference
+PARSE-08	not-a-defect	preference

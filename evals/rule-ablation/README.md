@@ -138,6 +138,14 @@ bias no amount of added noise removes. The honest reading of a null result is
 "this rule adds nothing *on a fixture I wrote*", and the honest reading of a
 positive one is stronger, because the bias runs the other way.
 
+**Every metric here scores ONE seeded defect.** Detection asks whether the review
+named it; the remedy rubrics ask whether the proposed fix for it is right.
+Neither looks at the other thirty-odd findings the review reports, so nothing in
+this directory can say whether those are accurate or how many genuine defects a
+review reaches. Rounds 10–11 concluded about the review as a whole from a metric
+that could only see one defect, and had to be corrected. `../rule-precision/`
+measures the part this harness is blind to.
+
 **The oracle scores detection only.** It asks whether the review named the
 defect. It never asks whether the review got the *remedy* right — and a large
 part of what these rules carry is remedy, not recognition. A rule whose value is
