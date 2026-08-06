@@ -1,0 +1,42 @@
+# Findings already reported on this change
+
+Three reviewers have already read this diff. These are the titles of what they reported — titles only, deliberately.
+
+- an org admin can grant himself `owner`, and the import silently rewrites existing members' roles
+- `enterSystemOperation` writes the audit bypass onto the caller's live request frame and never restores it, so every write after staging runs unaudited
+- the new `MUTATIONS` allowlist omits `createMany`, converting a deny-by-default audit guard into a fail-open one
+- `runImport` stages, promotes and deletes across three unrelated transactions, so a mid-run failure strands the batch with no path back
+- the 5 MB cap is measured in UTF-16 code units and applied only after the whole body is already in memory
+- `batchId` is built from a client-supplied header and is the only key scoping the staging rows
+- the changed audit guard and the entire importer ship with no tests
+- `parseRows` throws a `TypeError` on an empty body, and silently returns garbage when the header lacks an `email` column
+- `parseRows` splits the document into lines before any quote awareness, so a quoted field containing a newline is torn in two
+- the audit bypass is recorded at `debug` while ordinary audited writes are recorded at `info`
+- the role vocabulary is declared three times, in three shapes that already disagree
+- `enterSystemOperation()` leaves the audit bypass on for the rest of the request, so every membership write and the activity record are unaudited
+- the new `MUTATIONS` early return makes `assertAudited` fail-open for `createMany` and every raw write, codebase-wide
+- an org admin can rewrite any existing membership's role, including the org owner's, through the CSV
+- the audit guard is documented as refusing writes that carry no audit record, but it only checks that an actor id is non-empty
+- staging, promotion and cleanup are three independent writes with no transaction, so a mid-run failure strands rows that a retry then re-applies
+- `batchId` is built from a client-supplied header, so two concurrent imports in one org read and delete each other's staging rows
+- `parseRows` throws a `TypeError` on an empty or whitespace-only body, returning 500 instead of a 4xx
+- the CSV parser splits on newlines before parsing quotes, so a quoted field containing a newline shifts every following column
+- `POST /api/import` has no rate limiting
+- the 5 MB cap is applied after the entire body is buffered and counts UTF-16 units, not bytes
+- `applyBatch` upserts every staged row one at a time with no chunking and no row cap, while the chunking helper already exists two functions above
+- the changed audit control and the whole new import pipeline ship with no tests
+- `contextSnapshot` is exported, called by nothing, and does not deliver the immutability its type claims
+- `import_staging` carries member emails with no tenant column, no constraint on `role`, and no retention path
+- `org_activity` foreign keys declare no delete behaviour
+- rejected rows are counted but never identified
+- `enterSystemOperation` sets an ambient flag that never comes back off, so the whole rest of the request writes unaudited
+- `MUTATIONS` omits `createMany`, so the audit guard fails open for every bulk insert in the codebase
+- any org admin can grant `owner` and rewrite existing members' roles through the CSV
+- the audit control is documented as a boundary and implemented as a log line
+- the 5 MB limit counts UTF-16 units and runs after the body is already buffered
+- `parseRows` throws a `TypeError` on an empty body and silently rejects every row when the header has no `email` column
+- staging, promotion and cleanup are three independent commits with cleanup only on the success path
+- the batch key that isolates one import from another is supplied by the client
+- the write, authorization and audit paths ship with no test at all
+- `contextSnapshot` is exported and never called
+- email shape is checked deep in the promotion loop rather than at the boundary, and rejections are unattributable

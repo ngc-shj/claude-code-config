@@ -1,0 +1,41 @@
+# Findings already reported on this change
+
+Three reviewers have already read this diff. These are the titles of what they reported — titles only, deliberately.
+
+- the audit suspension granted for the staging writes leaks over the whole request
+- the audit guard's action classifier omits `createMany` and the raw-query actions, so a whole class of writes bypasses it
+- an org admin can mint an `owner`, including promoting themselves, through the import
+- `docs/import.md` and the guard's own docstring claim an audit control the code does not implement (R49)
+- no transaction across stage → apply → delete (R5)
+- the batch key is built from a client-supplied header and the staging table has no tenant column (R57)
+- the 5 MB limit is applied after the whole body is buffered, and it counts UTF-16 units rather than bytes (RS3)
+- `parseRows` throws on an empty body and silently yields empty emails when the header lacks an `email` column
+- the two security-relevant changes in this diff ship with no tests (RT6/RT7/RT8)
+- `contextSnapshot` is exported, unused, and weaker than its name suggests
+- the role vocabulary now lives in three places, and the staging table does not constrain it (R2)
+- `enterSystemOperation` sets the audit-skip flag on the caller's request frame and nothing ever clears it, so every write after the staging call is unaudited
+- the new `MUTATIONS` allowlist omits `createMany`, so the added early return disarms the audit guard for every bulk insert in the codebase
+- an org admin can grant `owner` — and re-role existing members — through the CSV, with no ceiling against the actor's own role
+- `assertAudited` asserts no audit record — it checks a context field and logs — while its name, its comment and `docs/import.md` describe an enforceable boundary
+- `runImport` has no transaction and no cleanup on the failure path, so a mid-import error leaves member PII in `import_staging` forever
+- `batchId` is built from a caller-supplied `x-request-id` header, so two imports can collide on one batch and each will apply and delete the other's staged rows
+- the 5 MB limit is checked after the whole body is buffered, and it counts UTF-16 code units rather than bytes
+- no row-count bound, and `applyBatch` loads every staged row and upserts them one at a time
+- no validation that the CSV has the columns it claims, and no email validation beyond `includes("@")`
+- `POST /api/import` ships with no rate limiting
+- every new export except `parseRows` ships with no test, including the security control the change modifies
+- a quoted field containing a newline is split into two rows before quote parsing ever runs
+- `contextSnapshot` is exported but never called anywhere in the change
+- `import_staging` has no retention, no org scope and no role constraint, and the role list is stated twice
+- the summary reports counts the importer assumed rather than counts it measured
+- `enterSystemOperation` writes the audit exemption into the caller's request frame and nothing ever clears it
+- an org admin can promote themselves, or anyone, to `owner` through the CSV
+- the audit guard's mutation list omits `createMany` and every raw-query action, so those writes never reach the check at all
+- `runImport` has no transaction and no failure path, so a throw mid-apply leaves memberships half-written and the batch stranded
+- the upload size limit is applied after the whole body is buffered, and counts UTF-16 units rather than bytes
+- `parseRows` throws on an empty body and silently rejects everything when the header lacks `email`
+- `batchId` is built from a caller-supplied header and every staging query re-resolves the batch by that name
+- the security-relevant half of the change ships with no tests
+- the doc states the opposite of what the code does, and the guard is a weaker class than the doc claims
+- `contextSnapshot` is exported with no caller and no test
+- the staging migration has no cleanup path, no role constraint, and no uniqueness

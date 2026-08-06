@@ -1,0 +1,44 @@
+# Findings already reported on this change
+
+Three reviewers have already read this diff. These are the titles of what they reported — titles only, deliberately.
+
+- `enterSystemOperation` mutates the shared request frame, so the audit exception never ends
+- the new `MUTATIONS` allowlist makes `assertAudited` fail-open on `createMany` — the diff's own staging write
+- an org admin can self-escalate to `owner` and rewrite any existing member's role through the CSV
+- `assertAudited` is a detection-only control documented and relied on as an enforceable boundary
+- `docs/import.md` states three audit properties the code does not have
+- the batch key is built from a caller-supplied header, and staging rows are selected by it alone
+- no transaction and no failure-path cleanup — a mid-import error half-applies memberships and orphans the batch
+- the 5 MB cap is enforced after the body is fully buffered and counts UTF-16 units, not bytes
+- an unrecognised or differently-cased role silently becomes `member`, and `member` is also the legitimate value
+- the audit control changed by this diff has no test, and neither does anything else outside `parse.ts`
+- `parseRows` throws on an empty upload and silently rejects everything on a header typo
+- the role vocabulary is written out in three places with no shared source
+- one sequential `upsert` per row inside a single HTTP request, with no bound on row count
+- the staging round-trip has no inspection step, so the audit exception is granted for nothing
+- duplicate addresses in one CSV inflate `staged` and `applied`
+- `enterSystemOperation` sets `skipAudit` on the caller's own context frame, so the audit control stays off for the rest of the request
+- the audit guard's new `MUTATIONS` allowlist omits `createMany`, so writes through it bypass the control entirely — including this change's own staging write
+- an org admin can grant and overwrite the `owner` role through the import, escalating privilege
+- the changed audit control ships with no test at all — nothing proves the guard can still fail
+- `batchId` is built from the caller-supplied `x-request-id` header, and the staging table has no tenancy column
+- stage, apply and cleanup are three independent statements with no transaction and no failure-path cleanup
+- the 5 MB cap is applied after the whole body is already in memory, and it counts characters rather than bytes
+- a CSV whose header omits or misspells a column silently rejects every row with no diagnostic
+- the activity feed is indexed and ordered on a wall-clock timestamp with no tie-break
+- the staging round-trip buys nothing the design claims for it, and it is the sole justification for the audit suspension
+- no rate limiting is visible on the new import route
+- `contextSnapshot` is exported but never called, and its `Readonly` return promises more than it delivers
+- the default role literal `member` is stated in two places, and duplicate emails in one CSV are silently collapsed
+- an org admin can grant `owner` and demote the existing owner through the CSV
+- `enterSystemOperation()` sets an ambient flag that is never cleared, so every write after the staging step runs unaudited
+- the `MUTATIONS` allowlist omits `createMany` and every raw-query action, so those writes never reach the audit check at all
+- `docs/import.md` and the guard's doc comment both claim a control stronger than the code implements
+- `batchId` is derived from a client-controlled header, so concurrent imports in one org read and delete each other's staged rows
+- the import is not transactional and its staging rows leak permanently on any failure
+- the 5 MB limit is checked after the whole body is buffered, and counts UTF-16 code units rather than bytes
+- a CSV whose header lacks an `email` column silently imports nothing, and an empty body crashes with a 500
+- the two new bypass branches in the audit guard, and every new production export outside `parse.ts`, ship with no test
+- nothing bounds the number of rows or the number of queries a single import issues
+- email validity is decided in `applyBatch` rather than in the parser that already normalises the field
+- `contextSnapshot` is exported but never called, and its `Readonly` return is only shallow
