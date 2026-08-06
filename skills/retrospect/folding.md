@@ -241,18 +241,29 @@ Three standing cautions:
   this kind is the cheapest audit of a rule this repo has**: it costs ten read-only
   agents and it tells you what the rule is missing, which no amount of mining more
   review artifacts will.
-- **Who reads the rule does not change what the review says.** Rounds 10 and 11 varied
-  the skill's structure rather than its catalogue: three specialised experts against
-  three identical generalists, equal compute, same materials, both prompts rendered from
-  one template. On a testing-flavoured defect, coverage came out 6.25 vs 6.50 of 11 —
-  the point estimate favouring the *unspecialised* arm. Replicated on a security-flavoured
-  defect, where the security expert should have had the advantage: **24.88 vs 24.88 of
-  34**, with the two pre-registered subsets differing by under four tenths in opposite
-  directions. Both arms miss the same properties in both rounds. Routing is decided by
-  matching the diff against pattern names, so every reviewer arrives at the same row
-  whatever their role. Before adding a perspective, a phase, or an expert, measure it the
-  way a rule is measured; structure is the most expensive thing here and was the last
-  thing tested.
+- **Who reads the rule does not change the fix — but it changes what else gets found.**
+  Rounds 10 and 11 varied the skill's structure rather than its catalogue: three
+  specialised experts against three identical generalists, equal compute, same materials,
+  both prompts rendered from one template. On the **remedy for the routed defect** there
+  is no difference — 6.25 vs 6.50 of 11 on a testing-flavoured defect, **24.88 vs 24.88
+  of 34** on a security-flavoured one, both bounded well under what the design could
+  catch. Routing is by pattern match, so every reviewer reaches the same row whatever
+  their role, and reads the same procedure.
+  Then an adjudicated defect inventory was built from the same material (574 findings →
+  83 claims → three blind adjudicators, 39 real) and the broader conclusion collapsed:
+  the specialised arm reaches **19.1 of 39 real defects against 16.8**, at **73.5%
+  precision against 81.6%**. The payoff is in the marginal reviewer — three generalists
+  keep rediscovering each other's defects (+2.5 from the third), three specialists do not
+  (+4.8). **Measure structure on defect coverage, not only on remedy quality**, and
+  remember that a metric scoring one seeded defect cannot see the rest of the review.
+- **Precision is the upstream gate, so measure it first.** An inaccurate finding costs the
+  fixer exactly what an accurate one costs and buys nothing, and it is invisible to every
+  rubric that scores a known defect's remedy. Roughly one finding in four to five is not a
+  defect. Adjudicating them needs no new reviews — cluster the findings into distinct
+  claims, then have three agents judge the claims blind, **with the member counts withheld
+  so a claim forty reviewers made looks like one a single reviewer made.** State the
+  assumption the panel judges under (here: the diff is a real PR and everything it does
+  not show exists and works), because without one every "X is absent" scores as a defect.
 - **Write "and", never "or", in an obligation.** R54's clause (f) says *test nesting OR
   concurrent use*. Across sixteen blind-scored reviews in both arms, the nesting test
   appears 16/16 and the concurrency test 0/16 — and concurrency is the branch that

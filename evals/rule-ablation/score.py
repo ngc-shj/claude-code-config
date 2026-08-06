@@ -24,8 +24,10 @@ was read — see `protocols/`.
 import argparse
 import collections
 import itertools
+import math
 import os
 import re
+import statistics
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -143,6 +145,32 @@ def main():
             continue
         row = ''.join(f'{sum(1 for m in vals if m[n] == "y")}/{len(vals):<4d}' for n in names)
         print(f'{key[0] + " " + key[1]:14s}' + row)
+
+    # A null is only worth reading beside the difference the design could have
+    # caught. Rounds 1-3 called detection flat at n=8 per arm, where 8/8 vs 6/8
+    # is p=0.47 — that null could only ever have ruled out a very large effect.
+    pairs = collections.defaultdict(dict)
+    for (fixture, arm), ms in cells.items():
+        vals = [sum(1 for n in names if m[n] == 'y') for m in ms if m]
+        if len(vals) > 1:
+            pairs[fixture][arm] = vals
+    printed = False
+    for fixture, arms in sorted(pairs.items()):
+        if len(arms) != 2:
+            continue
+        (a1, v1), (a2, v2) = sorted(arms.items())
+        n = min(len(v1), len(v2))
+        sp = math.sqrt((statistics.variance(v1) + statistics.variance(v2)) / 2)
+        if not sp:
+            continue
+        if not printed:
+            print('\nobserved difference vs what n could catch '
+                  '(two-sided .05, 80% power)')
+            printed = True
+        diff = abs(statistics.mean(v1) - statistics.mean(v2))
+        mde = (2.145 + 0.868) * sp * math.sqrt(2 / n)
+        verdict = 'above MDE' if diff >= mde else 'below MDE — bounds the effect, not zero'
+        print(f'  {fixture} {a1} vs {a2}: diff {diff:.2f}, MDE {mde:.2f} /{props} — {verdict}')
 
     print('\nscorer agreement')
     for a, b in itertools.combinations(range(3), 2):

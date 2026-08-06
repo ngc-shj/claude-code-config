@@ -321,12 +321,46 @@ caveat now; its headline (extension properties E vs O, all cells within one
 batch) is unaffected. The lesson joins the standing set: **arm comparisons are
 valid within a batch; a stored cross-batch number is context, not a control.**
 
+## Power audit (2026-08-06): which nulls here are worth anything
+
+Every round above reports n. None reported the difference its n could have
+caught, and the two are not the same statement. `score.py` now prints it for
+each arm pair (`diff` against `MDE`, two-sided .05 at 80% power).
+
+**The remedy nulls are tight.** Round 10 observed 0.25 against an MDE of 0.94 of
+11; round 11 observed 0.00 against 1.79 of 34. Those bound the effect at roughly
+5–9% of the rubric, which is a real statement.
+
+**The detection nulls of rounds 1–3 are not.** Detection was scored as a binary
+at n=8 per arm, where 8/8 against 6/8 is p=0.47 and even 8/8 against 4/8 is
+p=0.077. Nothing short of 8/8 against 3/8 would have registered. "No detection
+difference survived replication" is therefore true and much weaker than it
+reads: those rounds could only ever have ruled out a very large effect, and the
+F6 cell they did flag (arm C missing the defect in 3 of 8 runs) sits at p=0.20.
+
+**One published point estimate is inside the noise.** Round 6.5's F9 cell —
+"marginal where the platform's idiom already encodes the fix (7.25 vs 6.75)" —
+is a difference of 0.50 against an MDE of 0.70. The direction is not
+established; the F6 cell beside it (diff 1.85, MDE 1.21) is.
+
+This audit costs one command over sheets already checked in, and it is the
+cheapest instrument this eval has found. Run it before writing a null down.
+
 ## What follows
 
 1. **Do not shrink rows to digest names.** Arm B measured exactly that and scored
    identically to carrying nothing.
-2. **Report n, and replicate before writing.** Five claims from this eval have
+2. **Report n, and replicate before writing.** Six claims from this eval have
    been corrected by the round that followed them — round 8's P5 point estimate
-   joined the list when the same-batch control moved it from 1/8 to 5/8.
+   joined when the same-batch control moved it from 1/8 to 5/8, and rounds 10–11's
+   headline joined when an adjudicated defect inventory showed the metric could
+   not see what it was being used to rule out
+   (`2026-08-06-finding-precision.md`).
 3. **Compare within the batch.** Round 9's same-batch control is the difference
    between an honest saturation claim and an inflated 1/8→8/8 one.
+4. **Report the difference n could have caught, beside the difference observed.**
+   A null read off a design that could only catch an enormous effect is not a
+   null worth citing.
+5. **Ask what the metric cannot see.** Rounds 10–11 scored the remedy for one
+   seeded defect and concluded about the review as a whole. The scored slice was
+   sound; the generalisation was not.
