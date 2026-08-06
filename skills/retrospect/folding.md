@@ -256,6 +256,16 @@ Three standing cautions:
   keep rediscovering each other's defects (+2.5 from the third), three specialists do not
   (+4.8). **Measure structure on defect coverage, not only on remedy quality**, and
   remember that a metric scoring one seeded defect cannot see the rest of the review.
+- **Telling a reviewer what was already found converts restatement into reach — and into
+  noise.** At equal cost, three reviewers handed the previous three's findings restate
+  **1.12** of them against **28.88** blind, a 96% cut, and spend the freed attention
+  elsewhere: they add **6.62 real defects against 4.62** and file **4.50 Critical/Major
+  non-defects against 2.38**. Per reviewer that is 1.47:1 signal-to-noise against 1.94:1
+  — more ground covered, less accurately. Neither dominates, so the pre-registered rule
+  ("adopt if it adds a real defect more AND costs no more non-defects") **fires on the
+  first half and fails on the second**, and the output is both numbers with no
+  recommendation. Write decision rules that can return "no recommendation"; a rule that
+  must pick a winner will pick one from a trade it cannot price.
 - **Before adding a reviewer, check what the split is already doing.** The reviewer-count
   curve, measured by sub-sampling one batch of six identical reviewers: real defects
   reached go 10.8 → 14.3 → 16.4 → 17.9 → 19.1 → 20.0, so the gain decays — while the

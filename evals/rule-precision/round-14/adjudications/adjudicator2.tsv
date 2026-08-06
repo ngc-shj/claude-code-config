@@ -1,0 +1,21 @@
+cluster_id	verdict	reason
+BULK-29	not-a-defect	outside-diff
+BULK-30	real
+BULK-31	not-a-defect	outside-diff
+BULK-32	wrong	misreads-code
+CTX-08	real
+CTX-09	real
+CTX-10	not-a-defect	outside-diff
+GUARD-10	not-a-defect	outside-diff
+GUARD-11	real
+GUARD-12	not-a-defect	outside-diff
+PARSE-19	real
+PARSE-20	wrong	misreads-code
+ROUTE-13	real
+ROUTE-14	not-a-defect	preference
+ROUTE-15	not-a-defect	preference
+ROUTE-16	real
+ROUTE-17	not-a-defect	outside-diff
+TEST-08	real
+TEST-09	not-a-defect	preference
+TEST-10	real
