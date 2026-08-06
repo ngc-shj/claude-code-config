@@ -8,6 +8,16 @@ setup() {
   export CLAUDE_USAGE_LOG="$BATS_TEST_TMPDIR/usage-log.jsonl"
 }
 
+# `stat -c` is GNU, `stat -f` is BSD. This repo targets both.
+mode_of() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
+
+# A payload carrying only the five-hour window, which the schema permits.
+payload_one_window() {
+  local f="$BATS_TEST_TMPDIR/payload-one.json"
+  printf '{"model":{"display_name":"Opus 5"},"rate_limits":{"five_hour":{"used_percentage":%s,"resets_at":1786000000}}}\n' "$1" > "$f"
+  printf '%s' "$f"
+}
+
 # Writes a payload — including the fields that must NOT be logged — to a file
 # and echoes the path. A file rather than a function so it survives `bash -c`.
 # $1/$2 percentages, $3/$4 reset boundaries.
@@ -55,8 +65,111 @@ JSON
 
 @test "the log is not world-readable" {
   bash "$SCRIPT" < "$(payload)" >/dev/null
-  run stat -c '%a' "$CLAUDE_USAGE_LOG"
+  run mode_of "$CLAUDE_USAGE_LOG"
   [ "$output" = "600" ]
+}
+
+@test "an existing world-readable log with an UNCHANGED reading is still tightened" {
+  # umask governs creation only, and the unchanged and stale paths both return
+  # before the append — so a chmod placed at the append never runs for them.
+  bash "$SCRIPT" < "$(payload)" >/dev/null
+  chmod 664 "$CLAUDE_USAGE_LOG"
+  bash "$SCRIPT" < "$(payload)" >/dev/null
+  run mode_of "$CLAUDE_USAGE_LOG"
+  [ "$output" = "600" ]
+}
+
+@test "a reading that went backwards within the same window is dropped" {
+  # A lock orders writes; it does not make a late-arriving old reading true.
+  bash "$SCRIPT" < "$(payload 12.4 41.8)" >/dev/null
+  bash "$SCRIPT" < "$(payload 12.3 41.7)" >/dev/null
+  run wc -l < "$CLAUDE_USAGE_LOG"
+  [ "$(echo "$output" | tr -d ' ')" = "1" ]
+}
+
+@test "a reset boundary that goes backwards is dropped as stale" {
+  bash "$SCRIPT" < "$(payload 12.3 41.8 1786000000 1786400000)" >/dev/null
+  bash "$SCRIPT" < "$(payload 12.3 41.8 1786000000 1786000000)" >/dev/null
+  run wc -l < "$CLAUDE_USAGE_LOG"
+  [ "$(echo "$output" | tr -d ' ')" = "1" ]
+}
+
+@test "a drop across a genuine rollover is kept" {
+  bash "$SCRIPT" < "$(payload 12.3 97.4 1786000000 1786400000)" >/dev/null
+  bash "$SCRIPT" < "$(payload 12.3 2.1 1786000000 1787004800)" >/dev/null
+  run wc -l < "$CLAUDE_USAGE_LOG"
+  [ "$(echo "$output" | tr -d ' ')" = "2" ]
+}
+
+@test "a window missing from the payload does not discard the window that is present" {
+  # The fault this closes: judging both windows together threw away a valid
+  # five-hour update whenever seven_day was absent or stale.
+  bash "$SCRIPT" < "$(payload 12.0 41.0)" >/dev/null
+  bash "$SCRIPT" < "$(payload_one_window 13.0)" >/dev/null
+  run wc -l < "$CLAUDE_USAGE_LOG"
+  [ "$(echo "$output" | tr -d ' ')" = "2" ]
+  run jq -s -r '.[1].seven_day' "$CLAUDE_USAGE_LOG"
+  [ "$output" = "null" ]
+}
+
+@test "a stale window is nulled while the other window's advance is kept" {
+  bash "$SCRIPT" < "$(payload 12.0 41.0)" >/dev/null
+  bash "$SCRIPT" < "$(payload 13.0 40.0)" >/dev/null
+  # numeric comparison: jq echoes 13.0 as written, so a string match on "13"
+  # would be testing the input's formatting rather than the behaviour
+  run jq -s -e '.[1] | (.five_hour.used_percentage == 13) and (.seven_day == null)' "$CLAUDE_USAGE_LOG"
+  [ "$status" -eq 0 ]
+}
+
+@test "a reading where every window is stale is not appended at all" {
+  bash "$SCRIPT" < "$(payload 12.0 41.0)" >/dev/null
+  bash "$SCRIPT" < "$(payload 11.0 40.0)" >/dev/null
+  run wc -l < "$CLAUDE_USAGE_LOG"
+  [ "$(echo "$output" | tr -d ' ')" = "1" ]
+}
+
+@test "an unobtainable lock fails closed and says so" {
+  sleep 30 & live=$!
+  mkdir -p "$CLAUDE_USAGE_LOG.lock"
+  printf '%s\n' "$live" > "$CLAUDE_USAGE_LOG.lock/owner"
+  run bash "$SCRIPT" < "$(payload)"
+  kill "$live" 2>/dev/null; wait "$live" 2>/dev/null || true
+  rm -rf "$CLAUDE_USAGE_LOG.lock"
+  [[ "$output" == *"usage-log!"* ]]
+  [ ! -f "$CLAUDE_USAGE_LOG" ]
+}
+
+@test "a lock held by a LIVE process is never stolen" {
+  # Age is not evidence of death, and neither is an unreadable owner file:
+  # stealing on either basis broke a concurrency test under load.
+  sleep 30 & live=$!
+  mkdir -p "$CLAUDE_USAGE_LOG.lock"
+  printf '%s\n' "$live" > "$CLAUDE_USAGE_LOG.lock/owner"
+  run bash "$SCRIPT" < "$(payload)"
+  kill "$live" 2>/dev/null; wait "$live" 2>/dev/null || true
+  rm -rf "$CLAUDE_USAGE_LOG.lock"
+  [[ "$output" == *"usage-log!"* ]]
+}
+
+@test "a lock whose owner is gone is reclaimed" {
+  mkdir -p "$CLAUDE_USAGE_LOG.lock"
+  printf '999999\n' > "$CLAUDE_USAGE_LOG.lock/owner"
+  run bash "$SCRIPT" < "$(payload)"
+  [[ "$output" != *"usage-log!"* ]]
+  [ -f "$CLAUDE_USAGE_LOG" ]
+}
+
+@test "concurrency holds without flock, which macOS does not ship" {
+  bin="$BATS_TEST_TMPDIR/noflock"; mkdir -p "$bin"
+  for c in cat date mkdir tail basename dirname jq chmod rm sleep seq stat kill; do
+    [ -n "$(command -v "$c" || true)" ] && ln -sf "$(command -v "$c")" "$bin/$c"
+  done
+  [ ! -e "$bin/flock" ]
+  f="$(payload)"
+  for _ in $(seq 40); do env PATH="$bin" "$(command -v bash)" "$SCRIPT" < "$f" >/dev/null & done
+  wait
+  run wc -l < "$CLAUDE_USAGE_LOG"
+  [ "$(echo "$output" | tr -d ' ')" = "1" ]
 }
 
 @test "an unchanged reading is not appended twice" {
@@ -127,7 +240,7 @@ JSON
   # jq absent, coreutils present — the realistic failure. Emptying PATH would
   # remove `cat` too and test nothing about jq.
   bin="$BATS_TEST_TMPDIR/bin"; mkdir -p "$bin"
-  for c in cat date mkdir tail basename dirname flock stat; do
+  for c in cat date mkdir tail basename dirname chmod rm sleep seq stat kill; do
     [ -n "$(command -v "$c" || true)" ] && ln -sf "$(command -v "$c")" "$bin/$c"
   done
   f="$(payload)"
