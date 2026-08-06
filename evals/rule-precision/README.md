@@ -67,6 +67,34 @@ One generalist beats one specialist, two are level, three specialists win — an
 the specialists' third reviewer still adds nearly twice what the generalists'
 does, because specialised replies overlap half as much (Jaccard 0.116 vs 0.246).
 
+## Round 12: the first intervention aimed at precision
+
+`round-12/` — the same instrument used as an outcome measure rather than a
+diagnosis. A **Finding Floor** (three clauses inherited by every finding, wired
+by one digest line) against HEAD, arms identical in every other shipped file,
+n=8 reviews per arm.
+
+| | W (floor) | N (HEAD) | t | MDE@80% |
+|---|---|---|---|---|
+| Critical/Major findings that are not defects | **1.62** | 4.12 | −4.11 | 1.83 |
+| distinct real defects reached (control) | 16.50 | 16.88 | −0.59 | 1.93 |
+
+```bash
+evals/rule-precision/round-12/measure.py
+```
+
+Two things this reuse buys, and they are the reason to build an inventory once:
+
+- **The standard is held fixed.** The 77 claims round 11 adjudicated keep their
+  verdicts; only the 6 genuinely new claims were judged, by the same brief.
+  Re-adjudicating the old ones would let the standard drift between arms and
+  between rounds, which is the same failure the same-batch rule guards against.
+- **The claim space converged.** 599 new findings produced only 6 claims the
+  earlier round had not already recorded, which is evidence the inventory is
+  near-complete for this fixture rather than an artifact of one sample.
+
+Full write-up: `docs/archive/audit/2026-08-06-finding-floor.md`.
+
 ## What it cannot tell you
 
 - **`real` is a panel's judgement, not ground truth.** Three agents under a
