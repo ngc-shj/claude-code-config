@@ -1,0 +1,599 @@
+Subject: [PATCH] feat(webhooks): sign and deliver outbound events with retries
+
+ app/api/routes/settings.py           |  58 +++++++++++
+ app/events/dispatcher.py             |  25 ++++-
+ app/webhooks/delivery.py             | 135 +++++++++++++++++++++++++++++
+ app/webhooks/models.py               |  63 ++++++++++++
+ app/webhooks/signing.py              |  37 ++++++++
+ docs/webhooks.md                     |  38 ++++++++
+ migrations/0042_webhook_delivery.sql |  33 ++++++++
+ tests/webhooks/test_delivery.py      |  83 ++++++++++++++++
+ 8 files changed, 470 insertions(+), 2 deletions(-)
+
+diff --git a/app/api/routes/settings.py b/app/api/routes/settings.py
+index 7c2a91e5b..e05b3acd1 100644
+--- a/app/api/routes/settings.py
++++ b/app/api/routes/settings.py
+@@ -1,10 +1,20 @@
++from urllib.parse import urlparse
++
+-from fastapi import APIRouter, Depends, HTTPException
++from fastapi import APIRouter, Depends, HTTPException, Query
++from pydantic import BaseModel
+
+ from app.api.deps import CurrentUser, current_user
+ from app.db import session_scope
+ from app.models.api_key import ApiKey
+ from app.models.org import Organization
++from app.webhooks import models as webhook_models
++from app.webhooks.signing import new_signing_secret
+
+ router = APIRouter(prefix="/v1/settings", tags=["settings"])
+
++
++class EndpointIn(BaseModel):
++    url: str
++    event_types: list[str] = []
++
+
+@@ -11,22 +21,68 @@ router = APIRouter(prefix="/v1/settings", tags=["settings"])
+ @router.get("/profile")
+ async def get_profile(user: CurrentUser = Depends(current_user)) -> dict:
+     with session_scope() as session:
+         org = session.get(Organization, user.org_id)
+         if org is None:
+             raise HTTPException(status_code=404, detail="organization not found")
+         return {"org_id": org.id, "name": org.name, "plan": org.plan}
+
+
+ @router.get("/api-keys")
+ async def list_api_keys(user: CurrentUser = Depends(current_user)) -> list[dict]:
+     with session_scope() as session:
+         keys = (
+             session.query(ApiKey)
+             .filter(ApiKey.org_id == user.org_id)
+             .order_by(ApiKey.created_at.desc())
+             .all()
+         )
+         return [
+             {"id": k.id, "prefix": k.prefix, "created_at": k.created_at.isoformat()}
+             for k in keys
+         ]
++
++
++@router.post("/webhook-endpoints", status_code=201)
++async def create_webhook_endpoint(
++    body: EndpointIn, user: CurrentUser = Depends(current_user)
++) -> dict:
++    parsed = urlparse(body.url)
++    if not parsed.scheme.startswith("http") or not parsed.netloc:
++        raise HTTPException(status_code=422, detail="url must be an http(s) URL")
++    with session_scope() as session:
++        endpoint = webhook_models.WebhookEndpoint(
++            org_id=user.org_id,
++            url=body.url,
++            event_types=body.event_types,
++            signing_secret=new_signing_secret(),
++            active=True,
++        )
++        session.add(endpoint)
++        session.flush()
++        return endpoint.to_dict()
++
++
++@router.get("/webhook-endpoints")
++async def list_webhook_endpoints(user: CurrentUser = Depends(current_user)) -> list[dict]:
++    with session_scope() as session:
++        endpoints = (
++            session.query(webhook_models.WebhookEndpoint)
++            .filter(webhook_models.WebhookEndpoint.org_id == user.org_id)
++            .all()
++        )
++        return [e.to_dict() for e in endpoints]
++
++
++@router.get("/webhook-endpoints/{endpoint_id}/deliveries")
++async def list_deliveries(
++    endpoint_id: int, limit: int = Query(50, ge=1), user: CurrentUser = Depends(current_user)
++) -> list[dict]:
++    with session_scope() as session:
++        deliveries = (
++            session.query(webhook_models.WebhookDelivery)
++            .filter(webhook_models.WebhookDelivery.endpoint_id == endpoint_id)
++            .order_by(webhook_models.WebhookDelivery.created_at.desc())
++            .limit(limit)
++            .all()
++        )
++        return [d.to_dict() for d in deliveries]
+diff --git a/app/events/dispatcher.py b/app/events/dispatcher.py
+index 3b1f0c74a..9a4e21d0f 100644
+--- a/app/events/dispatcher.py
++++ b/app/events/dispatcher.py
+@@ -1,18 +1,25 @@
+ import logging
+ from dataclasses import dataclass
+ from datetime import datetime, timezone
+ from typing import Any
+
+ from app.db import session_scope
+ from app.events.models import Event
+ from app.events.subscribers import SUBSCRIBERS
++from app.webhooks import delivery as webhook_delivery
+
+ log = logging.getLogger(__name__)
+
++WEBHOOK_EVENT_TYPES = {
++    "invoice.paid",
++    "invoice.payment_failed",
++    "subscription.updated",
++}
++
+
+ @dataclass(frozen=True)
+ class EventEnvelope:
+     org_id: int
+     type: str
+     payload: dict[str, Any]
+     occurred_at: datetime
+@@ -21,19 +28,35 @@ class EventEnvelope:
+ async def dispatch(envelope: EventEnvelope) -> int:
+     """Persist an event, then notify in-process subscribers."""
+-    log.info("dispatching %s for org %s", envelope.type, envelope.org_id)
++    log.info(
++        "dispatching %s for org %s (webhooks=%s)",
++        envelope.type,
++        envelope.org_id,
++        envelope.type in WEBHOOK_EVENT_TYPES,
++    )
+     with session_scope() as session:
+         row = Event(
+             org_id=envelope.org_id,
+             type=envelope.type,
+             payload=envelope.payload,
+             occurred_at=envelope.occurred_at,
+             created_at=datetime.now(timezone.utc),
+         )
+         session.add(row)
+         session.flush()
+         event_id = row.id
+
+     for subscriber in SUBSCRIBERS.get(envelope.type, ()):
+         await subscriber(envelope)
+
++    if envelope.type in WEBHOOK_EVENT_TYPES:
++        try:
++            await webhook_delivery.enqueue_for_event(
++                org_id=envelope.org_id,
++                event_id=event_id,
++                event_type=envelope.type,
++                payload=envelope.payload,
++            )
++        except Exception as exc:
++            log.warning("webhook enqueue failed for event %s: %s", event_id, exc)
++
+     return event_id
+diff --git a/app/webhooks/delivery.py b/app/webhooks/delivery.py
+new file mode 100644
+index 000000000..c41ab7e39
+--- /dev/null
++++ b/app/webhooks/delivery.py
+@@ -0,0 +1,135 @@
++from __future__ import annotations
++
++import asyncio
++import logging
++import time
++from datetime import datetime, timedelta, timezone
++from typing import Any
++
++import httpx
++
++from app.cache import redis_client
++from app.db import session_scope
++from app.webhooks import models as m
++from app.webhooks.signing import SIGNATURE_HEADER, TIMESTAMP_HEADER, sign
++
++log = logging.getLogger(__name__)
++
++MAX_ATTEMPTS = 5
++BASE_DELAY_SECONDS = 2
++BATCH_SIZE = 100
++REQUEST_TIMEOUT = 30.0
++LOCK_KEY = "webhooks:dispatch:lock"
++
++
++async def enqueue_for_event(
++    org_id: int, event_id: int, event_type: str, payload: dict[str, Any]
++) -> int:
++    with session_scope() as session:
++        endpoints = (
++            session.query(m.WebhookEndpoint)
++            .filter(m.WebhookEndpoint.org_id == org_id, m.WebhookEndpoint.active.is_(True))
++            .all()
++        )
++        rows = [
++            m.WebhookDelivery(
++                endpoint_id=endpoint.id,
++                event_id=event_id,
++                event_type=event_type,
++                payload=payload,
++                next_attempt_at=datetime.utcnow(),
++            )
++            for endpoint in endpoints
++            if not endpoint.event_types or event_type in endpoint.event_types
++        ]
++        session.add_all(rows)
++        return len(rows)
++
++
++def backoff_for(attempt: int) -> timedelta:
++    return timedelta(seconds=BASE_DELAY_SECONDS**attempt)
++
++
++async def _acquire_lock() -> bool:
++    if await redis_client.get(LOCK_KEY):
++        return False
++    await redis_client.set(LOCK_KEY, "1")
++    await redis_client.expire(LOCK_KEY, 60)
++    return True
++
++
++async def _claim_batch() -> list[m.WebhookDelivery]:
++    now = datetime.now(timezone.utc)
++    with session_scope() as session:
++        rows = (
++            session.query(m.WebhookDelivery)
++            .filter(m.WebhookDelivery.status == "pending", m.WebhookDelivery.next_attempt_at <= now)
++            .order_by(m.WebhookDelivery.next_attempt_at)
++            .limit(BATCH_SIZE)
++            .all()
++        )
++        for row in rows:
++            row.status = "in_flight"
++        return rows
++
++
++def _finish(delivery_id: int, status: str, attempts: int, code: int | None, detail: str) -> None:
++    with session_scope() as session:
++        row = session.get(m.WebhookDelivery, delivery_id)
++        row.status = status
++        row.attempts = attempts
++        row.response_status = code
++        row.response_body = detail
++        row.updated_at = datetime.now(timezone.utc)
++
++
++async def send_once(
++    client: httpx.AsyncClient, endpoint: m.WebhookEndpoint, delivery: m.WebhookDelivery
++) -> httpx.Response:
++    ts, signature = sign(endpoint.signing_secret, delivery.payload)
++    headers = {
++        "Content-Type": "application/json",
++        "User-Agent": "acme-webhooks/1.0",
++        TIMESTAMP_HEADER: ts,
++        SIGNATURE_HEADER: signature,
++    }
++    log.info("POST %s headers=%s", endpoint.url, headers)
++    return await client.post(endpoint.url, json=delivery.payload, headers=headers)
++
++
++async def deliver(client: httpx.AsyncClient, delivery: m.WebhookDelivery) -> None:
++    with session_scope() as session:
++        endpoint = session.get(m.WebhookEndpoint, delivery.endpoint_id)
++    attempt = delivery.attempts
++    while True:
++        attempt += 1
++        try:
++            response = await send_once(client, endpoint, delivery)
++            if 200 <= response.status_code < 300:
++                _finish(delivery.id, "delivered", attempt, response.status_code, response.text)
++                return
++            status_code = response.status_code
++            detail = f"HTTP {response.status_code}: {response.text}"
++        except httpx.HTTPError as exc:
++            status_code, detail = None, str(exc)
++        if attempt >= MAX_ATTEMPTS:
++            _finish(delivery.id, "failed_permanent", attempt, status_code, detail)
++            return
++        delay = backoff_for(attempt).total_seconds()
++        log.warning("delivery %s failed (%s), retrying in %ss", delivery.id, detail, delay)
++        time.sleep(delay)
++
++
++async def run_worker(poll_interval: float = 1.0) -> None:
++    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
++        while True:
++            if not await _acquire_lock():
++                await asyncio.sleep(poll_interval)
++                continue
++            try:
++                batch = await _claim_batch()
++                await asyncio.gather(*[deliver(client, d) for d in batch])
++            finally:
++                await redis_client.delete(LOCK_KEY)
++            if not batch:
++                await asyncio.sleep(poll_interval)
+diff --git a/app/webhooks/models.py b/app/webhooks/models.py
+new file mode 100644
+index 000000000..1d7f5c8ab
+--- /dev/null
++++ b/app/webhooks/models.py
+@@ -0,0 +1,63 @@
++from __future__ import annotations
++
++from datetime import datetime, timezone
++
++from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Text
++from sqlalchemy.dialects.postgresql import JSONB
++
++from app.db import Base
++
++STATUSES = ("pending", "in_flight", "delivered", "failed_permanent")
++
++
++def _now() -> datetime:
++    return datetime.now(timezone.utc)
++
++
++class WebhookEndpoint(Base):
++    __tablename__ = "webhook_endpoints"
++
++    id = Column(BigInteger, primary_key=True)
++    org_id = Column(BigInteger, ForeignKey("organizations.id"), nullable=False)
++    url = Column(Text, nullable=False)
++    signing_secret = Column(Text, nullable=False)
++    event_types = Column(JSONB, nullable=False, default=list)
++    active = Column(Boolean, nullable=False, default=True)
++    created_at = Column(DateTime(timezone=True), default=_now)
++
++    def to_dict(self) -> dict:
++        return {
++            "id": self.id,
++            "url": self.url,
++            "event_types": self.event_types,
++            "active": self.active,
++            "signing_secret": self.signing_secret,
++        }
++
++
++class WebhookDelivery(Base):
++    __tablename__ = "webhook_deliveries"
++
++    id = Column(BigInteger, primary_key=True)
++    endpoint_id = Column(BigInteger, ForeignKey("webhook_endpoints.id"), nullable=False)
++    event_id = Column(BigInteger, nullable=False)
++    event_type = Column(String(100), nullable=False)
++    payload = Column(JSONB, nullable=False)
++    status = Column(String(20), nullable=False, default="pending")
++    attempts = Column(Integer, nullable=False, default=0)
++    next_attempt_at = Column(DateTime(timezone=True), nullable=False)
++    response_status = Column(Integer)
++    response_body = Column(Text)
++    created_at = Column(DateTime(timezone=True), default=_now)
++    updated_at = Column(DateTime(timezone=True), default=_now)
++
++    def to_dict(self) -> dict:
++        return {
++            "id": self.id,
++            "event_id": self.event_id,
++            "event_type": self.event_type,
++            "status": self.status,
++            "attempts": self.attempts,
++            "response_status": self.response_status,
++            "next_attempt_at": self.next_attempt_at.isoformat(),
++        }
+diff --git a/app/webhooks/signing.py b/app/webhooks/signing.py
+new file mode 100644
+index 000000000..7ae0c93d1
+--- /dev/null
++++ b/app/webhooks/signing.py
+@@ -0,0 +1,37 @@
++import hashlib
++import hmac
++import json
++import random
++import string
++import time
++from typing import Any
++
++SIGNATURE_HEADER = "X-Acme-Signature"
++TIMESTAMP_HEADER = "X-Acme-Timestamp"
++SECRET_PREFIX = "whsec_"
++SECRET_BYTES = 32
++
++_ALPHABET = string.ascii_letters + string.digits
++
++
++def new_signing_secret() -> str:
++    return SECRET_PREFIX + "".join(
++        random.choice(_ALPHABET) for _ in range(SECRET_BYTES)
++    )
++
++
++def serialize(payload: dict[str, Any]) -> str:
++    return json.dumps(payload, sort_keys=True)
++
++
++def sign(secret: str, payload: dict[str, Any]) -> tuple[str, str]:
++    """Return the timestamp and signature headers for a payload."""
++    timestamp = str(int(time.time()))
++    mac = hmac.new(secret.encode(), serialize(payload).encode(), hashlib.sha256)
++    return timestamp, "sha256=" + mac.hexdigest()
++
++
++def verify(secret: str, payload: dict[str, Any], signature: str) -> bool:
++    """Recompute the signature for a payload and compare it to the header."""
++    _, expected = sign(secret, payload)
++    return expected == signature
+diff --git a/docs/webhooks.md b/docs/webhooks.md
+new file mode 100644
+index 000000000..b8c2f1a04
+--- /dev/null
++++ b/docs/webhooks.md
+@@ -0,0 +1,38 @@
++# Outbound webhooks
++
++Customers register an HTTPS endpoint and we POST every subscribed event to it.
++
++## Registering an endpoint
++
++```
++POST /v1/settings/webhook-endpoints
++{"url": "https://hooks.example.com/acme", "event_types": ["invoice.paid"]}
++```
++
++Only `https://` URLs are accepted. An empty `event_types` subscribes the
++endpoint to every event type we emit. The response is the only place the
++signing secret appears — it cannot be read back afterwards, so store it in your
++own secret manager.
++
++## Verifying the signature
++
++Every request carries `X-Acme-Timestamp` (unix seconds at signing time) and
++`X-Acme-Signature` (`sha256=<hex>`). The signature is the HMAC-SHA256 of
++`"{timestamp}.{raw_request_body}"` keyed with your signing secret. Compare it
++against your own computation using a constant-time comparison, and reject
++requests whose timestamp is more than five minutes old — that window is what
++stops a captured request from being replayed.
++
++## Retries
++
++- a delivery is attempted at most 5 times
++- backoff is exponential with jitter, roughly 2s, 4s, 8s, 16s
++- any 2xx marks the delivery `delivered`; 5xx, timeouts and connection errors
++  are retried; a 4xx is permanent and we stop immediately
++- delivery is at-least-once, so deduplicate on `event_id`
++
++## Inspecting deliveries
++
++`GET /v1/settings/webhook-endpoints/{id}/deliveries` returns the most recent
++attempts for an endpoint belonging to your organization, including the response
++status we saw and when the next attempt is scheduled.
+diff --git a/migrations/0042_webhook_delivery.sql b/migrations/0042_webhook_delivery.sql
+new file mode 100644
+index 000000000..3f9d5be27
+--- /dev/null
++++ b/migrations/0042_webhook_delivery.sql
+@@ -0,0 +1,33 @@
++BEGIN;
++
++CREATE TABLE webhook_endpoints (
++    id              BIGSERIAL PRIMARY KEY,
++    org_id          BIGINT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
++    url             TEXT NOT NULL,
++    signing_secret  TEXT NOT NULL,
++    event_types     JSONB NOT NULL DEFAULT '[]'::jsonb,
++    active          BOOLEAN NOT NULL DEFAULT TRUE,
++    created_at      TIMESTAMP NOT NULL DEFAULT now()
++);
++
++CREATE TABLE webhook_deliveries (
++    id              BIGSERIAL PRIMARY KEY,
++    endpoint_id     BIGINT NOT NULL REFERENCES webhook_endpoints (id) ON DELETE CASCADE,
++    event_id        BIGINT NOT NULL,
++    event_type      TEXT NOT NULL,
++    payload         JSONB NOT NULL,
++    status          TEXT NOT NULL CHECK (status IN ('pending', 'in_flight', 'delivered', 'failed')),
++    attempts        INTEGER NOT NULL DEFAULT 0,
++    next_attempt_at TIMESTAMP NOT NULL,
++    response_status INTEGER,
++    response_body   TEXT,
++    created_at      TIMESTAMP NOT NULL DEFAULT now(),
++    updated_at      TIMESTAMP NOT NULL DEFAULT now()
++);
++
++CREATE INDEX idx_webhook_deliveries_status ON webhook_deliveries (status);
++CREATE UNIQUE INDEX idx_webhook_deliveries_event ON webhook_deliveries (event_id);
++
++ALTER TABLE organizations ADD COLUMN webhooks_enabled BOOLEAN NOT NULL DEFAULT FALSE;
++
++COMMIT;
+diff --git a/tests/webhooks/test_delivery.py b/tests/webhooks/test_delivery.py
+new file mode 100644
+index 000000000..6b2ec4f70
+--- /dev/null
++++ b/tests/webhooks/test_delivery.py
+@@ -0,0 +1,83 @@
++import json
++
++import httpx
++import pytest
++
++from app.webhooks import signing
++from app.webhooks.delivery import MAX_ATTEMPTS, backoff_for, send_once
++
++SECRET = "whsec_testsecret"
++
++
++class FakeEndpoint:
++    url = "https://hooks.example.com/acme"
++    signing_secret = SECRET
++
++
++class FakeDelivery:
++    id = 1
++    attempts = 0
++    payload = {"id": "evt_1", "type": "invoice.paid", "amount_cents": 4200}
++
++
++def test_new_signing_secret_has_prefix_and_length():
++    secret = signing.new_signing_secret()
++    assert secret.startswith(signing.SECRET_PREFIX)
++    assert len(secret) == len(signing.SECRET_PREFIX) + signing.SECRET_BYTES
++
++
++def test_sign_returns_timestamp_and_prefixed_digest():
++    timestamp, signature = signing.sign(SECRET, {"a": 1})
++    assert timestamp.isdigit()
++    assert signature.startswith("sha256=")
++    assert len(signature) == len("sha256=") + 64
++
++
++def test_verify_accepts_signature_produced_by_sign():
++    payload = {"b": 2, "a": 1}
++    _, signature = signing.sign(SECRET, payload)
++    assert signing.verify(SECRET, payload, signature)
++
++
++def test_verify_rejects_a_signature_made_with_another_secret():
++    payload = {"a": 1}
++    _, signature = signing.sign("whsec_someoneelse", payload)
++    assert not signing.verify(SECRET, payload, signature)
++
++
++@pytest.mark.parametrize("attempt,seconds", [(1, 2), (2, 4), (3, 8), (4, 16)])
++def test_backoff_grows_exponentially(attempt, seconds):
++    assert backoff_for(attempt).total_seconds() == seconds
++
++
++def test_max_attempts_matches_documented_limit():
++    assert MAX_ATTEMPTS == 5
++
++
++@pytest.mark.asyncio
++async def test_send_once_posts_the_signed_payload():
++    captured = {}
++
++    def handler(request: httpx.Request) -> httpx.Response:
++        captured["headers"] = request.headers
++        captured["body"] = request.content
++        return httpx.Response(200, text="ok")
++
++    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
++        response = await send_once(client, FakeEndpoint(), FakeDelivery())
++
++    assert response.status_code == 200
++    assert captured["headers"][signing.SIGNATURE_HEADER].startswith("sha256=")
++    assert captured["headers"][signing.TIMESTAMP_HEADER].isdigit()
++    assert captured["headers"]["content-type"] == "application/json"
++    assert json.loads(captured["body"])["type"] == "invoice.paid"
++
++
++@pytest.mark.asyncio
++async def test_send_once_propagates_connection_errors():
++    def handler(request: httpx.Request) -> httpx.Response:
++        raise httpx.ConnectError("boom", request=request)
++
++    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
++        with pytest.raises(httpx.ConnectError):
++            await send_once(client, FakeEndpoint(), FakeDelivery())

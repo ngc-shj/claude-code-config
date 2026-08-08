@@ -81,6 +81,22 @@ findable defect and the run says nothing about the rule.
 | `fixtures/F6-R54.diff` | R54 | 8 files, ~425 lines | `withElevatedRead` never clears the GUC, so later statements in the transaction stay elevated |
 | `fixtures/F8-RT9hard.diff` | RT9 | 8 files, ~425 lines | the issuer/nbf tightening landed only in `src/auth/verify.ts`; the deploy config routes every request through `edge/handler.js`, which carries its own copy |
 | `fixtures/F9-R54b.diff` | R54 | 8 files, ~437 lines | `enterSystemOperation()` sets the audit-skip flag on the request context and never clears it, so every write after the staging step runs unaudited |
+| `fixtures/F10-webhooks.diff` | — | 8 files, 470 lines | none — see below |
+
+**F10 has no target rule and no oracle**, so nothing in this directory can use
+it. It exists for `../rule-precision/`, which scores findings against an
+adjudicated claim inventory rather than against one seeded defect, and which
+needed a second fixture because five conclusions rested on F9 alone
+(`protocols/round-16.md`). Two things about it are worth knowing before it is
+reused here:
+
+- It was written by an agent that was told the domain, the file shape and the
+  line budget and **nothing about the arms it would be used to compare** — the
+  bias this directory's closing section describes runs the other way for F10,
+  because no one who knew the measurement chose where its defects went.
+- Its diffstat is honest: 470 claimed insertions, 470 actual added lines. F9's
+  claims 437 and has 297, which matters when "comparable size to F9" is the
+  requirement being checked.
 
 F9 is F6's shape in a different domain — same rule, same "control suspension
 leaking past its intended scope, buried in a large diff", but an

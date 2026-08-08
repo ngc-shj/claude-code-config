@@ -1,0 +1,82 @@
+# Findings already reported on this change
+
+Three reviewers have already read this diff. These are the titles of what they reported — titles only, deliberately.
+
+- `list_deliveries` has no tenancy filter — any authenticated user can read any organization's webhook payloads
+- `GET /webhook-endpoints` returns every endpoint's `signing_secret`, contradicting the documented "cannot be read back" control
+- signing secrets are generated with `random`, not a CSPRNG
+- `verify` compares signatures with `==` (RS1)
+- the signature is computed over different bytes than the request body carries (R40)
+- the signature does not cover the timestamp, so the documented replay window enforces nothing
+- endpoint URLs are unvalidated against internal targets and the client follows redirects (SSRF)
+- the migration's status CHECK constraint does not contain the value the code writes
+- the unique index on `event_id` alone makes multi-endpoint fan-out impossible
+- `time.sleep` inside an async coroutine blocks the event loop
+- `deliver` and `_claim_batch` use ORM instances after their session has closed
+- `_acquire_lock` is a non-atomic check-then-set and the release is unowned
+- `in_flight` is a non-terminal state with no exit on the crash path (R38)
+- the persisted retry schedule is never used — retries are an in-process loop
+- `docs/webhooks.md` describes retry and subscription semantics the code does not implement (R29/R49)
+- the dispatcher swallows every enqueue failure, converting delivery loss into a log line
+- `webhooks_enabled` is added to `organizations` and read by nothing (R41)
+- every delivery's signature header is written to the application log and every response body is stored unbounded
+- `limit` on the deliveries route has a floor but no ceiling
+- the new production surface is largely untested, and the one signing test cannot fail for the property it names (RT5/RT6/RT7)
+- the test doubles cannot see the model, migration, or session defects they stand in for (RT1)
+- `enqueue_for_event` writes a naive timestamp into a timezone-aware column, reimplementing the module's own `_now` helper (R1)
+- the claim and listing queries order on non-unique keys (R57)
+- `_finish` dereferences a row it did not confirm exists
+- `updated_at` is not maintained on the claim transition
+- the index supporting the claim query covers only one of its three predicates
+- `SECRET_BYTES` names characters, not bytes
+- `list_deliveries` is not scoped to the caller's organization
+- signing secrets are generated with `random`, not a CSPRNG
+- signature comparison in `verify` is not constant-time (RS1)
+- the MAC is computed over bytes that are neither transmitted nor documented
+- the signing secret is returned on every endpoint read
+- any http(s) host is accepted and redirects are followed — SSRF into the internal network
+- the migration's CHECK constraint rejects the status the code writes
+- `UNIQUE (event_id)` makes fan-out to a second endpoint impossible
+- `time.sleep` inside an async coroutine blocks the entire event loop
+- ORM instances are used after their session closes
+- the signature test cannot fail when the signature is wrong
+- the `webhooks_enabled` kill switch is added and never consulted
+- `in_flight` is a non-terminal state with no reset path, and retry progress is never persisted
+- the Redis lock is non-atomic, can lose its TTL, and is deleted by whoever finishes first
+- any exception ends the worker permanently
+- the dispatcher swallows every webhook enqueue failure
+- naive `utcnow()` written into timezone-aware columns, and the migration declares neither
+- `docs/webhooks.md` documents behaviour the code does not implement
+- full outbound headers are logged and full response bodies are stored
+- unbounded fan-out and an unbounded page size on the new routes
+- `event_types` is accepted unvalidated and duplicates the dispatcher's hardcoded set
+- nine new production exports ship with tests for two
+- `_finish` dereferences a possibly-missing row
+- the claim query's index does not match its predicate
+- `list_deliveries` orders by a non-unique key
+- the create handler returns 201 before the transaction commits
+- the bytes that are signed are not the bytes that are sent, so no customer can verify a delivery
+- the timestamp header is not covered by the MAC, so the documented replay window is unenforceable
+- signature comparison is not constant-time (RS1)
+- signing secrets are generated with the `random` module, not a CSPRNG (R1)
+- `list_deliveries` has no tenancy filter, so any authenticated user can read any organization's webhook payloads
+- the signing secret is returned by the list endpoint, contradicting the documented "cannot be read back" guarantee
+- endpoint URLs are unrestricted and redirects are followed, giving authenticated SSRF into the internal network
+- the migration's CHECK constraint rejects the status the code actually writes
+- `UNIQUE (event_id)` makes fan-out to a second endpoint impossible
+- `time.sleep` inside the async retry loop blocks the event loop
+- ORM instances are used after their session has closed
+- the delivery lock is neither atomic nor safely released, and a crash between `set` and `expire` wedges the feature permanently
+- `in_flight` is a non-terminal state with no reaper, so any interruption strands a delivery forever
+- 4xx responses are retried, contradicting the documented retry policy, and the backoff has no jitter
+- the delivered payload carries no event id or type, so the documented deduplication key is not on the wire
+- the webhook enqueue is outside the event's transaction and its failure is swallowed
+- delivery request headers, including the live signature, are logged at INFO
+- no rate limiting on the three new routes (RS2)
+- `limit` on `list_deliveries` has an inclusive lower bound but no upper bound (RS3)
+- `webhooks_enabled` is added to the schema but nothing ever reads it (R41)
+- the model declares timezone-aware columns while the DDL creates naive ones, and one writer uses `utcnow()`
+- the dispatcher's event allow-list is a hardcoded set that contradicts the documented "every event type" semantics
+- the new production surface is almost entirely untested (RT6/RT5/RT10)
+- `_finish` dereferences a possibly-absent row
+- response bodies are stored and retained without a size bound

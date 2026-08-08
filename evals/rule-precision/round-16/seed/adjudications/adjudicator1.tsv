@@ -1,0 +1,65 @@
+cluster_id	verdict	reason
+DELIVERY-09	real
+DELIVERY-30	real
+DISPATCH-01	real
+DELIVERY-11	real
+DELIVERY-08	real
+DELIVERY-13	real
+TESTS-10	real
+MIGRATION-05	real
+SETTINGS-01	real
+MODELS-05	real
+SETTINGS-07	not-a-defect	scope
+DELIVERY-17	real
+DELIVERY-10	real
+DELIVERY-05	real
+DELIVERY-04	real
+DELIVERY-01	real
+MODELS-02	not-a-defect	scope
+SETTINGS-09	not-a-defect	scope
+SIGNING-04	real
+DELIVERY-12	real
+MIGRATION-04	real
+SIGNING-05	real
+TESTS-03	real
+DELIVERY-20	real
+SIGNING-01	real
+SIGNING-02	real
+MIGRATION-02	real
+DISPATCH-02	real
+MODELS-04	real
+DELIVERY-14	real
+MODELS-03	real
+TESTS-04	real
+SIGNING-06	real
+DELIVERY-23	not-a-defect	preference
+MIGRATION-01	real
+DISPATCH-04	real
+TESTS-01	real
+TESTS-05	real
+DELIVERY-18	wrong	misreads-code
+MODELS-01	real
+TESTS-06	real
+MIGRATION-08	not-a-defect	outside-diff
+MIGRATION-03	real
+TESTS-08	real
+DELIVERY-07	real
+DELIVERY-03	real
+MODELS-07	real
+SETTINGS-08	not-a-defect	preference
+DISPATCH-03	real
+TESTS-02	real
+SETTINGS-02	real
+SETTINGS-04	real
+DELIVERY-06	real
+SETTINGS-05	real
+SETTINGS-06	real
+DELIVERY-16	real
+SETTINGS-03	real
+DELIVERY-21	real
+SIGNING-03	real
+DELIVERY-19	real
+DELIVERY-02	real
+MIGRATION-07	not-a-defect	preference
+DELIVERY-25	not-a-defect	outside-diff
+DELIVERY-15	real
