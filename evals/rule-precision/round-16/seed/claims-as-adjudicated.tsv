@@ -1,0 +1,65 @@
+cluster_id	claim
+DELIVERY-09	rows flipped to in_flight by _claim_batch are moved on only by _finish and nothing resets stale in_flight rows, so a crash or unhandled exception strands them outside the pending query permanently.
+DELIVERY-30	the POSTed body is the bare event payload with no event_id or event_type in the body or headers, so a receiver has no id to deduplicate on.
+DISPATCH-01	dispatch gates the webhook enqueue on the hardcoded three-entry WEBHOOK_EVENT_TYPES set, so an endpoint subscribed to any other type, or to all types via an empty event_types, receives nothing.
+DELIVERY-11	deliver treats every response outside 200-299 as retryable and re-POSTs it up to MAX_ATTEMPTS, so a 4xx is retried instead of being marked permanent immediately.
+DELIVERY-08	_claim_batch selects pending rows with no FOR UPDATE SKIP LOCKED and no conditional update, so concurrent claimers can select and deliver the same rows.
+DELIVERY-13	enqueue_for_event writes next_attempt_at=datetime.utcnow(), a naive value, while _claim_batch compares against the aware datetime.now(timezone.utc).
+TESTS-10	the tests substitute hand-rolled FakeEndpoint and FakeDelivery class-attribute stubs for the real ORM models, so detached-instance and missing-row behaviour is never exercised.
+MIGRATION-05	no index supports list_deliveries, which filters on endpoint_id and orders by created_at DESC with neither column indexed.
+SETTINGS-01	list_deliveries filters only on the endpoint_id taken from the path and never checks that the endpoint belongs to the caller's organization, so any authenticated user can read another organization's delivery rows.
+MODELS-05	WebhookDelivery.updated_at has a creation default but no onupdate, so writes that do not go through _finish, such as the in_flight flip, leave the timestamp stale.
+SETTINGS-07	nothing caps how many endpoints one organization can register, so a caller can multiply the per-event fan-out and delivery rows without limit.
+DELIVERY-17	asyncio.gather is called without return_exceptions=True, so the first delivery to raise propagates out and its sibling coroutines are abandoned.
+DELIVERY-10	retry state is held in the local attempt counter and attempts/next_attempt_at are written only by the terminal _finish, so progress is lost across restarts and the next_attempt_at schedule is never used.
+DELIVERY-05	_acquire_lock issues set and expire as two separate commands, so a crash between them leaves LOCK_KEY with no TTL and blocks all further delivery.
+DELIVERY-04	_acquire_lock reads LOCK_KEY and then sets it as separate operations, so two workers that both observe an empty key both acquire the lock.
+DELIVERY-01	deliver backs off with the blocking time.sleep(delay) inside an async coroutine, stalling the event loop and every other gathered delivery for the duration.
+MODELS-02	signing_secret is stored as plaintext TEXT with no encryption or hashing, so database, replica, or backup access yields every customer's HMAC key.
+SETTINGS-09	the change adds only create and read routes, so an endpoint cannot be deactivated, deleted, or have its signing secret rotated through the API.
+SIGNING-04	verify compares digests with expected == signature instead of a constant-time comparison, so the comparison short-circuits on the first differing byte.
+DELIVERY-12	backoff_for returns exactly BASE_DELAY_SECONDS ** attempt seconds with no randomisation, so there is no jitter and deliveries failing together retry at the same instants.
+MIGRATION-04	the only index available to the claim query is on status, while _claim_batch also filters on and orders by next_attempt_at, so the pending set is sorted on every poll.
+SIGNING-05	new_signing_secret builds the secret from random.choice, which draws on the non-cryptographic Mersenne Twister PRNG rather than a CSPRNG.
+TESTS-03	test_verify_accepts_signature_produced_by_sign is tautological because verify calls sign internally, so the assertion holds for any implementation and pins nothing about the on-the-wire format.
+DELIVERY-20	send_once logs the full header dict at INFO, writing the X-Acme-Signature and timestamp values into application logs on every attempt.
+SIGNING-01	sign HMACs json.dumps(payload, sort_keys=True) while the request is sent with client.post(json=...), so the signed bytes differ from the transmitted body and a receiver hashing the raw request body cannot reproduce the signature.
+SIGNING-02	sign MACs only the serialised payload, so the X-Acme-Timestamp header is unauthenticated and a replayer can rewrite it without invalidating the signature.
+MIGRATION-02	_finish writes the status failed_permanent, which the migration's CHECK constraint ('pending','in_flight','delivered','failed') does not allow, so a permanent failure cannot be recorded.
+DISPATCH-02	the except Exception around enqueue_for_event logs a warning and lets dispatch return the event id as success, so a failed enqueue drops the webhook with no retry or failure signal.
+MODELS-04	the STATUSES tuple is referenced by no column, validator, or check, and lists failed_permanent where the migration's CHECK lists failed.
+DELIVERY-14	_finish assigns row.status immediately after session.get without a None check, raising AttributeError when the delivery row no longer exists.
+MODELS-03	models.py declares created_at, updated_at and next_attempt_at as DateTime(timezone=True) while migration 0042 creates them as TIMESTAMP without time zone, so offsets are dropped on write.
+TESTS-04	the new HTTP routes create_webhook_endpoint, list_webhook_endpoints and list_deliveries have no tests, so the URL validation and org scoping are unexercised.
+SIGNING-06	SECRET_BYTES = 32 is used as a character count over a 62-symbol alphabet, so the constant's name misstates the entropy of the secret it produces.
+DELIVERY-23	asyncio.gather fans out the whole claimed batch of up to BATCH_SIZE = 100 deliveries at once with no semaphore or concurrency limit.
+MIGRATION-01	CREATE UNIQUE INDEX idx_webhook_deliveries_event on webhook_deliveries (event_id) permits only one delivery row per event, so fan-out to a second endpoint violates the index and the whole enqueue fails.
+DISPATCH-04	the unguarded for subscriber ...: await subscriber(envelope) loop runs before the webhook block, so one raising subscriber prevents the webhook enqueue for an already-committed event.
+TESTS-01	test_send_once_posts_the_signed_payload captures both the request body and the signature header but asserts only the sha256= prefix, never verifying the signature against the captured body.
+TESTS-05	test_max_attempts_matches_documented_limit asserts MAX_ATTEMPTS == 5 against a literal and exercises no retry code, so it cannot fail for a behavioural reason.
+DELIVERY-18	batch is assigned only inside the try while if not batch is evaluated after the try/finally, so a failure in _claim_batch can reach the test with batch unbound.
+MODELS-01	WebhookEndpoint.to_dict includes signing_secret, so GET /v1/settings/webhook-endpoints returns every endpoint's signing secret rather than exposing it only in the creation response.
+TESTS-06	test_backoff_grows_exponentially asserts exact equality with 2, 4, 8 and 16 seconds, pinning jitter-free backoff so adding the documented jitter would turn the test red.
+MIGRATION-08	the migration contains only forward DDL with no down or rollback section, so the two new tables and the organizations column cannot be reverted by the migration tool.
+MIGRATION-03	the migration adds organizations.webhooks_enabled NOT NULL DEFAULT FALSE but no code in the change reads it, so the flag has no effect on endpoint creation or delivery.
+TESTS-08	test_new_signing_secret_has_prefix_and_length asserts only the prefix and length, which a predictable or constant generator satisfies exactly as well as a CSPRNG.
+DELIVERY-07	the 60-second LOCK_KEY TTL is shorter than a batch's worst-case runtime, so the lock can expire mid-batch and a second worker starts processing the same rows.
+DELIVERY-03	deliver loads the endpoint inside a session_scope block that closes before send_once reads endpoint.signing_secret and endpoint.url from the detached instance.
+MODELS-07	WebhookDelivery.event_type is declared String(100) in the model while the migration creates the column as unbounded TEXT.
+SETTINGS-08	list_webhook_endpoints calls .all() with no limit, offset, or pagination, so the response size grows with the number of endpoints in the org.
+DISPATCH-03	the event row is committed when session_scope exits and enqueue_for_event then opens its own transaction, so a failure between the two leaves a persisted event with no delivery rows.
+TESTS-02	deliver, _finish, _claim_batch, _acquire_lock, enqueue_for_event and run_worker have no tests; only the pure helpers and send_once are exercised.
+SETTINGS-02	create_webhook_endpoint performs no host validation, so a caller can register a loopback, link-local, or internal address that the delivery worker will then POST to from inside the network.
+SETTINGS-04	the limit parameter is declared Query(50, ge=1) with no upper bound, so one request can pull an unbounded number of delivery rows.
+DELIVERY-06	run_worker's finally calls redis_client.delete(LOCK_KEY) with no ownership or fencing check, so a worker that overran the TTL deletes a lock another worker holds.
+SETTINGS-05	event_types is persisted as an unconstrained list[str] with no membership check against the event types the system emits, so a misspelled or unknown name is accepted and silently never matches.
+SETTINGS-06	EndpointIn.url is a bare str with no length or format constraint, so an arbitrarily long string is accepted, stored, and later used as a request target.
+DELIVERY-16	deliver catches only httpx.HTTPError, so any other exception — including httpx.InvalidURL, a serialisation TypeError, or a database error from _finish — escapes the retry loop with the row left in_flight.
+SETTINGS-03	"create_webhook_endpoint validates the URL with parsed.scheme.startswith(""http""), which accepts plaintext http:// and any scheme merely beginning with those characters such as httpfoo://, contradicting the documented https-only rule."
+DELIVERY-21	_finish stores the remote response.text in response_body with no truncation or size bound, so a receiver controls how much content is persisted per attempt.
+SIGNING-03	verify recomputes a fresh timestamp from time.time() and accepts no received timestamp, so it cannot enforce the documented five-minute freshness window.
+DELIVERY-19	the delivery AsyncClient is constructed with follow_redirects=True, so a receiver can redirect the signed payload and its signature headers to another host.
+DELIVERY-02	_claim_batch returns ORM rows loaded inside with session_scope(), so later attribute reads in deliver and send_once touch detached, expired instances.
+MIGRATION-07	there is no unique constraint on (org_id, url), so the same URL can be registered repeatedly for one organization and every event is delivered to it more than once.
+DELIVERY-25	enqueue_for_event, _claim_batch and _finish perform blocking synchronous SQLAlchemy work while called from coroutines, so every database round trip stalls the event loop.
+DELIVERY-15	deliver passes the result of session.get(m.WebhookEndpoint, ...) to send_once with no None check, so a deleted endpoint row raises AttributeError inside the retry loop.

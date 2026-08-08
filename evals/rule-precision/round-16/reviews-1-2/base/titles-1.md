@@ -1,0 +1,89 @@
+# Findings already reported on this change
+
+Three reviewers have already read this diff. These are the titles of what they reported — titles only, deliberately.
+
+- the signature is computed over different bytes than the request body carries
+- the timestamp header is not covered by the MAC, so the documented replay window cannot be enforced
+- HMAC comparison is not constant-time
+- signing secrets are generated from a non-cryptographic PRNG
+- the deliveries endpoint is not scoped to the caller's organization
+- the unique index on `event_id` makes any org with two endpoints receive nothing
+- the migration's CHECK constraint rejects the terminal status the code writes
+- the signing secret is readable back from the list endpoint, contradicting the documented contract
+- endpoint URL validation admits SSRF, and redirect following widens it
+- the delivered body carries no event id or type, so the documented dedup key does not exist on the wire
+- `time.sleep` inside the async delivery loop blocks the whole worker
+- ORM rows are used after their session has closed
+- the dispatch lock is non-atomic to acquire, released without ownership, and can wedge with no TTL
+- the test suite cannot fail on any of the signing defects above
+- naive and aware timestamps are mixed, and the ORM's timezone declaration contradicts the migration
+- `in_flight` is a non-terminal state with no timeout and no sweeper
+- retries happen in-process, so `next_attempt_at`, `attempts`, and the documented jitter are all fiction
+- 4xx responses are retried, contradicting the documented retry policy
+- the `webhooks_enabled` flag the migration adds is never read
+- a second, hardcoded event allowlist in the dispatcher silently drops subscribed event types
+- an enqueue failure is swallowed, so the event is committed with no deliveries and no retry
+- one failing delivery aborts the batch and can leave `batch` unbound
+- the deliveries `limit` has no upper bound
+- the ordering key has no total order, so pages skip and repeat rows
+- response bodies are persisted and logged without a bound
+- every delivery logs its signature header at INFO
+- no test reaches the worker, the routes, or the enqueue path, and two of the existing tests cannot fail
+- `_finish` dereferences a row that may not exist
+- nothing caps the number of endpoints an organization can register, so each event fans out without bound
+- `SECRET_BYTES` names bytes but counts characters
+- `STATUSES` is dead and is the third spelling of the same enum
+- no index supports the deliveries listing
+- `event_types` entries are never validated
+- the signature is computed over different bytes than the ones sent, so no receiver can ever verify it
+- any authenticated user can read any organization's webhook deliveries
+- registered endpoint URLs are unvalidated, and the worker follows redirects — SSRF into the internal network
+- signing secrets are generated from a non-cryptographic PRNG
+- the signing secret is returned on every endpoint read, contradicting the documented one-time-disclosure contract
+- the signature and full header set are written to the application log at INFO
+- the migration's status CHECK constraint does not include the status the code writes
+- the unique index on `event_id` alone makes fan-out to more than one endpoint impossible
+- `_claim_batch` returns ORM rows whose session has already closed
+- `verify` compares signatures with `==`
+- `deliver` blocks the event loop with `time.sleep` inside an async function
+- `in_flight` is a non-terminal state with no timeout and no recovery path
+- the dispatch lock is check-then-act, and is released unconditionally
+- `dispatch` records the event, then swallows the enqueue failure
+- `webhooks_enabled` is added by the migration and read by nothing
+- none of the three new routes has rate limiting
+- `limit` on the deliveries route has a floor but no ceiling
+- `enqueue_for_event` writes a naive `utcnow()` into a timezone-aware column, and the migration declares the columns without a timezone
+- `docs/webhooks.md` describes four behaviours the implementation does not have
+- the new delivery, worker and enqueue code ships with no tests
+- the existing signing tests cannot fail for the defects they appear to cover
+- deliveries are ordered by a non-unique wall-clock column
+- `_finish` dereferences a row it does not check for existence
+- `enqueue_for_event` accepts arbitrary strings as `event_types`
+- the delivery table lacks the index its two hot queries need
+- `list_deliveries` reads any organization's deliveries (missing tenancy filter)
+- signing secrets are generated with `random`, not a CSPRNG
+- `verify` compares signatures with `==` (not constant-time) and never covers the timestamp
+- the signature is computed over different bytes than the request body carries
+- the migration's status CHECK constraint does not admit the status the code writes
+- the unique index on `event_id` alone makes multi-endpoint orgs impossible
+- `WebhookEndpoint.to_dict()` returns the signing secret on every list call
+- endpoint URL validation admits non-HTTPS and internal targets, and the client follows redirects
+- `deliver` calls the blocking `time.sleep` inside an async worker
+- the worker uses ORM objects after their session has closed
+- the redis lock is non-atomic and can wedge dispatch permanently
+- deliveries can be wedged in `in_flight` with no reaper or timeout
+- 4xx responses are retried and backoff has no jitter, contradicting the published contract
+- the dispatcher swallows every enqueue failure, so events are silently lost
+- `enqueue_for_event` writes a naive `utcnow()` into a timezone-aware column, bypassing the module's own helper
+- the migration declares naive `TIMESTAMP` columns while the models declare `DateTime(timezone=True)`
+- signature headers are written to the application log
+- `list_deliveries` accepts an unbounded `limit`
+- `_finish` dereferences a possibly-absent row and stores an unbounded response body
+- only three event types can ever reach a webhook, contradicting the documented "every event type"
+- the new worker and enqueue paths ship with no tests
+- `webhooks_enabled` is added to `organizations` but nothing reads it
+- is there a shared rate limiter these routes should be registered with?
+- the delivery-claim index does not cover the claim query's sort
+- deleting an endpoint destroys its delivery history
+- `enqueue_for_event` is declared `async` but never awaits
+- no way to rotate a signing secret or deactivate an endpoint
