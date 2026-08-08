@@ -34,6 +34,12 @@ No new reviews were generated, so nothing here depends on a second batch.
    looks exactly like one that a single reviewer made. Popularity is not
    evidence. Majority vote per claim; agreement 84.3–94.0%.
 
+`adjudication-brief.md` is the brief every round from 11 on has used, with the
+three lines that vary per round (`{N}`, `{DIFF}`, `{CLAIMS}`) left as slots.
+Holding it fixed is what lets a verdict recorded in one round mean the same thing
+in the next; rendering it at each round's own counts and paths reproduces all
+five instances byte-for-byte, and `round-16/README.md` lists their checksums.
+
 Verdicts are `real` (accurate about the code and worth changing before merge),
 `wrong` (misreads the code), and `not-a-defect` (accurate but a preference, out
 of the change's scope, or resting on code the diff does not show).
@@ -142,6 +148,36 @@ pre-registered rule clears on coverage and fails on cost, so the recorded output
 is both numbers and no recommendation.
 
 Full write-up: `docs/archive/audit/2026-08-06-conditioned-second-wave.md`.
+
+## Round 15: is a titles-only base as good as the full one?
+
+`round-15/` — three arms on the same fixed base. T (titles only) and C (the full
+base) came out identical to two decimals on everything that matters, and round
+14's cost penalty did not replicate. Six of the eight pre-registered reviews ran.
+Numbers and both deviations: `round-15/README.md`.
+
+## Round 16: a second fixture at last
+
+`round-16/` — five conclusions rested on F9, so this round bought a second
+fixture (`../rule-ablation/fixtures/F10-webhooks.diff`, Python/asyncio webhook
+delivery, written by an agent blind to the arms) and a seed defect inventory on
+it: 361 enumerated entries from five panellists, 93 claims, **64 kept at ≥3/5 and
+adjudicated — 54 real**, adjudicator agreement 92.2–96.9%.
+
+It was to test whether an explicit stopping sentence cuts the Critical/Major
+non-defects conditioning adds. **It stopped at its own manipulation check after
+2 of 10 reviews**: no reply in either arm ended in `No findings`, which the
+protocol pre-registered as meaning the wording did not arrive.
+
+| | replies | findings | per reply | `No findings` |
+|---|---|---|---|---|
+| base | 6 | 163 | 27.2 | 0 |
+| T | 6 | 51 | 8.5 | 0 |
+| TS | 6 | 40 | 6.7 | 0 |
+
+TS wrote 21% fewer findings than T, which is **recorded and not claimed** — n=2,
+no adjudication behind it. The eight remaining reviews and 5.4M tokens were not
+spent. `../rule-ablation/protocols/round-16.md`, `round-16/README.md`.
 
 ## What it cannot tell you
 
