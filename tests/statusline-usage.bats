@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # The status line's job here is not decoration: it is the only local surface
-# carrying the plan's rate-limit percentages with decimals, so what it LOGS —
+# that persists the plan's rate-limit percentages at all, so what it LOGS —
 # and whether it admits when it could not log — is the thing under test.
 
 setup() {
@@ -52,6 +52,16 @@ JSON
   bash "$SCRIPT" < "$(payload)" >/dev/null
   run jq -c '[.five_hour.used_percentage, .five_hour.resets_at, .seven_day.used_percentage, .seven_day.resets_at]' "$CLAUDE_USAGE_LOG"
   [ "$output" = "[12.3,1786000000,41.8,1786400000]" ]
+}
+
+@test "a percentage is logged as it arrived, never rounded to a whole percent" {
+  # Every reading observed so far has been a whole percent, and the two that
+  # looked otherwise were `0.14 * 100` and `0.28 * 100` to the bit. That the
+  # server quantizes is only falsifiable while this hook records what arrived,
+  # so a value differing from an integer in its last digit must survive intact.
+  bash "$SCRIPT" < "$(payload 14.000000000000002 3)" >/dev/null
+  run jq -c '.five_hour.used_percentage' "$CLAUDE_USAGE_LOG"
+  [ "$output" = "14.000000000000002" ]
 }
 
 @test "logs ONLY the timestamp, percentages and resets" {

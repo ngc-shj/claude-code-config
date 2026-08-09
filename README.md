@@ -615,6 +615,12 @@ Polling occurs every five minutes, but a JSONL line is appended only when a usag
 percentage or reset boundary changes. No samples can be taken while the machine
 is suspended or offline.
 
+Every percentage observed so far has been a whole number — the occasional
+`14.000000000000002` is `0.14 * 100` in binary floating point, not sub-percent
+precision. Treat the resolution of a subtraction as 1% of the window. Nothing
+here rounds, so a genuinely fractional reading would be logged verbatim and
+would settle the question.
+
 Disable on Linux:
 
 ```bash

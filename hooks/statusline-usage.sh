@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 # Status line that also records the plan's rate-limit percentages.
 #
-# Why this exists: `/usage` floors its percentages to integers, which cannot
-# resolve a batch smaller than a few percent of the weekly allowance. The
-# status line payload carries the same figures with decimals, and it is the
-# only place they surface locally — the server computes them and Claude Code
-# does not persist them anywhere else.
+# Why this exists: `/usage` prints a percentage and forgets it. Nothing local
+# keeps a timestamped history, so the cost of a batch cannot be recovered once
+# it is over. This log is that history — ordered, per window, monotonically
+# filtered — and two of its lines can be subtracted.
+#
+# IT WAS ALSO BUILT FOR SUB-PERCENT RESOLUTION, AND THAT PREMISE HAS NOT HELD.
+# `/usage` floors to integers while the payload appeared to carry decimals, but
+# across the first 27 logged readings every value was a whole percent, and the
+# two that looked otherwise — 14.000000000000002 and 28.000000000000004 — are
+# `0.14 * 100` and `0.28 * 100` to the bit. The server quantizes to 1% and
+# scales; the trailing digits are float noise, not precision. So read the
+# resolution as 1% of the window until a reading arrives that is not a whole
+# percent. This hook rounds nothing, which is what leaves that falsifiable:
+# such a reading would be logged exactly as it came. tests/ pins it.
 #
 # WHAT A DIFFERENCE BETWEEN TWO READINGS MEANS. The log measures ACCOUNT-WIDE
 # usage, not this batch's, so `after - before` is:
