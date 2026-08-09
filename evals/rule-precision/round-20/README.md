@@ -99,6 +99,12 @@ Verified mechanically over all 104 merged cluster rows: 3129 findings assigned
 exactly once, none dropped or duplicated, **no existing claim reworded**, no
 `existing` id absent from the inventory.
 
+`../extract.py` was run over all 108 review files and **reproduced this round's
+`findings.tsv` byte-for-byte**, so the extraction is not a step anyone has to
+take on trust. The review files themselves are not checked in — no round keeps
+them — and that check cannot be re-run from the repository alone; it was run
+once, here, while they existed.
+
 ## What the round cost operationally, and what it changed
 
 **Fourteen agents were lost to the five-hour rate limit**, part way through the
