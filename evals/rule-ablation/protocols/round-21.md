@@ -21,8 +21,9 @@ positive evidence of an effect. It did not measure **why**, and every clause
 result rests on F10 alone. This asks both at once, because the hypothesis makes
 a fixture-independent prediction, and a second fixture is the natural place to
 test it: if clause 1 works by refusing requirements that rest on code the change
-does not contain, the effect should land on that subtype and not on non-defects
-at large.
+does not contain, the effect should be visible in that subtype. **Whether it is
+larger there than on the other reasons is exploratory** — that contrast is the
+difference-in-differences recorded below, and this round is not sized for it.
 
 ## Arms — the minimum that answers it
 
@@ -46,14 +47,27 @@ fixtures is two.
 
 ### F11 is generated once and frozen
 
-The generating prompt is `../../rule-precision/round-21/f11-prompt.md`,
-committed **before** F11 is generated. Its content is pinned here by blob hash
+The generating prompt is `../../rule-precision/round-21/f11-prompt.md`. **That
+file contains only the text the generating agent receives** — the task, the
+shape, the constraints — and nothing about the arms, the Finding Floor, this
+hypothesis, or that anything is being measured. The reasons for withholding
+those belong here, in the protocol, not in the agent's input:
+
+- The round asks whether clause 1 suppresses findings about code outside the
+  change. An author who knew that would have a live reason to choose how much
+  such code the diff leans on, which would make the primary a property of the
+  fixture.
+- F10 was commissioned the same way (`../../rule-precision/round-16/README.md`):
+  domain, file shape, line budget, and an instruction not to label or count what
+  it introduces. The author agent is one agent beyond the round's arms.
+
+It is committed **before** F11 is generated. Its content is pinned here by blob hash
 rather than by commit id, because a squash merge rewrites commit ids and would
 leave the record pointing at nothing:
 
 ```
 git hash-object evals/rule-precision/round-21/f11-prompt.md
-066751639115ccecd75133f3f0bf3d22f4410857
+4f71afeb8f3d561eef9793286dbd7d0d41d817bc
 ```
 
 F11 is produced from that prompt **once** and frozen. The order is the point: a

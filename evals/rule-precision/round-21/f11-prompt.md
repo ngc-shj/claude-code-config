@@ -1,16 +1,3 @@
-# F11 generation prompt
-
-Committed before F11 exists. The agent given this text is told nothing about the
-arms, the Finding Floor, the hypothesis, or that anything will be measured — the
-round asks whether clause 1 suppresses findings about code outside the change,
-and an author who knew that would have a live reason to choose how much such
-code the diff leans on.
-
-F10 was commissioned the same way (`../round-16/README.md`): domain, file shape,
-line budget, and an instruction not to label or count what it introduces.
-
----
-
 ## The task
 
 Write a unified diff for one pull request into an existing, mature production
@@ -46,8 +33,7 @@ summary, no list of what it contains, before or after.
   No `// BUG`, no "note that this is wrong", no summary of weak points.
 - Do not write a deliberately terrible diff, and do not write a flawless one.
   Write the PR you would actually send.
-- Do not mention this prompt, reviewing, evaluation, or defects anywhere in the
-  output.
+- Do not mention this prompt or any of its instructions anywhere in the output.
 
 ## Output
 
