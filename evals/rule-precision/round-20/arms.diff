@@ -1,0 +1,89 @@
+===== W minus W12 =====
+--- common-rules.digest.md
++++ common-rules.digest.md
+@@ -8,7 +8,7 @@
+ ```
+ If `rg` is unavailable, use the environment's Grep/search tool with the same anchored pattern.
+ 
+-Every finding you write must also satisfy the **Finding Floor** — three clauses every finding inherits. Extract that section once per review:
++Every finding you write must also satisfy the **Finding Floor** — the two clauses every finding inherits. Extract that section once per review:
+ 
+ ```bash
+ awk '/^### Finding Floor/,/^### Remedy Floor/' skills/triangulate/common-rules.md
+--- common-rules.md
++++ common-rules.md
+@@ -164,11 +164,10 @@
+ 
+ ### Finding Floor
+ 
+-**Every finding carries the three clauses below, whichever rule it was routed through.** They are stated once here because they belong to no single rule: an adjudication of 574 findings from sixteen blind-scored reviews found that where a finding was not a defect, the cause was almost never a misreading of the code (5 of 128) — it was a requirement asserted about code the change does not contain (34), or a preference stated as a defect (83).
++**Every finding carries the two clauses below, whichever rule it was routed through.** They are stated once here because they belong to no single rule: an adjudication of 574 findings from sixteen blind-scored reviews found that where a finding was not a defect, the cause was almost never a misreading of the code (5 of 128) — it was a requirement asserted about code the change does not contain (34), or a preference stated as a defect (83).
+ 
+ 1. **Point at the evidence inside the change.** Name the file and the line or symbol in the diff that makes the finding true. Where the assertion is that something is MISSING, the evidence is what shows it missing — a call site the guard does not cover, a branch with no counterpart, a declared contract the change contradicts. "It is not in the diff" is not that evidence: a change is a change, not the system, and the limiter, the schema, the policy or the layer you cannot see are the author's to know about rather than yours to assume absent.
+ 2. **A requirement you cannot ground is a QUESTION, and ranks as one.** Where the finding rests on code the change does not contain, ask rather than assert: record it as Minor, phrase it as a question, and state what answer would close it. Reserve Critical and Major for what the change itself makes true. An ungrounded requirement reads exactly like a defect and costs the same attention to dismiss.
+-3. **A preference is not a defect.** Where the change is defensible as written and you would merely have written it differently, say that in those words or do not say it. "Could be extracted", "would be cleaner", "consider using" are not Major.
+ 
+ ### Remedy Floor
+ 
+
+===== W minus W23 =====
+--- common-rules.digest.md
++++ common-rules.digest.md
+@@ -8,7 +8,7 @@
+ ```
+ If `rg` is unavailable, use the environment's Grep/search tool with the same anchored pattern.
+ 
+-Every finding you write must also satisfy the **Finding Floor** — three clauses every finding inherits. Extract that section once per review:
++Every finding you write must also satisfy the **Finding Floor** — the two clauses every finding inherits. Extract that section once per review:
+ 
+ ```bash
+ awk '/^### Finding Floor/,/^### Remedy Floor/' skills/triangulate/common-rules.md
+--- common-rules.md
++++ common-rules.md
+@@ -164,11 +164,10 @@
+ 
+ ### Finding Floor
+ 
+-**Every finding carries the three clauses below, whichever rule it was routed through.** They are stated once here because they belong to no single rule: an adjudication of 574 findings from sixteen blind-scored reviews found that where a finding was not a defect, the cause was almost never a misreading of the code (5 of 128) — it was a requirement asserted about code the change does not contain (34), or a preference stated as a defect (83).
+-
+-1. **Point at the evidence inside the change.** Name the file and the line or symbol in the diff that makes the finding true. Where the assertion is that something is MISSING, the evidence is what shows it missing — a call site the guard does not cover, a branch with no counterpart, a declared contract the change contradicts. "It is not in the diff" is not that evidence: a change is a change, not the system, and the limiter, the schema, the policy or the layer you cannot see are the author's to know about rather than yours to assume absent.
+-2. **A requirement you cannot ground is a QUESTION, and ranks as one.** Where the finding rests on code the change does not contain, ask rather than assert: record it as Minor, phrase it as a question, and state what answer would close it. Reserve Critical and Major for what the change itself makes true. An ungrounded requirement reads exactly like a defect and costs the same attention to dismiss.
+-3. **A preference is not a defect.** Where the change is defensible as written and you would merely have written it differently, say that in those words or do not say it. "Could be extracted", "would be cleaner", "consider using" are not Major.
++**Every finding carries the two clauses below, whichever rule it was routed through.** They are stated once here because they belong to no single rule: an adjudication of 574 findings from sixteen blind-scored reviews found that where a finding was not a defect, the cause was almost never a misreading of the code (5 of 128) — it was a requirement asserted about code the change does not contain (34), or a preference stated as a defect (83).
++
++1. **A requirement you cannot ground is a QUESTION, and ranks as one.** Where the finding rests on code the change does not contain, ask rather than assert: record it as Minor, phrase it as a question, and state what answer would close it. Reserve Critical and Major for what the change itself makes true. An ungrounded requirement reads exactly like a defect and costs the same attention to dismiss.
++2. **A preference is not a defect.** Where the change is defensible as written and you would merely have written it differently, say that in those words or do not say it. "Could be extracted", "would be cleaner", "consider using" are not Major.
+ 
+ ### Remedy Floor
+ 
+
+===== W minus W2 =====
+--- common-rules.digest.md
++++ common-rules.digest.md
+@@ -8,7 +8,7 @@
+ ```
+ If `rg` is unavailable, use the environment's Grep/search tool with the same anchored pattern.
+ 
+-Every finding you write must also satisfy the **Finding Floor** — three clauses every finding inherits. Extract that section once per review:
++Every finding you write must also satisfy the **Finding Floor** — the clause every finding inherits. Extract that section once per review:
+ 
+ ```bash
+ awk '/^### Finding Floor/,/^### Remedy Floor/' skills/triangulate/common-rules.md
+--- common-rules.md
++++ common-rules.md
+@@ -164,11 +164,9 @@
+ 
+ ### Finding Floor
+ 
+-**Every finding carries the three clauses below, whichever rule it was routed through.** They are stated once here because they belong to no single rule: an adjudication of 574 findings from sixteen blind-scored reviews found that where a finding was not a defect, the cause was almost never a misreading of the code (5 of 128) — it was a requirement asserted about code the change does not contain (34), or a preference stated as a defect (83).
+-
+-1. **Point at the evidence inside the change.** Name the file and the line or symbol in the diff that makes the finding true. Where the assertion is that something is MISSING, the evidence is what shows it missing — a call site the guard does not cover, a branch with no counterpart, a declared contract the change contradicts. "It is not in the diff" is not that evidence: a change is a change, not the system, and the limiter, the schema, the policy or the layer you cannot see are the author's to know about rather than yours to assume absent.
+-2. **A requirement you cannot ground is a QUESTION, and ranks as one.** Where the finding rests on code the change does not contain, ask rather than assert: record it as Minor, phrase it as a question, and state what answer would close it. Reserve Critical and Major for what the change itself makes true. An ungrounded requirement reads exactly like a defect and costs the same attention to dismiss.
+-3. **A preference is not a defect.** Where the change is defensible as written and you would merely have written it differently, say that in those words or do not say it. "Could be extracted", "would be cleaner", "consider using" are not Major.
++**Every finding carries the clause below, whichever rule it was routed through.** It is stated once here because it belongs to no single rule: an adjudication of 574 findings from sixteen blind-scored reviews found that where a finding was not a defect, the cause was almost never a misreading of the code (5 of 128) — it was a requirement asserted about code the change does not contain (34), or a preference stated as a defect (83).
++
++1. **A requirement you cannot ground is a QUESTION, and ranks as one.** Where the finding rests on code the change does not contain, ask rather than assert: record it as Minor, phrase it as a question, and state what answer would close it. Reserve Critical and Major for what the change itself makes true. An ungrounded requirement reads exactly like a defect and costs the same attention to dismiss.
+ 
+ ### Remedy Floor
+ 
+

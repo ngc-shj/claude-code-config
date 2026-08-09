@@ -89,12 +89,19 @@ def series(by, metric):
 
 
 def paired(a, b):
-    """(mean difference, sd of differences, t, MDE) for a - b."""
+    """(mean difference, sd_d, t, MDE, CI low, CI high) for a - b.
+
+    The MDE is here for the gate only. Whether the round SAW an effect is the
+    t and the interval; requiring the observed difference to exceed the MDE is a
+    stricter bar than alpha=.05 applied by accident. See `../methods.md`."""
     d = [x - y for x, y in zip(a, b)]
     n = len(d)
     sd = st.stdev(d)
-    t = st.mean(d) / (sd / math.sqrt(n)) if sd else 0.0
-    return st.mean(d), sd, t, (T_PAIRED[n] + Z_BETA) * sd / math.sqrt(n)
+    se = sd / math.sqrt(n)
+    t = st.mean(d) / se if sd else 0.0
+    half = T_PAIRED[n] * se
+    return (st.mean(d), sd, t, (T_PAIRED[n] + Z_BETA) * se,
+            st.mean(d) - half, st.mean(d) + half)
 
 
 def main():
@@ -110,7 +117,7 @@ def main():
     if '--gate' in sys.argv:
         print('POWER GATE — pre-registered to run before any arm comparison.\n'
               'No arm mean is printed here, by design.\n')
-        _, sd, _, obs = paired(prim['W'], prim['N'])
+        _, sd, _, obs, _, _ = paired(prim['W'], prim['N'])
         print(f'PRIMARY W - N, paired')
         print(f'  observed sd of differences   {sd:.3f}')
         print(f'  observed MDE at n=6          {obs:.2f}')
@@ -144,14 +151,19 @@ def main():
         for a in ('W', 'W2', 'N'):
             print(f'{"":34s}{a:>3s} {s[a]}')
 
-    print('\nPAIRED comparisons, per review. Only the first fires a rule.')
-    print(f'{"":36s}{"diff":>8s}{"sd_d":>8s}{"t":>8s}{"MDE":>8s}')
-    for label, x, y in (('PRIMARY    W  - N ', 'W', 'N'),
-                        ('SECONDARY  W  - W2', 'W', 'W2'),
-                        ('RECORDED   W2 - N ', 'W2', 'N')):
+    print('\nPAIRED comparisons on the primary metric, per review.')
+    print('Only W - N was confirmatory. The others are EXPLORATORY and are'
+          '\nreported with their numbers rather than promoted or discounted.')
+    print(f'{"":30s}{"diff":>8s}{"sd_d":>8s}{"t":>8s}{"95% CI":>18s}{"MDE":>8s}')
+    for label, x, y in (('CONFIRMATORY W  - N ', 'W', 'N'),
+                        ('exploratory  W  - W2', 'W', 'W2'),
+                        ('exploratory  W2 - N ', 'W2', 'N')):
         s = rows['PRIMARY   C+M not-a-defect']
-        d, sd, t, m = paired(s[x], s[y])
-        print(f'{label:36s}{d:8.2f}{sd:8.3f}{t:8.2f}{m:8.2f}')
+        d, sd, t, m, lo, hi = paired(s[x], s[y])
+        print(f'{label:30s}{d:8.2f}{sd:8.3f}{t:8.2f}   [{lo:6.2f},{hi:6.2f}]{m:8.2f}')
+    print(f'\nt_crit at df={len(rows["PRIMARY   C+M not-a-defect"]["W"]) - 1} '
+          f'is {T_PAIRED[6]}. The MDE column is the DESIGN quantity the gate used;'
+          '\nit is not a bar the observed difference has to clear. See ../methods.md.')
 
     print('\nReal defects reached, per arm — recorded, read by no decision rule.')
     s = rows['          real claims reached']

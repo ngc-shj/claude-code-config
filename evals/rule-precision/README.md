@@ -203,6 +203,39 @@ authorised by someone who had already seen the n=6 table; and one reply was
 found missing partway through, though the primary series turned out unaffected.
 `round-17/README.md`.
 
+## Round 20: clause 1 carries the floor
+
+`round-20/` — round 19 measured clauses 1 and 3 contributing −1.83 jointly and
+could not say which. Four arms in one batch, a 2×2 in (clause 1) × (clause 3)
+with clause 2 always present, identify each.
+
+| C+M `not-a-defect`, per review | W (1,2,3) | W₁₂ | W₂₃ | W₂ |
+|---|---|---|---|---|
+| mean | 1.78 | 1.44 | 3.11 | 3.33 |
+
+| paired | difference | t | 95% CI |
+|---|---|---|---|
+| **CONFIRMATORY** W − W₂₃ — clause 1 | **−1.33** | −3.27 | **[−2.27, −0.39]** |
+| exploratory W − W₁₂ — clause 3 | +0.33 | 0.63 | [−0.88, +1.55] |
+| exploratory W₁₂ − W₂ — clause 1 | −1.89 | −3.09 | [−3.30, −0.48] |
+| exploratory W₂₃ − W₂ — clause 3 | −0.22 | −0.55 | [−1.15, +0.70] |
+
+```bash
+evals/rule-precision/round-20/measure.py --gate   # the gate, run first and alone
+evals/rule-precision/round-20/measure.py
+```
+
+**The confirmatory rule fires**: the interval for W − W₂₃ excludes zero, so
+clause 1 contributes. Clause 1 shows an effect in both of its cells; clause 3's
+interval straddles zero in both, and the 2×2 interaction is +0.56, CI [−1.21,
++2.32] — the clauses do not depend on each other.
+
+**This does not license deleting clause 3.** The design measures positive
+contributions; a null is not equivalence, and no skill file is changed.
+`round-20/README.md` also records the fourteen agents lost to the five-hour
+limit and the two tools that came out of it — `preflight.py` and
+`await_outputs.py`.
+
 ## Round 19: all three levels in one batch
 
 `round-19/` — rounds 17 and 18 left W, W₂ and N on three different rulers, and
@@ -224,12 +257,17 @@ evals/rule-precision/round-19/measure.py --gate   # the gate, run first and alon
 evals/rule-precision/round-19/measure.py
 ```
 
-**The primary does not clear its own MDE, so the round makes no adoption
-claim** — while being significant by the conventional test (t_crit 2.571). Both
-readings are recorded. What the arms show, subject to that: clause 2 alone is
-indistinguishable from no floor (−0.17), and the whole measured gap sits between
-W and W₂. **Which of clause 1 and clause 3 does that is not identifiable here**
-and needs W₁₂ and W₂₃ arms.
+**The interval excludes zero** ([−3.76, −0.24]); the pre-registered rule
+additionally required the difference to exceed the MDE, which it did not, so the
+round recorded no confirmatory claim. That rule was wrong — an MDE is a design
+quantity, not a significance threshold — and `methods.md` separates the two for
+every protocol from round 20 on, rather than the correction being applied
+retroactively here.
+
+What the arms show: clause 2 alone is indistinguishable from no floor (−0.17,
+CI [−1.85, +1.51]), and the whole measured gap sits between W and W₂ (−1.83,
+CI [−2.62, −1.04], **exploratory**). **Which of clause 1 and clause 3 does that
+is not identifiable here** and needs W₁₂ and W₂₃ arms.
 
 Extraction rate, taken from the real reviews' tool-call traces rather than from
 separate gate agents: W 18/18, W₂ 18/18, N 0/18. Two things round 18's claims
@@ -267,6 +305,24 @@ power gate stated as a quantity rather than an sd ceiling needed no
 interpretation when it mattered; and 1027 findings produced **9 new claims and
 zero new real defects**, so F10's real set has now been stable for two rounds.
 `round-18/README.md`.
+
+## How power and inference are kept apart
+
+`methods.md` — what the MDE is for (sizing a round before it runs), what the
+paired test and interval are for (what the round observed), and when a SESOI is
+pre-registered instead. Rounds 12–19 used the MDE for both jobs; round 19 is the
+worked example of the two disagreeing.
+
+```bash
+evals/rule-precision/extract.py <review-dir> <out.tsv>   # structured, not regex
+```
+
+`extract.py` replaces the per-round heading regex that lost findings in rounds
+18 and 19 — both times in the arm carrying the Finding Floor, because clause 2
+makes reviewers invent heading shapes the brief's template has no slot for. A
+block is a finding if it carries a `File:` field; severity is whichever severity
+word is in the heading; fields run across hard-wrapped lines. It reproduces
+round 19's `findings.tsv` byte-for-byte.
 
 ## The primary metric mixes two failure modes (post-hoc, rounds 12 and 17)
 
