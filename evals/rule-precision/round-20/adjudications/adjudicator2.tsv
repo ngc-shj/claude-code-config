@@ -1,0 +1,19 @@
+cluster_id	verdict	reason
+R20-TST-02	real
+R20-SET-01	not-a-defect	outside-diff
+R20-TST-03	not-a-defect	preference
+R20-TST-01	real
+R20-DOC-11	real
+R20-DOC-07	real
+R20-DOC-10	wrong	misreads-code
+R20-DOC-01	real
+R20-DOC-12	real
+R20-DOC-06	real
+R20-DEL-01	not-a-defect	outside-diff
+R20-DOC-02	real
+R20-DOC-09	real
+R20-DOC-05	real
+R20-MOD-01	wrong	misreads-code
+R20-DOC-03	real
+R20-DOC-08	real
+R20-DOC-04	real

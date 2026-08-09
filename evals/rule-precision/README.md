@@ -203,6 +203,39 @@ authorised by someone who had already seen the n=6 table; and one reply was
 found missing partway through, though the primary series turned out unaffected.
 `round-17/README.md`.
 
+## Round 20: clause 1 carries the floor
+
+`round-20/` — round 19 measured clauses 1 and 3 contributing −1.83 jointly and
+could not say which. Four arms in one batch, a 2×2 in (clause 1) × (clause 3)
+with clause 2 always present, identify each.
+
+| C+M `not-a-defect`, per review | W (1,2,3) | W₁₂ | W₂₃ | W₂ |
+|---|---|---|---|---|
+| mean | 1.78 | 1.44 | 3.11 | 3.33 |
+
+| paired | difference | t | 95% CI |
+|---|---|---|---|
+| **CONFIRMATORY** W − W₂₃ — clause 1 | **−1.33** | −3.27 | **[−2.27, −0.39]** |
+| exploratory W − W₁₂ — clause 3 | +0.33 | 0.63 | [−0.88, +1.55] |
+| exploratory W₁₂ − W₂ — clause 1 | −1.89 | −3.09 | [−3.30, −0.48] |
+| exploratory W₂₃ − W₂ — clause 3 | −0.22 | −0.55 | [−1.15, +0.70] |
+
+```bash
+evals/rule-precision/round-20/measure.py --gate   # the gate, run first and alone
+evals/rule-precision/round-20/measure.py
+```
+
+**The confirmatory rule fires**: the interval for W − W₂₃ excludes zero, so
+clause 1 contributes. Clause 1 shows an effect in both of its cells; clause 3's
+interval straddles zero in both, and the 2×2 interaction is +0.56, CI [−1.21,
++2.32] — the clauses do not depend on each other.
+
+**This does not license deleting clause 3.** The design measures positive
+contributions; a null is not equivalence, and no skill file is changed.
+`round-20/README.md` also records the fourteen agents lost to the five-hour
+limit and the two tools that came out of it — `preflight.py` and
+`await_outputs.py`.
+
 ## Round 19: all three levels in one batch
 
 `round-19/` — rounds 17 and 18 left W, W₂ and N on three different rulers, and
