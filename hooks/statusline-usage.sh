@@ -156,9 +156,18 @@ append_record() {
                   | if   ($y|type) != "object" or $y.used_percentage == null
                          or $y.resets_at == null then {v: null, new: false}
                     elif ($x|type) != "object" then {v: $y, new: true}
+                    # The status-line payload rounds some reset instants while
+                    # /api/oauth/usage returns fractional ISO timestamps. The
+                    # same boundary has been observed one second apart. Since
+                    # real window boundaries are hours apart, canonicalise a
+                    # +/-1s difference to the accepted boundary before the
+                    # monotonic comparison.
+                    elif (($y.resets_at - $x.resets_at) | fabs) <= 1 then
+                      ($y + {resets_at: $x.resets_at}) as $z
+                      | if $z.used_percentage < $x.used_percentage
+                        then {v: null, new: false}
+                        else {v: $z, new: ($z != $x)} end
                     elif $y.resets_at < $x.resets_at then {v: null, new: false}
-                    elif $y.resets_at == $x.resets_at
-                         and $y.used_percentage < $x.used_percentage then {v: null, new: false}
                     else {v: $y, new: ($y != $x)} end )})
                | from_entries) as $j
             | if ($j.five_hour.new or $j.seven_day.new | not) then empty else
