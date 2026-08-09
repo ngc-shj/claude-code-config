@@ -1,0 +1,12 @@
+cluster_id	verdict	reason
+R19-TST-01	not-a-defect	preference
+R19-DOC-04	real
+R19-DOC-05	real
+R19-DOC-01	not-a-defect	preference
+R19-DOC-02	real
+R19-MOD-01	not-a-defect	outside-diff
+R19-DOC-03	real
+R19-DEL-02	not-a-defect	preference
+R19-SET-01	wrong	misreads-code
+R19-DEL-01	not-a-defect	preference
+R19-TST-02	real
