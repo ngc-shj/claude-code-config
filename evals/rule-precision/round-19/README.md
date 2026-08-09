@@ -50,7 +50,7 @@ what it found.
 
 ## What the three arms show, and what that is worth
 
-- **Clause 2 alone is indistinguishable from having no Finding Floor at all.**
+- **Clause 2 alone showed no detectable difference from having no Finding Floor.**
   W₂ − N is −0.17 with t=−0.25. In-batch, this is a sharper version of round
   18's −1.00, which was also null.
 - **The whole of the measured gap sits between W and W₂**, −1.83 of the −2.00.

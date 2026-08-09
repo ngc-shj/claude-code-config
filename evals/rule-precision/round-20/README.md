@@ -47,9 +47,16 @@ The design has two cells for each clause, and they agree:
 | **1** | W − W₂₃ = **−1.33**, CI [−2.27, −0.39] | W₁₂ − W₂ = **−1.89**, CI [−3.30, −0.48] |
 | **3** | W − W₁₂ = +0.33, CI [−0.88, +1.55] | W₂₃ − W₂ = −0.22, CI [−1.15, +0.70] |
 
-**Clause 1 shows an effect in both cells; clause 3's interval straddles zero in
-both.** The interaction is +0.56, CI [−1.21, +2.32] — the two clauses do not
-depend on each other, so the effect is clause 1's alone rather than a pairing.
+**Both clause-1 contrasts exclude zero; both clause-3 intervals cross it.** The
+interaction is +0.56, CI [−1.21, +2.32], which also crosses zero.
+
+Read that as what it is. Clause 1 is the only component here with **positive
+evidence** of an effect. **The absence of a clause-3 effect, and the absence of
+an interaction, are not established** — both intervals are wide enough to
+contain effects worth having, and an interval crossing zero is a failure to
+detect, not a demonstration of nothing. Saying "clause 3 does not contribute" or
+"the clauses do not interact" would be claiming an equivalence this design
+cannot produce.
 
 Only W − W₂₃ was confirmatory. The other four are exploratory and are reported
 with their numbers, neither discounted nor promoted.
@@ -140,6 +147,32 @@ twelve landed before starting the next.
 
 Against the protocol's 119 agents and ≈10.4M. The overrun is the fourteen lost
 reviews and the needless clustering rerun.
+
+## The result in one paragraph
+
+> The full Finding Floor consistently reduced high-severity non-defects. Clause
+> 2 alone showed no detectable difference from having no floor. In the 2×2
+> ablation, both clause-1 contrasts excluded zero — one confirmatory and one
+> exploratory — whereas both clause-3 intervals and the interaction interval
+> crossed zero. Thus clause 1 is the only component with positive evidence of an
+> effect; the absence of clause-3 or interaction effects was not established.
+
+## What to do next, in order
+
+1. **Why does clause 1 work?** It is the only component with evidence behind it
+   and nothing here explains the mechanism. The protocol predicted that
+   "point at the evidence inside the change" is what suppresses
+   requirement-about-absent-code claims; that prediction is untested. This is
+   the question a reader will ask first and the one the series cannot answer.
+2. **Does it replicate on another fixture?** Every clause result rests on F10.
+   Round 17 showed the floor as a whole transferring from F9; a component
+   effect has never been asked to.
+3. **Make the pairing real.** One shared preamble per review index across arms.
+   Currently the pairing is nominal, costs degrees of freedom, and buys nothing.
+4. **A non-inferiority test for clause 3** — only if someone actually wants to
+   delete it. Establishing that a clause contributes nothing is expensive
+   (n≈100/arm), and the finding would be "we may remove three sentences". The
+   mechanism and the replication are worth more.
 
 ## What this does not settle
 
