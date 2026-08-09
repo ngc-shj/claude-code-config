@@ -170,8 +170,12 @@ reviews and the needless clustering rerun.
 3. **Make the pairing real.** One shared preamble per review index across arms.
    Currently the pairing is nominal, costs degrees of freedom, and buys nothing.
 4. **A non-inferiority test for clause 3** — only if someone actually wants to
-   delete it. Establishing that a clause contributes nothing is expensive
-   (n≈100/arm), and the finding would be "we may remove three sentences". The
+   delete it. Establishing that a clause contributes nothing is expensive: at
+   round 19's observed sd it needs roughly n=100 per arm, but that figure is an
+   approximation that moves with **the margin chosen and the variance
+   observed** — a looser margin or a quieter batch costs less, a tighter one
+   costs more, and neither is known until the margin is fixed. Whatever it
+   comes to, the finding it buys is "we may remove three sentences". The
    mechanism and the replication are worth more.
 
 ## What this does not settle
