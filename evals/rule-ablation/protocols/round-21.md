@@ -8,19 +8,22 @@
 
 The hypothesis is stated in the terms the primary actually measures. An earlier
 draft said clause 1 "selectively reduces" findings about "a guard or requirement
-absent from the change". **Both words were wider than the decision rule.**
+absent from the change". **Both made claims the decision rule does not test.**
 `outside-diff` is the adjudicators' tag for "depends on code the diff does not
-show", which is broader than guards-and-requirements; and *selectively* asserts
+show", which is *broader* than guards-and-requirements — so the old wording
+named a narrower class than the primary counts — and *selectively* asserts
 a contrast against the other reasons that no test here evaluates. The
 difference-in-differences that would license it is recorded below and is
 explicitly **not** a confirmatory quantity in this round.
 
 Round 20 established that clause 1 is the only Finding Floor component with
 positive evidence of an effect. It did not measure **why**, and every clause
-result rests on F10 alone. This asks both at once, because the prediction makes a
-prediction that a second fixture is the natural place to test: if clause 1 works
-by refusing ungrounded requirements, the effect should land on that subtype and
-not on non-defects at large.
+result rests on F10 alone. This asks both at once, because the hypothesis makes
+a fixture-independent prediction, and a second fixture is the natural place to
+test it: if clause 1 works by refusing requirements that rest on code the change
+does not contain, the effect should be visible in that subtype. **Whether it is
+larger there than on the other reasons is exploratory** — that contrast is the
+difference-in-differences recorded below, and this round is not sized for it.
 
 ## Arms — the minimum that answers it
 
@@ -44,10 +47,32 @@ fixtures is two.
 
 ### F11 is generated once and frozen
 
-The generating prompt is committed **before** F11 is generated, and **the commit
-id is recorded in this protocol** before the generating agent is launched. F11
-is produced from that prompt **once** and frozen. The order is the point: a
-prompt written after seeing a fixture is a fixture chosen twice. Regeneration is permitted only for a pre-defined
+The generating prompt is `../../rule-precision/round-21/f11-prompt.md`. **That
+file contains only the text the generating agent receives** — the task, the
+shape, the constraints — and nothing about the arms, the Finding Floor, this
+hypothesis, or that anything is being measured. The reasons for withholding
+those belong here, in the protocol, not in the agent's input:
+
+- The round asks whether clause 1 suppresses findings about code outside the
+  change. An author who knew that would have a live reason to choose how much
+  such code the diff leans on, which would make the primary a property of the
+  fixture.
+- F10 was commissioned the same way (`../../rule-precision/round-16/README.md`):
+  domain, file shape, line budget, and an instruction not to label or count what
+  it introduces. The author agent is one agent beyond the round's arms.
+
+It is committed **before** F11 is generated. Its content is pinned here by blob hash
+rather than by commit id, because a squash merge rewrites commit ids and would
+leave the record pointing at nothing:
+
+```
+git hash-object evals/rule-precision/round-21/f11-prompt.md
+4f71afeb8f3d561eef9793286dbd7d0d41d817bc
+```
+
+F11 is produced from that prompt **once** and frozen. The order is the point: a
+prompt written after seeing a fixture is a fixture chosen twice, and the hash is
+what makes the order checkable afterwards by anyone. Regeneration is permitted only for a pre-defined
 mechanical failure — the output does not apply as a diff, or is truncated — and
 never for anything about its content: not its subject matter, not how many
 ungrounded-requirement openings it happens to offer, and above all **not its
