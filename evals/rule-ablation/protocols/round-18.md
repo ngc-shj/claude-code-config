@@ -47,8 +47,9 @@ rule: an arm is measured against a comparator from its own batch.
 
 ## Arms, exactly
 
-From the `bc0f966` catalogue snapshot, one file differs between the arms and
-`diff -rq` must show only that file:
+From the `bc0f966` catalogue snapshot. Two files differ between the arms —
+`common-rules.md` and `common-rules.digest.md`, as in round 17 — and `diff -rq`
+must show those two and nothing else:
 
 - **W₂**: in `skills/triangulate/common-rules.md`, `### Finding Floor` keeps its
   heading, its rationale paragraph and clause 2. Clauses 1 and 3 are deleted and
@@ -56,8 +57,12 @@ From the `bc0f966` catalogue snapshot, one file differs between the arms and
   three clauses below" becomes "the clause below"; the sentence's counts (5
   misreads, 34 ungrounded requirements, 83 preferences) are left as they are,
   because they are the evidence for the section's existence and not for any one
-  clause. `common-rules.digest.md` keeps its extraction line unchanged; only the
-  words "three clauses" in it become "the clause".
+  clause. The sentence's following clause loses its plural agreement with the
+  count — "They are stated once here because they belong" becomes "It is stated
+  once here because it belongs" — which is a consequence of the ablation and not
+  a second edit. `common-rules.digest.md` keeps its extraction line unchanged;
+  only the words "three clauses every finding inherits" in it become "the clause
+  every finding inherits".
 - **N**: round 17's N, reproduced from the same snapshot — the section cut and
   the digest paragraph that routes to it removed.
 
