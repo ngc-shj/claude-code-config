@@ -179,6 +179,30 @@ TS wrote 21% fewer findings than T, which is **recorded and not claimed** — n=
 no adjudication behind it. The eight remaining reviews and 5.4M tokens were not
 spent. `../rule-ablation/protocols/round-16.md`, `round-16/README.md`.
 
+## Round 17: the shipped Finding Floor, on the second fixture
+
+`round-17/` — round 12 put the Finding Floor in the skill on F9 alone. This asks
+whether it survives F10, a fixture nobody built for it.
+
+| | W (floor) | N (removed) | t | MDE@80% |
+|---|---|---|---|---|
+| Critical/Major findings that are not defects | **2.44** | 4.56 | −3.05 | 2.05 |
+| distinct real defects reached (control) | 33.78 | 34.78 | −1.01 | 2.94 |
+
+```bash
+evals/rule-precision/round-17/measure.py --variance   # the gate, run first and alone
+evals/rule-precision/round-17/measure.py
+```
+
+**The direction and the size replicate** — round 12 measured 2.50 on F9 with a
+flat control; this is 2.11, also flat. n=9 per arm, reached by a declared
+deviation after the pre-registered variance check fired at n=6, because F9's sd
+did not transfer. Three things a reader should carry: the sd gate is still
+literally exceeded at n=9 and both readings are recorded; the extension was
+authorised by someone who had already seen the n=6 table; and one reply was
+found missing partway through, though the primary series turned out unaffected.
+`round-17/README.md`.
+
 ## What it cannot tell you
 
 - **`real` is a panel's judgement, not ground truth.** Three agents under a

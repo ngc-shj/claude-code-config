@@ -1,0 +1,31 @@
+cluster_id	verdict	reason
+NEWSCH-06	real	
+NEWDEL-03	real	
+NEWSIG-02	not-a-defect	preference
+NEWDEL-08	real	
+NEWSET-01	not-a-defect	outside-diff
+NEWSCH-02	not-a-defect	scope
+NEWDEL-02	real	
+NEWSCH-04	not-a-defect	preference
+NEWSIG-01	real	
+NEWSET-04	not-a-defect	preference
+NEWDEL-05	not-a-defect	preference
+NEWTD-03	not-a-defect	preference
+NEWTD-01	real	
+NEWDEL-07	real	
+NEWTD-04	not-a-defect	outside-diff
+NEWDEL-01	real	
+NEWDEL-04	not-a-defect	scope
+NEWDEL-09	not-a-defect	preference
+NEWSET-03	real	
+NEWDEL-06	not-a-defect	preference
+NEWTD-02	wrong	misreads-code
+NEWSCH-03	not-a-defect	preference
+NEWSCH-01	not-a-defect	preference
+NEWSCH-05	not-a-defect	preference
+NEWSET-02	real	
+B2TD-02	not-a-defect	preference
+B2DIS-02	not-a-defect	preference
+B2SET-01	not-a-defect	preference
+B2TD-01	real	
+B2DIS-01	not-a-defect	preference

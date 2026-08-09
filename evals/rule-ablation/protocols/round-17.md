@@ -78,6 +78,36 @@ before any arm comparison. If it exceeds ×1.15 of 1.217, the round reports the
 comparison as underpowered and makes no adoption claim, rather than reporting a
 null as evidence of absence.
 
+## DEVIATION, declared before the extension ran
+
+The variance check fired. Observed pooled sd on F10: **primary 1.742, control
+2.370**, against a ×1.15 ceiling of 1.400 — ×1.43 and ×1.95. At n=6 the MDE on
+the primary is **3.09**, larger than the 2.50 round 12 measured, so the six
+reviews cannot detect the effect they were sized for. n=6 was computed from F9's
+sd and F9's sd did not transfer.
+
+At the observed sd, **n=9 per arm** is the smallest that clears 2.50 (MDE 2.43).
+
+The pre-registration above has no split provision. Reaching n=9 by adding three
+reviews in a second batch is therefore a deviation, and it is declared here
+before those reviews ran:
+
+- **Both arms sit in both batches.** What round 9 forbids is measuring an arm
+  against a *stored number* from another batch; that is not this. A batch effect
+  that shifts both arms equally is absorbed by reporting the blocked estimate
+  alongside the pooled one, and both are reported.
+- **The trigger was the variance alone.** `measure.py --variance` prints no arm
+  mean, by construction, and the decision to extend was taken on the sd.
+- **The contamination that cannot be removed**: the arm comparison at n=6 had
+  been computed and read before this extension was authorised. The decision does
+  not rest on it, and a reader should still discount it, because the person
+  authorising the extension had seen which way the numbers pointed. The n=6
+  table is in `../../rule-precision/round-17/README.md` so that discount can be
+  applied rather than guessed at.
+- **The alternative was re-running nine reviews in one fresh batch** — 54 agents
+  against 18, discarding 3.0M of completed work to buy a pre-registration rather
+  than a measurement.
+
 ## Pre-registered metrics
 
 Against the F10 seed inventory, only genuinely new claims adjudicated, same
