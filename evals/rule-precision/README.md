@@ -203,6 +203,42 @@ authorised by someone who had already seen the n=6 table; and one reply was
 found missing partway through, though the primary series turned out unaffected.
 `round-17/README.md`.
 
+## Round 19: all three levels in one batch
+
+`round-19/` — rounds 17 and 18 left W, W₂ and N on three different rulers, and
+round 9's rule blocked every comparison across them. This runs all three
+together, paired by review, with one inferential comparison fixed in advance.
+
+| C+M `not-a-defect`, per review | W | W₂ | N |
+|---|---|---|---|
+| mean | **1.67** | 3.50 | 3.67 |
+
+| paired | difference | t | MDE |
+|---|---|---|---|
+| **PRIMARY** W − N | −2.00 | −2.93 | 2.33 |
+| SECONDARY W − W₂ | −1.83 | −5.97 | 1.05 |
+| RECORDED W₂ − N | −0.17 | −0.25 | 2.23 |
+
+```bash
+evals/rule-precision/round-19/measure.py --gate   # the gate, run first and alone
+evals/rule-precision/round-19/measure.py
+```
+
+**The primary does not clear its own MDE, so the round makes no adoption
+claim** — while being significant by the conventional test (t_crit 2.571). Both
+readings are recorded. What the arms show, subject to that: clause 2 alone is
+indistinguishable from no floor (−0.17), and the whole measured gap sits between
+W and W₂. **Which of clause 1 and clause 3 does that is not identifiable here**
+and needs W₁₂ and W₂₃ arms.
+
+Extraction rate, taken from the real reviews' tool-call traces rather than from
+separate gate agents: W 18/18, W₂ 18/18, N 0/18. Two things round 18's claims
+did not survive: the `not-a-defect` split was **not** the tighter instrument this
+time (the composite was), and a pre-declared "underpowered" threshold computed
+from a borrowed variance stopped meaning what it meant when the variance
+changed — the same failure this round's protocol had fixed for the gate and not
+for the secondary. `round-19/README.md`.
+
 ## Round 18: is the floor reducible to its second clause?
 
 `round-18/` — round 17's decomposition put the whole effect in one verdict class
