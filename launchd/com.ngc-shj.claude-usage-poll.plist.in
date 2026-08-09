@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ngc-shj.claude-usage-poll</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.claude/hooks/claude-usage-poll.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StartInterval</key>
+  <integer>300</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.claude/state/usage-poll-launchd.log</string>
+</dict>
+</plist>

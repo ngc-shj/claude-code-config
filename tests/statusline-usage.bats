@@ -94,6 +94,29 @@ JSON
   [ "$(echo "$output" | tr -d ' ')" = "1" ]
 }
 
+@test "the same reset boundary rounded one second differently is canonicalized" {
+  # The internal usage API has returned 10:59:59.997 where the status-line
+  # payload reports the same weekly boundary as 11:00:00.
+  bash "$SCRIPT" < "$(payload 12.3 41.8 1786000000 1786400000)" >/dev/null
+  bash "$SCRIPT" < "$(payload 12.4 42.0 1785999999 1786399999)" >/dev/null
+
+  run jq -s -e '
+    .[1].five_hour.resets_at == 1786000000
+    and .[1].seven_day.resets_at == 1786400000
+    and .[1].five_hour.used_percentage == 12.4
+    and .[1].seven_day.used_percentage == 42
+  ' "$CLAUDE_USAGE_LOG"
+  [ "$status" -eq 0 ]
+}
+
+@test "a one-second reset representation difference does not permit usage to go backwards" {
+  bash "$SCRIPT" < "$(payload 12.3 41.8 1786000000 1786400000)" >/dev/null
+  bash "$SCRIPT" < "$(payload 12.2 41.7 1785999999 1786399999)" >/dev/null
+
+  run wc -l < "$CLAUDE_USAGE_LOG"
+  [ "$(echo "$output" | tr -d ' ')" = 1 ]
+}
+
 @test "a drop across a genuine rollover is kept" {
   bash "$SCRIPT" < "$(payload 12.3 97.4 1786000000 1786400000)" >/dev/null
   bash "$SCRIPT" < "$(payload 12.3 2.1 1786000000 1787004800)" >/dev/null
