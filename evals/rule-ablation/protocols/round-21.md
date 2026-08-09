@@ -8,19 +8,21 @@
 
 The hypothesis is stated in the terms the primary actually measures. An earlier
 draft said clause 1 "selectively reduces" findings about "a guard or requirement
-absent from the change". **Both words were wider than the decision rule.**
+absent from the change". **Both made claims the decision rule does not test.**
 `outside-diff` is the adjudicators' tag for "depends on code the diff does not
-show", which is broader than guards-and-requirements; and *selectively* asserts
+show", which is *broader* than guards-and-requirements — so the old wording
+named a narrower class than the primary counts — and *selectively* asserts
 a contrast against the other reasons that no test here evaluates. The
 difference-in-differences that would license it is recorded below and is
 explicitly **not** a confirmatory quantity in this round.
 
 Round 20 established that clause 1 is the only Finding Floor component with
 positive evidence of an effect. It did not measure **why**, and every clause
-result rests on F10 alone. This asks both at once, because the prediction makes a
-prediction that a second fixture is the natural place to test: if clause 1 works
-by refusing ungrounded requirements, the effect should land on that subtype and
-not on non-defects at large.
+result rests on F10 alone. This asks both at once, because the hypothesis makes
+a fixture-independent prediction, and a second fixture is the natural place to
+test it: if clause 1 works by refusing requirements that rest on code the change
+does not contain, the effect should land on that subtype and not on non-defects
+at large.
 
 ## Arms — the minimum that answers it
 
@@ -44,10 +46,19 @@ fixtures is two.
 
 ### F11 is generated once and frozen
 
-The generating prompt is committed **before** F11 is generated, and **the commit
-id is recorded in this protocol** before the generating agent is launched. F11
-is produced from that prompt **once** and frozen. The order is the point: a
-prompt written after seeing a fixture is a fixture chosen twice. Regeneration is permitted only for a pre-defined
+The generating prompt is `../../rule-precision/round-21/f11-prompt.md`,
+committed **before** F11 is generated. Its content is pinned here by blob hash
+rather than by commit id, because a squash merge rewrites commit ids and would
+leave the record pointing at nothing:
+
+```
+git hash-object evals/rule-precision/round-21/f11-prompt.md
+066751639115ccecd75133f3f0bf3d22f4410857
+```
+
+F11 is produced from that prompt **once** and frozen. The order is the point: a
+prompt written after seeing a fixture is a fixture chosen twice, and the hash is
+what makes the order checkable afterwards by anyone. Regeneration is permitted only for a pre-defined
 mechanical failure — the output does not apply as a diff, or is truncated — and
 never for anything about its content: not its subject matter, not how many
 ungrounded-requirement openings it happens to offer, and above all **not its
