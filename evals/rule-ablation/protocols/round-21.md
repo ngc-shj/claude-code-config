@@ -1,15 +1,23 @@
-# Round 21 protocol — does clause 1 work the way we think, and off F10?
+# Round 21 protocol — does clause 1's effect land where predicted, and off F10?
 (written before any run; no output read; no agent executed while writing it)
 
 ## The hypothesis
 
-> **Clause 1 selectively reduces findings that report a guard or requirement
-> absent from the change as a high-severity defect, and that effect appears on a
-> fixture other than F10.**
+> **Clause 1 reduces high-severity non-defect findings whose alleged defect
+> depends on code outside the change, and that reduction appears on F11.**
+
+The hypothesis is stated in the terms the primary actually measures. An earlier
+draft said clause 1 "selectively reduces" findings about "a guard or requirement
+absent from the change". **Both words were wider than the decision rule.**
+`outside-diff` is the adjudicators' tag for "depends on code the diff does not
+show", which is broader than guards-and-requirements; and *selectively* asserts
+a contrast against the other reasons that no test here evaluates. The
+difference-in-differences that would license it is recorded below and is
+explicitly **not** a confirmatory quantity in this round.
 
 Round 20 established that clause 1 is the only Finding Floor component with
 positive evidence of an effect. It did not measure **why**, and every clause
-result rests on F10 alone. This asks both at once, because the mechanism makes a
+result rests on F10 alone. This asks both at once, because the prediction makes a
 prediction that a second fixture is the natural place to test: if clause 1 works
 by refusing ungrounded requirements, the effect should land on that subtype and
 not on non-defects at large.
@@ -33,6 +41,18 @@ primary a measurement of the fixture.
 **A result on F11 establishes transfer to F11.** It does not establish
 fixture-independence, and no wording in the write-up may imply otherwise. Two
 fixtures is two.
+
+### F11 is generated once and frozen
+
+The generating prompt is committed **before** F11 is generated. F11 is produced
+from it **once** and frozen. Regeneration is permitted only for a pre-defined
+mechanical failure — the output does not apply as a diff, or is truncated — and
+never for anything about its content: not its subject matter, not how many
+ungrounded-requirement openings it happens to offer, and above all **not its
+`outside-diff` base rate**, which cannot be known before the arms run and must
+not be sampled for.
+
+A fixture regenerated until it suits the hypothesis measures the hypothesis.
 
 ## Metrics — using a tag that predates the hypothesis
 
@@ -92,15 +112,29 @@ The observed difference is **not** required to exceed the MDE; that was round
 
 | PRIMARY (`outside-diff`) | SECONDARY (all non-defects) | reading |
 |---|---|---|
-| CI below zero | CI below zero | the mechanism is supported and the effect transfers to F11 |
-| CI crosses zero | CI below zero | the effect transferred; **the proposed mechanism is not supported** |
-| CI below zero | CI crosses zero | attention moved off the subtype without a detectable change in total non-defect cost |
+| CI below zero | CI below zero | the **predicted mechanistic signature is observed**, and it appears on F11 |
+| CI crosses zero | CI below zero | exploratory evidence of transfer; **the predicted signature is not observed** |
+| CI below zero | CI crosses zero | **the finding mix shifted** off the subtype without a detectable change in total non-defect cost |
 | CI crosses zero | CI crosses zero | **no transfer detected on F11** |
 
-Row 3 is the one worth stating plainly: it would mean clause 1 redirects where
-reviewers look — "this is not mine to demand, so look elsewhere" — without the
-total bill falling. That is a real finding and not a disappointing version of
-row 1.
+The SECONDARY is exploratory, so a CI below zero on it is *exploratory evidence
+of transfer*, never a confirmed one — the confirmatory claim is the PRIMARY's
+alone.
+
+Row 3 is the one worth stating plainly: it would mean the mix of findings moved
+off the subtype without the total bill falling. That is a real result and not a
+disappointing version of row 1. It is a statement about what reviewers wrote,
+not about what they were doing when they wrote it.
+
+### The contrast that would license the word "selective"
+
+`Δ(outside-diff) − Δ(other reasons)` is computed and **recorded**. If clause 1
+acts on the subtype rather than on non-defects at large, that difference is
+negative. **It is exploratory here.** Calling the effect selective requires this
+difference to be the pre-registered test, with its own n; this round is sized
+for the subtype's own effect and is not sized for a contrast between two noisy
+counts. Round 20's post-hoc values — −1.78 on the subtype against +0.44 on the
+rest — are the reason to record it and are not a substitute for testing it.
 
 **An interval that crosses zero is a failure to detect, never a demonstration
 that the effect is absent.** No row above licenses an equivalence claim.
@@ -113,10 +147,19 @@ ran. F11 has no inventory. Two options, and the protocol picks the cheaper one
 with its weakness stated rather than pretending the choice is free:
 
 - **Chosen: adjudicate after the arms run**, blind, counts withheld, order
-  shuffled, same standing brief. This is what rounds 17–20 did for their new
-  claims, and what round 11 did for all of its own. **Weakness: the claim space
-  is defined by the arms themselves**, so a claim only one arm ever makes still
-  enters the inventory and is judged there.
+  shuffled, same standing brief. **The union of both arms' claims is clustered
+  and adjudicated together**, with the arm and the member counts withheld, so no
+  claim is judged in the knowledge of which arm produced it. This is what rounds
+  17–20 did for their new claims, and what round 11 did for all of its own.
+  **Weakness: the claim space is defined by the arms themselves**, so a claim
+  only one arm ever makes still enters the inventory and is judged there.
+
+  The primary survives this, because it counts findings each arm actually wrote
+  and their adjudicated reason — not coverage of a fixed defect set. What a seed
+  inventory would mainly improve is real-defect coverage, and **that is a
+  recorded metric here that fires no rule**. Accordingly, **F11's real-defect
+  counts are a record over an arm-generated claim space and are not compared
+  with F10's fixed inventory** in any direction.
 - Rejected: a seed round first. It buys a standard fixed before the arms at
   roughly the cost of the measurement itself.
 
@@ -162,7 +205,8 @@ absorb the adjudication.
 - **Fixture-independence.** F11 is one more fixture, not a population.
 - **Whether clause 3 contributes.** Not in this design and not this round's
   question.
-- **Why clause 1 works, at any level below the subtype it acts on.** This
-  measures *what* it selects against, not the reviewer-side process that
-  produces the selection.
+- **The reviewer-side mechanism.** This round tests whether clause 1's effect
+  lands on the finding class the prediction names. Why a reviewer writes fewer
+  of those — what they do instead, whether they look elsewhere or simply write
+  less — is not observed here, and the write-up must not narrate it.
 - **No fixes are applied.** The fixtures are diffs.
