@@ -203,6 +203,35 @@ authorised by someone who had already seen the n=6 table; and one reply was
 found missing partway through, though the primary series turned out unaffected.
 `round-17/README.md`.
 
+## Round 18: is the floor reducible to its second clause?
+
+`round-18/` — round 17's decomposition put the whole effect in one verdict class
+whose shape is clause 2's target, so this asks whether clause 2 is the section.
+It is not.
+
+| | W₂ (clause 2 alone) | N | difference | t | MDE |
+|---|---|---|---|---|---|
+| PRIMARY C+M `not-a-defect` | 3.33 | 4.33 | −1.00 | −1.20 | 2.55 |
+| CONTROL real defects reached | 36.17 | 34.83 | +1.34 | +0.60 | 6.81 |
+
+```bash
+evals/rule-precision/round-18/measure.py --gate   # the gate, run first and alone
+evals/rule-precision/round-18/measure.py
+```
+
+Powered for 2.67 — the full floor's effect on this fixture — and the decision
+rule does not fire, so **clauses 1 and 3 stay**. It does not show clause 2 is
+inert: −1.00 is inside the MDE. The comparator is N rather than W because a null
+against W could not have licensed a deletion at any affordable n; the protocol
+works that arithmetic out.
+
+Three things this round contributes beyond its own result: the pre-registered
+split is a **22% tighter instrument** than the composite on identical data; the
+power gate stated as a quantity rather than an sd ceiling needed no
+interpretation when it mattered; and 1027 findings produced **9 new claims and
+zero new real defects**, so F10's real set has now been stable for two rounds.
+`round-18/README.md`.
+
 ## The primary metric mixes two failure modes (post-hoc, rounds 12 and 17)
 
 ```bash

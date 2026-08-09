@@ -1,0 +1,10 @@
+cluster_id	verdict	reason
+R18-SET-01	not-a-defect	outside-diff
+R18-SET-03	not-a-defect	preference
+R18-DEL-01	wrong	misreads-code
+R18-SIG-01	not-a-defect	preference
+R18-SIG-02	not-a-defect	outside-diff
+R18-MIG-01	not-a-defect	preference
+R18-SET-02	wrong	misreads-code
+R18-DEL-02	not-a-defect	outside-diff
+R18-DSP-01	not-a-defect	preference
