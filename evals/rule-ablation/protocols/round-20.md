@@ -4,8 +4,8 @@
 ## What round 19 left
 
 Clauses 1 and 3 of the Finding Floor contribute **−1.83 jointly** (95% CI
-[−2.62, −1.04], exploratory), and clause 2 alone is indistinguishable from no
-floor at all. Which of the two carries that is not identifiable from three arms.
+[−2.62, −1.04], exploratory), and clause 2 alone showed no detectable
+difference from no floor at all. Which of the two carries that is not identifiable from three arms.
 This round adds the two arms that identify it.
 
 ## Arms — a 2×2, with clause 2 always present

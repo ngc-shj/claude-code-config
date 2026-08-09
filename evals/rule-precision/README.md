@@ -228,7 +228,10 @@ evals/rule-precision/round-20/measure.py
 **The confirmatory rule fires**: the interval for W − W₂₃ excludes zero, so
 clause 1 contributes. Clause 1 shows an effect in both of its cells; clause 3's
 interval straddles zero in both, and the 2×2 interaction is +0.56, CI [−1.21,
-+2.32] — the clauses do not depend on each other.
++2.32], which also crosses zero. Clause 1 is the only component with positive
+evidence of an effect; **the absence of a clause-3 effect and the absence of an
+interaction are not established**, since an interval crossing zero is a failure
+to detect rather than a demonstration of nothing.
 
 **This does not license deleting clause 3.** The design measures positive
 contributions; a null is not equivalence, and no skill file is changed.
@@ -264,8 +267,8 @@ quantity, not a significance threshold — and `methods.md` separates the two fo
 every protocol from round 20 on, rather than the correction being applied
 retroactively here.
 
-What the arms show: clause 2 alone is indistinguishable from no floor (−0.17,
-CI [−1.85, +1.51]), and the whole measured gap sits between W and W₂ (−1.83,
+What the arms show: clause 2 alone showed no detectable difference from no floor
+(−0.17, CI [−1.85, +1.51]), and the whole measured gap sits between W and W₂ (−1.83,
 CI [−2.62, −1.04], **exploratory**). **Which of clause 1 and clause 3 does that
 is not identifiable here** and needs W₁₂ and W₂₃ arms.
 
