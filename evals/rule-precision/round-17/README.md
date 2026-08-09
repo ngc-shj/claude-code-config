@@ -162,6 +162,71 @@ enough to flag, not to conclude. Two rollovers of the five-hour window occurred
 and were recorded as `0` rather than carried forward, which is the behaviour the
 hook's header specifies.
 
+## Post-hoc: the primary mixes two failure modes, and only one is the floor's
+
+**Not pre-registered, and it changes nothing above.** The recorded result is the
+composite in the first table. What follows is an analysis of the same sheets,
+written afterwards, and its status is a hypothesis for the next round's
+pre-registration.
+
+```bash
+evals/rule-precision/decompose.py     # both rounds, both fixtures
+```
+
+The primary counts Critical/Major findings whose claim is not `real`, and that
+set holds two verdicts the adjudication has always kept apart: `not-a-defect`
+(accurate, but a preference or a requirement about code the change does not
+contain) and `wrong` (misreads the code). The Finding Floor is aimed at the
+first — its own rationale in `common-rules.md` cites 5 misreads against 34
+ungrounded requirements and 83 preferences. Nothing in its three clauses
+addresses the second.
+
+| round 17, F10 | W | N | difference | t | MDE |
+|---|---|---|---|---|---|
+| PRIMARY as published | 2.44 | 4.56 | −2.11 | −3.05 | 2.05 |
+| of which **not-a-defect** | 1.22 | 3.89 | **−2.67** | **−5.95** | 1.33 |
+| of which **wrong** | 1.22 | 0.67 | +0.56 | +1.39 | 1.19 |
+
+On F9 the same split is degenerate — **neither arm wrote a single Critical/Major
+misread across 599 findings** — so round 12's published 2.50 and its
+not-a-defect series are the same number to the digit.
+
+Two consequences, if this survives pre-registration:
+
+- **The composite under-reports the floor exactly where a fixture happens to
+  contain a misread trap.** On the quantity the intervention targets, round 12's
+  2.50 replicates as **2.67**, not 2.11, and t moves from −3.05 to −5.95.
+- **The +0.56 on misreads is not a result.** It sits inside its own MDE of 1.19.
+  It is recorded because the sign is the uncomfortable one, not because n=9 can
+  see it.
+
+### Every Critical/Major misread in this round is one claim
+
+`DELIVERY-18`, 19 findings, in 7 of 9 reviews in **both** arms: `batch` is
+assigned inside the `try` and tested after the `try/finally`, so — the claim
+goes — an exception in `_claim_batch` reaches the test with `batch` unbound. It
+does not: the exception propagates past that line, which is why the panel scored
+it `wrong`.
+
+The same lines also carry `NEWDEL-02`, scored **`real`**: the `try` has only a
+`finally`, so any exception escapes the `while` loop and the worker stops. That
+is the defect the misread is groping for — and it was written **4 times against
+the false version's 19**. The instinct is right roughly a fifth as often as it
+is expressed correctly, on identical code, under both arms.
+
+This is what claim-level adjudication cannot express in one verdict, and it is
+the reason `wrong` should not be read as "the reviewer saw nothing".
+
+### What is left after the floor
+
+W's 11 remaining Critical/Major non-defect findings are three claims, and all
+three assert that the change does not add a guard: no rate limit on the new
+routes (8), no length bound on `EndpointIn.url` (2), no cap on endpoints per
+organization (1). That is precisely clause 2's target — a requirement resting on
+code the change does not contain, which the clause says to file as a Minor
+question — arriving as Critical/Major anyway. The residual is a **compliance**
+gap with a clause that was read, not a category the floor fails to name.
+
 ## What this does not settle
 
 - **One model, one skill, one catalogue snapshot.**
@@ -176,4 +241,7 @@ hook's header specifies.
   Most of this round's variance is one arm's, and the review that produced 7 is
   not explained by anything recorded here. Whether the floor is conditionally
   effective rather than uniformly so is a question n=9 cannot answer and this
-  round does not claim to.
+  round does not claim to. The post-hoc split above accounts for part of it —
+  W's series is `1 1 4 1 2 0 0 1 1` on not-a-defect against N's `4 4 4 4 4 5 3
+  4 3`, so the arm asymmetry shrinks but does not vanish, and the review that
+  produced 7 produced 4 and 3 of the two kinds rather than an excess of one.

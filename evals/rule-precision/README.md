@@ -203,6 +203,30 @@ authorised by someone who had already seen the n=6 table; and one reply was
 found missing partway through, though the primary series turned out unaffected.
 `round-17/README.md`.
 
+## The primary metric mixes two failure modes (post-hoc, rounds 12 and 17)
+
+```bash
+evals/rule-precision/decompose.py
+```
+
+Every round's primary counts Critical/Major findings whose claim is not `real`,
+and that set contains both `not-a-defect` (a preference, or a requirement about
+code the change does not contain) and `wrong` (a misread). The Finding Floor
+targets the first and says nothing about the second.
+
+| | W | N | difference | t |
+|---|---|---|---|---|
+| round 12 (F9), published = not-a-defect | 1.62 | 4.12 | −2.50 | −4.11 |
+| round 17 (F10), published composite | 2.44 | 4.56 | −2.11 | −3.05 |
+| round 17 (F10), **not-a-defect only** | 1.22 | 3.89 | **−2.67** | **−5.95** |
+
+F9 produced **no** Critical/Major misread at all, so there the two metrics
+coincide; F10 contains one misread trap and they do not. The composite is
+therefore sensitive to a property of the fixture that has nothing to do with the
+intervention, and it under-reports. **Pre-register the split before leaning on
+it** — this analysis was written after both rounds were recorded.
+`round-17/README.md` has the trap, the residual, and the caveats.
+
 ## What it cannot tell you
 
 - **`real` is a panel's judgement, not ground truth.** Three agents under a

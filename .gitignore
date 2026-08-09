@@ -18,3 +18,7 @@ hooks/lib/java-lib/
 # absolute host paths and session permission grants — never shareable. This
 # repo installs into ~/.claude/, not via a committed project .claude/.
 .claude/
+
+# Python bytecode from the eval scripts
+__pycache__/
+*.pyc
