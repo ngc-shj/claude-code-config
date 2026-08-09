@@ -44,8 +44,10 @@ fixtures is two.
 
 ### F11 is generated once and frozen
 
-The generating prompt is committed **before** F11 is generated. F11 is produced
-from it **once** and frozen. Regeneration is permitted only for a pre-defined
+The generating prompt is committed **before** F11 is generated, and **the commit
+id is recorded in this protocol** before the generating agent is launched. F11
+is produced from that prompt **once** and frozen. The order is the point: a
+prompt written after seeing a fixture is a fixture chosen twice. Regeneration is permitted only for a pre-defined
 mechanical failure — the output does not apply as a diff, or is truncated — and
 never for anything about its content: not its subject matter, not how many
 ungrounded-requirement openings it happens to offer, and above all **not its
@@ -65,6 +67,15 @@ fixed years of rounds before anyone asked this question.
 
 1. **PRIMARY (confirmatory)** — Critical/Major findings whose claim is
    `not-a-defect` with reason `outside-diff`, per review.
+
+   **Aggregation rule, fixed here because the primary depends on it.** The three
+   adjudicators each return a verdict and a reason. A claim counts as
+   `outside-diff not-a-defect` **only when at least two of the three assign that
+   JOINT label** — `not-a-defect` *and* `outside-diff` from the same
+   adjudicator. A claim that two call `not-a-defect` for different reasons is
+   not in the primary. Agreement on this binary classification is reported
+   alongside the usual pairwise verdict agreement. Deciding how to combine split
+   reasons after seeing which way they split is the failure this forecloses.
 2. **SECONDARY (exploratory)** — Critical/Major `not-a-defect`, all reasons.
 3. **RECORDED** — Critical/Major `not-a-defect` with any other reason;
    distinct real defects reached; `wrong`; findings written; tokens.
@@ -83,27 +94,43 @@ in round 20 — and it is used here only to pick n:
 | all `not-a-defect` | −1.33 | 1.225 |
 | other reasons | +0.44 | 1.130 |
 
-| n/arm | MDE at sd_d 0.972 | at 1.4 (if it does not transfer) |
+| n/arm | Welch MDE at round 20's arm sds | paired MDE at sd_d 0.972 |
 |---|---|---|
-| 6 | 1.35 | 1.95 |
-| **9** | **1.02** | 1.47 |
-| 12 | 0.86 | 1.24 |
+| 6 | 1.32 | 1.35 |
+| **9** | **1.00** | 1.02 |
+| 12 | 0.84 | 0.86 |
+
+Round 20's subtype arm sds were 0.707 (W) and 0.726 (W₂₃); Welch df at n=9 is
+16.0. If the sd fails to transfer and comes in at 1.4 per arm, the Welch MDE at
+n=9 is 1.47 — still under the 1.78 the subtype showed on F10, which is what the
+gate below tests.
 
 **n=9 per arm. 2 × 9 × 3 = 54 review agents.** n=6 suffices if the sd transfers;
 round 17 is the reason not to assume it does — F9's sd did not transfer to F10
 and that round had to be extended by declared deviation.
 
 > **GATE.** After all 18 reviews and before any arm mean is computed, the
-> observed MDE on the PRIMARY is calculated. If it exceeds **1.78** — the effect
+> observed Welch MDE on the PRIMARY is calculated. If it exceeds **1.78** — the effect
 > the subtype showed on F10 — the round reports the primary as underpowered and
 > makes no confirmatory claim. It does **not** extend n.
 
 ## Inference (after the run)
 
-Paired t and 95% CI on the per-review difference, df = n−1.
+**Welch's two-sample t interval, independent groups.** The arms share review
+indices and nothing else — there are no per-review preambles, so index *i* in
+one arm has no factor in common with index *i* in the other. Round 19 measured
+that directly: sd of the paired differences was 1.323 where independence
+predicts 1.344. Treating a pairing that carries no information as if it did
+costs degrees of freedom and asserts a structure the design does not have.
 
-> **CONFIRMATORY RULE. Clause 1 acts on the ungrounded-requirement subtype, on
-> F11, if the 95% CI for W − W₂₃ on the PRIMARY lies entirely below zero.**
+**The nominal index-paired analysis is computed and reported as a sensitivity
+analysis**, not as the primary. On round 20's subtype series the two agree to
+within noise — Welch CI [−2.49, −1.06] against paired [−2.52, −1.03], MDE 1.00
+against 1.02 — so the choice does not decide n and is made for correctness
+rather than for power.
+
+> **CONFIRMATORY RULE. Clause 1 reduces the `outside-diff` subtype on F11 if the
+> Welch 95% CI for W − W₂₃ on the PRIMARY lies entirely below zero.**
 
 The observed difference is **not** required to exceed the MDE; that was round
 19's error and `../../rule-precision/methods.md` records the separation.
