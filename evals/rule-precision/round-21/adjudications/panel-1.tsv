@@ -1,0 +1,80 @@
+cluster_id	verdict	reason
+R21-API-01	real
+R21-API-02	not-a-defect	preference
+R21-API-03	real
+R21-API-04	not-a-defect	scope
+R21-API-05	not-a-defect	preference
+R21-API-06	not-a-defect	preference
+R21-API-07	not-a-defect	preference
+R21-API-08	real
+R21-API-09	not-a-defect	preference
+R21-API-10	not-a-defect	scope
+R21-API-11	not-a-defect	preference
+R21-API-12	real
+R21-DOC-01	real
+R21-DOC-02	not-a-defect	preference
+R21-MDL-01	real
+R21-MDL-02	real
+R21-MDL-03	real
+R21-MDL-04	real
+R21-MDL-05	real
+R21-MDL-06	real
+R21-MDL-07	real
+R21-MDL-08	not-a-defect	preference
+R21-MDL-09	not-a-defect	preference
+R21-MDL-10	wrong	misreads-code
+R21-MDL-11	not-a-defect	scope
+R21-MDL-12	real
+R21-MDL-13	not-a-defect	scope
+R21-MDL-14	real
+R21-MDL-15	real
+R21-MDL-16	not-a-defect	preference
+R21-MDL-17	not-a-defect	preference
+R21-MDL-18	not-a-defect	preference
+R21-MIG-01	real
+R21-MIG-02	not-a-defect	preference
+R21-MIG-03	not-a-defect	preference
+R21-MIG-04	not-a-defect	outside-diff
+R21-MIG-05	not-a-defect	preference
+R21-MIG-06	not-a-defect	preference
+R21-MIG-07	not-a-defect	scope
+R21-RTR-01	not-a-defect	outside-diff
+R21-RTR-02	not-a-defect	scope
+R21-SCH-01	real
+R21-SCH-02	real
+R21-SCH-03	real
+R21-SCH-04	real
+R21-SCH-05	real
+R21-SCH-06	not-a-defect	preference
+R21-TST-01	real
+R21-TST-02	real
+R21-TST-03	real
+R21-WRK-01	real
+R21-WRK-02	real
+R21-WRK-03	real
+R21-WRK-04	real
+R21-WRK-05	real
+R21-WRK-06	real
+R21-WRK-07	real
+R21-WRK-08	not-a-defect	preference
+R21-WRK-09	not-a-defect	preference
+R21-WRK-10	real
+R21-WRK-11	real
+R21-WRK-12	real
+R21-WRK-13	real
+R21-WRK-14	real
+R21-WRK-15	real
+R21-WRK-16	real
+R21-WRK-17	not-a-defect	preference
+R21-WRK-18	not-a-defect	preference
+R21-WRK-19	not-a-defect	preference
+R21-WRK-20	not-a-defect	preference
+R21-WRK-21	real
+R21-WRK-22	not-a-defect	preference
+R21-WRK-23	not-a-defect	outside-diff
+R21-WRK-24	not-a-defect	scope
+R21-WRK-25	not-a-defect	preference
+R21-WRK-26	not-a-defect	preference
+R21-WRK-27	not-a-defect	preference
+R21-WRK-28	not-a-defect	preference
+R21-WRK-29	not-a-defect	preference
