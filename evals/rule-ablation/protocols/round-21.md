@@ -81,6 +81,25 @@ not be sampled for.
 
 A fixture regenerated until it suits the hypothesis measures the hypothesis.
 
+## DEVIATION — declared after F11 generation and before any review ran
+
+F11 contains 684 added lines across 8 files, against a generating brief that
+specified 400–500 added lines across 7–9 files. It is retained and frozen
+without regeneration. The protocol permits regeneration only when the output
+does not apply as a diff or is truncated; F11 is neither. Treating the size miss
+as a mechanical failure now would add a regeneration criterion after observing
+the output and would replace the pre-registered single fixture draw with a
+second draw.
+
+Both arms receive the same frozen fixture, so the internal validity of the
+W − W₂₃ contrast conditional on F11 is preserved. The larger fixture may
+increase variance, reviewer burden, and reduce comparability with F10. The
+pre-registered observed-MDE gate remains the check on power; it does not remove
+those other limitations.
+
+Review-token cost is expected to exceed the 4.8M estimate, and actual usage will
+be recorded.
+
 ## Metrics — using a tag that predates the hypothesis
 
 The standing adjudication brief has asked for a reason tag since round 11:
