@@ -1,0 +1,755 @@
+Subject: [PATCH] feat(exports): scheduled dataset exports to customer buckets
+
+ docs/scheduled-exports.md            |  59 +++++++++++
+ internal/api/exports.go              |  83 ++++++++++++++++
+ internal/api/router.go               |   6 ++
+ internal/exports/exports_test.go     | 138 ++++++++++++++++++++++++++
+ internal/exports/model.go            | 149 ++++++++++++++++++++++++++++
+ internal/exports/schedule.go         |  36 +++++++
+ internal/exports/worker.go           | 186 +++++++++++++++++++++++++++++++++++
+ migrations/0057_export_schedules.sql |  27 +++++
+ 8 files changed, 684 insertions(+)
+
+diff --git a/docs/scheduled-exports.md b/docs/scheduled-exports.md
+new file mode 100644
+index 0000000..59cc5af
+--- /dev/null
++++ b/docs/scheduled-exports.md
+@@ -0,0 +1,59 @@
++# Scheduled exports
++
++A scheduled export copies one of your datasets into a bucket you own, on a
++cadence you choose. We only ever write to the bucket named in the schedule.
++
++## Creating a schedule
++
++```
++POST /v1/export-schedules
++{
++  "name": "nightly events",
++  "dataset": "events", "format": "csv",
++  "cadence": "daily", "hour_of_day": 3, "timezone": "Europe/Berlin",
++  "destination": {
++    "bucket": "acme-exports", "prefix": "analytics/", "region": "eu-west-1",
++    "access_key": "...", "secret_key": "..."
++  }
++}
++```
++
++`dataset` is one of `events`, `sessions` or `conversions`; `format` is `csv` or
++`jsonl`; `cadence` is `hourly`, `daily` or `weekly`. The destination
++credentials are stored encrypted and are never handed back by the API, so keep
++your own copy — rotating them means recreating the schedule.
++
++`hour_of_day` is interpreted in `timezone`, which must be an IANA name such as
++`America/New_York` and defaults to UTC. Weekly schedules run on Monday at that
++hour; hourly schedules ignore `hour_of_day` and run on the hour.
++
++## What lands in your bucket
++
++Each run writes one object under `prefix`, named for the dataset and the moment
++the run started:
++
++```
++analytics/events-2024-05-02.csv
++```
++
++CSV files carry a header row of column names; JSONL files carry one object per
++line with those same keys and the same values. Timestamps are RFC 3339 in UTC.
++
++A run covers exactly the interval since the run before it — the last hour, day
++or week of `occurred_at` — so consecutive objects tile the timeline. Concatenate
++everything a schedule has produced and you have the dataset with no gaps and no
++duplicated rows, and no run overwrites an object an earlier run wrote.
++
++## Failures
++
++The worker polls every 30 seconds and takes whatever is due; a schedule is
++claimed by one worker, so a due run happens once even with several workers
++live. A run that fails — bad credentials, an unreachable bucket, a query that
++times out — leaves `last_status` as `failed` and `last_error` set on the
++schedule, and the schedule moves on to its next slot. We do not retry inside
++the window, so a hard failure means one missing file.
++
++`GET /v1/export-schedules` returns your schedules with those fields, and is the
++first place to look when a file you expected has not appeared. `DELETE
++/v1/export-schedules/{id}` stops future runs; objects already in your bucket
++are left alone.
+diff --git a/internal/api/exports.go b/internal/api/exports.go
+new file mode 100644
+index 0000000..09fa68b
+--- /dev/null
++++ b/internal/api/exports.go
+@@ -0,0 +1,83 @@
++package api
++
++import (
++	"encoding/json"
++	"net/http"
++	"strconv"
++	"time"
++
++	"github.com/acme/analytics/internal/auth"
++	"github.com/acme/analytics/internal/exports"
++)
++
++type exportHandler struct {
++	store *exports.Store
++}
++
++func (h *exportHandler) create(w http.ResponseWriter, r *http.Request) {
++	org := auth.OrgFromContext(r.Context())
++
++	var body struct {
++		Name        string              `json:"name"`
++		Dataset     string              `json:"dataset"`
++		Format      exports.Format      `json:"format"`
++		Cadence     string              `json:"cadence"`
++		HourOfDay   int                 `json:"hour_of_day"`
++		Timezone    string              `json:"timezone"`
++		Destination exports.Destination `json:"destination"`
++	}
++	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
++		writeError(w, http.StatusBadRequest, "request body is not valid JSON")
++		return
++	}
++	if body.Timezone == "" {
++		body.Timezone = "UTC"
++	}
++
++	schedule := &exports.Schedule{
++		OrgID:       org.ID,
++		Name:        body.Name,
++		Dataset:     body.Dataset,
++		Format:      body.Format,
++		Cadence:     body.Cadence,
++		HourOfDay:   body.HourOfDay,
++		Timezone:    body.Timezone,
++		Destination: body.Destination,
++		Enabled:     true,
++	}
++	if err := schedule.Validate(); err != nil {
++		writeError(w, http.StatusUnprocessableEntity, err.Error())
++		return
++	}
++	schedule.NextRunAt = exports.NextRun(schedule, time.Now().UTC())
++
++	if err := h.store.Create(r.Context(), schedule); err != nil {
++		writeError(w, http.StatusInternalServerError, "could not save the export schedule")
++		return
++	}
++	writeJSON(w, http.StatusCreated, schedule)
++}
++
++func (h *exportHandler) list(w http.ResponseWriter, r *http.Request) {
++	org := auth.OrgFromContext(r.Context())
++
++	schedules, err := h.store.ListByOrg(r.Context(), org.ID)
++	if err != nil {
++		writeError(w, http.StatusInternalServerError, "could not load export schedules")
++		return
++	}
++	writeJSON(w, http.StatusOK, schedules)
++}
++
++func (h *exportHandler) delete(w http.ResponseWriter, r *http.Request) {
++	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
++	if err != nil {
++		writeError(w, http.StatusBadRequest, "id must be an integer")
++		return
++	}
++	if err := h.store.Delete(r.Context(), id); err != nil {
++		writeError(w, http.StatusInternalServerError, "could not delete the export schedule")
++		return
++	}
++	w.WriteHeader(http.StatusNoContent)
++}
+diff --git a/internal/api/router.go b/internal/api/router.go
+index eb05c8e..d558f4d 100644
+--- a/internal/api/router.go
++++ b/internal/api/router.go
+@@ -5,6 +5,7 @@ import (
+ 	"net/http"
+ 
+ 	"github.com/acme/analytics/internal/auth"
++	"github.com/acme/analytics/internal/exports"
+ )
+ 
+ // NewRouter wires the public v1 surface. Everything mounted behind authed
+@@ -19,5 +20,10 @@ func NewRouter(db *sql.DB) http.Handler {
+ 	mux.Handle("POST /v1/queries", authed(http.HandlerFunc(h.runQuery)))
+ 	mux.Handle("GET /v1/queries/{id}", authed(http.HandlerFunc(h.getQuery)))
+ 
++	ex := &exportHandler{store: exports.NewStore(db)}
++	mux.Handle("POST /v1/export-schedules", authed(http.HandlerFunc(ex.create)))
++	mux.Handle("GET /v1/export-schedules", authed(http.HandlerFunc(ex.list)))
++	mux.Handle("DELETE /v1/export-schedules/{id}", authed(http.HandlerFunc(ex.delete)))
++
+ 	return withRequestID(withRecovery(mux))
+ }
+diff --git a/internal/exports/exports_test.go b/internal/exports/exports_test.go
+new file mode 100644
+index 0000000..4d2d88f
+--- /dev/null
++++ b/internal/exports/exports_test.go
+@@ -0,0 +1,138 @@
++package exports
++
++import (
++	"testing"
++	"time"
++)
++
++func validSchedule() *Schedule {
++	return &Schedule{
++		Name:      "nightly events",
++		Dataset:   "events",
++		Format:    FormatCSV,
++		Cadence:   "daily",
++		HourOfDay: 3,
++		Timezone:  "UTC",
++		Destination: Destination{
++			Bucket:    "acme-exports",
++			Prefix:    "analytics/",
++			Region:    "eu-west-1",
++			AccessKey: "AKIAEXAMPLE",
++			SecretKey: "s3cret",
++		},
++	}
++}
++
++func TestValidateAcceptsAWellFormedSchedule(t *testing.T) {
++	if err := validSchedule().Validate(); err != nil {
++		t.Fatalf("expected a valid schedule, got %v", err)
++	}
++}
++
++func TestValidateRejectsBadInput(t *testing.T) {
++	cases := map[string]func(*Schedule){
++		"empty name":      func(s *Schedule) { s.Name = "  " },
++		"unknown dataset": func(s *Schedule) { s.Dataset = "invoices" },
++		"unknown format":  func(s *Schedule) { s.Format = "parquet" },
++		"unknown cadence": func(s *Schedule) { s.Cadence = "fortnightly" },
++		"hour too large":  func(s *Schedule) { s.HourOfDay = 24 },
++		"no bucket":       func(s *Schedule) { s.Destination.Bucket = "" },
++		"no credentials":  func(s *Schedule) { s.Destination.SecretKey = "" },
++	}
++	for name, mutate := range cases {
++		t.Run(name, func(t *testing.T) {
++			s := validSchedule()
++			mutate(s)
++			if err := s.Validate(); err == nil {
++				t.Fatalf("expected %s to be rejected", name)
++			}
++		})
++	}
++}
++
++func TestNextRun(t *testing.T) {
++	tokyo := validSchedule()
++	tokyo.Timezone = "Asia/Tokyo"
++	hourly := validSchedule()
++	hourly.Cadence = "hourly"
++	weekly := validSchedule()
++	weekly.Cadence = "weekly"
++	unknownZone := validSchedule()
++	unknownZone.Timezone = "Mars/Olympus_Mons"
++
++	cases := map[string]struct {
++		schedule *Schedule
++		from     time.Time
++		want     time.Time
++	}{
++		"daily, configured hour already passed": {
++			validSchedule(),
++			time.Date(2024, 5, 1, 9, 30, 0, 0, time.UTC),
++			time.Date(2024, 5, 2, 3, 0, 0, 0, time.UTC),
++		},
++		"daily, configured hour still ahead": {
++			validSchedule(),
++			time.Date(2024, 5, 1, 1, 0, 0, 0, time.UTC),
++			time.Date(2024, 5, 1, 3, 0, 0, 0, time.UTC),
++		},
++		"daily, hour is the customer's local hour": {
++			tokyo,
++			time.Date(2024, 5, 1, 0, 0, 0, 0, time.UTC),
++			time.Date(2024, 5, 1, 18, 0, 0, 0, time.UTC), // 03:00 on 2024-05-02 in Tokyo
++		},
++		"unknown timezone falls back to UTC": {
++			unknownZone,
++			time.Date(2024, 5, 1, 9, 0, 0, 0, time.UTC),
++			time.Date(2024, 5, 2, 3, 0, 0, 0, time.UTC),
++		},
++		"hourly lands on the next hour boundary": {
++			hourly,
++			time.Date(2024, 5, 1, 9, 42, 13, 0, time.UTC),
++			time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC),
++		},
++		"weekly lands on the next Monday": {
++			weekly,
++			time.Date(2024, 5, 1, 9, 0, 0, 0, time.UTC), // a Wednesday
++			time.Date(2024, 5, 6, 3, 0, 0, 0, time.UTC),
++		},
++	}
++	for name, c := range cases {
++		t.Run(name, func(t *testing.T) {
++			if got := NextRun(c.schedule, c.from); !got.Equal(c.want) {
++				t.Fatalf("next run = %s, want %s", got, c.want)
++			}
++		})
++	}
++}
++
++func TestObjectKeyIsDatedAndSitsUnderThePrefix(t *testing.T) {
++	s := validSchedule()
++	at := time.Date(2024, 5, 2, 3, 0, 0, 0, time.UTC)
++
++	if got, want := objectKey(s, at), "analytics/events-2024-05-02.csv"; got != want {
++		t.Fatalf("object key = %q, want %q", got, want)
++	}
++
++	s.Destination.Prefix = ""
++	if got, want := objectKey(s, at), "events-2024-05-02.csv"; got != want {
++		t.Fatalf("object key without a prefix = %q, want %q", got, want)
++	}
++}
++
++func TestFormatValueRendersScalarsForCSV(t *testing.T) {
++	cases := []struct {
++		in   any
++		want string
++	}{
++		{nil, ""},
++		{[]byte("hello"), "hello"},
++		{int64(42), "42"},
++		{true, "true"},
++		{time.Date(2024, 5, 2, 3, 0, 0, 0, time.UTC), "2024-05-02T03:00:00Z"},
++	}
++	for _, c := range cases {
++		if got := formatValue(c.in); got != c.want {
++			t.Errorf("formatValue(%v) = %q, want %q", c.in, got, c.want)
++		}
++	}
++}
+diff --git a/internal/exports/model.go b/internal/exports/model.go
+new file mode 100644
+index 0000000..c26e4bb
+--- /dev/null
++++ b/internal/exports/model.go
+@@ -0,0 +1,149 @@
++package exports
++
++import (
++	"context"
++	"database/sql"
++	"errors"
++	"fmt"
++	"strings"
++	"time"
++)
++
++type Format string
++
++const (
++	FormatCSV   Format = "csv"
++	FormatJSONL Format = "jsonl"
++)
++
++// datasets maps the name a customer sees to the table we read from. Anything
++// not in here is rejected before it ever reaches the worker.
++var datasets = map[string]string{
++	"events":      "analytics.events",
++	"sessions":    "analytics.sessions",
++	"conversions": "analytics.conversions",
++}
++
++// Destination is the customer's own bucket. We only ever write to it.
++type Destination struct {
++	Bucket    string `json:"bucket"`
++	Prefix    string `json:"prefix"`
++	Region    string `json:"region"`
++	AccessKey string `json:"access_key"`
++	SecretKey string `json:"secret_key"`
++}
++
++type Schedule struct {
++	ID          int64       `json:"id"`
++	OrgID       int64       `json:"org_id"`
++	Name        string      `json:"name"`
++	Dataset     string      `json:"dataset"`
++	Format      Format      `json:"format"`
++	Cadence     string      `json:"cadence"`
++	HourOfDay   int         `json:"hour_of_day"`
++	Timezone    string      `json:"timezone"`
++	Destination Destination `json:"destination"`
++	Enabled     bool        `json:"enabled"`
++	LastRunAt   *time.Time  `json:"last_run_at"`
++	LastStatus  string      `json:"last_status"`
++	LastError   string      `json:"last_error,omitempty"`
++	NextRunAt   time.Time   `json:"next_run_at"`
++}
++
++func (s *Schedule) Validate() error {
++	if strings.TrimSpace(s.Name) == "" {
++		return errors.New("name is required")
++	}
++	if _, ok := datasets[s.Dataset]; !ok {
++		return fmt.Errorf("unknown dataset %q", s.Dataset)
++	}
++	if s.Format != FormatCSV && s.Format != FormatJSONL {
++		return fmt.Errorf("unknown format %q", s.Format)
++	}
++	switch s.Cadence {
++	case "hourly", "daily", "weekly":
++	default:
++		return fmt.Errorf("unknown cadence %q", s.Cadence)
++	}
++	if s.HourOfDay < 0 || s.HourOfDay > 23 {
++		return errors.New("hour_of_day must be between 0 and 23")
++	}
++	if s.Destination.Bucket == "" {
++		return errors.New("destination.bucket is required")
++	}
++	if s.Destination.AccessKey == "" || s.Destination.SecretKey == "" {
++		return errors.New("destination credentials are required")
++	}
++	return nil
++}
++
++type Store struct {
++	db *sql.DB
++}
++
++func NewStore(db *sql.DB) *Store { return &Store{db: db} }
++
++const scheduleColumns = `id, org_id, name, dataset, format, cadence, hour_of_day, timezone,
++	dest_bucket, dest_prefix, dest_region, dest_access_key, dest_secret_key,
++	enabled, last_run_at, last_status, last_error, next_run_at`
++
++func (st *Store) Create(ctx context.Context, s *Schedule) error {
++	const q = `INSERT INTO export_schedules
++		(org_id, name, dataset, format, cadence, hour_of_day, timezone,
++		 dest_bucket, dest_prefix, dest_region, dest_access_key, dest_secret_key,
++		 enabled, next_run_at)
++		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
++		RETURNING id`
++	return st.db.QueryRowContext(ctx, q,
++		s.OrgID, s.Name, s.Dataset, s.Format, s.Cadence, s.HourOfDay, s.Timezone,
++		s.Destination.Bucket, s.Destination.Prefix, s.Destination.Region,
++		s.Destination.AccessKey, s.Destination.SecretKey, s.Enabled, s.NextRunAt,
++	).Scan(&s.ID)
++}
++
++func (st *Store) ListByOrg(ctx context.Context, orgID int64) ([]*Schedule, error) {
++	return st.query(ctx, "WHERE org_id = $1 ORDER BY id", orgID)
++}
++
++// Due returns the enabled schedules whose next_run_at has passed, oldest first.
++func (st *Store) Due(ctx context.Context, now time.Time, limit int) ([]*Schedule, error) {
++	return st.query(ctx, "WHERE enabled AND next_run_at <= $1 ORDER BY next_run_at LIMIT $2", now, limit)
++}
++
++func (st *Store) query(ctx context.Context, where string, args ...any) ([]*Schedule, error) {
++	rows, err := st.db.QueryContext(ctx, "SELECT "+scheduleColumns+" FROM export_schedules "+where, args...)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++
++	out := []*Schedule{}
++	for rows.Next() {
++		var s Schedule
++		err := rows.Scan(
++			&s.ID, &s.OrgID, &s.Name, &s.Dataset, &s.Format, &s.Cadence, &s.HourOfDay, &s.Timezone,
++			&s.Destination.Bucket, &s.Destination.Prefix, &s.Destination.Region,
++			&s.Destination.AccessKey, &s.Destination.SecretKey,
++			&s.Enabled, &s.LastRunAt, &s.LastStatus, &s.LastError, &s.NextRunAt,
++		)
++		if err != nil {
++			return nil, err
++		}
++		out = append(out, &s)
++	}
++	return out, rows.Err()
++}
++
++// Record stores the outcome of a run and moves the schedule to its next slot.
++func (st *Store) Record(ctx context.Context, id int64, ranAt, next time.Time, status, runErr string) error {
++	const q = `UPDATE export_schedules
++		SET last_run_at = $1, next_run_at = $2, last_status = $3, last_error = $4
++		WHERE id = $5`
++	_, err := st.db.ExecContext(ctx, q, ranAt, next, status, runErr, id)
++	return err
++}
++
++func (st *Store) Delete(ctx context.Context, id int64) error {
++	_, err := st.db.ExecContext(ctx, "DELETE FROM export_schedules WHERE id = $1", id)
++	return err
++}
+diff --git a/internal/exports/schedule.go b/internal/exports/schedule.go
+new file mode 100644
+index 0000000..229e638
+--- /dev/null
++++ b/internal/exports/schedule.go
+@@ -0,0 +1,36 @@
++package exports
++
++import "time"
++
++// NextRun returns the next UTC instant a schedule should fire, strictly after
++// from. Customers pick the hour in their own timezone, so the arithmetic runs
++// in that location and is converted back at the end.
++func NextRun(s *Schedule, from time.Time) time.Time {
++	loc, err := time.LoadLocation(s.Timezone)
++	if err != nil {
++		loc = time.UTC
++	}
++	local := from.In(loc)
++
++	if s.Cadence == "hourly" {
++		return local.Add(time.Hour).Truncate(time.Hour).UTC()
++	}
++	next := time.Date(local.Year(), local.Month(), local.Day(), s.HourOfDay, 0, 0, 0, loc)
++	for !next.After(local) || (s.Cadence == "weekly" && next.Weekday() != time.Monday) {
++		next = next.AddDate(0, 0, 1)
++	}
++	return next.UTC()
++}
++
++// window is how far back a run reaches for rows. It matches the cadence so
++// consecutive runs of a schedule tile the timeline without a gap.
++func window(cadence string) time.Duration {
++	switch cadence {
++	case "hourly":
++		return time.Hour
++	case "weekly":
++		return 7 * 24 * time.Hour
++	default:
++		return 24 * time.Hour
++	}
++}
+diff --git a/internal/exports/worker.go b/internal/exports/worker.go
+new file mode 100644
+index 0000000..279911b
+--- /dev/null
++++ b/internal/exports/worker.go
+@@ -0,0 +1,186 @@
++package exports
++
++import (
++	"bytes"
++	"context"
++	"database/sql"
++	"encoding/csv"
++	"encoding/json"
++	"fmt"
++	"log/slog"
++	"strings"
++	"time"
++
++	"github.com/acme/analytics/internal/storage"
++)
++
++const (
++	pollInterval = 30 * time.Second
++	dueBatchSize = 25
++	maxRows      = 500000
++)
++
++// Worker turns due schedules into objects in the customer's bucket. cmd/worker
++// starts one per process.
++type Worker struct {
++	store *Store
++	db    *sql.DB
++	log   *slog.Logger
++}
++
++func NewWorker(db *sql.DB, log *slog.Logger) *Worker {
++	return &Worker{store: NewStore(db), db: db, log: log}
++}
++
++func (w *Worker) Run(ctx context.Context) error {
++	ticker := time.NewTicker(pollInterval)
++	defer ticker.Stop()
++	for {
++		select {
++		case <-ctx.Done():
++			return ctx.Err()
++		case <-ticker.C:
++			if err := w.tick(ctx); err != nil {
++				w.log.Error("export tick failed", "err", err)
++			}
++		}
++	}
++}
++
++func (w *Worker) tick(ctx context.Context) error {
++	due, err := w.store.Due(ctx, time.Now().UTC(), dueBatchSize)
++	if err != nil {
++		return err
++	}
++	for _, schedule := range due {
++		w.runSchedule(ctx, schedule)
++	}
++	return nil
++}
++
++func (w *Worker) runSchedule(ctx context.Context, s *Schedule) {
++	startedAt := time.Now().UTC()
++	status, runErr := "succeeded", ""
++
++	key, rowCount, err := w.export(ctx, s, startedAt)
++	if err != nil {
++		w.log.Error("export failed",
++			"schedule", s.ID, "org", s.OrgID, "destination", s.Destination, "err", err)
++		status, runErr = "failed", err.Error()
++	} else {
++		w.log.Info("export uploaded", "schedule", s.ID, "key", key, "rows", rowCount)
++	}
++
++	next := NextRun(s, startedAt)
++	if err := w.store.Record(ctx, s.ID, startedAt, next, status, runErr); err != nil {
++		w.log.Error("could not advance schedule", "schedule", s.ID, "err", err)
++	}
++}
++
++// export reads one window of the dataset and uploads it, returning the object
++// key it wrote and how many rows went into it.
++func (w *Worker) export(ctx context.Context, s *Schedule, at time.Time) (string, int, error) {
++	q := fmt.Sprintf(`SELECT * FROM %s
++		WHERE org_id = $1 AND occurred_at >= $2 AND occurred_at < $3
++		ORDER BY occurred_at
++		LIMIT %d`, datasets[s.Dataset], maxRows)
++	rows, err := w.db.QueryContext(ctx, q, s.OrgID, at.Add(-window(s.Cadence)), at)
++	if err != nil {
++		return "", 0, fmt.Errorf("query %s: %w", s.Dataset, err)
++	}
++	defer rows.Close()
++
++	cols, err := rows.Columns()
++	if err != nil {
++		return "", 0, err
++	}
++	var buf bytes.Buffer
++	n, err := serialize(&buf, s.Format, cols, rows)
++	if err != nil {
++		return "", 0, fmt.Errorf("serialize as %s: %w", s.Format, err)
++	}
++
++	client, err := storage.NewClient(storage.Config{
++		Region:          s.Destination.Region,
++		AccessKeyID:     s.Destination.AccessKey,
++		SecretAccessKey: s.Destination.SecretKey,
++	})
++	if err != nil {
++		return "", 0, fmt.Errorf("storage client: %w", err)
++	}
++	key := objectKey(s, at)
++	if err := client.Put(ctx, s.Destination.Bucket, key, buf.Bytes(), contentType(s.Format)); err != nil {
++		return "", 0, fmt.Errorf("upload to %s: %w", s.Destination.Bucket, err)
++	}
++	return key, n, nil
++}
++
++func serialize(buf *bytes.Buffer, format Format, cols []string, rows *sql.Rows) (int, error) {
++	values := make([]any, len(cols))
++	targets := make([]any, len(cols))
++	for i := range values {
++		targets[i] = &values[i]
++	}
++	out := csv.NewWriter(buf)
++	enc := json.NewEncoder(buf)
++	if format == FormatCSV {
++		if err := out.Write(cols); err != nil {
++			return 0, err
++		}
++	}
++
++	n := 0
++	for rows.Next() {
++		if err := rows.Scan(targets...); err != nil {
++			return n, err
++		}
++		var err error
++		if format == FormatCSV {
++			record := make([]string, len(cols))
++			for i := range cols {
++				record[i] = formatValue(values[i])
++			}
++			err = out.Write(record)
++		} else {
++			record := make(map[string]any, len(cols))
++			for i, col := range cols {
++				record[col] = values[i]
++			}
++			err = enc.Encode(record)
++		}
++		if err != nil {
++			return n, err
++		}
++		n++
++	}
++	out.Flush()
++	return n, out.Error()
++}
++
++func formatValue(v any) string {
++	switch t := v.(type) {
++	case nil:
++		return ""
++	case []byte:
++		return string(t)
++	case time.Time:
++		return t.UTC().Format(time.RFC3339)
++	default:
++		return fmt.Sprint(t)
++	}
++}
++
++func objectKey(s *Schedule, at time.Time) string {
++	name := fmt.Sprintf("%s-%s.%s", s.Dataset, at.Format("2006-01-02"), s.Format)
++	if prefix := strings.Trim(s.Destination.Prefix, "/"); prefix != "" {
++		return prefix + "/" + name
++	}
++	return name
++}
++
++func contentType(format Format) string {
++	if format == FormatCSV {
++		return "text/csv"
++	}
++	return "application/x-ndjson"
++}
+diff --git a/migrations/0057_export_schedules.sql b/migrations/0057_export_schedules.sql
+new file mode 100644
+index 0000000..414bc8d
+--- /dev/null
++++ b/migrations/0057_export_schedules.sql
+@@ -0,0 +1,27 @@
++BEGIN;
++
++CREATE TABLE export_schedules (
++    id               BIGSERIAL PRIMARY KEY,
++    org_id           BIGINT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
++    name             TEXT NOT NULL,
++    dataset          TEXT NOT NULL,
++    format           TEXT NOT NULL CHECK (format IN ('csv', 'jsonl')),
++    cadence          TEXT NOT NULL CHECK (cadence IN ('hourly', 'daily', 'weekly')),
++    hour_of_day      SMALLINT NOT NULL DEFAULT 0,
++    timezone         TEXT NOT NULL DEFAULT 'UTC',
++    dest_bucket      TEXT NOT NULL,
++    dest_prefix      TEXT NOT NULL DEFAULT '',
++    dest_region      TEXT NOT NULL,
++    dest_access_key  TEXT NOT NULL,
++    dest_secret_key  TEXT NOT NULL,
++    enabled          BOOLEAN NOT NULL DEFAULT TRUE,
++    last_run_at      TIMESTAMPTZ,
++    last_status      TEXT NOT NULL DEFAULT '',
++    last_error       TEXT NOT NULL DEFAULT '',
++    next_run_at      TIMESTAMPTZ NOT NULL,
++    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
++);
++
++CREATE INDEX idx_export_schedules_due ON export_schedules (next_run_at) WHERE enabled;
++
++COMMIT;
