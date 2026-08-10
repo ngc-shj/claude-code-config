@@ -43,7 +43,17 @@ FIELDS = ['id', 'arm', 'review', 'part', 'severity', 'target', 'file', 'title', 
 
 
 def target(s):
-    """The changed file a finding is about, for splitting the clustering work."""
+    """An ordering key over findings. NOT a reliable file classifier.
+
+    The extension list is deliberately not widened. This function orders the id
+    assignment below, so changing it renumbers every id and costs the round-19
+    byte-for-byte reproduction this module documents — while the ids themselves
+    are arbitrary labels no analysis reads. Round 21's Go fixture put 926 of
+    1094 findings in `(other)` here and lost nothing by it.
+
+    Splitting the clustering work is `split_clusters.py`, which derives the file
+    set from the fixture diff and so needs no extension list at all.
+    """
     m = re.search(r'[\w/\.\-]+\.(py|sql|txt|cfg|toml|ini|md|yaml|yml)', s)
     return m.group(0).lstrip('`') if m else '(other)'
 
