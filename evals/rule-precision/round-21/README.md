@@ -121,7 +121,12 @@ reviews proportionally more expensive.
 `../extract.py`'s `target()` recognises `py|sql|txt|cfg|toml|ini|md|yaml|yml` and
 no `go`, so 926 of this round's 1094 findings landed in `(other)`. Extraction
 itself was complete and reconciled — the gap only degrades the key used to split
-clustering across agents, which was computed separately here. `target()` was left
-untouched **because it also orders the id assignment**: changing it would renumber
-findings and break the byte-for-byte reproduction of round 19 the file documents.
-Fixing it needs its own commit and a decision about that reproduction claim.
+clustering across agents, which was computed separately here.
+
+Resolved after this round in `../split_clusters.py`: the split now derives the
+changed-file set from the fixture diff, so no extension list is involved and a
+new language needs no code change. `target()` was left as it is **because it also
+orders the id assignment** — widening it would renumber every finding and cost the
+byte-for-byte round-19 reproduction, to fix a column no analysis reads. Running
+the new script over this round's `findings.tsv` reproduces the eight buckets used
+here, finding for finding.
