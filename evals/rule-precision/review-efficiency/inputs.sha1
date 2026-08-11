@@ -1,7 +1,8 @@
-# input manifest, pinned at 17248a03cc011ca48f998f6d77ae434aa4e1ffe8
-# every repository file this audit reads, with its blob hash at that commit.
-# per-agent token counts come from session transcripts outside the repo;
-# cost-ledger.tsv records the sha1 of that transcript set (see _ledger.py --verify).
+# input manifest. Every file whose bytes can change a number this audit prints.
+#
+# Section 1: inputs that existed at base 17248a03cc011ca48f998f6d77ae434aa4e1ffe8
+# (round sheets, adjudication panels, and the verdict loader the design audit
+#  and this audit share). Hashes are the base-commit blobs.
 09f978b9e5e713ff6bfb0c82f2a2ef2cbc2bcda5 round-20/findings.tsv
 bebfbeb5bd894aa84e102cf0038b003d1a3d7118 round-20/clusters.tsv
 cefac6eb91b247de7632ac5f658a7388364e1bc1 round-21/findings.tsv
@@ -38,3 +39,11 @@ bf8d9ec11417b1e8a2be9d759ad4c361f3dd279e round-20/adjudications/adjudicator1.tsv
 1e39c259e7482e55005e6f223c84b18f2089dce9 round-22/adjudications/panel-1.tsv
 3b4e1688e76d3c17c9f31dd25c1c3ae3110d813b round-22/adjudications/panel-2.tsv
 2e849dfbde68f2b0f8d916c79e1093707db5762c round-22/adjudications/panel-3.tsv
+cc91644f87b113725c37e43c48eba868c6607d1e design-audit/_data.py
+#
+# Section 2: DERIVED IN THIS PR, not present at base. cost-ledger.tsv is built
+# from session transcripts outside the repository by _ledger.py; the ledger
+# itself carries the sha1 of that transcript set, and `_ledger.py --verify`
+# re-derives it and diffs every row.
+4b4b6b2a5315b0077861578a9dcec0e275ac85ea review-efficiency/cost-ledger.tsv
+34d67f034c6c6d669be0f3568330a89d9213d668 review-efficiency/_ledger.py

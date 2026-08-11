@@ -30,19 +30,37 @@ import _ledger                                                  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 EVALS = _data.EVALS
 
-# Cost-equivalent tokens, in units of one base input token. Anthropic's published
-# ratios: cache write 1.25x (5m TTL) / 2x (1h), cache read 0.1x, output 5x. This
-# is the only unit in this audit in which a cached re-send and a generated token
-# are comparable quantities.
+# API-price-equivalent input tokens: each count weighted by its price relative to
+# one base input token, using Anthropic's published API ratios (cache write 1.25x
+# at 5m TTL / 2x at 1h, cache read 0.1x, output 5x). It is the unit in which a
+# cached re-send and a generated token are comparable.
+#
+# It is NOT a measured spend. These rounds ran on a Claude subscription, whose
+# weekly allowance is a separate scheme from API metered billing, and nothing in
+# a transcript records how much of that allowance an agent consumed. Read every
+# api-eq figure as "what this would price at, at API rates", never as an invoice.
 W_CC5M, W_CC1H, W_READ, W_OUT = 1.25, 2.0, 0.1, 5.0
 
 
-def cost_eq(r):
+def raw_tokens(r):
+    """Tokens the API actually processed, unweighted: ingested plus generated."""
+    return r['uncached'] + r['cc5m'] + r['cc1h'] + r['cache_read'] + r['output']
+
+
+def api_eq(r):
     return (r['uncached'] + W_CC5M * r['cc5m'] + W_CC1H * r['cc1h']
             + W_READ * r['cache_read'] + W_OUT * r['output'])
 
 
 def verify():
+    """Every file whose bytes can move a number in this audit, checked by hash.
+
+    That includes three things beyond the round sheets: `cost-ledger.tsv`, which
+    this PR derives and every cost figure reads; `design-audit/_data.py`, which
+    decides which claims count as real; and this audit's own `_ledger.py` loader.
+    Leaving any of them out would let the audit report `inputs verified` while
+    its numbers silently changed.
+    """
     man = os.path.join(HERE, 'inputs.sha1')
     want = {}
     for line in open(man):
@@ -168,36 +186,46 @@ read as one.
   sent        (uncached + cache writes){st.mean([r['uncached'] + r['cc5m'] + r['cc1h'] for r in led if r['round'] == 'round 22']) / 1000:6.1f}k
   re-sent     (cache reads)        {st.mean([r['cache_read'] for r in led if r['round'] == 'round 22']) / 1000:8.1f}k
   output                           {st.mean([r['output'] for r in led if r['round'] == 'round 22']) / 1000:8.1f}k
-  cost-equivalent (1x/1.25x/0.1x/5x){st.mean([cost_eq(r) for r in led if r['round'] == 'round 22']) / 1000:6.1f}k
+  raw processed (sent + re-sent + output){st.mean([raw_tokens(r) for r in led if r['round'] == 'round 22']) / 1000:9.1f}k
+  api-eq      (1x/1.25x/0.1x/5x)   {st.mean([api_eq(r) for r in led if r['round'] == 'round 22']) / 1000:8.1f}k
+
+Two totals for round 22's 150 review agents, both real, measuring different
+things: {sum(raw_tokens(r) for r in led if r['round'] == 'round 22') / 1e6:.1f}M tokens actually processed, and {sum(api_eq(r) for r in led if r['round'] == 'round 22') / 1e6:.1f}M api-eq. The
+second weights each token by its API price relative to base input; it is what
+the work would price at on metered API billing, NOT what it drew from this
+project's subscription allowance. That allowance is a separate scheme and no
+transcript records consumption against it - it is not recoverable here at all.
 """)
     print(f'{"round":10s}{"agents":>7s}{"sent":>9s}{"re-sent":>9s}{"output":>8s}'
-          f'{"cost-eq":>9s}{"ctx_final":>10s}{"round total":>13s}')
+          f'{"api-eq":>9s}{"ctx_final":>10s}{"round total":>13s}')
     for rnd in sorted({r['round'] for r in reviews}):
         g = [r for r in reviews if r['round'] == rnd]
         f = lambda k: st.mean([r[k] for r in g]) / 1000
         print(f'{rnd:10s}{len(g):7d}'
               f'{st.mean([r["uncached"] + r["cc5m"] + r["cc1h"] for r in g]) / 1000:9.1f}k'
               f'{f("cache_read"):8.1f}k{f("output"):7.1f}k'
-              f'{st.mean([cost_eq(r) for r in g]) / 1000:8.1f}k{f("ctx_final"):9.1f}k'
-              f'{sum(cost_eq(r) for r in g) / 1e6:11.1f}M')
+              f'{st.mean([api_eq(r) for r in g]) / 1000:8.1f}k{f("ctx_final"):9.1f}k'
+              f'{sum(api_eq(r) for r in g) / 1e6:11.1f}M')
     for rnd, stated in (('round 21', 4.53), ('round 22', 12.5)):
         g = [r for r in reviews if r['round'] == rnd]
         print(f'cross-check: {rnd} reviews sum to {sum(r["ctx_final"] for r in g) / 1e6:.2f}M by ctx_final, '
               f'against the {stated}M its README states')
     r22 = [r for r in reviews if r['round'] == 'round 22']
-    ratio = st.mean([cost_eq(r) for r in r22]) / st.mean([r['ctx_final'] for r in r22])
+    ratio = st.mean([api_eq(r) for r in r22]) / st.mean([r['ctx_final'] for r in r22])
+    raw_ratio = st.mean([raw_tokens(r) for r in r22]) / st.mean([r['ctx_final'] for r in r22])
     print(f'\nConsequence for the design audit, which priced future rounds at the reported\n'
-          f'rate: cost-equivalent spend runs {ratio:.1f}x ctx_final, so the n-per-arm designs it\n'
-          f'called unaffordable are {ratio:.1f}x more expensive than it stated. That strengthens\n'
-          f'its "do not spend" conclusion and changes nothing else about it.')
+          f'rate: those designs process {raw_ratio:.1f}x more tokens than it stated, and price at\n'
+          f'{ratio:.1f}x more AT API RATES. Neither figure is a subscription-allowance draw. Both\n'
+          f'point the same way, so its "do not spend" conclusion is strengthened and\n'
+          f'nothing else about it changes.')
     print('\nreviews are the production-shaped agents; the rest is evaluation machinery')
     print(f'{"role":12s}{"agents":>7s}{"cost-eq mean":>14s}{"total":>10s}')
     for role in ('review', 'adjudicate', 'cluster', 'seed', 'other'):
         g = [r for r in led if r['role'] == role]
         if not g:
             continue
-        print(f'{role:12s}{len(g):7d}{st.mean([cost_eq(r) for r in g]) / 1000:13.1f}k'
-              f'{sum(cost_eq(r) for r in g) / 1e6:9.1f}M')
+        print(f'{role:12s}{len(g):7d}{st.mean([api_eq(r) for r in g]) / 1000:13.1f}k'
+              f'{sum(api_eq(r) for r in g) / 1e6:9.1f}M')
     dupes = collections.Counter((r['round'], r['arm'], r['review'], r['part']) for r in reviews)
     retried = [k for k, v in dupes.items() if v > 1]
     print(f'\nre-runs (same arm/review/part launched twice): {len(retried)}'
@@ -215,7 +243,8 @@ def section_composition(led):
     content = sum(b.values())
     sent = st.mean([r['uncached'] + r['cc5m'] + r['cc1h'] for r in g])
     out = st.mean([r['output'] for r in g])
-    ce = st.mean([cost_eq(r) for r in g])
+    ce = st.mean([api_eq(r) for r in g])
+    raw = st.mean([raw_tokens(r) for r in g])
     print(f"""
 Content the agent pulled in, measured as tool-result bytes ({n} round-22 agents):
 
@@ -225,7 +254,7 @@ Content the agent pulled in, measured as tool-result bytes ({n} round-22 agents)
   other                                              {b['other'] / 1000:8.1f} kB {100 * b['other'] / content:5.1f}%
   total                                              {content / 1000:8.1f} kB
 
-Bytes are exact; the share of SPEND they carry is not, because the same content
+Bytes are exact; the share of PROCESSED TOKENS they carry is not, because content
 is written into the cache repeatedly as the conversation grows. Measured:
 {sent / 1000:.0f}k tokens ingested against {content / 1000:.0f} kB of tool-result content, i.e. about {sent / (content / 3.8):.1f}x
 what the content alone would be at 3.8 bytes/token. This audit measures that
@@ -234,16 +263,23 @@ TTL expiry), though requests made more than 5 minutes after the previous one -
 where the ephemeral cache has certainly expired - carry only {100 * sum(r['cc_after_gap'] for r in g) / sum(r['cc5m'] + r['cc1h'] for r in g):.0f}% of the
 cache creation, so plain TTL expiry does not explain it.
 
-In cost-equivalent terms the split is not content at all:
+Weighted by API price, the split is not content at all - but the same split by
+raw token count looks completely different, and which one matters depends on
+what the reader is budgeting:
 
-  cache writes  {st.mean([W_CC5M * r['cc5m'] + W_CC1H * r['cc1h'] for r in g]) / 1000:7.1f}k {100 * st.mean([W_CC5M * r['cc5m'] + W_CC1H * r['cc1h'] for r in g]) / ce:5.1f}%
-  output        {W_OUT * out / 1000:7.1f}k {100 * W_OUT * out / ce:5.1f}%   ({out / 1000:.1f}k tokens at 5x)
-  cache reads   {W_READ * st.mean([r['cache_read'] for r in g]) / 1000:7.1f}k {100 * W_READ * st.mean([r['cache_read'] for r in g]) / ce:5.1f}%
-  uncached      {st.mean([r['uncached'] for r in g]) / 1000:7.1f}k
+  {"":14s}{"api-eq":>16s}{"raw tokens":>18s}
+  cache writes  {st.mean([W_CC5M * r['cc5m'] + W_CC1H * r['cc1h'] for r in g]) / 1000:8.1f}k {100 * st.mean([W_CC5M * r['cc5m'] + W_CC1H * r['cc1h'] for r in g]) / ce:5.1f}% {st.mean([r['cc5m'] + r['cc1h'] for r in g]) / 1000:10.1f}k {100 * st.mean([r['cc5m'] + r['cc1h'] for r in g]) / raw:5.1f}%
+  output        {W_OUT * out / 1000:8.1f}k {100 * W_OUT * out / ce:5.1f}% {out / 1000:10.1f}k {100 * out / raw:5.1f}%
+  cache reads   {W_READ * st.mean([r['cache_read'] for r in g]) / 1000:8.1f}k {100 * W_READ * st.mean([r['cache_read'] for r in g]) / ce:5.1f}% {st.mean([r['cache_read'] for r in g]) / 1000:10.1f}k {100 * st.mean([r['cache_read'] for r in g]) / raw:5.1f}%
+  uncached      {st.mean([r['uncached'] for r in g]) / 1000:8.1f}k
 
-Two levers follow, and neither is the reviewer count: the catalogue is the
-largest single body of content read, and output at 5x is the largest single
-line of cost.""")
+Output is {100 * W_OUT * out / ce:.0f}% of api-eq and {100 * out / raw:.0f}% of raw tokens: it is the dominant line
+only under API pricing, and a rounding error by volume. Cache traffic is the
+reverse. Any claim that output is "as big a lever as the catalogue" holds under
+API pricing and does not hold by volume, so it has to carry that condition.
+
+What survives both units: the catalogue is the largest single body of content
+the reviewer reads, and neither lever is the reviewer count.""")
 
 
 def section_k(led):
@@ -251,19 +287,21 @@ def section_k(led):
     per_agent = {}
     for rnd in ('round 20', 'round 21', 'round 22'):
         g = [r for r in led if r['role'] == 'review' and r['round'] == rnd]
-        per_agent[rnd] = st.mean([cost_eq(r) for r in g])
+        per_agent[rnd] = st.mean([api_eq(r) for r in g])
     print(f"""
 Sub-sampling C(3,k) subsets of the same agents is only unbiased for identical
 reviewers, which parts a/b/c are: same brief, same catalogue, no role split.
 This is therefore a curve for "k generalists", and the shipped configuration is
 three ROLE-SPECIALISED experts. No round measured the specialist curve.
 
-Cost per reviewer is the round's own measured mean cost-equivalent per agent
-(round 20 {per_agent['round 20'] / 1000:.0f}k, 21 {per_agent['round 21'] / 1000:.0f}k, 22 {per_agent['round 22'] / 1000:.0f}k), and k costs k x that. The three
+Cost per reviewer is the round's own measured mean api-eq per agent
+(round 20 {per_agent['round 20'] / 1000:.0f}k, 21 {per_agent['round 21'] / 1000:.0f}k, 22 {per_agent['round 22'] / 1000:.0f}k), and k costs k x that. Since k scales
+every count in the same proportion, the ranking of the k rungs is identical in
+raw tokens; only the labels change. The three
 reviewers of a review run against the same brief and the same catalogue, so a
 shared prefix might have made the 2nd and 3rd cheaper; measured, they are not -
 round 22 means by position are """
-          + ', '.join(f'{p}={st.mean([cost_eq(r) for r in led if r["role"] == "review" and r["round"] == "round 22" and r["part"] == p]) / 1000:.0f}k'
+          + ', '.join(f'{p}={st.mean([api_eq(r) for r in led if r["role"] == "review" and r["round"] == "round 22" and r["part"] == p]) / 1000:.0f}k'
                       for p in 'abc') + '.')
     for name in ('round 20', 'round 21', 'round 22'):
         for arm in ('W', 'W23'):
@@ -271,7 +309,7 @@ round 22 means by position are """
             c = curve(f2c, verdict, reviews, 3)
             print(f'\n{name}, arm {arm} ({len(reviews)} reviews)')
             print(f'{"k":>2s}{"real claims":>13s}{"marginal":>10s}{"C+M non-defect":>16s}'
-                  f'{"dup rate":>10s}{"severe miss":>13s}{"cost-eq":>10s}{"per marginal claim":>20s}')
+                  f'{"dup rate":>10s}{"severe miss":>13s}{"api-eq":>10s}{"per marginal claim":>20s}')
             prev = None
             for k in (1, 2, 3):
                 v = c[k]
@@ -362,7 +400,7 @@ def trigger_signal(f2c, verdict, reviews):
 
 def section_policies(led, arm='W'):
     rule('4. Adaptive policies, replayed on round 22')
-    unit = st.mean([cost_eq(r) for r in led if r['role'] == 'review' and r['round'] == 'round 22'])
+    unit = st.mean([api_eq(r) for r in led if r['role'] == 'review' and r['round'] == 'round 22'])
     f2c, verdict, reviews = arm_reviews('round 22', arm)
     xs, ys, r = trigger_signal(f2c, verdict, reviews)
     print(f"""
@@ -372,9 +410,12 @@ a runtime harness can see without adjudication.
 
 The oracle row picks the smallest k that reaches everything k=3 reaches. It
 reads the later reviewers' results to decide whether to launch them, so it is
-an upper bound on what any first-reviewer rule could reach, not a candidate.
+not a candidate - it is an upper bound, and a NARROW one: it bounds only
+scheduling that preserves each review's k=3 real-claim set exactly. Policies
+willing to lose coverage save far more (k=1 saves 67%), so "the ceiling is 5%"
+is a statement about COVERAGE-PRESERVING scheduling and about nothing else.
 
-Round 22, arm {arm} ({len(reviews)} reviews), cost-eq unit {unit / 1000:.0f}k per reviewer.
+Round 22, arm {arm} ({len(reviews)} reviews), api-eq unit {unit / 1000:.0f}k per reviewer.
 
 The trigger statistic barely varies: reviewer 1's C+M count runs {min(xs)}-{max(xs)}
 (mean {st.mean(xs):.1f}, sd {st.stdev(xs):.1f}) across {len(xs)} (review, ordering) pairs - the Finding Floor
@@ -386,7 +427,7 @@ That correlation is partly mechanical - a reviewer who reports more findings
 has already reached more claims, leaving fewer for the others - so it is a
 description of this sample, not evidence that the statistic is a good trigger.
 """)
-    print(f'{"policy":34s}{"real":>8s}{"C+M nd":>9s}{"cost-eq":>10s}{"escalated":>11s}{"vs k=3":>9s}')
+    print(f'{"policy":34s}{"real":>8s}{"C+M nd":>9s}{"api-eq":>10s}{"escalated":>11s}{"vs k=3":>9s}')
     pol = policies(f2c, verdict, reviews, unit)
     base = pol['always k=3']['cost']
     for name, v in pol.items():
@@ -444,13 +485,15 @@ def section_frontier(led, unit, f2c, verdict, reviews):
     tot = st.mean([sum(r[f'bytes_{k}'] for k in ('catalogue', 'diff', 'harness', 'other'))
                    for r in g])
     print(f"""
-Axes: real claims reached (up), C+M not-a-defect (down), cost-equivalent tokens
-(down). Dominated = another candidate costs no more, reaches no less, and is no
+Axes: real claims reached (up), C+M not-a-defect (down), api-eq tokens (down).
+Every candidate here scales all four token counts together, so the ordering is
+the same in raw tokens and the frontier does not depend on the price weights.
+Dominated = another candidate costs no more, reaches no less, and is no
 noisier, with at least one strict. Everything here is round 22, arm W, one
 fixture: the frontier is descriptive of that sample and is not a claim about
 fixtures in general.
 """)
-    print(f'{"candidate":36s}{"real":>8s}{"C+M nd":>9s}{"cost-eq":>10s}  verdict')
+    print(f'{"candidate":36s}{"real":>8s}{"C+M nd":>9s}{"api-eq":>10s}  verdict')
     items = sorted(cands.items(), key=lambda kv: kv[1][2])
     for name, (real, noi, cost) in items:
         dom = [o for o, (r2, n2, c2) in cands.items()
@@ -480,8 +523,9 @@ at all here because no round has ever varied it, so it has no coverage number
 to be dominated on. Section 2 is the whole argument for it: the catalogue is
 {cat / 1000:.0f} kB of the {tot / 1000:.0f} kB a reviewer reads ({100 * cat / tot:.0f}%), and it is a per-reviewer
 multiplier - it multiplies through whatever k is chosen, which is exactly what
-choosing k cannot do. Output at 5x ({100 * W_OUT * st.mean([r['output'] for r in g]) / st.mean([cost_eq(r) for r in g]):.0f}% of cost-equivalent spend) is the
-same shape of lever and the same size of prize.
+choosing k cannot do. Output is a second lever of the same shape but NOT of a
+comparable size in general: {100 * W_OUT * st.mean([r['output'] for r in g]) / st.mean([api_eq(r) for r in g]):.0f}% of api-eq against {100 * st.mean([r['output'] for r in g]) / st.mean([raw_tokens(r) for r in g]):.0f}% of raw tokens, so
+it is worth attacking under API pricing and close to irrelevant by volume.
 
 So the audit records two things rather than one:
   - the rule's own answer, `always k=1`, and why taking it would be a mistake;

@@ -10,13 +10,33 @@ It does re-price what those rounds cost, which is a separate matter and is in
 the first section.
 
 Run with `review-efficiency/audit.py`. No new agents were run for it. Inputs are
-pinned: `inputs.sha1` lists the 36 repository files the audit reads with their
-blob hashes at base `17248a03cc011ca48f998f6d77ae434aa4e1ffe8`, and the script
-verifies the path set and the hashes before producing a number. Claim verdicts
-come from `../design-audit/_data.py` rather than being re-derived, so the two
-audits cannot disagree about which claims are real.
+pinned: `inputs.sha1` lists the 39 files whose bytes can move a number — the
+round sheets and adjudication panels at base
+`17248a03cc011ca48f998f6d77ae434aa4e1ffe8`, plus `design-audit/_data.py` (which
+decides which claims are real) and the two files this PR derives,
+`cost-ledger.tsv` and `_ledger.py`. `verify()` checks the path set and every
+hash before a number is produced. Claim verdicts are imported from
+`../design-audit/_data.py` rather than re-derived, so the two audits cannot
+disagree about which claims are real.
 
-## The token figures in every previous round README are peak context, not spend
+## Two units, and what neither of them is
+
+Nothing in this audit is a measured bill. These rounds ran on a Claude
+subscription, whose weekly allowance is a **separate scheme from API metered
+billing**, and no transcript records consumption against that allowance — it is
+not recoverable here at all. Two units are used instead, both derived from
+measured counts:
+
+- **raw tokens** — what the API actually processed: uncached input + cache
+  writes + cache reads + output, unweighted.
+- **api-eq** — each count weighted by its price relative to one base input
+  token, using Anthropic's published API ratios (cache write 1.25× at 5m TTL /
+  2× at 1h, cache read 0.1×, output 5×). Read it as *"what this would price at,
+  at API rates"*, never as an invoice.
+
+They rank things differently, and where they do, this audit says so.
+
+## The token figures in every previous round README are peak context
 
 `subagent_tokens`, the number the task notification reports and every round's
 cost table is built from, is **the final request's context size**. Reconciled
@@ -34,21 +54,20 @@ round-22 review agent:
 | sent (uncached + cache writes) | 109.6k |
 | re-sent (cache reads) | 286.1k |
 | output | 25.9k |
-| **cost-equivalent** (1× / 1.25× write / 0.1× read / 5× output) | **294.9k** |
+| **raw processed** (sent + re-sent + output) | **421.6k** |
+| **api-eq** (1× / 1.25× / 0.1× / 5×) | **294.9k** |
 
-Cost-equivalent tokens are the only unit in which a cached re-send and a
-generated token are comparable; the weights are Anthropic's published ratios.
-On that unit round 22's 150 review agents cost 44.2M, not 12.5M — the two
-numbers measure different things and neither is wrong, but only one of them is
-a spend.
+Round 22's 150 review agents therefore processed **63.2M tokens** and price at
+**44.2M api-eq**, against the 12.5M its README states. All three are real
+numbers about different things; only the first two describe work done.
 
-This has one consequence outside this audit. The design audit priced future
-rounds at the reported rate; cost-equivalent spend runs **3.5× ctx_final**, so
-the n-per-arm designs it called unaffordable are 3.5× more expensive than it
-stated. That strengthens its "do not spend" conclusion and changes nothing else
-about it.
+Consequence outside this audit: the design audit priced future rounds at the
+reported rate, so the designs it called unaffordable **process 5.1× more tokens
+and price at 3.5× more at API rates** than it stated. Neither is a
+subscription-allowance draw. Both point the same way, so its "do not spend"
+conclusion is strengthened and nothing else about it changes.
 
-| round | agents | sent | re-sent | output | cost-eq | ctx_final | round total |
+| round | agents | sent | re-sent | output | api-eq | ctx_final | round total (api-eq) |
 |---|---|---|---|---|---|---|---|
 | 17 | 54 | 113.5k | 245.1k | 27.2k | 302.2k | 84.9k | 16.3M |
 | 18 | 36 | 126.1k | 321.5k | 28.4k | 331.7k | 88.5k | 11.9M |
@@ -58,19 +77,20 @@ about it.
 | 22 | 150 | 109.6k | 286.1k | 25.9k | 294.9k | 83.1k | 44.2M |
 
 Evaluation machinery, separated from the production-shaped review agents:
-458 review agents at 310.0k mean (142.0M), 24 adjudicators (2.3M), 57 clustering
-agents (10.6M), 5 seed panellists (0.6M), 28 other (8.5M). Two agents were
-re-runs (round 20, arm W2, review 8, parts b and c). **No Codex or Ollama agent
-ran in any of these rounds** — the eval harness is Claude-only. The production
-skill does call Ollama for seed findings before the reviewers; that costs zero
-Claude tokens and is not measured here.
+458 review agents at 310.0k api-eq mean (142.0M), 24 adjudicators (2.3M), 57
+clustering agents (10.6M), 5 seed panellists (0.6M), 28 other (8.5M). Two agents
+were re-runs (round 20, arm W2, review 8, parts b and c). **No Codex or Ollama
+agent ran in any of these rounds** — the eval harness is Claude-only. The
+production skill does call Ollama for seed findings before the reviewers; that
+costs zero Claude tokens and is not measured here.
 
 **Provenance.** `cost-ledger.tsv` is per-agent and **measured**, recovered from
-the session transcripts the rounds ran in (`_ledger.py`, `--verify` re-derives
-and diffs). Nothing in this audit is a round-average estimate. The transcripts
-are outside the repository and not redistributable; the ledger carries counts
-only — no prompt, no reply, no file content — and records the sha1 of the
-transcript set it was built from.
+the session transcripts the rounds ran in. Nothing is a round-average estimate.
+The transcripts are outside the repository and not redistributable; the ledger
+carries counts only — no prompt, no reply, no file content — and records the
+sha1 of the transcript set. `_ledger.py --verify` rebuilds it from the
+transcripts and diffs all 572 rows across all 22 columns, exiting non-zero on
+any difference.
 
 ## Where a review agent's tokens go
 
@@ -83,22 +103,30 @@ Content pulled in, as exact tool-result bytes, 150 round-22 agents:
 | harness (brief, `wc -l` handshake, writing output) | 4.5 | 5.4% |
 | other | 0.2 | 0.3% |
 
-The bytes are exact. **The share of *spend* they carry is not**, because the
-same content is written into the cache repeatedly as the conversation grows:
+The bytes are exact. **The share of processed tokens they carry is not**,
+because content is written into the cache repeatedly as the conversation grows:
 109.6k tokens ingested against 84 kB of content, ~5.0× what the content alone
 would be at 3.8 bytes/token. This audit measures that ratio and does not
 establish its mechanism — requests made more than 5 minutes after the previous
 one, where the ephemeral cache has certainly expired, carry only 6% of the cache
 creation, so plain TTL expiry does not explain it.
 
-In cost-equivalent terms the split is not content at all:
+The two units disagree about what dominates, and the disagreement is the point:
 
-| | | |
-|---|---|---|
-| cache writes | 135.7k | 46.0% |
-| output | 129.6k | 43.9% (25.9k tokens at 5×) |
-| cache reads | 28.6k | 9.7% |
-| uncached | 1.0k | |
+| | api-eq | | raw tokens | |
+|---|---|---|---|---|
+| cache writes | 135.7k | 46.0% | 108.6k | 25.7% |
+| output | 129.6k | 43.9% | 25.9k | 6.1% |
+| cache reads | 28.6k | 9.7% | 286.1k | 67.9% |
+| uncached | 1.0k | | | |
+
+Output is 44% of api-eq and **6% of raw tokens**: the dominant line under API
+pricing, a rounding error by volume. Cache traffic is the reverse. Any claim
+that output is "as big a lever as the catalogue" holds *under API pricing* and
+does not hold by volume, and has to carry that condition.
+
+What survives both units: the catalogue is the largest single body of content
+the reviewer reads, and neither lever is the reviewer count.
 
 ## Reviewer-count replay
 
@@ -107,11 +135,13 @@ parts a/b/c are. **This is a curve for k generalists; the shipped configuration
 is three role-specialised experts, and no round measured the specialist curve.**
 The three reviewers of one review share a brief and a catalogue, so a shared
 prefix might have made the 2nd and 3rd cheaper — measured, it does not: round-22
-means by position are a=309k, b=294k, c=282k, so k costs k×.
+means by position are a=309k, b=294k, c=282k, so k costs k×. Because k scales
+every count in the same proportion, the ranking of the rungs is identical in raw
+tokens; only the labels change.
 
 Round 22, both arms (25 reviews each):
 
-| | k | real claims | marginal | C+M non-defect | dup rate | severe miss | cost-eq |
+| | k | real claims | marginal | C+M non-defect | dup rate | severe miss | api-eq |
 |---|---|---|---|---|---|---|---|
 | W | 1 | 15.45 | 15.45 | 1.48 | 0.00 | 2.47 | 295k |
 | W | 2 | 18.43 | 2.97 | 2.96 | 0.37 | 0.79 | 590k |
@@ -121,8 +151,8 @@ Round 22, both arms (25 reviews each):
 | W₂₃ | 3 | 21.48 | 2.31 | 5.12 | 0.49 | 0.00 | 885k |
 
 Rounds 20 and 21 are in the script's output and have the same shape. The third
-reviewer costs 295k cost-equivalent tokens for 1.85 further real claims in arm
-W — 159k per marginal claim, against 19k for the first reviewer.
+reviewer costs 295k api-eq for 1.85 further real claims in arm W — 159k per
+marginal claim, against 19k for the first reviewer.
 
 **Round 13 is shown separately and must not be pooled**: a different fixture
 (F9), a different inventory, an earlier rule set, and one arm. Its k=1…6 curve
@@ -146,7 +176,7 @@ reached more claims, leaving fewer for the others), so it describes this sample
 and is not evidence that the statistic is a good trigger. Both directions are
 replayed.
 
-| policy | real | C+M nd | cost-eq | escalated | vs k=3 |
+| policy | real | C+M nd | api-eq | escalated | vs k=3 |
 |---|---|---|---|---|---|
 | always k=1 | 15.45 | 1.48 | 295k | — | −67% |
 | always k=2 | 18.43 | 2.96 | 590k | — | −33% |
@@ -158,8 +188,10 @@ replayed.
 
 The oracle picks the smallest k that reaches everything k=3 reaches; it reads
 the later reviewers' results to decide whether to launch them, so it bounds what
-any first-reviewer rule could reach and is not a candidate. **It saves 5%.**
-That is the ceiling on adaptive scheduling here, and it is small.
+any first-reviewer rule could reach and is not a candidate. It saves 5% — but
+that is **a ceiling on scheduling that preserves each review's k=3 real-claim
+set exactly**, and on nothing else. Policies willing to lose coverage save far
+more (k=1 saves 67%). The 5% is not a bound on adaptive scheduling in general.
 
 ## Rule-level ROI: not measured
 
@@ -187,10 +219,12 @@ one that turns a per-run list into a per-finding attribution.
 
 ## Pareto frontier, and what to test forward
 
-Axes: real claims reached (up), C+M not-a-defect (down), cost-equivalent tokens
-(down). Dominated = another candidate costs no more, reaches no less, is no
-noisier, with at least one strict. Round 22, arm W, one fixture — descriptive of
-that sample, not a claim about fixtures in general.
+Axes: real claims reached (up), C+M not-a-defect (down), api-eq tokens (down).
+Every candidate scales all four token counts together, so the ordering is the
+same in raw tokens and the frontier does not depend on the price weights.
+Dominated = another candidate costs no more, reaches no less, is no noisier,
+with at least one strict. Round 22, arm W, one fixture — descriptive of that
+sample, not a claim about fixtures in general.
 
 Every escalate-on-a-high-count policy is dominated by an escalate-on-a-low-count
 one at similar cost, which is the sign of that correlation showing up in the
@@ -209,8 +243,10 @@ what each reviewer reads from the catalogue. It scores as no candidate here
 because no round has ever varied it, so it has no coverage number to be
 dominated on. The argument for it is the composition table: the catalogue is
 52.5 kB of the 84 kB a reviewer reads (63%), and unlike k it is a *per-reviewer
-multiplier* — it multiplies through whatever k is chosen. Output at 5× (44% of
-cost-equivalent spend) is the same shape of lever and the same size of prize.
+multiplier* — it multiplies through whatever k is chosen. Output is a second
+lever of the same shape but not of comparable size in general: 44% of api-eq
+against 6% of raw tokens, so it is worth attacking under API pricing and close
+to irrelevant by volume.
 
 So this audit records two things rather than one:
 
@@ -227,9 +263,10 @@ forward test inherits the same defect.
 
 - It proposes no change to clause 1 and produces no evidence about it.
 - It does not edit the catalogue, the skill, or the reviewer count.
+- It reports no measured spend, and cannot: subscription-allowance consumption
+  is not recorded anywhere this audit can read.
 - It does not claim the catalogue trim would save coverage-neutral tokens. That
-  is a hypothesis, and the reason to run a forward test rather than a reason to
-  skip one.
+  is a hypothesis, and the reason to run a forward test rather than to skip one.
 - It does not estimate per-rule ROI from rule IDs mentioned in finding text.
 - It does not establish why cache creation runs ~5× the content read, only that
   it does and that TTL expiry does not explain it.

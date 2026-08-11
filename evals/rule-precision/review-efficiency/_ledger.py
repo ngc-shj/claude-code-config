@@ -1,11 +1,15 @@
+#!/usr/bin/env python3
 """Build `cost-ledger.tsv` from the session transcripts the eval rounds ran in.
 
 The transcripts are NOT in this repository — they live under
 `~/.claude/projects/<project>/<session>/subagents/` and are not redistributable
 (they contain full agent conversations). What this script writes out is counts
 only: no prompt, no reply, no file content. `audit.py` reads the committed
-ledger; this script is how the ledger is re-derived, and `--verify` re-derives it
-and diffs against the committed copy.
+ledger; this script is how the ledger is re-derived.
+
+  _ledger.py            rebuild cost-ledger.tsv from the transcripts
+  _ledger.py --verify   rebuild in memory and diff every row against the
+                        committed copy, exiting non-zero on any difference
 
 Usage accounting, the part that is easy to get wrong: a `message.usage` block is
 written on interim streaming rows as well as on the final row of the same
@@ -203,10 +207,20 @@ def write(rows, digest):
         f.write('# reported: subagent_tokens as the task notification stated it (0 = not found).\n')
         f.write('# cc_after_gap: cache creation on a request >5min after the previous one.\n')
         f.write('# bytes_*: tool-result bytes by the material the call pulled in (not tokens).\n')
-        w = csv.DictWriter(f, fieldnames=COLS, delimiter='\t', extrasaction='ignore')
+        w = csv.DictWriter(f, fieldnames=COLS, delimiter='\t', extrasaction='ignore',
+                           lineterminator='\n')
         w.writeheader()
         for r in rows:
-            w.writerow({c: r.get(c, 0) for c in COLS})
+            w.writerow(normalise(r))
+
+
+def normalise(row):
+    """A row projected onto COLS, missing values zeroed, everything a string.
+
+    Both sides of `--verify` go through this, so the comparison is of the data
+    and not of formatting or of which keys a dict happened to carry.
+    """
+    return {c: str(row.get(c, 0) if row.get(c, '') != '' else 0) for c in COLS}
 
 
 def load():
@@ -229,13 +243,41 @@ def load():
     return rows, digest
 
 
+def diff_against_committed(rebuilt, digest):
+    """Every committed row against its rebuilt twin. Returns a list of complaints."""
+    old, old_digest = load()
+    bad = []
+    if old_digest != digest:
+        bad.append(f'transcript manifest differs: committed {old_digest}, rebuilt {digest}')
+    a = {r['agent']: normalise(r) for r in old}
+    b = {r['agent']: normalise(r) for r in rebuilt}
+    for agent in sorted(set(a) - set(b)):
+        bad.append(f'{agent}: in the committed ledger, absent from the rebuild')
+    for agent in sorted(set(b) - set(a)):
+        bad.append(f'{agent}: in the rebuild, absent from the committed ledger')
+    for agent in sorted(set(a) & set(b)):
+        fields = [c for c in COLS if a[agent][c] != b[agent][c]]
+        if fields:
+            bad.append(f'{agent}: ' + ', '.join(
+                f'{c} {a[agent][c]} -> {b[agent][c]}' for c in fields[:4])
+                + (f' (+{len(fields) - 4} more fields)' if len(fields) > 4 else ''))
+    return len(a), len(b), bad
+
+
 if __name__ == '__main__':
     rows, digest = build()
     if '--verify' in sys.argv:
-        old, old_digest = load()
-        print(f'committed: {len(old)} agents, manifest {old_digest}')
-        print(f'rebuilt:   {len(rows)} agents, manifest {digest}')
-        print('MATCH' if old_digest == digest and len(old) == len(rows) else 'DIFFERS')
+        n_old, n_new, bad = diff_against_committed(rows, digest)
+        print(f'committed {n_old} rows, rebuilt {n_new}, compared on all {len(COLS)} columns')
+        if not bad:
+            print(f'MATCH: every row identical, manifest {digest}')
+        else:
+            print(f'DIFFERS: {len(bad)} discrepancies')
+            for line in bad[:20]:
+                print(f'  {line}')
+            if len(bad) > 20:
+                print(f'  ... and {len(bad) - 20} more')
+            raise SystemExit(1)
     else:
         write(rows, digest)
         print(f'{len(rows)} agents -> {LEDGER}\nmanifest sha1 {digest}')
