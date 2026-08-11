@@ -29,10 +29,10 @@ the intervention is reformulated, this protocol is void and a new one is written
 
 Measured over the round-22 review agents that issued an anchored `rg`. The
 figures below were taken at pre-registration time with a scratch script;
-**`gate0.py` is authoritative** and prints marginally different values (18.0 /
-18.9 / 21.7 kB / 3.0 / 17.1%) because it filters agents slightly differently.
-The pre-registration table is left as written rather than edited after the
-fact:
+**`gate0.py` is authoritative** and prints different values (18.2 / 19.8 /
+21.8 kB / 2.9 / 16.9%) — the scratch script shared the payload-matching defect
+the third amendment records. The pre-registration table is left as written
+rather than edited after the fact:
 
 | | mean | median | max |
 |---|---|---|---|

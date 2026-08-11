@@ -4,12 +4,17 @@
 tests no pre-registered hypothesis, and changes no skill. It exists to identify
 *what to change to raise token efficiency* — not to change it.
 
-**Follow-up in progress.** The forward-test candidate recommended below —
-trimming catalogue routing — is being evaluated in `../routing-trim/` under a
-pre-registered protocol. Its first gate did not refute it. Nothing in this
-document is superseded. (An earlier revision of this note claimed the
-recommendation was withdrawn on a 7.94% ceiling; that ceiling was miscomputed
-and the withdrawal is itself withdrawn.)
+**One candidate refuted, the recommendation intact.** The forward-test candidate
+this audit recommends below was made concrete in `../routing-trim/` as
+*evidence-gated row routing*, and that specific form is refuted: even removing
+100% of the candidate rows saves at most 17.74–18.58% of raw processed tokens,
+against the 20% bar set for it.
+
+That refutes **the candidate, not the recommendation**. Removing the whole
+catalogue reaches 61.77%, so a larger intervention on the same material is
+untouched. What the episode does confirm is this audit's own warning about
+units: the candidate was sized from a 63% share of content bytes, and content
+bytes are not tokens.
 
 **It does not touch clause 1.** The replication question rounds 21 and 22 were
 built for is still unresolved and nothing here bears on whether it replicates.

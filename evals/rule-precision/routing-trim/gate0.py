@@ -12,7 +12,8 @@ With no rows to fetch there is no anchored `rg`, so the request that ingests its
 result does not happen either - and since 94% of raw tokens are context re-sent
 across requests, that vanished request is the larger term. A first version of
 this script counted only the bytes and reported a ceiling of 7.9%; that was not
-an upper bound, and the protocol amendment of 2026-08-12 records the correction.
+an upper bound, and the protocol amendments of 2026-08-12 record that and two
+later corrections, the last of which restored the refutation.
 
 Everything is read from the session transcripts of round 22, which are not in
 this repository (`~/.claude/projects/<project>/<session>/subagents/`). The
@@ -52,17 +53,37 @@ BPT = (3.5, 3.8, 4.2)
 EXPECTED_MANIFEST = 'c4a20dc7a6985a0fcd2e64b120f6e9ccb3bf3af3'
 
 
-def is_rows(s):
-    return 'common-rules.md' in s and 'rg ' in s and 'rule-details' not in s
+def tool_target(name, tool_input):
+    """The text naming what a call TOUCHES - never the payload it writes.
+
+    Classifying on the serialised input as a whole is what an earlier version
+    did, and it counted a reviewer's own output as a catalogue fetch: a review
+    body quoting `common-rules.md` and an `rg` command matched every substring
+    test. A Write's `content` says nothing about what the agent read.
+    """
+    if name == 'Bash':
+        return tool_input.get('command', '') or ''
+    return ' '.join(str(tool_input.get(k, '')) for k in
+                    ('file_path', 'path', 'pattern', 'glob', 'notebook_path'))
 
 
-def is_catalogue(s):
-    return ('common-rules.digest.md' in s or 'rule-details/' in s
-            or 'common-rules.md' in s or 'SKILL.md' in s or '/cat-' in s)
+def is_rows(t):
+    """An anchored extraction of table rows from the rules file.
+
+    Identified positively, by the anchored row pattern, rather than by excluding
+    commands that mention `rule-details`: five agents fetch rows and list the
+    detail directory in one command, and excluding those would drop real fetches.
+    """
+    return 'common-rules.md' in t and bool(re.search(r'\brg\b', t)) and '^\\|' in t
 
 
-def is_diff(s):
-    return bool(re.search(r'\.diff\b', s))
+def is_catalogue(t):
+    return ('common-rules.digest.md' in t or 'rule-details/' in t
+            or 'common-rules.md' in t or 'SKILL.md' in t or '/cat-' in t)
+
+
+def is_diff(t):
+    return bool(re.search(r'\.diff\b', t))
 
 
 SCOPES = (
@@ -116,15 +137,15 @@ def read(path):
             if not isinstance(c, dict):
                 continue
             if c.get('type') == 'tool_use':
-                s = json.dumps(c.get('input', {}))
-                names = [n for n, pred in SCOPES if pred(s)]
+                t = tool_target(c.get('name', ''), c.get('input', {}))
+                names = [n for n, pred in SCOPES if pred(t)]
                 if names:
                     calls[c['id']] = names
-                if is_rows(s):
+                if is_rows(t):
                     facts['rg_calls'] += 1
-                    facts['candidates'].update(RULE_ID.findall(c['input'].get('command', '')))
-                if 'rule-details/' in s:
-                    facts['details'].update(re.findall(r'rule-details/((?:R|RS|RT)\d+)\.md', s))
+                    facts['candidates'].update(RULE_ID.findall(t))
+                if 'rule-details/' in t:
+                    facts['details'].update(re.findall(r'rule-details/((?:R|RS|RT)\d+)\.md', t))
             elif c.get('type') == 'tool_result' and c.get('tool_use_id') in calls:
                 text = result_text(c)
                 for n in calls[c['tool_use_id']]:
@@ -223,6 +244,8 @@ def main():
             print(f'  {name if bpt == BPT[0] else "":22s}{bpt:7.1f}{100 * F / R:7.2f}%'
                   f'{100 * C / R:8.2f}%{100 * T / R:7.2f}%{100 * ceiling / R:9.2f}%{100 * CA / A:8.2f}%')
             verdicts.setdefault(name, []).append(100 * ceiling / R)
+            if name == 'candidate rows only':
+                verdicts.setdefault('content only', []).append(100 * C / R)
         print()
 
     print('Where the raw tokens actually are')
@@ -244,27 +267,24 @@ def main():
     print(f'  row content per agent: {rb:.1f} kB, about {rb / 3.8:.1f}k tokens, against '
           f'{st.mean([raw_of(u) for u, _h, _f in data]) / 1000:.0f}k raw')
 
-    best = max(verdicts['candidate rows only'])
-    cat = max(verdicts['the whole catalogue'])
-    best = max(verdicts['candidate rows only'])
+    worst = max(verdicts['candidate rows only'])
     print(f"""
-VERDICT: Gate 0 does NOT refute the candidate.
+VERDICT: Gate 0 REFUTES the candidate.
 
-The perfect form removes up to {best:.2f}% of raw processed tokens, above the 20% bar,
-so the bar is not structurally unreachable and the gate cannot end the work.
+The perfect form removes at most {worst:.2f}% of raw processed tokens, against a 20%
+bar, at every calibration tested. An evidence gate can only do worse than
+removing everything, so no replay, telemetry or forward test can rescue it. The
+pre-registered rule ends the work here.
 
-Read the columns before reading that as encouragement. Almost all of the ceiling
-is the vanished round trip, and a gate that retains anything only reaches it by
-also CONSOLIDATING what it retains into fewer calls: 40 of 150 agents fetch rows
-in more than one request, so a non-empty retained set can still drop requests,
-but only down to one. The intervention as fixed says which rows to open, not how
-many calls to make - so whether the trip term is available at all is a property
-of the implementation, not of the gate.
+The trip column carries most of what is there, and it is available only to a
+gate that also consolidates what it retains into one call - which the
+intervention as fixed does not specify. Without consolidation only the content
+column applies: {min(verdicts["content only"]):.2f}-{max(verdicts["content only"]):.2f}%.
 
-Gate 1 therefore reports both variants: with consolidation, and without it,
-where the trip saving is not identifiable and only the content column applies.
-This gate's job is done - it failed to refute, which is the only other thing it
-was allowed to do.""")
+Scope: this refutes THIS candidate - evidence-gated row routing - and not the
+review-efficiency audit that proposed looking at the catalogue. Removing the
+entire catalogue reaches {max(verdicts["the whole catalogue"]):.1f}%, so a different, larger intervention on
+the same material is not refuted by this number.""")
 
 
 if __name__ == '__main__':

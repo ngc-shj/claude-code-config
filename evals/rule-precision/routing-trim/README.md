@@ -1,9 +1,13 @@
-# Evidence-gated row routing — Gate 0 does not refute it
+# Evidence-gated row routing — refuted at Gate 0
 
-**The candidate survives. Nothing is adopted, nothing is implemented, and no
-agents were spent.** `protocol.md` fixes the gates; `gate0.py` reproduces every
-number here and stops if the transcript set it reads is not the one these
-numbers came from.
+**The candidate is rejected. Gate 1 is not run, nothing is implemented, and no
+agents were spent.** `protocol.md` fixes the gates and carries three amendments;
+`gate0.py` reproduces every number here and stops if the transcript set it reads
+is not the one these numbers came from.
+
+**Scope: this refutes one candidate, not the audit that proposed it.** Removing
+the entire catalogue reaches 61.77%, so a different and larger intervention on
+the same material is untouched by this result.
 
 ## What is being evaluated
 
@@ -32,57 +36,48 @@ across requests, that vanished request is the larger term by far.
 
 | removed entirely | B/tok | floor | content | trip | **CEILING** | api-eq |
 |---|---|---|---|---|---|---|
-| **candidate rows only** | 3.5 | 1.44% | 6.33% | 18.56% | **23.45%** | 17.17% |
-| | 3.8 | 1.33% | 5.83% | 18.56% | **23.06%** | 17.11% |
-| | 4.2 | 1.20% | 5.27% | 18.56% | **22.63%** | 17.05% |
-| the whole catalogue | 3.5 | 3.56% | 15.38% | 67.09% | 78.92% | 87.33% |
-| catalogue + the diff | 3.5 | 5.34% | 25.35% | 67.29% | 87.29% | 88.76% |
+| **candidate rows only** | 3.5 | 1.48% | 6.51% | 13.55% | **18.58%** | 9.66% |
+| | 3.8 | 1.36% | 5.99% | 13.55% | **18.18%** | 9.61% |
+| | 4.2 | 1.23% | 5.42% | 13.55% | **17.74%** | 9.54% |
+| the whole catalogue | 3.5 | 3.55% | 15.36% | 49.96% | 61.77% | 65.54% |
+| catalogue + the diff | 3.5 | 5.33% | 25.32% | 50.02% | 70.01% | 66.76% |
 
-**22.63–23.45% clears the 20% bar, so Gate 0 cannot end the work.** Nothing here
+**17.74–18.58% misses the 20% bar at every calibration, so Gate 0 refutes the
+candidate.** An evidence gate can only do worse than removing everything, so no
+replay, telemetry or forward test can rescue it. Nothing here
 is exact: bytes are measured, tokens are modelled from them, so every figure is
 a model-based bracket reported at three calibrations. The denominator is the
 whole round — all 150 agents, including the three that fetched no rows — so the
 figures are a share of the round, not of the subset the intervention touches.
 
-## Read the columns before reading that as encouragement
+## Read the columns
 
-Almost the whole ceiling is the vanished round trip, and **a gate that retains
-anything reaches that term only by also consolidating what it retains into fewer
-calls.** Row fetches per agent are 0 ×3, 1 ×107, 2 ×35, 3 ×4, 4 ×1 — 40 agents
-fetch rows more than once, so a non-empty retained set can still drop requests,
-but only down to one.
+Most of what is there is the vanished round trip, and **a gate that retains
+anything reaches that term only by also consolidating** what it retains into one
+call. Row fetches per agent are 1 ×145, 2 ×4, 3 ×1 — five agents fetch more than
+once, so consolidation buys almost nothing even where it applies.
 
 The intervention as fixed says which rows to open, **not how many calls to
-make**. Whether the trip term is available at all is therefore a property of the
-implementation, not of the gate. Gate 1 reports both variants:
-
-- **with consolidation** — retained set empty: every row-result request goes;
-  non-empty: `max(existing row-result requests − 1, 0)` go; plus content;
-- **without consolidation** — the call count is whatever the reviewer happens to
-  make, the trip saving is **not identifiable**, and only the content column
-  (5.27–6.33%) applies.
-
-The share of empty retained sets is one input to that, not the decisive
-quantity — an earlier version of this document said it was, on the assumption of
-one row fetch per agent, and that was wrong.
+make**. Without consolidation only the content column applies: **5.42–6.51%**.
+Either reading is below the bar.
 
 ## What the current routing does (measured, for the record)
 
-147 of 150 round-22 review agents issued **at least one** anchored `rg` (0 ×3,
-1 ×107, 2 ×35, 3 ×4, 4 ×1), 145 of them with rule IDs parseable from the
-pattern. The candidate set is chosen from the digest
+All 150 round-22 review agents issued **at least one** anchored `rg` (1 ×145,
+2 ×4, 3 ×1), every one with rule IDs parseable from the pattern. The candidate
+set is chosen from the digest
 **before any row is read**, so the intervention's decision point is well defined
 and every candidate is observable.
 
 | | mean | median | max |
 |---|---|---|---|
-| candidate rule IDs in the `rg` pattern | 18.0 | 17.0 | 33 |
-| matched row lines returned | 18.9 | 18.0 | 52 |
-| row bytes | 21.7 kB | 21.4 kB | 39 kB |
-| rule-detail pages opened | 3.0 | 4.0 | 7 |
-| detail pages as a share of candidates | 17.1% | 19.0% | 50% |
+| candidate rule IDs in the `rg` pattern | 18.2 | 17.0 | 33 |
+| matched row lines returned | 19.8 | 18.0 | 61 |
+| row bytes | 21.8 kB | 21.1 kB | 30 kB |
+| rule-detail pages opened | 2.9 | 4.0 | 7 |
+| detail pages as a share of candidates | 16.9% | 19.0% | 50% |
 
-Only 17.1% of candidates are ever promoted to a detail page, so the speculative
+Only 16.9% of candidates are ever promoted to a detail page, so the speculative
 expansion the intervention targets is real.
 
 ## Where the raw tokens are
@@ -95,7 +90,7 @@ expansion the intervention targets is real.
 | uncached input | 0.2% |
 
 **93.6% is transport, not content** — the same material re-sent across a mean of
-7.6 requests per agent. Row content is 21.7 kB, about 5.7k tokens, against 422k
+7.6 requests per agent. Row content is 21.8 kB, about 5.7k tokens, against 422k
 raw per agent. This is why the round trip dominates the bytes, and why a
 content-only model of the saving was wrong.
 
@@ -113,16 +108,26 @@ Three corrections, all raised in review, none found by the author.
    denominator excluded agents the scope did not touch; `later` counted one
    request too many; and the api-eq column added the removed content's first
    cache-write on top of the eliminated request that already contained it.
-3. **The Gate 1 formula assumed one row fetch per agent.** 40 of 150 make more
-   than one, so the empty/non-empty dichotomy it rested on does not hold.
-   Corrected before Gate 1 was run.
+3. **The Gate 1 formula assumed one row fetch per agent**, and the empty/non-empty
+   dichotomy it rested on does not hold.
+4. **The classifier counted the reviewer's own output as a catalogue fetch.** It
+   tested substrings of the whole serialised tool input, so a finding quoting
+   `common-rules.md` and an `rg` command matched. That invented 37 row fetches
+   and the requests to go with them: the true counts are 1 ×145, 2 ×4, 3 ×1, not
+   0 ×3 / 1 ×107 / 2 ×35 / 3 ×4 / 4 ×1. **This is the correction that restored the
+   refutation**, moving the ceiling from 22.63–23.45% to 17.74–18.58%.
+   `tests/gate0-classify.bats` pins it, and fails if the whole-input form
+   returns.
 
 `protocol.md` carries both amendments in place, each with the direction it moves
 the conclusion.
 
 ## What this does not license
 
-- It is not evidence the intervention works. Gate 0 can only refute or fail to
-  refute, and it failed to refute.
+- It does not refute the review-efficiency audit, or the idea of reducing what a
+  reviewer reads. It refutes **this** candidate: evidence-gated row routing,
+  against a 20% raw-token bar.
 - It does not adopt, implement, or schedule anything.
-- It does not name a successor candidate; none is needed while this one is live.
+- It does not name a successor candidate. Naming a lever from a share statistic
+  is the error that produced this candidate; any successor must clear a
+  Gate-0-style ceiling before anything else is spent on it.
