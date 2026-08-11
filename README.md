@@ -27,16 +27,10 @@ claude-code-config/
 │   ├── openai-backend.sh      # OpenAI-compatible provider (llama.cpp/vLLM): /v1 discovery + request
 │   ├── notify.sh                 # Desktop notifications (macOS + Linux)
 │   ├── stop-notify.sh            # Task completion notifications
-│   ├── statusline-usage.sh       # Render + record rate-limit snapshots from Claude Code
-│   ├── claude-usage-poll.sh      # Poll the internal usage endpoint without a model prompt
 │   ├── session-retrospect-check.sh # SessionStart: prompt when retrospective mining is due
 │   ├── retro-state.sh            # Retrospect state CLI (cursors, due, snooze, config gate)
 │   ├── retro-prescreen.sh        # Zero-token candidate discovery per knowledge source
 │   └── check-rule-sync.sh        # Rule-ID + phase-manifest/terminator linter for triangulate files
-├── scripts/
-│   └── install-usage-poller.sh   # Install systemd (Linux) or launchd (macOS) scheduler
-├── systemd/                       # Linux user service + five-minute timer
-├── launchd/                       # macOS five-minute LaunchAgent template
 ├── skills/
 │   ├── triangulate/
 │   │   └── SKILL.md              # Triangulate: 3-phase × 3-expert review workflow
@@ -575,64 +569,14 @@ The installer overwrites `~/.claude/CLAUDE.md` (from `global/`), hooks, skills, 
 
 For local customizations that should survive installs, use `~/.claude/settings.local.json` instead of editing `~/.claude/settings.json` directly.
 
-### Continuous usage sampling (Linux and macOS, optional)
+### Status line and usage history (optional)
 
-The status line only receives a fresh `rate_limits` value after Claude Code gets
-an API response. For independent sampling, the optional native scheduler calls
-the same internal OAuth usage endpoint once every five minutes, without sending
-a model prompt. The installer selects a systemd user timer on Linux and a
-launchd LaunchAgent on macOS:
-
-```bash
-bash install.sh
-bash scripts/install-usage-poller.sh
-tail -f ~/.claude/usage-log.jsonl
-```
-
-The endpoint is not a documented public API, so `claude-usage-poll.sh` validates
-the observed response strictly and writes nothing if its schema changes. It
-reads the existing Claude Code OAuth access token from
-`~/.claude/.credentials.json`; the token is sent to `curl` over stdin and is not
-placed in process arguments, environment variables, logs, or temporary files.
-HTTP 429 responses honor `Retry-After`, with a five-minute minimum backoff.
-HTTP 401/403 and schema failures appear in the scheduler diagnostics.
-
-Linux:
-
-```bash
-systemctl --user status claude-usage-poll.timer
-journalctl --user -u claude-usage-poll.service
-```
-
-macOS:
-
-```bash
-launchctl print "gui/$(id -u)/com.ngc-shj.claude-usage-poll"
-tail -f ~/.claude/state/usage-poll-launchd.log
-```
-
-Polling occurs every five minutes, but a JSONL line is appended only when a usage
-percentage or reset boundary changes. No samples can be taken while the machine
-is suspended or offline.
-
-Every percentage observed so far has been a whole number — the occasional
-`14.000000000000002` is `0.14 * 100` in binary floating point, not sub-percent
-precision. Treat the resolution of a subtraction as 1% of the window. Nothing
-here rounds, so a genuinely fractional reading would be logged verbatim and
-would settle the question.
-
-Disable on Linux:
-
-```bash
-systemctl --user disable --now claude-usage-poll.timer
-```
-
-Disable on macOS:
-
-```bash
-launchctl disable "gui/$(id -u)/com.ngc-shj.claude-usage-poll"
-launchctl bootout "gui/$(id -u)/com.ngc-shj.claude-usage-poll"
-```
+The status line is `bash ~/.claude/usage/statusline-usage.sh`, from
+[claude-usage](https://github.com/ngc-shj/claude-usage) — a separate repo that
+renders the plan's rate-limit percentages and keeps a timestamped history of
+them in `~/.claude/usage-log.jsonl`, sampled by its own systemd/launchd poller.
+Install it there; nothing else in this repo depends on it, and the status line
+simply renders nothing if it is absent.
 
 ### Install local models (optional)
 
