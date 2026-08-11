@@ -38,7 +38,8 @@ SAFETY = 0.80               # never plan to use the last fifth of the window
 
 def samples():
     if not LOG.exists():
-        sys.exit(f'no usage log at {LOG} — run scripts/install-usage-poller.sh')
+        sys.exit(f'no usage log at {LOG} — install the poller from the '
+                 'claude-usage repo')
     rows = [json.loads(l) for l in LOG.read_text().splitlines() if l.strip()]
     have = [r for r in rows if r.get('five_hour')]
     if not have:
@@ -78,7 +79,7 @@ def main():
     # underneath it — then `used` describes a window that no longer exists. In
     # that one case take a reading rather than warn about the old one.
     if reset <= now:
-        poll = pathlib.Path.home() / '.claude/hooks/claude-usage-poll.sh'
+        poll = pathlib.Path.home() / '.claude/usage/claude-usage-poll.sh'
         if poll.exists():
             print(f'window rolled over at {reset:%H:%M}; taking a fresh reading')
             os.system(f'bash {poll} >/dev/null 2>&1')
