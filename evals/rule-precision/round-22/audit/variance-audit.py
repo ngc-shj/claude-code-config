@@ -218,11 +218,15 @@ def main():
                            lambda f, cid, r=r: cm(f) and d['verdict'][cid] == ('not-a-defect', r))
                 comp[r] = per_review(c, a, d['reviews'])
             tot = per_review(d['prim'], a, d['reviews'])
-            print(f'  {a:4s} var(primary) {st.variance(tot):6.3f}')
+            live = [r for r in REASONS if any(comp[r])]
+            sv = sum(st.variance(comp[r]) for r in live)
+            sc = sum(st.covariance(comp[x], comp[y])
+                     for x, y in itertools.combinations(live, 2))
+            print(f'  {a:4s} var(primary) {st.variance(tot):6.3f} = '
+                  f'sum var(reasons) {sv:6.3f} + 2*sum cov(reasons) {2 * sc:+7.3f}')
             for r in REASONS:
                 if any(comp[r]):
                     print(f'       {r:14s} mean {st.mean(comp[r]):5.2f}  var {st.variance(comp[r]):6.3f}')
-            live = [r for r in REASONS if any(comp[r])]
             for x, y in itertools.combinations(live, 2):
                 print(f'       cov({x},{y}) {st.covariance(comp[x], comp[y]):+.3f}')
         print()
@@ -249,14 +253,20 @@ def main():
     print('=' * 78)
     print('5. PINNED VS NEW CLAIMS (round 22 only; round 21 had no inventory)')
     print('=' * 78)
+    print('This is a partition too, so its covariance term is printed with it.\n')
     d = data['round 22']
     for a in ARMS:
+        parts = {}
         for label, want in (('claims carried over', 'existing'), ('claims new here', 'new')):
             c = counts(d['rows'], d['f2c'], d['verdict'],
                        lambda f, cid, w=want: cm(f) and d['verdict'][cid][0] == 'not-a-defect'
                        and d['status'][cid] == w)
-            xs = per_review(c, a, d['reviews'])
-            print(f'  {a:4s} {label:22s} {fmt(xs)}')
+            parts[label] = per_review(c, a, d['reviews'])
+            print(f'  {a:4s} {label:22s} {fmt(parts[label])}')
+        cov = st.covariance(parts['claims carried over'], parts['claims new here'])
+        tot = per_review(d['prim'], a, d['reviews'])
+        print(f'       var(primary) {st.variance(tot):6.3f} = carried {st.variance(parts["claims carried over"]):.3f}'
+              f' + new {st.variance(parts["claims new here"]):.3f} + 2*cov {2 * cov:+.3f}')
     print()
 
     print('=' * 78)

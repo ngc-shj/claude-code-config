@@ -74,11 +74,15 @@ A review is the sum of its three parts, so
 
 **W's increase is almost entirely the covariance term**: individual reviewers'
 variance rose 2.278 → 2.570 (+0.29) while the between-reviewer covariance swung
-−0.167 → +1.020 (+1.19), about 80% of W's +1.48 total. **W₂₃'s smaller increase is
-the opposite** — all in individual part variance, with its covariance flat.
+−0.167 → +1.020 (+1.19), about 80% of W's +1.48 total.
 
-In W's round 22, the three reviewers of a given index moved together. In round 21
-they did not, and in W₂₃ they did not in either round.
+**W₂₃ moves the other way on both terms.** Its component variances rose +0.780
+(1.750 → 2.530) while its covariance term fell −0.197 (+0.194 → −0.003), netting
++0.583. Its covariance is not flat; it moved against its component variances and
+absorbed a quarter of what they added.
+
+So in W's round 22 the three reviewers of a given index moved together, and in
+W₂₃'s they moved slightly *less* together than in round 21.
 
 ### How much of that is the execution window?
 
@@ -101,22 +105,35 @@ not explain.
 
 ### By reason component
 
-| W | var(primary) | preference | scope | outside-diff |
-|---|---|---|---|---|
-| round 21 | 2.111 | 1.944 | 0.250 | 1.000 |
-| round 22 | 3.590 | **2.907** | 0.490 | **0.340** |
+The primary is the sum of its reason components, so this decomposition has a
+covariance term too — and here it is the larger mover.
 
-`preference` carries most of W's marginal growth (+0.96 of +1.48). Its
-`outside-diff` variance *fell*. W₂₃: preference 2.000 → 1.860, scope 0.361 → 0.707,
-outside-diff 0.750 → 0.873.
+| W | var(primary) | preference | scope | outside-diff | Σ var | 2 Σ cov |
+|---|---|---|---|---|---|---|
+| round 21 | 2.111 | 1.944 | 0.250 | 1.000 | 3.194 | **−1.083** |
+| round 22 | 3.590 | **2.907** | 0.490 | **0.340** | 3.737 | **−0.147** |
+
+`preference`'s own variance rose +0.963 and `outside-diff`'s *fell* −0.660, so the
+summed component variances moved only +0.543 of W's +1.479. **The reason-level
+covariance term moved +0.937 — more than the components did.** The increase
+therefore **cannot be attributed to `preference` additively**: what changed is as
+much how the reason components co-move as how any one of them varies. In round 21
+they offset each other strongly (−1.083); in round 22 they barely did (−0.147).
+
+W₂₃ for comparison: preference 2.000 → 1.860, scope 0.361 → 0.707, outside-diff
+0.750 → 0.873, Σ var 3.111 → 3.440, 2 Σ cov −1.167 → −0.913.
 
 ### Review length, new claims, single reviews
 
 - **Length is not it.** Findings per review: sd 3.1–3.7 in every arm and round.
   What grew in W is the *rate* — primary per finding, sd 0.0208 → 0.0295.
   `corr(findings, primary)` fell in both arms (W 0.71 → 0.58, W₂₃ 0.59 → 0.45).
-- **New claims are not it.** Their per-review variance is 0.19 (W) and 0.22 (W₂₃)
-  against totals of 3.59 and 2.53. The carried-over claims carry the spread.
+- **New claims are not it**, and this is a partition too, so its covariance term
+  is stated with it: W = carried 3.310 + new 0.193 + 2 cov **+0.087** = 3.590;
+  W₂₃ = carried 2.623 + new 0.223 + 2 cov **−0.320** = 2.527. The new claims'
+  own variance is small and their covariance with the carried-over count is
+  small in W and mildly negative in W₂₃, so on both terms the spread sits with
+  the carried-over claims.
 - **Single reviews move these numbers a lot.** Dropping W's index 23 (value 9)
   takes its sd 1.895 → 1.675; dropping W₂₃'s index 21 (value 1) takes 1.590 → 1.367.
   At n=25 the sd is still a soft quantity, which is the same lesson as the
