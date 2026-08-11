@@ -1,0 +1,27 @@
+# input manifest, pinned at 096de2910c74508eb11683e7bba60268c5e1a196
+# every path this audit reads, with its blob hash at that commit.
+09f978b9e5e713ff6bfb0c82f2a2ef2cbc2bcda5  round-20/findings.tsv
+bebfbeb5bd894aa84e102cf0038b003d1a3d7118  round-20/clusters.tsv
+bf8d9ec11417b1e8a2be9d759ad4c361f3dd279e  round-20/adjudications/adjudicator1.tsv
+1ff94ca6a37f4dcc6b0d6a7f3f98e6c597bafff8  round-20/adjudications/adjudicator2.tsv
+1ff94ca6a37f4dcc6b0d6a7f3f98e6c597bafff8  round-20/adjudications/adjudicator3.tsv
+cefac6eb91b247de7632ac5f658a7388364e1bc1  round-21/findings.tsv
+6166c25dbcc1a21bd4ab5248c24533e54fef691b  round-21/clusters.tsv
+78dd1877c07286f0c1f569cac6c067efbd986513  round-21/adjudications/panel-1.tsv
+6e276875bc66d61971e25c95d9645cf64f33f83e  round-21/adjudications/panel-2.tsv
+0d62f2ef089429fe57019cd9cf33124a3f7bcff4  round-21/adjudications/panel-3.tsv
+8c9eb4ee8f509feeb49e716728549d3a23d59e96  round-22/findings.tsv
+eb4d0a44bf876bc17b5ff7fe54f6d8239dd3d3f6  round-22/clusters.tsv
+1e39c259e7482e55005e6f223c84b18f2089dce9  round-22/adjudications/panel-1.tsv
+3b4e1688e76d3c17c9f31dd25c1c3ae3110d813b  round-22/adjudications/panel-2.tsv
+2e849dfbde68f2b0f8d916c79e1093707db5762c  round-22/adjudications/panel-3.tsv
+b22adfb2860af871eadb6a5232d5de7da436946f  round-17/adjudications/adjudicator1.tsv
+e16783e5c8e12ddabafac108b7c905482aa3b8d4  round-17/adjudications/adjudicator2.tsv
+0f3489b16543f6507c7c0e4dcaa3d8b925fa39ef  round-17/adjudications/adjudicator3.tsv
+7a2232763c6cfb899168eea67ab15dc092339da6  round-18/adjudications/adjudicator1.tsv
+7b2d20a65b212a91d1b93a8733d886d37f2db83d  round-18/adjudications/adjudicator2.tsv
+7a2232763c6cfb899168eea67ab15dc092339da6  round-18/adjudications/adjudicator3.tsv
+b471363888891f08ce26c20db107d0dce4b752e6  round-19/adjudications/adjudicator1.tsv
+11215a87e590aa527a351b091749bd33447fe1e7  round-19/adjudications/adjudicator2.tsv
+7b31215c67ec2aafea7fff9592c808b081a6d05b  round-19/adjudications/adjudicator3.tsv
+64310da334af3272b572ab6a125f53dd4921487c  round-16/seed/inventory.tsv

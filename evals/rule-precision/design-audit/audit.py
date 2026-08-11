@@ -19,7 +19,8 @@ import itertools
 import math
 import statistics as st
 
-from _data import ROUNDS, series, load, welch, tcrit, PRIM, REAL, CM
+from _data import (ROUNDS, series, load, welch, tcrit, verify_inputs,
+                   PRIM, REAL, CM)
 
 BUDGETS = (100, 150, 200, 300, 450)
 
@@ -29,6 +30,9 @@ def head(t):
 
 
 def main():
+    n = verify_inputs()
+    print(f'inputs verified: {n} files match inputs.sha1 (pinned at the base commit)')
+
     head('1. THE TWO METRICS SIDE BY SIDE')
     print('Units matter. The false-positive metric counts Critical/Major findings')
     print('whose claim was adjudicated not-a-defect, per review. The coverage metric')
@@ -44,7 +48,11 @@ def main():
             print(f'  {name:10s}{st.mean(w):7.2f}{st.mean(x):7.2f}{d:8.2f}{se:7.3f}'
                   f'   [{lo:6.2f},{hi:6.2f}]')
         print()
-    print('  Only round 20\'s false-positive difference was a confirmatory result.')
+    print('  Only round 20\'s false-positive difference was a confirmatory result,')
+    print('  and its CONFIRMATORY interval is the pre-registered PAIRED one,')
+    print('  [-2.27, -0.39]. The [-2.29, -0.38] above is a Welch RE-ESTIMATE made')
+    print('  here so all three rounds sit on one scale. Round 20\'s conclusion is')
+    print('  unchanged; only the presentation scale is.')
     print('  Every coverage figure is a control that fired no rule in its round.')
 
     head('2. NET BENEFIT — the quantity a decision actually needs')
@@ -106,6 +114,9 @@ def main():
         print(f'    effect by k: ' + '  '.join(f'{stats[k][0]:+.2f}' for k in (1, 2, 3)))
         print(f'    sd at k=3 {stats[3][1]:.3f} vs {ind:.3f} under independence '
               f'({stats[3][1] / ind:.2f}x)\n')
+    print('  effect/MDE here uses F11\'s OBSERVED effect, so it is a retrospective')
+    print('  efficiency heuristic for comparing configurations at equal cost. It is')
+    print('  not a decision rule and nothing is judged by it.\n')
     print('  The two metrics disagree about k. The finding count is a sum, so its')
     print('  effect grows linearly with k while its sd grows faster than sqrt(k).')
     print('  Coverage is a union, so one reviewer reaches most of what three do and')
@@ -129,6 +140,16 @@ def main():
     print('  round 22\'s observed -1.20, no margin below 1.20 is reachable at any n.')
     print('  Every figure is conditional on that assumption, on equal variances, and')
     print('  on plugging in one round\'s observed sd as if it were known.')
+    print('\n  What those n cost, at 3 reviewers per index, 2 arms, and this')
+    print('  project\'s observed ~83k tokens per review agent:\n')
+    print(f'    {"margin (theta=0)":>17s}{"n/arm":>7s}{"agents":>8s}{"review tokens":>15s}')
+    for m, n in ((0.5, 193), (1.0, 49), (1.5, 22)):
+        ag = 2 * 3 * n
+        print(f'    {m:17.1f}{n:7d}{ag:8d}{ag * 0.083:14.0f}M')
+    print('\n  Round 22 alone cost 12.5M in reviews. THIS PROJECT DOES NOT ADOPT THAT')
+    print('  SPEND at the margins that would persuade a reader. That is an')
+    print('  operational judgement about this budget, not a claim that the design')
+    print('  is invalid or that the effect is absent.')
 
     head('5. WHERE EACH SIDE COMES FROM (round 22, F11 only)')
     rd, verdict, _ = ROUNDS['round 22']
@@ -182,7 +203,32 @@ def main():
           f'{sum(reach[c]["W"] - reach[c]["W23"] for c in pos):+d}).')
     print(f'  The three largest negatives sum '
           f'{sum(reach[c]["W"] - reach[c]["W23"] for c in rs[:3]):+d} of {net:+d}.')
-    print('  The coverage side is DIFFUSE where the false-positive side is')
+    import csv as _csv
+    status = {r['cluster_id']: r['status'] for r in
+              _csv.DictReader(open(os.path.join(rd, 'clusters.tsv'), newline=''),
+                              delimiter='\t')}
+    dec = collections.Counter()
+    for c in reach:
+        for arm in ('W', 'W23'):
+            dec[(arm, status[c])] += reach[c][arm]
+    print('\n  Does the coverage gap depend on claims adjudicated AFTER the arms ran?')
+    for stat, label in (('existing', 'claims carried in from round 21'),
+                        ('new', 'claims new to round 22')):
+        w, x = dec[('W', stat)], dec[('W23', stat)]
+        print(f'    {label:34s} W {w:4d}  W23 {x:4d}  diff {w - x:+4d}'
+              f'  ({(w - x) / 25:+.2f}/review)')
+    print('    The whole gap sits on claims whose verdicts were fixed before this')
+    print('    round\'s arms ran. It does not rest on this round\'s adjudication.')
+    print('\n  Full table, every real claim the two arms reached a different number')
+    print('  of times. Canonical claim text in full, not truncated.\n')
+    for c in rs:
+        d = reach[c]['W'] - reach[c]['W23']
+        if d:
+            print(f'    {c}  W {reach[c]["W"]:2d}  W23 {reach[c]["W23"]:2d}  {d:+3d}'
+                  f'  [{status[c]}]')
+            for ln in __import__('textwrap').wrap(claim[c], 70):
+                print(f'        {ln}')
+    print('\n  The coverage side is DIFFUSE where the false-positive side is')
     print('  concentrated. A narrow wording change cannot be assumed to keep the')
     print('  benefit while dropping the loss: the loss is not localised the same way.')
 

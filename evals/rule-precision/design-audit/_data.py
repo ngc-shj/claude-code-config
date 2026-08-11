@@ -1,6 +1,48 @@
-"""Shared loaders for the design audit. Reads rounds 20-22 as committed."""
+"""Shared loaders for the design audit.
+
+Inputs are PINNED. `inputs.sha1` lists every file this audit reads with its blob
+hash at the base commit; `verify_inputs()` checks that the path set and the
+hashes both still match before any number is produced. Globbing the adjudication
+directories would otherwise let a later round's sheet change these results
+silently.
+"""
 import csv, collections, glob, itertools, math, os, statistics as st
 EVALS=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def _blob_sha1(path):
+    data = open(path, 'rb').read()
+    import hashlib
+    return hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest()
+
+
+def verify_inputs():
+    """Every pinned path exists with its pinned hash, and no extra sheet crept in."""
+    man = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inputs.sha1')
+    want = {}
+    for line in open(man):
+        if line.startswith('#') or not line.strip():
+            continue
+        h, rel = line.split()
+        want[rel] = h
+    bad = []
+    for rel, h in sorted(want.items()):
+        full = os.path.join(EVALS, rel)
+        if not os.path.exists(full):
+            bad.append(f'MISSING  {rel}')
+        elif _blob_sha1(full) != h:
+            bad.append(f'CHANGED  {rel}')
+    seen = {rel for rel in want if '/adjudications/' in rel}
+    for d in {os.path.dirname(r) for r in seen}:
+        on_disk = {f'{d}/{n}' for n in os.listdir(os.path.join(EVALS, d))
+                   if n.endswith('.tsv')}
+        for extra in sorted(on_disk - seen):
+            bad.append(f'UNPINNED {extra}  (a sheet this audit was not written against)')
+    if bad:
+        raise SystemExit('input verification failed:\n  ' + '\n  '.join(bad)
+                         + '\n\nThe audit reads a fixed set of files. Re-pin '
+                           'inputs.sha1 and re-run every number if this is intended.')
+    return len(want)
+
+
 def verdicts(dirs, seed=None):
     out=dict(seed or {})
     for d in dirs:

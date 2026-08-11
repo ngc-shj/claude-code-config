@@ -9,7 +9,11 @@ matter includes zero, and no round was designed to detect the coverage quantity
 this audit puts at the centre.
 
 Run with `design-audit/audit.py`. No new agents were run for it: everything comes
-from rounds 20, 21 and 22 as committed.
+from rounds 16–22 as committed. **Inputs are pinned**: `inputs.sha1` lists all 25
+files the audit reads with their blob hashes at base
+`096de2910c74508eb11683e7bba60268c5e1a196`, and the script verifies both the path
+set and the hashes before producing a number — an adjudication sheet added later
+makes it stop rather than silently change these results.
 
 ## What the data actually is
 
@@ -37,9 +41,14 @@ The units are different and the difference is not cosmetic. The first counts
 counts **distinct real claims** reached by the three reviewers of a review
 *together* — a claim count over a union.
 
-Only round 20's false-positive difference was confirmatory. **Every coverage
-figure above is a control that fired no rule in its round**, including round 22's,
-whose interval lies below zero.
+Only round 20's false-positive difference was confirmatory — and **its
+confirmatory interval is the pre-registered *paired* one, [−2.27, −0.39]**. The
+[−2.29, −0.38] shown above is a **Welch re-estimate made here** so all three
+rounds sit on one scale. Round 20's conclusion is unchanged; only the
+presentation scale is.
+
+**Every coverage figure above is a control that fired no rule in its round**,
+including round 22's, whose interval lies below zero.
 
 ## 2. Net benefit, and the judgement it depends on
 
@@ -71,6 +80,10 @@ quantity no round was sized to measure**, not that the sign is known.
 Effect ÷ MDE at a fixed agent budget, averaged over all C(3,k) subsets of round 22
 so every k uses the same agents. A value of 1 would mean the observed effect
 exactly clears the MDE.
+
+`effect/MDE` uses F11's **observed** effect, so it is a **retrospective
+efficiency heuristic** for comparing configurations at equal cost — not a
+decision rule, and nothing here is judged by it.
 
 | agents | C+M not-a-defect | | | real claims reached | | |
 |---|---|---|---|---|---|---|
@@ -106,6 +119,19 @@ conditional statement about an assumed θ, not a property of the world. Every
 figure here inherits the plug-in and equal-variance assumptions, which is the
 same weakness round 22 paid for.
 
+What those n cost, at 3 reviewers per index, 2 arms, and this project's observed
+≈83k tokens per review agent:
+
+| margin (θ=0) | n/arm | agents | review tokens |
+|---|---|---|---|
+| 0.5 | 193 | 1158 | **≈96M** |
+| 1.0 | 49 | 294 | ≈24M |
+| 1.5 | 22 | 132 | ≈11M |
+
+Round 22 alone cost ≈12.5M in reviews. **This project does not adopt that spend
+at the margins that would persuade a reader.** That is an operational judgement
+about this budget — not a claim that the design is invalid or the effect absent.
+
 ## 5. Where each side comes from — and why they are not symmetric
 
 **False positives avoided, round 22 on F11: net +17 findings over 25 reviews/arm.**
@@ -124,10 +150,24 @@ does not show. **This describes round 22 on F11 and nothing else.**
 claims W reached less often (sum −44) against 7 it reached more often (+14).** The
 three largest negatives sum −18 of −30 — the largest single one is −8.
 
+**Does the gap rest on this round's own adjudication?** No:
+
+| | W | W₂₃ | diff |
+|---|---|---|---|
+| claims carried in from round 21 | 504 | 534 | **−30** (−1.20/review) |
+| claims new to round 22 | 3 | 3 | 0 |
+
+The entire coverage gap sits on claims whose verdicts were **fixed before this
+round's arms ran**. It does not depend on the 21 claims adjudicated afterwards.
+
 **The two sides are not shaped alike.** The benefit sits in one claim family; the
 loss is spread over sixteen claims. **It therefore cannot be assumed that a
 narrower clause would keep the benefit and drop the loss**, and this audit does
 not propose one.
+
+`audit.py` prints **every one of the 23 real claims the arms reached a different
+number of times**, with its canonical claim text in full and its
+carried-over/new status. The tables in this README are summaries of it.
 
 ## 6. Sizing without paying in full first
 
