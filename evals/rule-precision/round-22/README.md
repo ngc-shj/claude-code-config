@@ -15,13 +15,14 @@ see an effect of round 20's size, with 25 fresh reviews per arm.
 ## The result in one paragraph
 
 **The observed Welch MDE came in at 1.41 against a pre-registered ceiling of
-1.33, so the gate fired and the round makes no confirmatory claim.** The
-variance did not transfer: round 21's se on this metric implied per-arm sds near
-1.42, and this round measured 1.895 (W) and 1.590 (W₂₃). That possibility is
-exactly what the gate was placed to catch — the protocol named round 17 as the
-standing reminder that variance does not always transfer — and the pre-registered
-response, followed here, is to report the primary as underpowered and **not** to
-extend n. Everything below the gate is descriptive.
+1.33, so the gate fired and the round makes no confirmatory claim.** The observed
+arm sds were larger than the point values used for sizing: round 21 implied
+values near 1.42, while round 22 observed 1.895 (W) and 1.590 (W₂₃). That was
+sufficient for the pre-registered observed-MDE gate to fire. **It does not
+establish that the underlying variances differed between rounds**; round 21's n=9
+variance estimates were imprecise enough to include both round 22 values. The
+pre-registered response, followed here, is to report the primary as underpowered
+and **not** to extend n. Everything below the gate is descriptive.
 
 | | |
 |---|---|
@@ -30,10 +31,10 @@ extend n. Everything below the gate is descriptive.
 | observed MDE at n=25 | **1.41** |
 | pre-registered ceiling | 1.33 → **exceeded** |
 
-The protocol put the chance of this at about 6%, under the stated assumption
-that round 21's variance was exactly right. It was not, and the assurance figure
-was never a probability about the world — it was a probability conditional on an
-assumption this round falsified.
+The ~6% assurance was conditional on treating round 21's point variance estimate
+as known. In this sample that plug-in design did not provide the intended
+headroom. **This does not show that the underlying variance changed or that the
+two rounds' variances differ.**
 
 ## Descriptive, not confirmatory
 
@@ -136,8 +137,8 @@ with it. Against the protocol's estimate of ~163 agents and ≈13.8M.
 It did not buy an answer about replication. It bought two things worth having:
 
 - **A measurement of this metric's variance on F11 at n=25** — the quantity every
-  future power calculation for it depends on, and the one round 21's nine reviews
-  estimated badly.
+  future power calculation for it depends on, estimated on 25 reviews per arm
+  rather than nine, and so with a narrower interval than round 21 could offer.
 - **A demonstration that the gate works.** A round that had skipped it would have
   reported [−1.68, +0.32] as a replication failure at adequate power. It was not
   adequate power, and the protocol caught that before any arm mean was computed.
@@ -171,7 +172,8 @@ Plugging **this round's** observed sds (1.895, 1.590) into the same gate:
 expected df held fixed. Margins to compare with each other, not exact risks.
 
 n = 29 is the formal minimum and n ≈ 36 buys back the margin round 22 was designed
-for. **Neither number is adopted here.** Two rounds have now estimated this
-variance and disagreed by 25%; a third estimate from a single round is not a
-firmer basis than the second was. The variance audit comes first — why W's spread
-grew — and the next round's n is chosen after it, not from this table.
+for. **Neither plug-in n is adopted here.** The point estimates differ between
+rounds, but their sampling intervals overlap; future sizing must carry variance
+uncertainty rather than treat either round's point estimate as known. The
+variance audit comes first — which components the observed spread sits in — and
+the next round's n is chosen after it, not from this table.
