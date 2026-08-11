@@ -66,14 +66,25 @@ the two is carried. Positive favours keeping clause 1.
 | 0.5 | +0.72 [−0.73, +2.18] | +0.06 [−1.38, +1.50] | +0.08 [−1.07, +1.23] |
 | 1.0 | +0.11 [−2.80, +3.03] | 0.00 [−2.15, +2.15] | −0.52 [−1.98, +0.94] |
 | 2.0 | −1.11 [−7.18, +4.96] | −0.11 [−4.27, +4.04] | −1.72 [−4.01, +0.57] |
+| 3.0 | −2.33 [−11.60, +6.94] | −0.22 [−6.54, +6.10] | −2.92 [−6.14, +0.30] |
+| 5.0 | −4.78 [−20.47, +10.92] | −0.44 [−11.19, +10.30] | **−5.32 [−10.48, −0.16]** |
 
 Break-even ρ from the point estimates: **round 20 = 1.09, round 21 = 1.00, round
 22 = 0.57.**
 
 **What can be said: at ρ > 1.1 the point estimate is negative in all three
-rounds.** What cannot: that clause 1 is harmful. Every interval at ρ ≥ 0.5
-includes zero. The finding is that **the sign of the decision depends on a
-quantity no round was sized to measure**, not that the sign is known.
+rounds.**
+
+At ρ = 0.5, 1, 2 and 3 **every interval includes zero**. That is not a statement
+about all ρ: **at ρ = 5 round 22's interval is [−10.48, −0.16] and excludes
+zero**, because at a large enough loss ratio the coverage difference dominates
+the composite.
+
+**It still does not establish that clause 1 is harmful.** ρ was not fixed in
+advance, coverage is not a confirmatory metric in any round, and an interval
+found by scanning ρ until one excludes zero is not a test. What the scan shows
+is that **the sign of the decision depends on a quantity no round was sized to
+measure** — not that the sign is known.
 
 ## 3. Three reviewers per observation — right for one metric, wrong for the other
 

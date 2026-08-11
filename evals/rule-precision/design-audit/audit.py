@@ -66,7 +66,7 @@ def main():
     for name in ROUNDS:
         fw, fx = series(name, 'W', PRIM), series(name, 'W23', PRIM)
         rw, rx = series(name, 'W', REAL), series(name, 'W23', REAL)
-        for i, rho in enumerate((0.0, 0.5, 1.0, 2.0, 3.0)):
+        for i, rho in enumerate((0.0, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0)):
             uw = [f - rho * r for f, r in zip(fw, rw)]
             ux = [f - rho * r for f, r in zip(fx, rx)]
             d, se, df, lo, hi = welch(ux, uw)
@@ -80,9 +80,16 @@ def main():
         print(f'    {name:10s} fp saved {fp:+.2f}   real lost {rl:+.2f}   '
               f'break-even rho {fp / rl:.2f}')
     print('\n  Above its break-even rho the POINT ESTIMATE turns against clause 1 in')
-    print('  all three rounds. Every interval at rho >= 0.5 includes zero, so this')
-    print('  does NOT establish that clause 1 is harmful. It establishes that the')
-    print('  sign of the decision depends on a quantity no round was sized to measure.')
+    print('  all three rounds.')
+    print('\n  At rho = 0.5, 1, 2 and 3 every interval above includes zero. That is')
+    print('  NOT a statement about all rho: at rho = 5 round 22\'s interval is')
+    print('  [-10.48, -0.16] and excludes zero, because at a large enough loss ratio')
+    print('  the coverage difference dominates the composite.')
+    print('\n  It still does not establish that clause 1 is harmful. rho was not fixed')
+    print('  in advance, coverage is not a confirmatory metric in any round, and an')
+    print('  interval chosen by scanning rho until one excludes zero is not a test.')
+    print('  What the scan shows is that the sign of the decision depends on a')
+    print('  quantity no round was sized to measure.')
 
     head('3. REVIEWER CONFIGURATION — one observation, three agents')
     print('Averaged over all C(3,k) subsets of round 22, so each k uses the same')
