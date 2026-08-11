@@ -1,14 +1,15 @@
-# Evidence-gated row routing — refuted at Gate 0
+# Evidence-gated row routing — Gate 0 does not refute it
 
-**The candidate is rejected. No trim was implemented, no telemetry was added,
-no replay was run, and no agents were spent.** `protocol.md` was fixed before
-any savings figure was computed; `gate0.py` reproduces every number here.
+**The candidate survives. Nothing is adopted, nothing is implemented, and no
+agents were spent.** `protocol.md` fixes the gates; `gate0.py` reproduces every
+number here and stops if the transcript set it reads is not the one these
+numbers came from.
 
-## What was being evaluated
+## What is being evaluated
 
-The review-efficiency audit (`../review-efficiency/`) ended by recommending one
-thing to test forward: cut what each reviewer reads from the catalogue, holding
-k=3 and the role split fixed. The concrete form was pinned as:
+The review-efficiency audit (`../review-efficiency/`) recommended one thing to
+test forward: cut what each reviewer reads from the catalogue, holding k=3 and
+the role split fixed. The concrete form:
 
 > **Evidence-gated row routing.** After obtaining candidates from the digest,
 > open the compact row only for rules for which a concrete `file:line` in the
@@ -18,61 +19,54 @@ k=3 and the role split fixed. The concrete form was pinned as:
 with a termination gate: **if the reduction in raw processed tokens is below
 20%, stop.**
 
-## Why it was refuted without a replay
+## Gate 0 — the cheapest question, asked first
 
-The planned order was replay → telemetry → 20% gate. A cheaper gate goes first
-and needs no proxy at all: **how much would removing 100% of the target save?**
-That is an unreachable ideal — it assumes every row is speculative — so any real
-gate does worse. An intervention whose perfect form misses the bar is refuted
-outright.
+Before replaying anything, ask what removing **100%** of the target would save.
+That is unreachable by construction, so any real gate does worse, and an
+intervention whose perfect form misses the bar is refuted without a replay.
 
-Two figures, both computed exactly per agent from the round-22 transcripts.
-*Floor* saves only the first ingestion; *ceiling* also removes the content from
-every later request that re-sent it. Reported at three bytes/token calibrations
-so the conclusion does not rest on one:
+The ceiling has to include the **round trip the removal deletes**, not only the
+bytes: with no rows to fetch there is no anchored `rg`, so the request that
+ingests its result is never made. Since 94% of raw tokens are context re-sent
+across requests, that vanished request is the larger term by far.
 
-| removed entirely | floor | **ceiling** | api-eq ceiling |
-|---|---|---|---|
-| **candidate rows only** (the intervention, perfect) | 1.23–1.47% | **6.62–7.94%** | 2.96–3.55% |
-| the whole catalogue | 2.97–3.56% | 15.79–18.95% | 7.13–8.56% |
-| catalogue + the diff under review | 4.45–5.34% | 25.58–30.69% | 10.97–13.17% |
+| removed entirely | B/tok | floor | content | trip | **CEILING** | api-eq |
+|---|---|---|---|---|---|---|
+| **candidate rows only** | 3.5 | 1.47% | 7.94% | 18.96% | **25.42%** | 20.32% |
+| | 3.8 | 1.36% | 7.31% | 18.96% | **24.91%** | 20.04% |
+| | 4.2 | 1.23% | 6.62% | 18.96% | **24.35%** | 19.73% |
+| the whole catalogue | 3.5 | 3.56% | 18.95% | 67.09% | 82.48% | 94.20% |
+| catalogue + the diff | 3.5 | 5.34% | 30.69% | 67.29% | 92.64% | 99.07% |
 
-**The candidate's perfect form removes at most 7.94% against a 20% bar** — it
-misses by 12 points, at every calibration, in both units.
+**24.35–25.42% clears the 20% bar, so Gate 0 cannot end the work.** Nothing here
+is exact: bytes are measured, tokens are modelled from them, so every figure is
+a model-based bracket reported at three calibrations.
 
-The failure is not specific to this candidate: removing the **entire** catalogue
-reaches at most 18.95%. But note the difference in robustness — that bound misses
-by 1.1 points, so the broader claim ("no catalogue-routing intervention clears
-20%") holds under this model and would not survive a materially more generous
-one. The candidate's own failure would.
+## Read the columns before reading that as encouragement
 
-## Why the intuition was wrong
+Almost the whole ceiling is the vanished round trip, and **that term is only
+available when the retained set is empty** — no rows to fetch, no `rg`, no
+request. An evidence gate that keeps even one row still issues the `rg` and
+still pays for that request, so it harvests the **content** column alone:
+6.62–7.94%.
 
-The candidate was chosen because the catalogue is **63% of the content bytes** a
-reviewer reads. That statistic does not transfer to tokens:
+The intervention is defined to keep evidence-backed rows. So on any review with
+at least one such row the reachable saving is the content figure, and the
+ceiling is reachable only on reviews where nothing is evidence-backed at all.
 
-| raw processed tokens, round-22 reviews | |
-|---|---|
-| cache read (context re-sent) | 67.9% |
-| cache creation | 25.7% |
-| output | 6.1% |
-| uncached input | 0.2% |
+That makes the decisive quantity a single countable thing:
 
-**93.6% of raw tokens are transport, not content** — the same material re-sent
-across a mean of 7.6 requests per agent. Row content is 21.7 kB, about 5.7k
-tokens, against 422k raw per agent. Cutting what is read removes it once at
-ingestion and once per later re-send, which is exactly the ceiling above.
+> **How often is the retained set empty?**
 
-This is the same unit error the review-efficiency audit documented in another
-guise: content bytes, raw tokens and api-eq rank things differently, and a share
-in one is not a share in another. The audit named the catalogue as the lever
-using a content-byte share. That recommendation is now withdrawn.
+Gate 1 measures it, costed with the same two terms — round trip where the
+retained set is empty, content elsewhere.
 
 ## What the current routing does (measured, for the record)
 
-146 of 150 round-22 review agents issued one anchored `rg`; the candidate set is
-chosen from the digest **before any row is read**, so the intervention's decision
-point is well defined and every candidate is observable.
+147 of 150 round-22 review agents issued one anchored `rg`, 145 of them with
+rule IDs parseable from the pattern. The candidate set is chosen from the digest
+**before any row is read**, so the intervention's decision point is well defined
+and every candidate is observable.
 
 | | mean | median | max |
 |---|---|---|---|
@@ -82,23 +76,37 @@ point is well defined and every candidate is observable.
 | rule-detail pages opened | 3.0 | 4.0 | 7 |
 | detail pages as a share of candidates | 17.1% | 19.0% | 50% |
 
-Only 17% of candidates are ever promoted to a detail page, so the speculative
-expansion the intervention targets is real. It is simply too small to matter at
-the scale the gate demands.
+Only 17.1% of candidates are ever promoted to a detail page, so the speculative
+expansion the intervention targets is real.
+
+## Where the raw tokens are
+
+| raw processed tokens, round-22 reviews | |
+|---|---|
+| cache read (context re-sent) | 67.9% |
+| cache creation | 25.7% |
+| output | 6.1% |
+| uncached input | 0.2% |
+
+**93.6% is transport, not content** — the same material re-sent across a mean of
+7.6 requests per agent. Row content is 21.7 kB, about 5.7k tokens, against 422k
+raw per agent. This is why the round trip dominates the bytes, and why a
+content-only model of the saving was wrong.
+
+## Correction, recorded
+
+The first version of `gate0.py` counted only the removed bytes and reported a
+ceiling of 7.94%. On that figure this document said the candidate was refuted
+and the recommendation in `../review-efficiency/` was withdrawn. **Both were
+wrong**: the model was not an upper bound, because it omitted the request that
+disappears with the rows — the dominant term, and the same transport mass this
+audit had itself identified. The error was raised in review, not found by the
+author. `protocol.md` carries the amendment in place, including the direction it
+moves the conclusion.
 
 ## What this does not license
 
-- It does not say the catalogue is well designed, only that trimming its
-  **routing** cannot reach a 20% token cut. A smaller target is not refuted
-  here, because no smaller target was pre-registered.
-- It does not identify a replacement candidate. The transport share above says
-  where the mass sits — turn count and retained context, and for api-eq, output
-  at 5× — but naming a lever from a share statistic is the error that produced
-  this rejection. Any successor must pass a Gate-0-style ceiling first.
-- It changes no skill, no rule, and no reviewer configuration.
-
-## The durable lesson
-
-**Run the structural ceiling before adopting a candidate.** It costs one script
-and no agents, it is proxy-free, and here it refuted in minutes a line of work
-whose confirmatory design was priced at 294 agents and ≈124M raw tokens.
+- It is not evidence the intervention works. Gate 0 can only refute or fail to
+  refute, and it failed to refute.
+- It does not adopt, implement, or schedule anything.
+- It does not name a successor candidate; none is needed while this one is live.

@@ -4,13 +4,12 @@
 tests no pre-registered hypothesis, and changes no skill. It exists to identify
 *what to change to raise token efficiency* — not to change it.
 
-**Superseded in one respect.** The forward-test candidate this audit recommends
-below — trimming catalogue routing — was refuted at a structural ceiling in
-`../routing-trim/`: its perfect form removes at most 7.94% of raw processed
-tokens against the 20% bar that was later set. The recommendation is withdrawn;
-the measurements it rests on are unchanged. The rejection turned on the same
-unit distinction this audit documents — a 63% share of content bytes is not a
-63% share of tokens.
+**Follow-up in progress.** The forward-test candidate recommended below —
+trimming catalogue routing — is being evaluated in `../routing-trim/` under a
+pre-registered protocol. Its first gate did not refute it. Nothing in this
+document is superseded. (An earlier revision of this note claimed the
+recommendation was withdrawn on a 7.94% ceiling; that ceiling was miscomputed
+and the withdrawal is itself withdrawn.)
 
 **It does not touch clause 1.** The replication question rounds 21 and 22 were
 built for is still unresolved and nothing here bears on whether it replicates.

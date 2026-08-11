@@ -7,6 +7,13 @@ would removing ALL of it save" - an unreachable ideal that no proxy can beat.
 An intervention whose perfect form misses the bar is refuted without any
 further work.
 
+The ceiling must include the ROUND TRIP the removal deletes, not only the bytes.
+With no rows to fetch there is no anchored `rg`, so the request that ingests its
+result does not happen either - and since 94% of raw tokens are context re-sent
+across requests, that vanished request is the larger term. A first version of
+this script counted only the bytes and reported a ceiling of 7.9%; that was not
+an upper bound, and the protocol amendment of 2026-08-12 records the correction.
+
 Everything is read from the session transcripts of round 22, which are not in
 this repository (`~/.claude/projects/<project>/<session>/subagents/`). The
 script prints the sha1 of the exact agent-file set it read, so a result can be
@@ -35,8 +42,14 @@ RULE_ID = re.compile(r'\b(?:R|RS|RT)\d{1,2}\b')
 W_CC5M, W_CC1H, W_READ, W_OUT = 1.25, 2.0, 0.1, 5.0
 
 # Bytes per token. Reported at three values rather than one, because the
-# conclusion must not rest on the calibration.
+# conclusion must not rest on the calibration. Nothing here is exact: bytes are
+# measured, tokens are modelled from them, so every figure below is a
+# model-based bracket and is labelled as one.
 BPT = (3.5, 3.8, 4.2)
+
+# The agent-file set these results were computed against. A different corpus is
+# a different result, so the script stops rather than print numbers for it.
+EXPECTED_MANIFEST = 'c4a20dc7a6985a0fcd2e64b120f6e9ccb3bf3af3'
 
 
 def is_rows(s):
@@ -149,7 +162,12 @@ def main():
         if got:
             data.append(got)
     digest = hashlib.sha1('\n'.join(sorted(corpus)).encode()).hexdigest()
-    print(f'{len(data)} round-22 review agents; transcript manifest sha1 {digest}')
+    if digest != EXPECTED_MANIFEST:
+        raise SystemExit(f'transcript manifest mismatch\n  expected {EXPECTED_MANIFEST}\n'
+                         f'  got      {digest}\n\nThese results were computed against a '
+                         f'different agent-file set. Re-pin EXPECTED_MANIFEST and re-run '
+                         f'every number if this is intended.')
+    print(f'{len(data)} round-22 review agents; transcript manifest sha1 {digest} (matches)')
 
     print('\nWhat the current routing does')
     f = lambda v: f'{st.mean(v):8.1f}{st.median(v):9.1f}{max(v):7.0f}'
@@ -166,11 +184,14 @@ def main():
           f'   IDs parseable from the pattern; the rest routed differently)')
 
     print('\nGate 0 - remove 100% of the scope, an unreachable ideal')
-    print(f'  {"scope":24s}{"bytes/token":>12s}{"floor":>9s}{"ceiling":>10s}{"api-eq ceiling":>16s}')
+    print('  content  = the removed bytes, at first ingestion and in every later re-send')
+    print('  round trip = the request that ingests the result never happens at all')
+    print(f'  {"scope":22s}{"B/tok":>7s}{"floor":>8s}{"content":>9s}{"trip":>8s}'
+          f'{"CEILING":>10s}{"api-eq":>9s}')
     verdicts = {}
     for name, _ in SCOPES:
         for bpt in BPT:
-            R = A = F = C = CA = 0.0
+            R = A = F = C = T = CA = 0.0
             for usages, hits, _facts in data:
                 if not hits[name]:
                     continue
@@ -185,9 +206,16 @@ def main():
                     F += tok
                     C += min(tok * (1 + later), tok + carried)
                     CA += tok * W_CC5M + tok * W_READ * later
-            print(f'  {name if bpt == BPT[0] else "":24s}{bpt:12.1f}'
-                  f'{100 * F / R:8.2f}%{100 * C / R:9.2f}%{100 * CA / A:15.2f}%')
-            verdicts.setdefault(name, []).append(100 * C / R)
+                # With nothing to fetch, the requests that ingest those results are
+                # not made. Each such request is removed ONCE however many results
+                # it carried, or the same round trip is counted several times.
+                gone = {first for _b, first in hits[name] if first < n_req}
+                T += raw_of([usages[i] for i in gone])
+                CA += api_of([usages[i] for i in gone])
+            ceiling = T + (C - F)  # the vanished round trip, plus later re-sends
+            print(f'  {name if bpt == BPT[0] else "":22s}{bpt:7.1f}{100 * F / R:7.2f}%'
+                  f'{100 * C / R:8.2f}%{100 * T / R:7.2f}%{100 * ceiling / R:9.2f}%{100 * CA / A:8.2f}%')
+            verdicts.setdefault(name, []).append(100 * ceiling / R)
         print()
 
     print('Where the raw tokens actually are')
@@ -202,21 +230,33 @@ def main():
     total = sum(agg.values())
     for k, v in agg.most_common():
         print(f'  {k:30s}{100 * v / total:6.1f}%')
+    transport = agg['cache read (context re-sent)'] + agg['cache creation']
+    print(f'  {"-> transport, not content":30s}{100 * transport / total:6.1f}%')
     print(f'  requests per agent: mean {st.mean(reqs):.1f}, median {st.median(reqs):.0f}')
     rb = st.mean([x['row_bytes'] for x in rg]) / 1000
     print(f'  row content per agent: {rb:.1f} kB, about {rb / 3.8:.1f}k tokens, against '
           f'{st.mean([raw_of(u) for u, _h, _f in data]) / 1000:.0f}k raw')
 
-    worst = max(verdicts['candidate rows only'])
+    best = max(verdicts['candidate rows only'])
     cat = max(verdicts['the whole catalogue'])
-    print(f'\nVERDICT: the perfect form of the intervention removes at most {worst:.1f}% of raw\n'
-          f'processed tokens against a 20% bar, at every calibration tested. Gate 0 fails\n'
-          f'and the line of work stops.\n\n'
-          f'Removing the ENTIRE catalogue reaches at most {cat:.1f}%, so the failure is not specific\n'
-          f'to this candidate. Note the difference in robustness: the candidate misses by\n'
-          f'{20 - worst:.0f} points and the whole catalogue by {20 - cat:.1f}, so the broader claim - that no\n'
-          f'catalogue-routing intervention clears 20% - holds under this model but would\n'
-          f'not survive a materially more generous one. The candidate\'s own failure would.')
+    best = max(verdicts['candidate rows only'])
+    print(f"""
+VERDICT: Gate 0 does NOT refute the candidate.
+
+The perfect form removes up to {best:.2f}% of raw processed tokens, above the 20% bar,
+so the bar is not structurally unreachable and the gate cannot end the work.
+
+Read the columns before reading that as encouragement. Almost all of the
+ceiling is the vanished round trip (the trip column), which is only
+available when the retained set is EMPTY - no rows to fetch, no rg, no request.
+An evidence gate that keeps even one row still issues the rg and still pays that
+request, so it harvests the content column alone. The intervention is defined to
+keep evidence-backed rows, so the reachable saving on any review with at least
+one such row sits at the content figure, not the ceiling.
+
+That makes the decisive quantity a single countable thing: how often the
+retained set is empty. Gate 1 measures it. This gate's job is done - it failed
+to refute, which is the only other thing it was allowed to do.""")
 
 
 if __name__ == '__main__':

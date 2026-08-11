@@ -1,9 +1,14 @@
 # Protocol — evidence-gated row routing
 
-**Written before any savings figure was computed.** Structural facts about the
-current routing were measured first (they are needed to specify the
-intervention at all) and are recorded below; nothing about how much a trim
-would save was calculated before this document was fixed.
+**Written before any savings figure was computed** — fixed locally before
+`gate0.py` was run. The git history does not evidence that ordering, because
+this document and the first result landed in the same commit; a reader should
+treat the claim as the author's account, not as a verifiable fact. Structural
+facts about the current routing were measured first (they are needed to specify
+the intervention at all) and are recorded below.
+
+One clause has since been amended: Gate 0's ceiling was defined in a way that
+was not an upper bound. See the amendment in place, below.
 
 This protocol governs one candidate intervention and the order in which it may
 be evaluated. It authorises no change to the skill.
@@ -65,10 +70,11 @@ permits shipping.**
 ### Gate 0 — structural ceiling (no proxy, no new agents)
 
 Compute the raw-token reduction from removing **100% of candidate rows**. This
-is an unreachable ideal: it assumes every row is speculative. It is computed
-exactly, not estimated — for each agent, locate the request at which the row
-content entered the context and subtract those tokens from that request's cache
-creation and from every subsequent request's cache read.
+is an unreachable ideal: it assumes every row is speculative. Bytes are
+measured; tokens are modelled from them, so the result is a **model-based
+bracket**, reported at three bytes/token calibrations rather than as one exact
+figure. For each agent, locate the request that ingests the row content and
+account for what its absence removes.
 
 Two figures are pre-registered, and both will be reported:
 
@@ -76,8 +82,26 @@ Two figures are pre-registered, and both will be reported:
 - **ceiling** — the ingestion plus the removal from every later request that
   re-sent it.
 
-**If the ceiling is below 20% of raw processed tokens, the line of work stops
-here.** No proxy, replay, telemetry, or forward test can rescue an intervention
+> **Amendment, 2026-08-12 — the ceiling above is not an upper bound.**
+>
+> It counts only the removed bytes. With no rows to fetch there is no anchored
+> `rg`, so the request that ingests its result is not made either, and since 94%
+> of raw tokens are context re-sent across requests, that vanished round trip is
+> the larger term. The definition as written under-counts it entirely.
+>
+> Corrected: **ceiling = the vanished round trip (each such request removed once,
+> however many results it carried) + the removed content in every later request
+> that would still have re-sent it.**
+>
+> This amendment was made **after** the first run, whose result it changes: the
+> defective ceiling read 7.94% and refuted the candidate; the corrected one reads
+> 25.42% and does not. The correction therefore moves **against** the conclusion
+> previously drawn from it, which is the only direction in which amending a
+> pre-registration after seeing a result is defensible. It was raised in review,
+> not found by the author.
+
+**If the corrected ceiling is below 20% of raw processed tokens, the line of work
+stops here.** No proxy, replay, telemetry, or forward test can rescue an intervention
 whose perfect form does not clear the bar. This is the cheapest possible
 refutation and it is why it runs first.
 
@@ -95,6 +119,13 @@ strictest (most saved) to most generous (least saved):
 reading the row, which an evidence gate cannot see. They therefore bound the
 savings of a perfect gate from above, and the real intervention can only do
 worse.
+
+Each is costed with the same two terms as the corrected Gate 0, but the round
+trip is available **only on reviews whose retained set is empty** — a gate that
+keeps one row still issues the `rg` and still pays that request. So the saving
+is: (share of reviews with an empty retained set x the vanished round trip) +
+(content removed on the rest). The share of empty retained sets is the decisive
+quantity and is reported on its own.
 
 Decision:
 
