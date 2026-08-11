@@ -5,9 +5,11 @@ RETROSPECTIVE AND EXPLORATORY. It changes no confirmatory conclusion from rounds
 20-22, establishes no cause, and proposes no change to clause 1. It asks one
 operational question: would a further round change what we would do?
 
-Nothing here shows clause 1 is harmful. Every interval below includes zero at the
-loss ratios that matter, and no round was designed to detect the coverage
-quantity this audit puts at the centre.
+This audit does not establish that clause 1 is harmful. rho was not fixed in
+advance, coverage was not a confirmatory metric in any round, and the one
+interval that excludes zero (rho = 5, round 22) was found in a retrospective scan
+over rho. No round was designed to detect the coverage quantity this audit puts
+at the centre.
 
 Two fixtures, three rounds. F10 was reviewed once (round 20); F11 was reviewed
 twice (rounds 21 and 22). Those two F11 samples are fresh reviews but NOT

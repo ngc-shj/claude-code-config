@@ -4,9 +4,11 @@
 rounds 20–22, establishes no cause, and proposes no change to clause 1. It asks
 one operational question: *would a further round change what we would do?*
 
-**It does not show clause 1 is harmful.** Every interval at the loss ratios that
-matter includes zero, and no round was designed to detect the coverage quantity
-this audit puts at the centre.
+**This audit does not establish that clause 1 is harmful.** ρ was not fixed in
+advance, coverage was not a confirmatory metric in any round, and the one
+interval that excludes zero (ρ = 5, round 22) was found in a **retrospective scan
+over ρ**. No round was designed to detect the coverage quantity this audit puts
+at the centre.
 
 Run with `design-audit/audit.py`. No new agents were run for it: everything comes
 from rounds 16–22 as committed. **Inputs are pinned**: `inputs.sha1` lists all 25
@@ -67,6 +69,7 @@ the two is carried. Positive favours keeping clause 1.
 | 1.0 | +0.11 [−2.80, +3.03] | 0.00 [−2.15, +2.15] | −0.52 [−1.98, +0.94] |
 | 2.0 | −1.11 [−7.18, +4.96] | −0.11 [−4.27, +4.04] | −1.72 [−4.01, +0.57] |
 | 3.0 | −2.33 [−11.60, +6.94] | −0.22 [−6.54, +6.10] | −2.92 [−6.14, +0.30] |
+| 4.0 | −3.56 [−16.04, +8.92] | −0.33 [−8.86, +8.19] | −4.12 [−8.30, +0.06] |
 | 5.0 | −4.78 [−20.47, +10.92] | −0.44 [−11.19, +10.30] | **−5.32 [−10.48, −0.16]** |
 
 Break-even ρ from the point estimates: **round 20 = 1.09, round 21 = 1.00, round
