@@ -120,12 +120,35 @@ reading the row, which an evidence gate cannot see. They therefore bound the
 savings of a perfect gate from above, and the real intervention can only do
 worse.
 
-Each is costed with the same two terms as the corrected Gate 0, but the round
-trip is available **only on reviews whose retained set is empty** — a gate that
-keeps one row still issues the `rg` and still pays that request. So the saving
-is: (share of reviews with an empty retained set x the vanished round trip) +
-(content removed on the rest). The share of empty retained sets is the decisive
-quantity and is reported on its own.
+> **Amendment, 2026-08-12 (second) — the empty/non-empty dichotomy was wrong.**
+>
+> An earlier version of this clause said the round trip is available only when
+> the retained set is empty, and called the share of empty sets the decisive
+> quantity. That assumed one row-fetch request per agent. Measured, the number
+> of distinct row-result requests per agent is 0 x3, 1 x107, 2 x36, 3 x4 — 40
+> agents fetch rows more than once, so a non-empty retained set can still drop
+> requests. Corrected before Gate 1 was run.
+
+Each candidate is costed with the same two terms as the corrected Gate 0:
+
+- **round trip** — retained set empty: every row-result request of that agent
+  disappears. Retained set non-empty: the retained IDs are fetched in **one**
+  `rg`, so `max(existing row-result requests - 1, 0)` requests disappear.
+- **content** — the removed row bytes, in every later request that would still
+  have re-sent them.
+
+**The trip term depends on consolidation being part of the evaluated form.** The
+intervention as fixed says which rows to open, not how many calls to make. Gate 1
+therefore reports two variants and does not choose between them:
+
+- **with consolidation** — the formula above; the trip term is available;
+- **without consolidation** — the number of calls is whatever the reviewer
+  happens to make, so the trip saving is **not identifiable** and Gate 1 reports
+  the content term alone. It is then not an upper bound on the trip side and
+  cannot be used to clear the bar.
+
+The share of empty retained sets is still reported, but it is one input, not the
+decisive quantity.
 
 Decision:
 

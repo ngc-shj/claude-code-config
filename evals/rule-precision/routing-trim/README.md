@@ -32,39 +32,45 @@ across requests, that vanished request is the larger term by far.
 
 | removed entirely | B/tok | floor | content | trip | **CEILING** | api-eq |
 |---|---|---|---|---|---|---|
-| **candidate rows only** | 3.5 | 1.47% | 7.94% | 18.96% | **25.42%** | 20.32% |
-| | 3.8 | 1.36% | 7.31% | 18.96% | **24.91%** | 20.04% |
-| | 4.2 | 1.23% | 6.62% | 18.96% | **24.35%** | 19.73% |
-| the whole catalogue | 3.5 | 3.56% | 18.95% | 67.09% | 82.48% | 94.20% |
-| catalogue + the diff | 3.5 | 5.34% | 30.69% | 67.29% | 92.64% | 99.07% |
+| **candidate rows only** | 3.5 | 1.44% | 6.33% | 18.56% | **23.45%** | 17.17% |
+| | 3.8 | 1.33% | 5.83% | 18.56% | **23.06%** | 17.11% |
+| | 4.2 | 1.20% | 5.27% | 18.56% | **22.63%** | 17.05% |
+| the whole catalogue | 3.5 | 3.56% | 15.38% | 67.09% | 78.92% | 87.33% |
+| catalogue + the diff | 3.5 | 5.34% | 25.35% | 67.29% | 87.29% | 88.76% |
 
-**24.35–25.42% clears the 20% bar, so Gate 0 cannot end the work.** Nothing here
+**22.63–23.45% clears the 20% bar, so Gate 0 cannot end the work.** Nothing here
 is exact: bytes are measured, tokens are modelled from them, so every figure is
-a model-based bracket reported at three calibrations.
+a model-based bracket reported at three calibrations. The denominator is the
+whole round — all 150 agents, including the three that fetched no rows — so the
+figures are a share of the round, not of the subset the intervention touches.
 
 ## Read the columns before reading that as encouragement
 
-Almost the whole ceiling is the vanished round trip, and **that term is only
-available when the retained set is empty** — no rows to fetch, no `rg`, no
-request. An evidence gate that keeps even one row still issues the `rg` and
-still pays for that request, so it harvests the **content** column alone:
-6.62–7.94%.
+Almost the whole ceiling is the vanished round trip, and **a gate that retains
+anything reaches that term only by also consolidating what it retains into fewer
+calls.** Row fetches per agent are 0 ×3, 1 ×107, 2 ×35, 3 ×4, 4 ×1 — 40 agents
+fetch rows more than once, so a non-empty retained set can still drop requests,
+but only down to one.
 
-The intervention is defined to keep evidence-backed rows. So on any review with
-at least one such row the reachable saving is the content figure, and the
-ceiling is reachable only on reviews where nothing is evidence-backed at all.
+The intervention as fixed says which rows to open, **not how many calls to
+make**. Whether the trip term is available at all is therefore a property of the
+implementation, not of the gate. Gate 1 reports both variants:
 
-That makes the decisive quantity a single countable thing:
+- **with consolidation** — retained set empty: every row-result request goes;
+  non-empty: `max(existing row-result requests − 1, 0)` go; plus content;
+- **without consolidation** — the call count is whatever the reviewer happens to
+  make, the trip saving is **not identifiable**, and only the content column
+  (5.27–6.33%) applies.
 
-> **How often is the retained set empty?**
-
-Gate 1 measures it, costed with the same two terms — round trip where the
-retained set is empty, content elsewhere.
+The share of empty retained sets is one input to that, not the decisive
+quantity — an earlier version of this document said it was, on the assumption of
+one row fetch per agent, and that was wrong.
 
 ## What the current routing does (measured, for the record)
 
-147 of 150 round-22 review agents issued one anchored `rg`, 145 of them with
-rule IDs parseable from the pattern. The candidate set is chosen from the digest
+147 of 150 round-22 review agents issued **at least one** anchored `rg` (0 ×3,
+1 ×107, 2 ×35, 3 ×4, 4 ×1), 145 of them with rule IDs parseable from the
+pattern. The candidate set is chosen from the digest
 **before any row is read**, so the intervention's decision point is well defined
 and every candidate is observable.
 
@@ -95,14 +101,24 @@ content-only model of the saving was wrong.
 
 ## Correction, recorded
 
-The first version of `gate0.py` counted only the removed bytes and reported a
-ceiling of 7.94%. On that figure this document said the candidate was refuted
-and the recommendation in `../review-efficiency/` was withdrawn. **Both were
-wrong**: the model was not an upper bound, because it omitted the request that
-disappears with the rows — the dominant term, and the same transport mass this
-audit had itself identified. The error was raised in review, not found by the
-author. `protocol.md` carries the amendment in place, including the direction it
-moves the conclusion.
+Three corrections, all raised in review, none found by the author.
+
+1. **The ceiling was not an upper bound.** The first version counted only the
+   removed bytes and read 7.94%; on that figure this document refuted the
+   candidate and withdrew the recommendation in `../review-efficiency/`. Both
+   were wrong: it omitted the request that disappears with the rows — the
+   dominant term, and the same transport mass this audit had itself identified.
+2. **Three arithmetic defects.** Eliminated requests were counted once per tool
+   result rather than once (ceilings above 100% for the wider scopes); the
+   denominator excluded agents the scope did not touch; `later` counted one
+   request too many; and the api-eq column added the removed content's first
+   cache-write on top of the eliminated request that already contained it.
+3. **The Gate 1 formula assumed one row fetch per agent.** 40 of 150 make more
+   than one, so the empty/non-empty dichotomy it rested on does not hold.
+   Corrected before Gate 1 was run.
+
+`protocol.md` carries both amendments in place, each with the direction it moves
+the conclusion.
 
 ## What this does not license
 

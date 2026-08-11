@@ -180,8 +180,10 @@ def main():
     named = [x for x in rg if x['candidates']]
     print(f'  {"detail pages as % of candidates":38s}'
           + f([100 * len(x['details']) / len(x['candidates']) for x in named]))
-    print(f'  ({len(rg)} of {len(data)} agents issued an anchored rg, {len(named)} of them with rule\n'
-          f'   IDs parseable from the pattern; the rest routed differently)')
+    calls = collections.Counter(d[2]['rg_calls'] for d in data)
+    print(f'  ({len(rg)} of {len(data)} agents issued at least one anchored rg, {len(named)} of them\n'
+          f'   with rule IDs parseable from the pattern. Calls per agent: '
+          + ', '.join(f'{k}x{v}' for k, v in sorted(calls.items())) + ')')
 
     print('\nGate 0 - remove 100% of the scope, an unreachable ideal')
     print('  content  = the removed bytes, at first ingestion and in every later re-send')
@@ -193,24 +195,29 @@ def main():
         for bpt in BPT:
             R = A = F = C = T = CA = 0.0
             for usages, hits, _facts in data:
-                if not hits[name]:
-                    continue
+                # Every agent of the round stays in the denominator, including the
+                # three that fetched no rows: the saving is a share of the round,
+                # not of the subset the intervention happens to touch.
                 n_req = len(usages)
                 R += raw_of(usages)
                 A += api_of(usages)
+                if not hits[name]:
+                    continue
                 carried = sum(u.get('cache_read_input_tokens', 0)
                               + u.get('cache_creation_input_tokens', 0) for u in usages)
                 for nbytes, first in hits[name]:
                     tok = nbytes / bpt
-                    later = max(0, n_req - first)
+                    later = max(0, n_req - first - 1)
                     F += tok
                     C += min(tok * (1 + later), tok + carried)
-                    CA += tok * W_CC5M + tok * W_READ * later
+                    CA += tok * W_READ * later
                 # With nothing to fetch, the requests that ingest those results are
                 # not made. Each such request is removed ONCE however many results
                 # it carried, or the same round trip is counted several times.
                 gone = {first for _b, first in hits[name] if first < n_req}
                 T += raw_of([usages[i] for i in gone])
+                # api_of(gone) already contains the first cache-write of the
+                # removed content, so no separate first-write term is added above.
                 CA += api_of([usages[i] for i in gone])
             ceiling = T + (C - F)  # the vanished round trip, plus later re-sends
             print(f'  {name if bpt == BPT[0] else "":22s}{bpt:7.1f}{100 * F / R:7.2f}%'
@@ -246,17 +253,18 @@ VERDICT: Gate 0 does NOT refute the candidate.
 The perfect form removes up to {best:.2f}% of raw processed tokens, above the 20% bar,
 so the bar is not structurally unreachable and the gate cannot end the work.
 
-Read the columns before reading that as encouragement. Almost all of the
-ceiling is the vanished round trip (the trip column), which is only
-available when the retained set is EMPTY - no rows to fetch, no rg, no request.
-An evidence gate that keeps even one row still issues the rg and still pays that
-request, so it harvests the content column alone. The intervention is defined to
-keep evidence-backed rows, so the reachable saving on any review with at least
-one such row sits at the content figure, not the ceiling.
+Read the columns before reading that as encouragement. Almost all of the ceiling
+is the vanished round trip, and a gate that retains anything only reaches it by
+also CONSOLIDATING what it retains into fewer calls: 40 of 150 agents fetch rows
+in more than one request, so a non-empty retained set can still drop requests,
+but only down to one. The intervention as fixed says which rows to open, not how
+many calls to make - so whether the trip term is available at all is a property
+of the implementation, not of the gate.
 
-That makes the decisive quantity a single countable thing: how often the
-retained set is empty. Gate 1 measures it. This gate's job is done - it failed
-to refute, which is the only other thing it was allowed to do.""")
+Gate 1 therefore reports both variants: with consolidation, and without it,
+where the trip saving is not identifiable and only the content column applies.
+This gate's job is done - it failed to refute, which is the only other thing it
+was allowed to do.""")
 
 
 if __name__ == '__main__':
