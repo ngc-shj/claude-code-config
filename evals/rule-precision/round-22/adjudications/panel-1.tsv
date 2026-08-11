@@ -1,0 +1,22 @@
+cluster_id	verdict	reason
+R22-API-01	not-a-defect	scope
+R22-API-02	not-a-defect	outside-diff
+R22-API-03	not-a-defect	preference
+R22-DOC-01	real
+R22-DOC-02	real
+R22-MDL-01	not-a-defect	preference
+R22-MDL-02	not-a-defect	preference
+R22-MDL-03	not-a-defect	preference
+R22-MIG-01	not-a-defect	scope
+R22-SCH-01	not-a-defect	outside-diff
+R22-TST-01	real
+R22-TST-02	not-a-defect	preference
+R22-WK1-01	not-a-defect	preference
+R22-WK1-02	not-a-defect	preference
+R22-WK2-02	real
+R22-WK2-03	not-a-defect	preference
+R22-WK2-04	not-a-defect	preference
+R22-WK2-05	real
+R22-WK2-06	not-a-defect	preference
+R22-WK2-07	not-a-defect	outside-diff
+R22-WK2-08	not-a-defect	scope

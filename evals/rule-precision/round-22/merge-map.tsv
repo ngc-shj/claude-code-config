@@ -1,0 +1,25 @@
+cluster_id	verdict	target	why
+R22-API-01	keep		Asserts an in-flight run is never signalled when its schedule is deleted, a defect no other claim names (the existing discarded-sql.Result claims are about telling "no row matched" from success, not about cancelling a running export).
+R22-API-02	keep		The only claim about an unchecked nil org from auth.OrgFromContext panicking the handler.
+R22-API-03	keep		The only claim about h.store.Create failures being collapsed into a fixed 500 rather than a 4xx.
+R22-DOC-01	keep		Asserts the doc promises five separate unimplemented guarantees; no single existing claim covers that set, and each existing counterpart covers only one of them.
+R22-DOC-02	keep		Asserts the doc contradicts itself internally (tiling section vs Failures section), not that the doc disagrees with the code.
+R22-MDL-01	keep		The only claim that Validate enforces HourOfDay for a cadence NextRun ignores it for.
+R22-MDL-02	keep		About the omitempty JSON tag dropping last_error from the response; distinct from the existing claim that the '' column default is an in-band sentinel.
+R22-MDL-03	keep		The only claim about the column list being repeated three times and held together by positional order alone.
+R22-MIG-01	keep		The only claim about the missing updated_at column.
+R22-SCH-01	keep		Asserts the runtime image may carry no IANA zone database at all; existing timezone claims are about Validate not checking the name and NextRun swallowing the error.
+R22-TST-01	keep		Asserts the objectKey and formatValue tests only exercise already-correct inputs; the existing float64 claim asserts a rendering defect in formatValue itself.
+R22-TST-02	keep		Asserts the whole Validate table never checks which rule fired; the existing test claims are about the untested AccessKey arm and about HourOfDay boundaries.
+R22-WK1-01	keep		The only claim that the Format enum's spelling doubles as the customer-visible file extension.
+R22-WK1-02	keep		Asserts contentType's separate branch leaves a new format with the wrong MIME type, a different defect from the extension coupling in R22-WK1-01.
+R22-WK2-01	merge	R21-MDL-14	Same assertion as the recorded claim that runSchedule stores err.Error() verbatim in LastError and GET /v1/export-schedules hands it back; one sanitization change resolves both.
+R22-WK2-02	keep		First of the two identical no-panic-recovery claims, and no existing claim covers it.
+R22-WK2-03	keep		The only claim about storage.NewClient being rebuilt on every run instead of cached.
+R22-WK2-04	keep		Asserts a trailing-slash-free prefix is forced into a directory segment; the existing prefix claim is about '..' and empty segments surviving.
+R22-WK2-05	keep		Asserts the failure branch advances next_run_at with no retry, leaving that window uncovered; no existing claim makes that assertion.
+R22-WK2-06	keep		Asserts next_run_at is derived from the run's start rather than its finish; the existing startedAt claims are about the query window, not the next slot.
+R22-WK2-07	keep		First of the two identical claims that no code constructs or starts a Worker, and no existing claim covers it.
+R22-WK2-08	keep		Asserts runSchedule never re-runs Validate on a stored row; the existing dataset-map claims are about export's missing comma-ok check.
+R22-WK3-01	merge	R22-WK2-07	Same assertion as R22-WK2-07 — NewWorker/Worker.Run have no call site in the change — and the alphabetically first id wins.
+R22-WK3-02	merge	R22-WK2-02	Same assertion as R22-WK2-02 — no recover in Run/tick/runSchedule unlike the withRecovery-wrapped HTTP surface — and the alphabetically first id wins.
