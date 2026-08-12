@@ -164,9 +164,9 @@ worse.
 > The figure this amendment was written with (35.76–36.89%, and the claim that
 > "detail pages are the larger half") is superseded twice over: the detail
 > predicate was a superset of pages, and then it was found to miss every
-> relative-path page read. `gate0.py` prints the current values; including
-> details raises the ceiling by roughly 20 points, which is not an independent
-> share of the total and is not larger than the rows term at every calibration.
+> relative-path page read, and the request rule beneath it changed twice more.
+> `gate0.py` prints the current values; no figure is quoted here, because every
+> one written into this amendment has since been superseded.
 
 > **Amendment, 2026-08-12 (fifth) — Gate 1 costed rows only, like Gate 0 did.**
 >
@@ -270,10 +270,12 @@ are **removed only when `retained` is empty**, and kept otherwise. Gate 0's
 generous variant removes them unconditionally; Gate 1 does not, because that
 variant is a bound and Gate 1 is meant to be a replay.
 
-**Round trip.** Retained set empty: every row-result and detail-result request
-of that agent disappears. Non-empty: the retained IDs are fetched in **one** `rg`
-and each retained page is still read, so the requests that disappear are those
-whose scoped results were all removed.
+**Round trip.** A request disappears only under the rule stated above — **every
+tool result it ingests is removed**, scoped or not. With the retained set empty
+that is every row-result and detail-result request whose other results (if any)
+also go; with it non-empty the retained IDs are fetched in one `rg` and each
+retained page is still read, so fewer qualify. A request that also carried the
+diff never qualifies.
 
 **Content.** The removed row and detail bytes, in every later request that would
 still have re-sent them.

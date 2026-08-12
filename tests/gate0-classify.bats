@@ -162,6 +162,47 @@ print(','.join(sorted(set(g.RULE_ID.findall(t)))))
   [[ "$output" == "rows=False catalogue=False page=False dir=False ids=-" ]]
 }
 
+@test "a request carrying anything out of scope is not removable" {
+  # The correction that moved the strict ceiling from 40% to 28%: 142 of the 323
+  # requests that ingest a scoped result also ingest something else, usually the
+  # diff, and those requests still have to happen.
+  run python3 -c "
+import importlib.util
+spec = importlib.util.spec_from_file_location('g', '$GATE0')
+g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+n_req = 5
+mixed  = g.removable_requests({2: 2}, {2: 1}, n_req)   # 2 results, 1 in scope
+whole  = g.removable_requests({3: 2}, {3: 2}, n_req)   # 2 results, both in scope
+print(f'mixed={sorted(mixed)} whole={sorted(whole)}')
+"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "mixed=[] whole=[3]" ]]
+}
+
+@test "a request is counted once however many results it carried" {
+  run python3 -c "
+import importlib.util
+spec = importlib.util.spec_from_file_location('g', '$GATE0')
+g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+# four scoped results, all in request 1: one request disappears, not four
+print(len(g.removable_requests({1: 4}, {1: 4}, 5)))
+"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "1" ]]
+}
+
+@test "the agent last request is never removable" {
+  # Nothing follows it, so its absence cannot be observed in any later re-send.
+  run python3 -c "
+import importlib.util
+spec = importlib.util.spec_from_file_location('g', '$GATE0')
+g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+print(sorted(g.removable_requests({4: 1}, {4: 1}, 5)), sorted(g.removable_requests({5: 1}, {5: 1}, 5)))
+"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "[4] []" ]]
+}
+
 @test "tool_target never returns the payload a call writes" {
   # The behavioural form of the fix: whatever a Write carries, the text the
   # classifier sees is the destination, not the bytes. A source-text assertion

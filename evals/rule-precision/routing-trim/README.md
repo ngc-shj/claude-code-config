@@ -176,6 +176,9 @@ Eleven corrections, all raised in review, none found by the author.
     a scoped result also carry something out of scope — usually the diff — and
     those requests survive. Applied to Gate 0 as well, which drops the strict
     ceiling to 27.55–28.73% and rows-only to 5.76–6.59%, and changes no verdict.
+    The decision is now one function, `removable_requests()`, pinned by cases
+    that go red if it reverts to the scoped-only rule or lets the final request
+    go.
 
 `protocol.md` carries all six amendments in place, each with the direction it
 moves the conclusion.

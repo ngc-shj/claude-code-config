@@ -239,6 +239,22 @@ def read(path):
     return [last[r] for r in order], hits, facts, n_results, n_scoped
 
 
+def removable_requests(n_results, n_scoped, n_req):
+    """Request indices whose EVERY ingested result is removed.
+
+    Not "every scoped result": a request that also carried the diff is still
+    needed, and 142 of the 323 requests that ingest a scoped result are mixed
+    like that. Counting those as removable put most of the trip term on work
+    that would still have to happen.
+
+    Each index appears at most once however many results it carried, and the
+    agent's final request is never removable - there is nothing after it whose
+    absence could be observed.
+    """
+    return {r for r in n_scoped
+            if r < n_req and n_results.get(r, 0) == n_scoped[r]}
+
+
 def raw_of(usages):
     return sum(u.get('input_tokens', 0) + u.get('cache_creation_input_tokens', 0)
                + u.get('cache_read_input_tokens', 0) + u.get('output_tokens', 0)
@@ -300,9 +316,9 @@ def main():
         for bpt in BPT:
             R = A = F = C = T = CA = 0.0
             for usages, hits, _facts, n_results, n_scoped in data:
-                # Every agent of the round stays in the denominator, including the
-                # three that fetched no rows: the saving is a share of the round,
-                # not of the subset the intervention happens to touch.
+                # Every agent of the round stays in the denominator, including
+                # any the scope never touches: the saving is a share of the
+                # round, not of the subset the intervention happens to reach.
                 n_req = len(usages)
                 R += raw_of(usages)
                 A += api_of(usages)
@@ -319,8 +335,7 @@ def main():
                 # With nothing to fetch, the requests that ingest those results are
                 # not made. Each such request is removed ONCE however many results
                 # it carried, or the same round trip is counted several times.
-                gone = {r for r in n_scoped[name]
-                        if r < n_req and n_results[r] == n_scoped[name][r]}
+                gone = removable_requests(n_results, n_scoped[name], n_req)
                 T += raw_of([usages[i] for i in gone])
                 # api_of(gone) already contains the first cache-write of the
                 # removed content, so no separate first-write term is added above.
