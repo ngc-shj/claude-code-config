@@ -124,10 +124,41 @@ worse.
 >
 > An earlier version of this clause said the round trip is available only when
 > the retained set is empty, and called the share of empty sets the decisive
-> quantity. That assumed one row-fetch request per agent. Measured, the number
-> of distinct row-result requests per agent is 0 x3, 1 x107, 2 x36, 3 x4 — 40
-> agents fetch rows more than once, so a non-empty retained set can still drop
-> requests. Corrected before Gate 1 was run.
+> quantity. That assumed one row-fetch request per agent, and multi-fetch agents
+> exist, so a non-empty retained set can still drop requests. Corrected before
+> Gate 1 was run.
+>
+> The counts this amendment was first written with (0 x3, 1 x107, 2 x36, 3 x4;
+> "40 agents fetch rows more than once") were themselves wrong — see the third
+> amendment. The true figures are 1 x145, 2 x4, 3 x1: **five** agents.
+
+> **Amendment, 2026-08-12 (third) — the classifier counted the reviewer's own
+> output as a catalogue fetch.**
+>
+> It tested substrings of the whole serialised tool input, so a finding quoting
+> `common-rules.md` and showing an `rg` command matched. That invented 37 row
+> fetches and the requests to go with them. Classifying on what a call TOUCHES —
+> a Bash command, a Read path, never a Write payload — gives 1 x145, 2 x4, 3 x1.
+>
+> `tests/gate0-classify.bats` pins this and fails if the whole-input form
+> returns. Raised in review; its diagnosis named streaming snapshots of a
+> repeated `tool_use.id`, which does not occur in this corpus — all 1623 ids are
+> unique — but the counts it gave were right and the mechanism above produces
+> them exactly.
+
+> **Amendment, 2026-08-12 (fourth) — Gate 0's scope was narrower than the
+> intervention.**
+>
+> The intervention gates two things: which rows to open, and which detail pages
+> to follow from them. Gate 0 measured rows only, so it bounded a narrower
+> intervention than the one written down, and on that narrower figure
+> (17.74–18.58%) it declared a refutation.
+>
+> Removing 100% of what the intervention actually gates — rows and the detail
+> pages they gate — reaches **35.76–36.89%**; detail pages are the larger half.
+> Above the bar, so **Gate 0 does not refute and the work proceeds to Gate 1**.
+> This reverses the third amendment's verdict and is the third time the ceiling
+> was found not to be one. Raised in review.
 
 Each candidate is costed with the same two terms as the corrected Gate 0:
 

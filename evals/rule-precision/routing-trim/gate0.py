@@ -77,6 +77,13 @@ def is_rows(t):
     return 'common-rules.md' in t and bool(re.search(r'\brg\b', t)) and '^\\|' in t
 
 
+def is_detail(t):
+    """A rule-detail page pulled in. Under the fixed intervention these are
+    gated BY the rows: a detail is read only when a row points to a mandatory
+    one, so removing every row removes them too."""
+    return 'rule-details/' in t
+
+
 def is_catalogue(t):
     return ('common-rules.digest.md' in t or 'rule-details/' in t
             or 'common-rules.md' in t or 'SKILL.md' in t or '/cat-' in t)
@@ -86,10 +93,15 @@ def is_diff(t):
     return bool(re.search(r'\.diff\b', t))
 
 
+# The first scope is THE CANDIDATE: the intervention gates rows and the detail
+# pages the rows point to, so its perfect form removes both. Rows alone are kept
+# as a sub-component because they are what the routing change directly touches,
+# but a rows-only ceiling is not an upper bound on the fixed intervention.
 SCOPES = (
-    ('candidate rows only', is_rows),
+    ('the candidate (rows+details)', lambda t: is_rows(t) or is_detail(t)),
+    ('  of which rows alone', is_rows),
     ('the whole catalogue', is_catalogue),
-    ('catalogue + the diff', lambda s: is_catalogue(s) or is_diff(s)),
+    ('catalogue + the diff', lambda t: is_catalogue(t) or is_diff(t)),
 )
 
 
@@ -151,7 +163,7 @@ def read(path):
                 for n in calls[c['tool_use_id']]:
                     # the result is ingested by the request AFTER the one that asked
                     hits[n].append((len(text), seen + 1))
-                if 'candidate rows only' in calls[c['tool_use_id']]:
+                if '  of which rows alone' in calls[c['tool_use_id']]:
                     facts['row_bytes'] += len(text)
                     facts['row_lines'] += len([x for x in text.splitlines() if x.strip()])
     return [last[r] for r in order], hits, facts
@@ -244,7 +256,7 @@ def main():
             print(f'  {name if bpt == BPT[0] else "":22s}{bpt:7.1f}{100 * F / R:7.2f}%'
                   f'{100 * C / R:8.2f}%{100 * T / R:7.2f}%{100 * ceiling / R:9.2f}%{100 * CA / A:8.2f}%')
             verdicts.setdefault(name, []).append(100 * ceiling / R)
-            if name == 'candidate rows only':
+            if name == 'the candidate (rows+details)':
                 verdicts.setdefault('content only', []).append(100 * C / R)
         print()
 
@@ -267,24 +279,24 @@ def main():
     print(f'  row content per agent: {rb:.1f} kB, about {rb / 3.8:.1f}k tokens, against '
           f'{st.mean([raw_of(u) for u, _h, _f in data]) / 1000:.0f}k raw')
 
-    worst = max(verdicts['candidate rows only'])
+    best = max(verdicts['the candidate (rows+details)'])
+    rows_only = max(verdicts['  of which rows alone'])
     print(f"""
-VERDICT: Gate 0 REFUTES the candidate.
+VERDICT: Gate 0 does NOT refute the candidate.
 
-The perfect form removes at most {worst:.2f}% of raw processed tokens, against a 20%
-bar, at every calibration tested. An evidence gate can only do worse than
-removing everything, so no replay, telemetry or forward test can rescue it. The
-pre-registered rule ends the work here.
+The fixed intervention gates two things - which rows to open, and which detail
+pages to follow from them - so its perfect form removes both. That ceiling is
+{best:.2f}%, above the 20% bar, and Gate 0 cannot end the work. It proceeds to Gate 1.
 
-The trip column carries most of what is there, and it is available only to a
-gate that also consolidates what it retains into one call - which the
-intervention as fixed does not specify. Without consolidation only the content
-column applies: {min(verdicts["content only"]):.2f}-{max(verdicts["content only"]):.2f}%.
+Rows alone reach only {rows_only:.2f}%, and an earlier version of this script used that
+as the candidate's ceiling. It is not one: it bounds a narrower intervention
+than the one written down. Detail pages are the larger half.
 
-Scope: this refutes THIS candidate - evidence-gated row routing - and not the
-review-efficiency audit that proposed looking at the catalogue. Removing the
-entire catalogue reaches {max(verdicts["the whole catalogue"]):.1f}%, so a different, larger intervention on
-the same material is not refuted by this number.""")
+What the ceiling does NOT show is that the intervention gets any of it. The trip
+column is available only to a gate that also consolidates what it retains into
+one call, which the intervention does not specify; without that, only the
+content column applies ({min(verdicts["content only"]):.2f}-{max(verdicts["content only"]):.2f}%), which is below the bar on its own.
+Gate 1 has to separate those, and it can only refute or fail to refute.""")
 
 
 if __name__ == '__main__':

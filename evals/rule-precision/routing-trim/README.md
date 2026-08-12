@@ -1,13 +1,15 @@
-# Evidence-gated row routing — refuted at Gate 0
+# Evidence-gated row routing — Gate 0 does not refute it
 
-**The candidate is rejected. Gate 1 is not run, nothing is implemented, and no
-agents were spent.** `protocol.md` fixes the gates and carries three amendments;
+**Gate 0 fails to refute the candidate; it proceeds to Gate 1. Nothing is
+adopted, nothing is implemented, and no agents were spent.** `protocol.md` fixes the gates and carries four amendments;
 `gate0.py` reproduces every number here and stops if the transcript set it reads
 is not the one these numbers came from.
 
-**Scope: this refutes one candidate, not the audit that proposed it.** Removing
-the entire catalogue reaches 61.77%, so a different and larger intervention on
-the same material is untouched by this result.
+**Scope note.** The fixed intervention gates two things — which rows to open and
+which detail pages to follow from them — so Gate 0 must remove both. An earlier
+revision of this document measured rows alone, found 17.74–18.58%, and declared
+the candidate refuted. That was a ceiling on a narrower intervention than the
+one written down.
 
 ## What is being evaluated
 
@@ -36,30 +38,32 @@ across requests, that vanished request is the larger term by far.
 
 | removed entirely | B/tok | floor | content | trip | **CEILING** | api-eq |
 |---|---|---|---|---|---|---|
-| **candidate rows only** | 3.5 | 1.48% | 6.51% | 13.55% | **18.58%** | 9.66% |
-| | 3.8 | 1.36% | 5.99% | 13.55% | **18.18%** | 9.61% |
-| | 4.2 | 1.23% | 5.42% | 13.55% | **17.74%** | 9.54% |
+| **the candidate** (rows + gated details) | 3.5 | 2.24% | 9.05% | 30.08% | **36.89%** | 36.04% |
+| | 3.8 | 2.06% | 8.33% | 30.08% | **36.35%** | 35.96% |
+| | 4.2 | 1.86% | 7.54% | 30.08% | **35.76%** | 35.88% |
+| of which rows alone | 3.5 | 1.48% | 6.51% | 13.55% | 18.58% | 9.66% |
 | the whole catalogue | 3.5 | 3.55% | 15.36% | 49.96% | 61.77% | 65.54% |
 | catalogue + the diff | 3.5 | 5.33% | 25.32% | 50.02% | 70.01% | 66.76% |
 
-**17.74–18.58% misses the 20% bar at every calibration, so Gate 0 refutes the
-candidate.** An evidence gate can only do worse than removing everything, so no
-replay, telemetry or forward test can rescue it. Nothing here
-is exact: bytes are measured, tokens are modelled from them, so every figure is
+**35.76–36.89% clears the 20% bar, so Gate 0 cannot end the work.** Detail pages
+are the larger half of it: rows alone reach 17.74–18.58%, which is why scoping
+Gate 0 to rows produced a refutation the intervention does not warrant. Nothing
+here is exact: bytes are measured, tokens are modelled from them, so every figure is
 a model-based bracket reported at three calibrations. The denominator is the
-whole round — all 150 agents, including the three that fetched no rows — so the
-figures are a share of the round, not of the subset the intervention touches.
+whole round — all 150 agents — so the figures are a share of the round, not of
+the subset the intervention touches.
 
 ## Read the columns
 
 Most of what is there is the vanished round trip, and **a gate that retains
 anything reaches that term only by also consolidating** what it retains into one
 call. Row fetches per agent are 1 ×145, 2 ×4, 3 ×1 — five agents fetch more than
-once, so consolidation buys almost nothing even where it applies.
+once, so consolidation buys little where it applies at all.
 
-The intervention as fixed says which rows to open, **not how many calls to
-make**. Without consolidation only the content column applies: **5.42–6.51%**.
-Either reading is below the bar.
+The intervention as fixed says which rows and details to open, **not how many
+calls to make**. Without consolidation only the content column applies:
+**7.54–9.05%**, below the bar on its own. Gate 1 has to separate the two, and it
+can only refute or fail to refute.
 
 ## What the current routing does (measured, for the record)
 
@@ -96,7 +100,7 @@ content-only model of the saving was wrong.
 
 ## Correction, recorded
 
-Three corrections, all raised in review, none found by the author.
+Five corrections, all raised in review, none found by the author.
 
 1. **The ceiling was not an upper bound.** The first version counted only the
    removed bytes and read 7.94%; on that figure this document refuted the
@@ -118,16 +122,20 @@ Three corrections, all raised in review, none found by the author.
    refutation**, moving the ceiling from 22.63–23.45% to 17.74–18.58%.
    `tests/gate0-classify.bats` pins it, and fails if the whole-input form
    returns.
+5. **Gate 0's scope was narrower than the intervention.** It measured rows only,
+   while the intervention also gates the detail pages the rows point to.
+   Including them moves the ceiling from 17.74–18.58% to 35.76–36.89% and
+   **reverses the refutation** — the third time the ceiling was found not to be
+   one.
 
-`protocol.md` carries both amendments in place, each with the direction it moves
-the conclusion.
+`protocol.md` carries all four amendments in place, each with the direction it
+moves the conclusion.
 
 ## What this does not license
 
-- It does not refute the review-efficiency audit, or the idea of reducing what a
-  reviewer reads. It refutes **this** candidate: evidence-gated row routing,
-  against a 20% raw-token bar.
+- It is not evidence the intervention works. Gate 0 can refute or fail to
+  refute, and it failed to refute.
 - It does not adopt, implement, or schedule anything.
-- It does not name a successor candidate. Naming a lever from a share statistic
-  is the error that produced this candidate; any successor must clear a
-  Gate-0-style ceiling before anything else is spent on it.
+- It does not show the intervention reaches the ceiling. Most of the ceiling is
+  the round trip, which needs consolidation the intervention does not specify;
+  the content term alone is below the bar.

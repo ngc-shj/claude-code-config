@@ -4,17 +4,14 @@
 tests no pre-registered hypothesis, and changes no skill. It exists to identify
 *what to change to raise token efficiency* — not to change it.
 
-**One candidate refuted, the recommendation intact.** The forward-test candidate
-this audit recommends below was made concrete in `../routing-trim/` as
-*evidence-gated row routing*, and that specific form is refuted: even removing
-100% of the candidate rows saves at most 17.74–18.58% of raw processed tokens,
-against the 20% bar set for it.
+**Follow-up in progress.** The forward-test candidate recommended below was made
+concrete in `../routing-trim/` as *evidence-gated row routing* and is being
+evaluated there under a pre-registered protocol. Its first gate did not refute
+it. Nothing in this document is superseded.
 
-That refutes **the candidate, not the recommendation**. Removing the whole
-catalogue reaches 61.77%, so a larger intervention on the same material is
-untouched. What the episode does confirm is this audit's own warning about
-units: the candidate was sized from a 63% share of content bytes, and content
-bytes are not tokens.
+Two earlier revisions of this note said the candidate had been refuted, on
+ceilings of 7.94% and then 17.74–18.58%. Both were computed on models that were
+not upper bounds, and both are withdrawn.
 
 **It does not touch clause 1.** The replication question rounds 21 and 22 were
 built for is still unresolved and nothing here bears on whether it replicates.
