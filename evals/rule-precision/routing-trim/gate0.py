@@ -12,8 +12,10 @@ With no rows to fetch there is no anchored `rg`, so the request that ingests its
 result does not happen either - and since 94% of raw tokens are context re-sent
 across requests, that vanished request is the larger term. A first version of
 this script counted only the bytes and reported a ceiling of 7.9%; that was not
-an upper bound, and the protocol amendments of 2026-08-12 record that and two
-later corrections, the last of which restored the refutation.
+an upper bound. The protocol amendments of 2026-08-12 record that and the
+corrections after it - a classifier that counted the reviewer's own output, a
+scope narrower than the intervention, and a detail predicate that missed every
+relative-path page read. The verdict moved three times before settling.
 
 Everything is read from the session transcripts of round 22, which are not in
 this repository (`~/.claude/projects/<project>/<session>/subagents/`). The
@@ -77,12 +79,34 @@ def is_rows(t):
     return 'common-rules.md' in t and bool(re.search(r'\brg\b', t)) and '^\\|' in t
 
 
-DETAIL_PAGE = re.compile(r'rule-details/(?:R|RS|RT)\d+\.md')
+PAGE_ABS = re.compile(r'rule-details/((?:R|RS|RT)\d+)\.md')
+PAGE_REL = re.compile(r'\b((?:R|RS|RT)\d+)\.md')
+# The verb must be followed by whitespace: the catalogue directory is named
+# `cat-W`, so a bare \bcat\b matches every command that cds into it and the
+# filter silently passes everything.
+READS_CONTENT = re.compile(r'\b(cat|head|tail|sed|awk|rg|grep|less|more)\s')
+
+
+def page_ids(t):
+    """The rule-detail pages a call pulls the CONTENT of, as a set of IDs.
+
+    A set, not an ID: one call can fetch several pages, and 57 of them do -
+    `cd .../rule-details && cat R3.md R40.md R49.md`, or a for-loop over the
+    same. An earlier version matched only the absolute `rule-details/<ID>.md`
+    form and missed every relative one, so a "strict, identifiable pages only"
+    ceiling was neither.
+
+    Commands that name pages without reading them (`wc -l`, `ls`) are excluded:
+    they carry no page content to remove.
+    """
+    ids = set(PAGE_ABS.findall(t))
+    if 'rule-details' in t and READS_CONTENT.search(t):
+        ids |= set(PAGE_REL.findall(t))
+    return ids
 
 
 def is_detail_page(t):
-    """A specific rule-detail page. The strict reading: an identifiable page."""
-    return bool(DETAIL_PAGE.search(t))
+    return bool(page_ids(t))
 
 
 def is_detail(t):

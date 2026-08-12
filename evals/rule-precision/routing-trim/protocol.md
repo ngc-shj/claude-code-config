@@ -157,10 +157,16 @@ worse.
 > (17.74–18.58%) it declared a refutation.
 >
 > Removing 100% of what the intervention actually gates — rows and the detail
-> pages they gate — reaches **35.76–36.89%**; detail pages are the larger half.
-> Above the bar, so **Gate 0 does not refute and the work proceeds to Gate 1**.
-> This reverses the third amendment's verdict and is the third time the ceiling
-> was found not to be one. Raised in review.
+> pages they gate — clears the bar, so **Gate 0 does not refute and the work
+> proceeds to Gate 1**. This reverses the third amendment's verdict and is the
+> third time the ceiling was found not to be one. Raised in review.
+>
+> The figure this amendment was written with (35.76–36.89%, and the claim that
+> "detail pages are the larger half") is superseded twice over: the detail
+> predicate was a superset of pages, and then it was found to miss every
+> relative-path page read. `gate0.py` prints the current values; including
+> details raises the ceiling by roughly 20 points, which is not an independent
+> share of the total and is not larger than the rows term at every calibration.
 
 > **Amendment, 2026-08-12 (fifth) — Gate 1 costed rows only, like Gate 0 did.**
 >
@@ -178,14 +184,32 @@ keeps; everything below follows from it mechanically.
 `retained` and the agent actually opened it**. The intervention reads a detail
 only when a retained row points to a mandatory one, so a page whose ID the gate
 drops is removed with its row, and a page for a retained ID that the agent never
-opened cannot be conjured into existence. Pages are identified by the strict
-form — a `rule-details/<ID>.md` path — so each carries exactly one ID.
+opened cannot be conjured into existence.
 
-**Bytes and requests.** Every scoped tool result already has its byte count and
-the index of the request that ingests it. A detail result inherits the ID in its
-path; a row result carries the IDs in its `rg` pattern. Removed bytes are
-credited to the request that ingested them and to every later request that would
-still have re-sent them, exactly as in Gate 0.
+**Every result carries an ID SET, not an ID.** A single call can fetch several
+pages — `cd .../rule-details && cat R3.md R40.md R49.md`, or a loop over the
+same — and 57 calls do. A row result likewise carries every ID in its `rg`
+alternation. So each scoped result is `(bytes, request index, id_set)`:
+
+- detail results — the IDs whose page content the call reads, absolute
+  (`rule-details/<ID>.md`) or relative (a `cd` into the directory plus a
+  content-reading command). Commands that name pages without reading them
+  (`wc -l`, `ls`) carry no page content and are not detail results;
+- row results — the IDs in the `rg` pattern.
+
+**Partial retention is all-or-nothing, per result.** If any ID in a result's set
+is retained, **the whole result is kept and its byte saving is zero**. Only a
+result whose every ID is dropped contributes its bytes. Splitting a combined
+result line-by-line would need an attribution the transcript does not carry, and
+guessing it would inflate the saving; keeping the result whole is the direction
+that cannot.
+
+This applies identically to row results and to detail results, so no rule needs
+to know which kind it is holding.
+
+**Bytes and requests.** Removed bytes are credited to the request that ingested
+them and to every later request that would still have re-sent them, exactly as
+in Gate 0.
 
 **Rows and details sharing one request.** A request is eliminated **only if every
 scoped result it carries is removed**. If one retained result shares it, the

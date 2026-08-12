@@ -24,14 +24,15 @@ g = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(g)
 call = json.loads(sys.argv[2])
 t = g.tool_target(call['name'], call['input'])
-print(f"rows={g.is_rows(t)} catalogue={g.is_catalogue(t)} page={g.is_detail_page(t)} dir={g.is_detail(t)}")
+ids = ','.join(sorted(g.page_ids(t))) or '-'
+print(f"rows={g.is_rows(t)} catalogue={g.is_catalogue(t)} page={g.is_detail_page(t)} dir={g.is_detail(t)} ids={ids}")
 PY
 }
 
 @test "an anchored rg over the rules file is a row fetch" {
   run classify '{"name":"Bash","input":{"command":"cd /t/cat-W && rg -n '"'"'^\\| (R3|R49|RS3) \\|'"'"' common-rules.md"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == "rows=True catalogue=True page=False dir=False" ]]
+  [[ "$output" == "rows=True catalogue=True page=False dir=False ids=-" ]]
 }
 
 @test "a review body quoting the catalogue is NOT a fetch" {
@@ -39,7 +40,7 @@ PY
   # mentions common-rules.md and shows an rg command with an anchored pattern.
   run classify '{"name":"Write","input":{"file_path":"/t/out/W-3-c.md","content":"### Major: rule lookup\nI ran rg -n '"'"'^\\| (R3) \\|'"'"' common-rules.md to confirm this."}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == "rows=False catalogue=False page=False dir=False" ]]
+  [[ "$output" == "rows=False catalogue=False page=False dir=False ids=-" ]]
 }
 
 @test "a row fetch combined with listing rule-details is still a row fetch" {
@@ -48,7 +49,7 @@ PY
   run classify '{"name":"Bash","input":{"command":"cd /t/cat-W && rg -n '"'"'^\\| (R3|R49) \\|'"'"' common-rules.md && ls rule-details"}}'
   [ "$status" -eq 0 ]
   # A listing is directory traffic but names no page: generous scope only.
-  [[ "$output" == "rows=True catalogue=True page=False dir=True" ]]
+  [[ "$output" == "rows=True catalogue=True page=False dir=True ids=-" ]]
 }
 
 @test "a bare directory listing is generous-scope only, never a page" {
@@ -56,7 +57,7 @@ PY
   # predicates must not collapse into one.
   run classify '{"name":"Bash","input":{"command":"cd /t/cat-W && ls rule-details | head -80"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == "rows=False catalogue=True page=False dir=True" ]]
+  [[ "$output" == "rows=False catalogue=True page=False dir=True ids=-" ]]
 }
 
 @test "a path under rule-details/ that names no page is not a page" {
@@ -65,25 +66,63 @@ PY
   # collapses the two, and this is the case that catches it.
   run classify '{"name":"Bash","input":{"command":"cd /t/cat-W && ls rule-details/ | wc -l"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == "rows=False catalogue=True page=False dir=True" ]]
+  [[ "$output" == "rows=False catalogue=True page=False dir=True ids=-" ]]
 }
 
 @test "reading a rule-detail page is catalogue but not a row fetch" {
   run classify '{"name":"Read","input":{"file_path":"/t/cat-W/rule-details/R49.md"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == "rows=False catalogue=True page=True dir=True" ]]
+  [[ "$output" == "rows=False catalogue=True page=True dir=True ids=R49" ]]
 }
 
 @test "the Remedy Floor awk extraction is catalogue but not a row fetch" {
   run classify '{"name":"Bash","input":{"command":"cd /t/cat-W && awk '"'"'/^### Remedy Floor/,/^### Anti-Deferral/'"'"' common-rules.md"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == "rows=False catalogue=True page=False dir=False" ]]
+  [[ "$output" == "rows=False catalogue=True page=False dir=False ids=-" ]]
+}
+
+@test "a relative-path read of several pages yields the whole ID set" {
+  # 57 calls take this shape. Matching only the absolute rule-details/<ID>.md
+  # form missed every one of them, so a ceiling built on it was not the strict
+  # ceiling it claimed to be. Gate 1 needs the SET, not one ID.
+  run classify '{"name":"Bash","input":{"command":"cd /t/cat-W/rule-details && cat R3.md R40.md R49.md RS4.md"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "rows=False catalogue=True page=True dir=True ids=R3,R40,R49,RS4" ]]
+}
+
+@test "a loop over pages yields the same set" {
+  run classify '{"name":"Bash","input":{"command":"cd /t/cat-W/rule-details && for f in R3.md RT6.md; do cat \"$f\"; done"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "rows=False catalogue=True page=True dir=True ids=R3,RT6" ]]
+}
+
+@test "naming pages without reading them is not a detail result" {
+  # `wc -l R3.md R49.md` carries no page content, so there is nothing to remove.
+  run classify '{"name":"Bash","input":{"command":"cd /t/cat-W/rule-details && wc -l R3.md R49.md"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "rows=False catalogue=True page=False dir=True ids=-" ]]
+}
+
+@test "an anchored rg carries every ID in its pattern" {
+  # Row results are ID sets too, and Gate 1 applies the same all-or-nothing rule
+  # to them: if any ID is retained the whole result stays.
+  run python3 -c "
+import importlib.util, re
+spec = importlib.util.spec_from_file_location('g', '$GATE0')
+g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+cmd = \"cd /t/cat-W && rg -n '^\\\\| (R3|R49|RS3) \\\\|' common-rules.md\"
+t = g.tool_target('Bash', {'command': cmd})
+assert g.is_rows(t), t
+print(','.join(sorted(set(g.RULE_ID.findall(t)))))
+"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "R3,R49,RS3" ]]
 }
 
 @test "writing the review out is neither, however long the content" {
   run classify '{"name":"Write","input":{"file_path":"/t/out/W-1-a.md","content":"### Critical: something about /t/cat-W/rule-details/R3.md"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == "rows=False catalogue=False page=False dir=False" ]]
+  [[ "$output" == "rows=False catalogue=False page=False dir=False ids=-" ]]
 }
 
 @test "tool_target never returns the payload a call writes" {

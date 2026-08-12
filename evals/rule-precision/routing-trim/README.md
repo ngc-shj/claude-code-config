@@ -38,22 +38,23 @@ across requests, that vanished request is the larger term by far.
 
 | removed entirely | B/tok | floor | content | trip | **CEILING** | api-eq |
 |---|---|---|---|---|---|---|
-| **the candidate**, strict (rows + `.md` pages) | 3.5 | 2.09% | 8.45% | 28.43% | **34.79%** | 35.51% |
-| | 3.8 | 1.93% | 7.78% | 28.43% | **34.29%** | 35.43% |
-| | 4.2 | 1.74% | 7.04% | 28.43% | **33.73%** | 35.36% |
+| **the candidate**, strict (rows + page content) | 3.5 | 2.29% | 9.06% | 32.21% | **38.98%** | 42.85% |
+| | 3.8 | 2.11% | 8.35% | 32.21% | **38.44%** | 42.77% |
+| | 4.2 | 1.91% | 7.55% | 32.21% | **37.85%** | 42.69% |
 | the same, generous (any traffic into the dir) | 3.5 | 2.59% | 10.18% | 38.56% | 46.15% | 47.89% |
 | of which rows alone | 3.5 | 1.48% | 6.51% | 13.55% | 18.58% | 9.66% |
 | the whole catalogue | 3.5 | 3.55% | 15.36% | 49.96% | 61.77% | 65.54% |
 | catalogue + the diff | 3.5 | 5.33% | 25.32% | 50.02% | 70.01% | 66.76% |
 
-**33.73–34.79% clears the 20% bar, so Gate 0 cannot end the work.** That is the
-strict reading — identifiable `rule-details/<ID>.md` pages. A generous reading
+**37.85–38.98% clears the 20% bar, so Gate 0 cannot end the work.** That is the
+strict reading — calls that pull the content of a `<ID>.md` page, by absolute
+path or by a `cd` into the directory plus a reading command. A generous reading
 that also removes directory listings reaches 44.89–46.15%; the conclusion does
 not depend on which is used, and the strict figure is the one quoted.
 
 Rows alone reach 17.74–18.58%, which is why scoping Gate 0 to rows produced a
 refutation the intervention does not warrant. Including details **raises the
-ceiling by about 18 points** — a marginal contribution once rows are already
+ceiling by about 20 points** — a marginal contribution once rows are already
 removed, not an independent share of the total, and not larger than the rows
 term at every calibration. Nothing here is exact: bytes are measured, tokens are modelled from them, so every figure is
 a model-based bracket reported at three calibrations. The denominator is the
@@ -69,7 +70,7 @@ once, so consolidation buys little where it applies at all.
 
 The intervention as fixed says which rows and details to open, **not how many
 calls to make**. Without consolidation only the content column applies:
-**7.04–8.45%**, below the bar on its own. Gate 1 has to separate the two, and it
+**7.55–9.06%**, below the bar on its own. Gate 1 has to separate the two, and it
 can only refute or fail to refute.
 
 Gate 1's costing rules for detail pages are now fixed in `protocol.md` — which
@@ -114,7 +115,7 @@ content-only model of the saving was wrong.
 
 ## Correction, recorded
 
-Six corrections, all raised in review, none found by the author.
+Seven corrections, all raised in review, none found by the author.
 
 1. **The ceiling was not an upper bound.** The first version counted only the
    removed bytes and read 7.94%; on that figure this document refuted the
@@ -138,14 +139,19 @@ Six corrections, all raised in review, none found by the author.
    returns.
 5. **Gate 0's scope was narrower than the intervention.** It measured rows only,
    while the intervention also gates the detail pages the rows point to.
-   Including them moves the ceiling from 17.74–18.58% to 33.73–34.79% and
+   Including them moves the ceiling from 17.74–18.58% to 37.85–38.98% and
    **reverses the refutation** — the third time the ceiling was found not to be
    one.
 6. **Gate 1 was still costed on rows alone**, and would have repeated (5) one
    gate later. Its detail rules are fixed in `protocol.md` before it runs.
    Separately, "detail pages are the larger half" overstated what the numbers
-   support, and the ceiling's `is_detail` was a superset of actual pages; both
-   are now stated as such.
+   support, and `is_detail` was a superset of actual pages.
+7. **The strict predicate matched only absolute page paths**, missing all 57
+   relative-path reads (`cd .../rule-details && cat R3.md R40.md`), so the
+   "identifiable pages only" ceiling was not that. And a result can name
+   **several** pages — two calls fetch four each — so Gate 1 needs an ID *set*
+   per result, with an all-or-nothing rule for partial retention. Both are now
+   in `protocol.md`; `page_ids()` returns the set.
 
 `protocol.md` carries all five amendments in place, each with the direction it
 moves the conclusion.
