@@ -7,8 +7,10 @@ treat the claim as the author's account, not as a verifiable fact. Structural
 facts about the current routing were measured first (they are needed to specify
 the intervention at all) and are recorded below.
 
-One clause has since been amended: Gate 0's ceiling was defined in a way that
-was not an upper bound. See the amendment in place, below.
+Four clauses have since been amended, each recorded in place below with the
+direction it moves the conclusion: Gate 0's ceiling definition (twice), Gate 1's
+costing formula, and the counts both were written against. A fifth amendment
+fixes Gate 1's treatment of detail pages, before Gate 1 is run.
 
 This protocol governs one candidate intervention and the order in which it may
 be evaluated. It authorises no change to the skill.
@@ -160,13 +162,50 @@ worse.
 > This reverses the third amendment's verdict and is the third time the ceiling
 > was found not to be one. Raised in review.
 
-Each candidate is costed with the same two terms as the corrected Gate 0:
+> **Amendment, 2026-08-12 (fifth) — Gate 1 costed rows only, like Gate 0 did.**
+>
+> The fourth amendment widened Gate 0 to rows plus the detail pages they gate,
+> but left this clause costing row-result requests and row bytes alone. Gate 1
+> would then have measured a narrower intervention than the one written down —
+> the same defect, one gate later. The rules below replace it, and are fixed
+> **before Gate 1 is run**. Raised in review.
 
-- **round trip** — retained set empty: every row-result request of that agent
-  disappears. Retained set non-empty: the retained IDs are fetched in **one**
-  `rg`, so `max(existing row-result requests - 1, 0)` requests disappear.
-- **content** — the removed row bytes, in every later request that would still
-  have re-sent them.
+Each candidate is costed over **rows and the detail pages the rows gate**, with
+the same two terms as the corrected Gate 0. `retained` is the ID set a rule
+keeps; everything below follows from it mechanically.
+
+**Which detail pages survive.** A detail page is retained **iff its rule ID is in
+`retained` and the agent actually opened it**. The intervention reads a detail
+only when a retained row points to a mandatory one, so a page whose ID the gate
+drops is removed with its row, and a page for a retained ID that the agent never
+opened cannot be conjured into existence. Pages are identified by the strict
+form — a `rule-details/<ID>.md` path — so each carries exactly one ID.
+
+**Bytes and requests.** Every scoped tool result already has its byte count and
+the index of the request that ingests it. A detail result inherits the ID in its
+path; a row result carries the IDs in its `rg` pattern. Removed bytes are
+credited to the request that ingested them and to every later request that would
+still have re-sent them, exactly as in Gate 0.
+
+**Rows and details sharing one request.** A request is eliminated **only if every
+scoped result it carries is removed**. If one retained result shares it, the
+request stays and only the removed bytes are saved. This is the conservative
+direction and it is deliberate: a gate cannot delete a round trip it still needs
+for something else.
+
+**Calls that touch the directory without naming a page** — `ls rule-details` and
+the like — carry no ID, so no rule can retain or drop them on their merits. They
+are **removed only when `retained` is empty**, and kept otherwise. Gate 0's
+generous variant removes them unconditionally; Gate 1 does not, because that
+variant is a bound and Gate 1 is meant to be a replay.
+
+**Round trip.** Retained set empty: every row-result and detail-result request
+of that agent disappears. Non-empty: the retained IDs are fetched in **one** `rg`
+and each retained page is still read, so the requests that disappear are those
+whose scoped results were all removed.
+
+**Content.** The removed row and detail bytes, in every later request that would
+still have re-sent them.
 
 **The trip term depends on consolidation being part of the evaluated form.** The
 intervention as fixed says which rows to open, not how many calls to make. Gate 1

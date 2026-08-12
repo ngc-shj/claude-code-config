@@ -1,7 +1,7 @@
 # Evidence-gated row routing — Gate 0 does not refute it
 
 **Gate 0 fails to refute the candidate; it proceeds to Gate 1. Nothing is
-adopted, nothing is implemented, and no agents were spent.** `protocol.md` fixes the gates and carries four amendments;
+adopted, nothing is implemented, and no agents were spent.** `protocol.md` fixes the gates and carries five amendments;
 `gate0.py` reproduces every number here and stops if the transcript set it reads
 is not the one these numbers came from.
 
@@ -38,17 +38,24 @@ across requests, that vanished request is the larger term by far.
 
 | removed entirely | B/tok | floor | content | trip | **CEILING** | api-eq |
 |---|---|---|---|---|---|---|
-| **the candidate** (rows + gated details) | 3.5 | 2.24% | 9.05% | 30.08% | **36.89%** | 36.04% |
-| | 3.8 | 2.06% | 8.33% | 30.08% | **36.35%** | 35.96% |
-| | 4.2 | 1.86% | 7.54% | 30.08% | **35.76%** | 35.88% |
+| **the candidate**, strict (rows + `.md` pages) | 3.5 | 2.09% | 8.45% | 28.43% | **34.79%** | 35.51% |
+| | 3.8 | 1.93% | 7.78% | 28.43% | **34.29%** | 35.43% |
+| | 4.2 | 1.74% | 7.04% | 28.43% | **33.73%** | 35.36% |
+| the same, generous (any traffic into the dir) | 3.5 | 2.59% | 10.18% | 38.56% | 46.15% | 47.89% |
 | of which rows alone | 3.5 | 1.48% | 6.51% | 13.55% | 18.58% | 9.66% |
 | the whole catalogue | 3.5 | 3.55% | 15.36% | 49.96% | 61.77% | 65.54% |
 | catalogue + the diff | 3.5 | 5.33% | 25.32% | 50.02% | 70.01% | 66.76% |
 
-**35.76–36.89% clears the 20% bar, so Gate 0 cannot end the work.** Detail pages
-are the larger half of it: rows alone reach 17.74–18.58%, which is why scoping
-Gate 0 to rows produced a refutation the intervention does not warrant. Nothing
-here is exact: bytes are measured, tokens are modelled from them, so every figure is
+**33.73–34.79% clears the 20% bar, so Gate 0 cannot end the work.** That is the
+strict reading — identifiable `rule-details/<ID>.md` pages. A generous reading
+that also removes directory listings reaches 44.89–46.15%; the conclusion does
+not depend on which is used, and the strict figure is the one quoted.
+
+Rows alone reach 17.74–18.58%, which is why scoping Gate 0 to rows produced a
+refutation the intervention does not warrant. Including details **raises the
+ceiling by about 18 points** — a marginal contribution once rows are already
+removed, not an independent share of the total, and not larger than the rows
+term at every calibration. Nothing here is exact: bytes are measured, tokens are modelled from them, so every figure is
 a model-based bracket reported at three calibrations. The denominator is the
 whole round — all 150 agents — so the figures are a share of the round, not of
 the subset the intervention touches.
@@ -62,8 +69,15 @@ once, so consolidation buys little where it applies at all.
 
 The intervention as fixed says which rows and details to open, **not how many
 calls to make**. Without consolidation only the content column applies:
-**7.54–9.05%**, below the bar on its own. Gate 1 has to separate the two, and it
+**7.04–8.45%**, below the bar on its own. Gate 1 has to separate the two, and it
 can only refute or fail to refute.
+
+Gate 1's costing rules for detail pages are now fixed in `protocol.md` — which
+pages survive a retained ID, how bytes and requests are attributed to them, what
+happens when a row and a detail share one request, and how calls that touch the
+directory without naming a page are treated. They were still rows-only after
+Gate 0 was widened, which would have measured the same too-narrow intervention
+one gate later.
 
 ## What the current routing does (measured, for the record)
 
@@ -100,7 +114,7 @@ content-only model of the saving was wrong.
 
 ## Correction, recorded
 
-Five corrections, all raised in review, none found by the author.
+Six corrections, all raised in review, none found by the author.
 
 1. **The ceiling was not an upper bound.** The first version counted only the
    removed bytes and read 7.94%; on that figure this document refuted the
@@ -124,11 +138,16 @@ Five corrections, all raised in review, none found by the author.
    returns.
 5. **Gate 0's scope was narrower than the intervention.** It measured rows only,
    while the intervention also gates the detail pages the rows point to.
-   Including them moves the ceiling from 17.74–18.58% to 35.76–36.89% and
+   Including them moves the ceiling from 17.74–18.58% to 33.73–34.79% and
    **reverses the refutation** — the third time the ceiling was found not to be
    one.
+6. **Gate 1 was still costed on rows alone**, and would have repeated (5) one
+   gate later. Its detail rules are fixed in `protocol.md` before it runs.
+   Separately, "detail pages are the larger half" overstated what the numbers
+   support, and the ceiling's `is_detail` was a superset of actual pages; both
+   are now stated as such.
 
-`protocol.md` carries all four amendments in place, each with the direction it
+`protocol.md` carries all five amendments in place, each with the direction it
 moves the conclusion.
 
 ## What this does not license

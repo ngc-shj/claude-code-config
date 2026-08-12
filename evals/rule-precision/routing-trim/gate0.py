@@ -77,11 +77,23 @@ def is_rows(t):
     return 'common-rules.md' in t and bool(re.search(r'\brg\b', t)) and '^\\|' in t
 
 
+DETAIL_PAGE = re.compile(r'rule-details/(?:R|RS|RT)\d+\.md')
+
+
+def is_detail_page(t):
+    """A specific rule-detail page. The strict reading: an identifiable page."""
+    return bool(DETAIL_PAGE.search(t))
+
+
 def is_detail(t):
-    """A rule-detail page pulled in. Under the fixed intervention these are
-    gated BY the rows: a detail is read only when a row points to a mandatory
-    one, so removing every row removes them too."""
-    return 'rule-details/' in t
+    """Anything that reaches into the detail directory, pages and listings alike.
+
+    The generous reading, and a genuine superset of `is_detail_page`: a bare
+    `ls rule-details` carries no page but is still catalogue traffic the
+    intervention could remove. Reported alongside the strict form so the bound
+    is not read as a measurement of the pages themselves.
+    """
+    return 'rule-details/' in t or 'rule-details' in t and 'ls ' in t
 
 
 def is_catalogue(t):
@@ -98,7 +110,8 @@ def is_diff(t):
 # as a sub-component because they are what the routing change directly touches,
 # but a rows-only ceiling is not an upper bound on the fixed intervention.
 SCOPES = (
-    ('the candidate (rows+details)', lambda t: is_rows(t) or is_detail(t)),
+    ('the candidate, generous', lambda t: is_rows(t) or is_detail(t)),
+    ('  strict: rows + .md pages', lambda t: is_rows(t) or is_detail_page(t)),
     ('  of which rows alone', is_rows),
     ('the whole catalogue', is_catalogue),
     ('catalogue + the diff', lambda t: is_catalogue(t) or is_diff(t)),
@@ -256,7 +269,7 @@ def main():
             print(f'  {name if bpt == BPT[0] else "":22s}{bpt:7.1f}{100 * F / R:7.2f}%'
                   f'{100 * C / R:8.2f}%{100 * T / R:7.2f}%{100 * ceiling / R:9.2f}%{100 * CA / A:8.2f}%')
             verdicts.setdefault(name, []).append(100 * ceiling / R)
-            if name == 'the candidate (rows+details)':
+            if name == '  strict: rows + .md pages':
                 verdicts.setdefault('content only', []).append(100 * C / R)
         print()
 
@@ -279,18 +292,30 @@ def main():
     print(f'  row content per agent: {rb:.1f} kB, about {rb / 3.8:.1f}k tokens, against '
           f'{st.mean([raw_of(u) for u, _h, _f in data]) / 1000:.0f}k raw')
 
-    best = max(verdicts['the candidate (rows+details)'])
+    best = max(verdicts['the candidate, generous'])
     rows_only = max(verdicts['  of which rows alone'])
+    strict = verdicts['  strict: rows + .md pages']
     print(f"""
 VERDICT: Gate 0 does NOT refute the candidate.
 
 The fixed intervention gates two things - which rows to open, and which detail
-pages to follow from them - so its perfect form removes both. That ceiling is
-{best:.2f}%, above the 20% bar, and Gate 0 cannot end the work. It proceeds to Gate 1.
+pages to follow from them - so its perfect form removes both. Two readings of
+"details", both above the 20% bar:
 
-Rows alone reach only {rows_only:.2f}%, and an earlier version of this script used that
-as the candidate's ceiling. It is not one: it bounds a narrower intervention
-than the one written down. Detail pages are the larger half.
+  strict, identifiable .md pages only   {min(strict):.2f}-{max(strict):.2f}%   <- the figure to quote
+  generous, any traffic into the dir    {min(verdicts["the candidate, generous"]):.2f}-{max(verdicts["the candidate, generous"]):.2f}%   loose superset
+
+The strict reading is the one that maps to what the intervention gates: pages
+followed from rows. The generous one also removes directory listings, which the
+intervention does not obviously touch; it is reported only to show the bound is
+not sensitive to that choice. Gate 0 cannot end the work under either, and
+proceeds to Gate 1 on the strict figure.
+
+Rows alone reach {rows_only:.2f}%, and an earlier version of this script used that as
+the candidate's ceiling. It is not one: it bounds a narrower intervention than
+the one written down. Including details raises the ceiling by about 18 points -
+a marginal contribution once rows are already removed, not an independent share
+of it, and not larger than the rows term at every calibration.
 
 What the ceiling does NOT show is that the intervention gets any of it. The trip
 column is available only to a gate that also consolidates what it retains into
