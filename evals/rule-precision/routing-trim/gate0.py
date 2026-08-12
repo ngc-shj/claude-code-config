@@ -81,9 +81,16 @@ def is_rows(t):
 
 PAGE_FILE = re.compile(r'\b((?:R|RS|RT)\d+)\.md')
 BARE_ID = re.compile(r'\b((?:R|RS|RT)\d+)\b')
-# The verb must be followed by whitespace: the catalogue directory is named
+# `cat` is the only command in this corpus that reads a page's content: all 58
+# page-reading calls use it. `head`, `tail` and friends appear only downstream of
+# a pipe, reading another command's output - `wc -l R3.md … | tail -15` names
+# pages without fetching them, and accepting the wider verb list classified two
+# such commands as page reads. The corpus is pinned by manifest, so a shape that
+# is not in it cannot appear without the assertion firing first.
+#
+# The trailing \s matters independently: the catalogue directory is named
 # `cat-W`, so a bare \bcat\b matches every command that cds into it.
-READS_CONTENT = re.compile(r'\b(cat|head|tail|sed|awk|rg|grep|less|more)\s')
+READS_CONTENT = re.compile(r'\bcat\s')
 # `for f in R3 R49 RS3; do cat $f.md; done` - the IDs carry no extension, and 18
 # of the 58 page-reading commands take this shape.
 FOR_LOOP = re.compile(r'\bfor\s+(\w+)\s+in\s+([^;\n]+?)\s*;\s*do\b')
@@ -192,6 +199,12 @@ def read(path):
     idx = {rid: i for i, rid in enumerate(order)}
     calls = {}
     hits = {name: [] for name, _ in SCOPES}
+    # Per request: how many tool results it ingests in total, and how many of
+    # them each scope covers. A request survives unless EVERY result it carries
+    # is removed - one out-of-scope result (the diff, most often) is enough to
+    # keep it, and 142 of the 323 scoped ingestions are mixed like that.
+    n_results = collections.Counter()
+    n_scoped = {name: collections.Counter() for name, _ in SCOPES}
     facts = dict(candidates=set(), details=set(), row_bytes=0, row_lines=0, rg_calls=0)
     seen = 0
     for d in rows:
@@ -211,15 +224,19 @@ def read(path):
                     facts['candidates'].update(RULE_ID.findall(t))
                 if 'rule-details/' in t:
                     facts['details'].update(re.findall(r'rule-details/((?:R|RS|RT)\d+)\.md', t))
-            elif c.get('type') == 'tool_result' and c.get('tool_use_id') in calls:
+            elif c.get('type') == 'tool_result':
+                # the result is ingested by the request AFTER the one that asked
+                n_results[seen + 1] += 1
+                if c.get('tool_use_id') not in calls:
+                    continue
                 text = result_text(c)
                 for n in calls[c['tool_use_id']]:
-                    # the result is ingested by the request AFTER the one that asked
                     hits[n].append((len(text), seen + 1))
+                    n_scoped[n][seen + 1] += 1
                 if '  of which rows alone' in calls[c['tool_use_id']]:
                     facts['row_bytes'] += len(text)
                     facts['row_lines'] += len([x for x in text.splitlines() if x.strip()])
-    return [last[r] for r in order], hits, facts
+    return [last[r] for r in order], hits, facts, n_results, n_scoped
 
 
 def raw_of(usages):
@@ -273,14 +290,16 @@ def main():
 
     print('\nGate 0 - remove 100% of the scope, an unreachable ideal')
     print('  content  = the removed bytes, at first ingestion and in every later re-send')
-    print('  round trip = the request that ingests the result never happens at all')
+    print('  round trip = the request that ingests the result never happens, counted')
+    print('               only where EVERY result that request carries is removed - a')
+    print('               request that also carried the diff survives')
     print(f'  {"scope":22s}{"B/tok":>7s}{"floor":>8s}{"content":>9s}{"trip":>8s}'
           f'{"CEILING":>10s}{"api-eq":>9s}')
     verdicts = {}
     for name, _ in SCOPES:
         for bpt in BPT:
             R = A = F = C = T = CA = 0.0
-            for usages, hits, _facts in data:
+            for usages, hits, _facts, n_results, n_scoped in data:
                 # Every agent of the round stays in the denominator, including the
                 # three that fetched no rows: the saving is a share of the round,
                 # not of the subset the intervention happens to touch.
@@ -300,7 +319,8 @@ def main():
                 # With nothing to fetch, the requests that ingest those results are
                 # not made. Each such request is removed ONCE however many results
                 # it carried, or the same round trip is counted several times.
-                gone = {first for _b, first in hits[name] if first < n_req}
+                gone = {r for r in n_scoped[name]
+                        if r < n_req and n_results[r] == n_scoped[name][r]}
                 T += raw_of([usages[i] for i in gone])
                 # api_of(gone) already contains the first cache-write of the
                 # removed content, so no separate first-write term is added above.
@@ -315,7 +335,7 @@ def main():
 
     print('Where the raw tokens actually are')
     agg, reqs = collections.Counter(), []
-    for usages, _h, _f in data:
+    for usages, _h, _f, _nr, _ns in data:
         reqs.append(len(usages))
         for u in usages:
             agg['cache read (context re-sent)'] += u.get('cache_read_input_tokens', 0)
@@ -330,7 +350,7 @@ def main():
     print(f'  requests per agent: mean {st.mean(reqs):.1f}, median {st.median(reqs):.0f}')
     rb = st.mean([x['row_bytes'] for x in rg]) / 1000
     print(f'  row content per agent: {rb:.1f} kB, about {rb / 3.8:.1f}k tokens, against '
-          f'{st.mean([raw_of(u) for u, _h, _f in data]) / 1000:.0f}k raw')
+          f'{st.mean([raw_of(d[0]) for d in data]) / 1000:.0f}k raw')
 
     best = max(verdicts['the candidate, generous'])
     rows_only = max(verdicts['  of which rows alone'])
@@ -354,8 +374,11 @@ proceeds to Gate 1 on the strict figure.
 Rows alone reach {rows_only:.2f}%, and an earlier version of this script used that as
 the candidate's ceiling. It is not one: it bounds a narrower intervention than
 the one written down. Including details raises the ceiling by {max(strict) - rows_only:.0f} points - a marginal
-contribution once rows are already removed, not an independent share of it, and
-not larger than the rows term at every calibration.
+contribution once rows are already removed, not an independent share of it.
+
+Rows alone fall to {rows_only:.2f}% once a request is only counted as removable when every
+result it carries goes: row fetches almost always share their request with
+something out of scope, most often the diff.
 
 What the ceiling does NOT show is that the intervention gets any of it. The trip
 column is available only to a gate that also consolidates what it retains into

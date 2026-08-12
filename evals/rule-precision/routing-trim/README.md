@@ -38,25 +38,30 @@ across requests, that vanished request is the larger term by far.
 
 | removed entirely | B/tok | floor | content | trip | **CEILING** | api-eq |
 |---|---|---|---|---|---|---|
-| **the candidate**, strict (rows + page content) | 3.5 | 2.43% | 9.49% | 34.32% | **41.38%** | 46.72% |
-| | 3.8 | 2.23% | 8.74% | 34.32% | **40.82%** | 46.64% |
-| | 4.2 | 2.02% | 7.90% | 34.32% | **40.20%** | 46.55% |
-| the same, generous (any traffic into the dir) | 3.5 | 2.59% | 10.18% | 38.56% | 46.15% | 47.89% |
-| of which rows alone | 3.5 | 1.48% | 6.51% | 13.55% | 18.58% | 9.66% |
-| the whole catalogue | 3.5 | 3.55% | 15.36% | 49.96% | 61.77% | 65.54% |
+| **the candidate**, strict (rows + page content) | 3.5 | 2.43% | 9.48% | 21.67% | **28.73%** | 38.15% |
+| | 3.8 | 2.23% | 8.73% | 21.67% | **28.17%** | 38.07% |
+| | 4.2 | 2.02% | 7.90% | 21.67% | **27.55%** | 37.98% |
+| the same, generous (any traffic into the dir) | 3.5 | 2.59% | 10.18% | 31.69% | 39.28% | 43.38% |
+| of which rows alone | 3.5 | 1.48% | 6.51% | 1.57% | 6.59% | 1.40% |
+| the whole catalogue | 3.5 | 3.55% | 15.36% | 39.44% | 51.25% | 49.50% |
 | catalogue + the diff | 3.5 | 5.33% | 25.32% | 50.02% | 70.01% | 66.76% |
 
-**40.20–41.38% clears the 20% bar, so Gate 0 cannot end the work.** That is the
+**27.55–28.73% clears the 20% bar, so Gate 0 cannot end the work.** That is the
 strict reading — calls that pull the content of a `<ID>.md` page, by absolute
 path or by a `cd` into the directory plus a reading command. A generous reading
-that also removes directory listings reaches 44.89–46.15%; the conclusion does
+that also removes directory listings reaches 38.01–39.28%; the conclusion does
 not depend on which is used, and the strict figure is the one quoted.
 
-Rows alone reach 17.74–18.58%, which is why scoping Gate 0 to rows produced a
-refutation the intervention does not warrant. Including details **raises the
-ceiling by about 23 points** — a marginal contribution once rows are already
-removed, not an independent share of the total, and not larger than the rows
-term at every calibration. Nothing here is exact: bytes are measured, tokens are modelled from them, so every figure is
+A request counts as removed **only when every result it ingests goes** — 142 of
+the 323 requests that carry a scoped result also carry something out of scope,
+usually the diff, and those survive. Gate 0 could have left this loose, since
+overstating the trip term only makes refutation harder, but a bound wrong in a
+knowable direction is worth tightening and doing so does not change the verdict.
+
+Rows alone now reach **5.76–6.59%**: a row fetch almost always shares its
+request with something out of scope, so removing rows removes bytes but rarely a
+round trip. Scoping Gate 0 to rows produced a refutation the intervention never
+warranted, and this is how thin that scope really was. Nothing here is exact: bytes are measured, tokens are modelled from them, so every figure is
 a model-based bracket reported at three calibrations. The denominator is the
 whole round — all 150 agents — so the figures are a share of the round, not of
 the subset the intervention touches.
@@ -70,7 +75,7 @@ once, so consolidation buys little where it applies at all.
 
 The intervention as fixed says which rows and details to open, **not how many
 calls to make**. Without consolidation only the content column applies:
-**7.90–9.49%**, below the bar on its own. Gate 1 has to separate the two, and it
+**7.90–9.48%**, below the bar on its own. Gate 1 has to separate the two, and it
 can only refute or fail to refute.
 
 Gate 1's costing rules for detail pages are now fixed in `protocol.md` — which
@@ -115,7 +120,7 @@ content-only model of the saving was wrong.
 
 ## Correction, recorded
 
-Nine corrections, all raised in review, none found by the author.
+Eleven corrections, all raised in review, none found by the author.
 
 1. **The ceiling was not an upper bound.** The first version counted only the
    removed bytes and read 7.94%; on that figure this document refuted the
@@ -139,7 +144,7 @@ Nine corrections, all raised in review, none found by the author.
    returns.
 5. **Gate 0's scope was narrower than the intervention.** It measured rows only,
    while the intervention also gates the detail pages the rows point to.
-   Including them moves the ceiling from 17.74–18.58% to 40.20–41.38% and
+   Including them moves the ceiling from rows-only to the candidate scope and
    **reverses the refutation** — the third time the ceiling was found not to be
    one.
 6. **Gate 1 was still costed on rows alone**, and would have repeated (5) one
@@ -162,6 +167,15 @@ Nine corrections, all raised in review, none found by the author.
    their own ID, and the `for` form writes a per-page separator — and an
    explicit lower/upper band where it is not, with refutation conditional on the
    upper end.
+10. **A wide reading-verb list misread two compound commands** — `wc -l … | tail`
+    and `ls | head && wc` fetch no page content, but `tail`/`head` counted as
+    reading verbs while they read another command's output. Bash classification
+    is now restricted to `cat`, the only page-reading form in this pinned corpus.
+11. **Request elimination asked whether every *scoped* result was removed**, when
+    the question is whether every result is. 142 of the 323 requests that ingest
+    a scoped result also carry something out of scope — usually the diff — and
+    those requests survive. Applied to Gate 0 as well, which drops the strict
+    ceiling to 27.55–28.73% and rows-only to 5.76–6.59%, and changes no verdict.
 
 `protocol.md` carries all six amendments in place, each with the direction it
 moves the conclusion.

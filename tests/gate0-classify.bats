@@ -125,6 +125,21 @@ PY
   [[ "$output" == "rows=False catalogue=True page=False dir=True ids=-" ]]
 }
 
+@test "wc piped into tail is not a page read" {
+  # Both of these are in the corpus. `tail` and `head` read the OUTPUT of wc and
+  # ls, not the pages, so accepting a wide verb list classified two commands as
+  # page reads that fetch no page content at all.
+  run classify '{"name":"Bash","input":{"command":"cd /t/cat-W/rule-details && ls && wc -l R1.md R3.md 2>&1 | tail -15"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "rows=False catalogue=True page=False dir=True ids=-" ]]
+}
+
+@test "ls piped into head, then wc, is not a page read either" {
+  run classify '{"name":"Bash","input":{"command":"cd /t/cat-W/rule-details && ls | head -100 && echo \"---SIZES---\" && wc -l RS3.md R49.md 2>&1"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "rows=False catalogue=True page=False dir=True ids=-" ]]
+}
+
 @test "an anchored rg carries every ID in its pattern" {
   # Row results are ID sets too, and Gate 1 applies the same all-or-nothing rule
   # to them: if any ID is retained the whole result stays.

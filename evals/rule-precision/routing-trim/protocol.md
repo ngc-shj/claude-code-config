@@ -168,8 +168,17 @@ worse.
 > details raises the ceiling by roughly 20 points, which is not an independent
 > share of the total and is not larger than the rows term at every calibration.
 
+> **Amendment, 2026-08-12 (fifth) — Gate 1 costed rows only, like Gate 0 did.**
+>
+> The fourth amendment widened Gate 0 to rows plus the detail pages they gate,
+> but left this clause costing row-result requests and row bytes alone. Gate 1
+> would then have measured a narrower intervention than the one written down —
+> the same defect, one gate later. The rules below replace it, and are fixed
+> **before Gate 1 is run**. Raised in review.
+
 > **Amendment, 2026-08-13 (sixth) — the all-or-nothing rule pointed the wrong
-> way, and `page_ids` missed the commonest loop form.**
+> way, `page_ids` missed the commonest loop form, and a request was treated as
+> removable while it still carried the diff.**
 >
 > The fifth amendment resolved unattributable results by keeping them whole and
 > crediting zero bytes. That is a **lower** bound on the saving, and Gate 1
@@ -178,19 +187,18 @@ worse.
 > is splittable and an explicit lower/upper band where it is not, with refutation
 > conditional on the upper end.
 >
+> Request elimination asked whether every *scoped* result was removed, when the
+> question is whether every result is: 142 of the 323 requests that ingest a
+> scoped result also carry something out of scope, most often the diff, and
+> those requests survive. Applied to Gate 0 as well; its verdict is unchanged.
+>
 > Separately, `page_ids()` read literal `<ID>.md` only, so
 > `for f in R3 R49; do cat $f.md; done` — 18 of the 58 page-reading commands —
 > yielded nothing, while `wc -l .../R3.md` and `ls -l .../R49.md` yielded IDs the
-> protocol says are not detail results at all. Both fixed; both now pinned by
-> tests. Raised in review, before Gate 1 was run.
-
-> **Amendment, 2026-08-12 (fifth) — Gate 1 costed rows only, like Gate 0 did.**
->
-> The fourth amendment widened Gate 0 to rows plus the detail pages they gate,
-> but left this clause costing row-result requests and row bytes alone. Gate 1
-> would then have measured a narrower intervention than the one written down —
-> the same defect, one gate later. The rules below replace it, and are fixed
-> **before Gate 1 is run**. Raised in review.
+> protocol says are not detail results at all, and `wc -l … | tail -15` was read
+> as a page fetch because `tail` counted as a reading verb while it was reading
+> `wc`'s output. All fixed and pinned by tests. Raised in review, before Gate 1
+> was run.
 
 Each candidate is costed over **rows and the detail pages the rows gate**, with
 the same two terms as the corrected Gate 0. `retained` is the ID set a rule
@@ -241,11 +249,20 @@ every calibration.** A lower end below the bar establishes nothing.
 them and to every later request that would still have re-sent them, exactly as
 in Gate 0.
 
-**Rows and details sharing one request.** A request is eliminated **only if every
-scoped result it carries is removed**. If one retained result shares it, the
-request stays and only the removed bytes are saved. This is the conservative
-direction and it is deliberate: a gate cannot delete a round trip it still needs
-for something else.
+**When a request disappears.** A request is eliminated **only if every tool
+result it ingests is removed** — not merely every *scoped* one. A request that
+also carried the diff, or any other out-of-scope result, is still needed and
+survives. 142 of the 323 requests that ingest a scoped result are mixed like
+that, so the distinction is most of the term, not a corner case.
+
+The same applies within the scope: if one retained result shares the request,
+it stays and only the removed bytes are saved. A gate cannot delete a round trip
+it still needs for something else.
+
+Gate 0 applies this rule too. It could have been left loose there — Gate 0 is an
+upper bound, and overstating the trip term only makes refutation harder — but a
+bound that is wrong in a knowable direction is worth tightening, and doing so
+does not change its verdict.
 
 **Calls that touch the directory without naming a page** — `ls rule-details` and
 the like — carry no ID, so no rule can retain or drop them on their merits. They
