@@ -79,29 +79,45 @@ def is_rows(t):
     return 'common-rules.md' in t and bool(re.search(r'\brg\b', t)) and '^\\|' in t
 
 
-PAGE_ABS = re.compile(r'rule-details/((?:R|RS|RT)\d+)\.md')
-PAGE_REL = re.compile(r'\b((?:R|RS|RT)\d+)\.md')
+PAGE_FILE = re.compile(r'\b((?:R|RS|RT)\d+)\.md')
+BARE_ID = re.compile(r'\b((?:R|RS|RT)\d+)\b')
 # The verb must be followed by whitespace: the catalogue directory is named
-# `cat-W`, so a bare \bcat\b matches every command that cds into it and the
-# filter silently passes everything.
+# `cat-W`, so a bare \bcat\b matches every command that cds into it.
 READS_CONTENT = re.compile(r'\b(cat|head|tail|sed|awk|rg|grep|less|more)\s')
+# `for f in R3 R49 RS3; do cat $f.md; done` - the IDs carry no extension, and 18
+# of the 58 page-reading commands take this shape.
+FOR_LOOP = re.compile(r'\bfor\s+(\w+)\s+in\s+([^;\n]+?)\s*;\s*do\b')
+PATH_ONLY = re.compile(r'\s*\S*rule-details/(?:R|RS|RT)\d+\.md\s*')
 
 
 def page_ids(t):
     """The rule-detail pages a call pulls the CONTENT of, as a set of IDs.
 
-    A set, not an ID: one call can fetch several pages, and 57 of them do -
-    `cd .../rule-details && cat R3.md R40.md R49.md`, or a for-loop over the
-    same. An earlier version matched only the absolute `rule-details/<ID>.md`
-    form and missed every relative one, so a "strict, identifiable pages only"
-    ceiling was neither.
+    A set, not an ID: one call can fetch several pages, and many do. Three
+    shapes appear in the corpus and all three are handled:
 
-    Commands that name pages without reading them (`wc -l`, `ls`) are excluded:
-    they carry no page content to remove.
+      Read  .../rule-details/R49.md
+      Bash  cd .../rule-details && cat R3.md R40.md R49.md
+      Bash  cd .../rule-details && for f in R3 R49 RS3; do cat $f.md; done
+
+    Nothing is returned unless the command actually reads content. `wc -l` and
+    `ls -l` name pages without fetching them, so there is nothing to remove -
+    and matching a path before checking the verb is what made an earlier version
+    disagree with its own protocol about exactly those two.
     """
-    ids = set(PAGE_ABS.findall(t))
-    if 'rule-details' in t and READS_CONTENT.search(t):
-        ids |= set(PAGE_REL.findall(t))
+    if 'rule-details' not in t:
+        return set()
+    if not READS_CONTENT.search(t):
+        # A target that is nothing but a page path is a Read of that page, and a
+        # Read is a content fetch by definition - there is no verb to look for.
+        # A shell command that merely names the path () is not.
+        if PATH_ONLY.fullmatch(t):
+            return set(PAGE_FILE.findall(t))
+        return set()
+    ids = set(PAGE_FILE.findall(t))
+    for var, items in FOR_LOOP.findall(t):
+        if re.search(r'[$]\{?' + re.escape(var) + r'\}?(?:"\s*)?\.md', t) or f'${var}.md' in t:
+            ids |= set(BARE_ID.findall(items))
     return ids
 
 
@@ -337,9 +353,9 @@ proceeds to Gate 1 on the strict figure.
 
 Rows alone reach {rows_only:.2f}%, and an earlier version of this script used that as
 the candidate's ceiling. It is not one: it bounds a narrower intervention than
-the one written down. Including details raises the ceiling by about 18 points -
-a marginal contribution once rows are already removed, not an independent share
-of it, and not larger than the rows term at every calibration.
+the one written down. Including details raises the ceiling by {max(strict) - rows_only:.0f} points - a marginal
+contribution once rows are already removed, not an independent share of it, and
+not larger than the rows term at every calibration.
 
 What the ceiling does NOT show is that the intervention gets any of it. The trip
 column is available only to a gate that also consolidates what it retains into

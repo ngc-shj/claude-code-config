@@ -96,6 +96,28 @@ PY
   [[ "$output" == "rows=False catalogue=True page=True dir=True ids=R3,RT6" ]]
 }
 
+@test "a loop over bare IDs yields the set - the commonest form in the corpus" {
+  # 18 of the 58 page-reading commands look like this: the IDs carry no
+  # extension, so a predicate matching literal <ID>.md returns nothing for them.
+  run classify '{"name":"Bash","input":{"command":"cd /t/cat-W/rule-details && for f in R3 R49 RS3; do echo \"## $f\"; cat $f.md; done"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "rows=False catalogue=True page=True dir=True ids=R3,R49,RS3" ]]
+}
+
+@test "an absolute path named but not read is not a detail result" {
+  # Matching the path before checking the verb made the ceiling disagree with
+  # its own protocol about exactly this case.
+  run classify '{"name":"Bash","input":{"command":"wc -l /t/cat-W/rule-details/R3.md"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "rows=False catalogue=True page=False dir=True ids=-" ]]
+}
+
+@test "listing an absolute page path is not a detail result either" {
+  run classify '{"name":"Bash","input":{"command":"ls -l /t/cat-W/rule-details/R49.md"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "rows=False catalogue=True page=False dir=True ids=-" ]]
+}
+
 @test "naming pages without reading them is not a detail result" {
   # `wc -l R3.md R49.md` carries no page content, so there is nothing to remove.
   run classify '{"name":"Bash","input":{"command":"cd /t/cat-W/rule-details && wc -l R3.md R49.md"}}'

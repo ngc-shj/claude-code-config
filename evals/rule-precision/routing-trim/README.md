@@ -1,7 +1,7 @@
 # Evidence-gated row routing — Gate 0 does not refute it
 
 **Gate 0 fails to refute the candidate; it proceeds to Gate 1. Nothing is
-adopted, nothing is implemented, and no agents were spent.** `protocol.md` fixes the gates and carries five amendments;
+adopted, nothing is implemented, and no agents were spent.** `protocol.md` fixes the gates and carries six amendments;
 `gate0.py` reproduces every number here and stops if the transcript set it reads
 is not the one these numbers came from.
 
@@ -38,15 +38,15 @@ across requests, that vanished request is the larger term by far.
 
 | removed entirely | B/tok | floor | content | trip | **CEILING** | api-eq |
 |---|---|---|---|---|---|---|
-| **the candidate**, strict (rows + page content) | 3.5 | 2.29% | 9.06% | 32.21% | **38.98%** | 42.85% |
-| | 3.8 | 2.11% | 8.35% | 32.21% | **38.44%** | 42.77% |
-| | 4.2 | 1.91% | 7.55% | 32.21% | **37.85%** | 42.69% |
+| **the candidate**, strict (rows + page content) | 3.5 | 2.43% | 9.49% | 34.32% | **41.38%** | 46.72% |
+| | 3.8 | 2.23% | 8.74% | 34.32% | **40.82%** | 46.64% |
+| | 4.2 | 2.02% | 7.90% | 34.32% | **40.20%** | 46.55% |
 | the same, generous (any traffic into the dir) | 3.5 | 2.59% | 10.18% | 38.56% | 46.15% | 47.89% |
 | of which rows alone | 3.5 | 1.48% | 6.51% | 13.55% | 18.58% | 9.66% |
 | the whole catalogue | 3.5 | 3.55% | 15.36% | 49.96% | 61.77% | 65.54% |
 | catalogue + the diff | 3.5 | 5.33% | 25.32% | 50.02% | 70.01% | 66.76% |
 
-**37.85–38.98% clears the 20% bar, so Gate 0 cannot end the work.** That is the
+**40.20–41.38% clears the 20% bar, so Gate 0 cannot end the work.** That is the
 strict reading — calls that pull the content of a `<ID>.md` page, by absolute
 path or by a `cd` into the directory plus a reading command. A generous reading
 that also removes directory listings reaches 44.89–46.15%; the conclusion does
@@ -54,7 +54,7 @@ not depend on which is used, and the strict figure is the one quoted.
 
 Rows alone reach 17.74–18.58%, which is why scoping Gate 0 to rows produced a
 refutation the intervention does not warrant. Including details **raises the
-ceiling by about 20 points** — a marginal contribution once rows are already
+ceiling by about 23 points** — a marginal contribution once rows are already
 removed, not an independent share of the total, and not larger than the rows
 term at every calibration. Nothing here is exact: bytes are measured, tokens are modelled from them, so every figure is
 a model-based bracket reported at three calibrations. The denominator is the
@@ -70,7 +70,7 @@ once, so consolidation buys little where it applies at all.
 
 The intervention as fixed says which rows and details to open, **not how many
 calls to make**. Without consolidation only the content column applies:
-**7.55–9.06%**, below the bar on its own. Gate 1 has to separate the two, and it
+**7.90–9.49%**, below the bar on its own. Gate 1 has to separate the two, and it
 can only refute or fail to refute.
 
 Gate 1's costing rules for detail pages are now fixed in `protocol.md` — which
@@ -115,7 +115,7 @@ content-only model of the saving was wrong.
 
 ## Correction, recorded
 
-Seven corrections, all raised in review, none found by the author.
+Nine corrections, all raised in review, none found by the author.
 
 1. **The ceiling was not an upper bound.** The first version counted only the
    removed bytes and read 7.94%; on that figure this document refuted the
@@ -139,7 +139,7 @@ Seven corrections, all raised in review, none found by the author.
    returns.
 5. **Gate 0's scope was narrower than the intervention.** It measured rows only,
    while the intervention also gates the detail pages the rows point to.
-   Including them moves the ceiling from 17.74–18.58% to 37.85–38.98% and
+   Including them moves the ceiling from 17.74–18.58% to 40.20–41.38% and
    **reverses the refutation** — the third time the ceiling was found not to be
    one.
 6. **Gate 1 was still costed on rows alone**, and would have repeated (5) one
@@ -147,13 +147,23 @@ Seven corrections, all raised in review, none found by the author.
    Separately, "detail pages are the larger half" overstated what the numbers
    support, and `is_detail` was a superset of actual pages.
 7. **The strict predicate matched only absolute page paths**, missing all 57
-   relative-path reads (`cd .../rule-details && cat R3.md R40.md`), so the
-   "identifiable pages only" ceiling was not that. And a result can name
-   **several** pages — two calls fetch four each — so Gate 1 needs an ID *set*
-   per result, with an all-or-nothing rule for partial retention. Both are now
-   in `protocol.md`; `page_ids()` returns the set.
+   relative-path reads, so the "identifiable pages only" ceiling was not that.
+   And a result can name **several** pages, so Gate 1 needs an ID *set* per
+   result. `page_ids()` returns the set.
+8. **`page_ids()` then still missed the commonest loop form** —
+   `for f in R3 R49; do cat $f.md; done`, 18 of the 58 page-reading commands —
+   while `wc -l …/R3.md` and `ls -l …/R49.md` wrongly yielded IDs, contradicting
+   the protocol's own definition. Fixing the second broke plain `Read` calls
+   until a path-only target was treated as the content read it is; all three
+   behaviours are now pinned by mutation-tested cases.
+9. **Gate 1's all-or-nothing rule was a lower bound, and Gate 1 refutes on an
+   upper one.** A saving below 20% computed that way could not refute anything.
+   Replaced by exact splitting where the result is splittable — row lines carry
+   their own ID, and the `for` form writes a per-page separator — and an
+   explicit lower/upper band where it is not, with refutation conditional on the
+   upper end.
 
-`protocol.md` carries all five amendments in place, each with the direction it
+`protocol.md` carries all six amendments in place, each with the direction it
 moves the conclusion.
 
 ## What this does not license

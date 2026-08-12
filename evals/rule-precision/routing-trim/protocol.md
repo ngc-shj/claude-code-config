@@ -168,6 +168,22 @@ worse.
 > details raises the ceiling by roughly 20 points, which is not an independent
 > share of the total and is not larger than the rows term at every calibration.
 
+> **Amendment, 2026-08-13 (sixth) — the all-or-nothing rule pointed the wrong
+> way, and `page_ids` missed the commonest loop form.**
+>
+> The fifth amendment resolved unattributable results by keeping them whole and
+> crediting zero bytes. That is a **lower** bound on the saving, and Gate 1
+> refutes on an **upper** one — so a figure below the bar computed that way could
+> not have refuted anything. Replaced above by exact splitting where the result
+> is splittable and an explicit lower/upper band where it is not, with refutation
+> conditional on the upper end.
+>
+> Separately, `page_ids()` read literal `<ID>.md` only, so
+> `for f in R3 R49; do cat $f.md; done` — 18 of the 58 page-reading commands —
+> yielded nothing, while `wc -l .../R3.md` and `ls -l .../R49.md` yielded IDs the
+> protocol says are not detail results at all. Both fixed; both now pinned by
+> tests. Raised in review, before Gate 1 was run.
+
 > **Amendment, 2026-08-12 (fifth) — Gate 1 costed rows only, like Gate 0 did.**
 >
 > The fourth amendment widened Gate 0 to rows plus the detail pages they gate,
@@ -197,15 +213,29 @@ alternation. So each scoped result is `(bytes, request index, id_set)`:
   (`wc -l`, `ls`) carry no page content and are not detail results;
 - row results — the IDs in the `rg` pattern.
 
-**Partial retention is all-or-nothing, per result.** If any ID in a result's set
-is retained, **the whole result is kept and its byte saving is zero**. Only a
-result whose every ID is dropped contributes its bytes. Splitting a combined
-result line-by-line would need an attribution the transcript does not carry, and
-guessing it would inflate the saving; keeping the result whole is the direction
-that cannot.
+**Partial retention: split where the result is splittable, band where it is not.**
 
-This applies identically to row results and to detail results, so no rule needs
-to know which kind it is holding.
+Gate 1's decision rule refutes when an **upper** bound falls below the bar, so
+every unattributable quantity has to be resolved in the direction that makes the
+saving *larger*, not smaller. An earlier version of this clause kept partially
+retained results whole and credited them zero bytes. That is a **lower** bound:
+a real implementation that trimmed line by line could save more, so a figure
+below 20% computed that way could not refute anything.
+
+- **Row results split exactly.** An anchored `rg -n` returns one line per matched
+  rule and each line names its own ID, so bytes attribute per line with no
+  guesswork. Dropped IDs contribute their lines; retained IDs do not.
+- **Detail results split where the command wrote a separator.** The
+  `for f in …; do echo "##### $f"; cat $f.md; done` form marks each page, so its
+  bytes attribute per page. `cat R3.md R40.md` does not, and cannot be split.
+- **Everything still unattributable is reported as a band**, and both ends are
+  carried through every table:
+  - **lower** — the result is kept whole and saves nothing;
+  - **upper** — every byte of the mixed result is removable, while the request
+    that carried it **stays** (it is still needed for the retained IDs).
+
+**Gate 1 refutes only if the UPPER end is below 20% for every rule G1–G4 at
+every calibration.** A lower end below the bar establishes nothing.
 
 **Bytes and requests.** Removed bytes are credited to the request that ingested
 them and to every later request that would still have re-sent them, exactly as
