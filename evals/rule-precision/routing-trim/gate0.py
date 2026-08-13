@@ -139,8 +139,16 @@ def is_detail(t):
     `ls rule-details` carries no page but is still catalogue traffic the
     intervention could remove. Reported alongside the strict form so the bound
     is not read as a measurement of the pages themselves.
+
+    Plain containment, because the earlier `'rule-details/' or ('rule-details'
+    and 'ls ')` form was only a superset by accident: `ls ` matched the tail of
+    `rule-details ` itself, so a path that ended in anything but a space -
+    `cd ".../rule-details" && cat R3.md`, two calls in this corpus - was a page
+    read the generous scope did not contain. `page_ids()` returns nothing
+    without `rule-details` in the target, so containment makes the superset
+    claim hold by construction rather than by coincidence.
     """
-    return 'rule-details/' in t or 'rule-details' in t and 'ls ' in t
+    return 'rule-details' in t
 
 
 def is_catalogue(t):
