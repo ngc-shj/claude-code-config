@@ -104,6 +104,17 @@ PY
   [[ "$output" == "rows=False catalogue=True page=True dir=True ids=R3,R49,RS3" ]]
 }
 
+@test "a page read whose directory path is quoted is still directory traffic" {
+  # The generous scope must CONTAIN the strict one, and the earlier predicate was
+  # a superset only by accident: `'ls '` matched the tail of `rule-details `
+  # itself, so a path ending in anything but a space - two calls in the corpus -
+  # was a page read the generous ceiling did not count. Gate 1's self-check
+  # against Gate 0 is what surfaced it.
+  run classify '{"name":"Bash","input":{"command":"cd \"/t/cat-W/rule-details\" && for f in R3.md RS4.md; do echo \"===== $f\"; cat \"$f\"; done"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "rows=False catalogue=True page=True dir=True ids=R3,RS4" ]]
+}
+
 @test "an absolute path named but not read is not a detail result" {
   # Matching the path before checking the verb made the ceiling disagree with
   # its own protocol about exactly this case.
