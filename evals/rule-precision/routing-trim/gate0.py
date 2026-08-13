@@ -247,9 +247,11 @@ def removable_requests(n_results, n_scoped, n_req):
     like that. Counting those as removable put most of the trip term on work
     that would still have to happen.
 
-    Each index appears at most once however many results it carried, and the
-    agent's final request is never removable - there is nothing after it whose
-    absence could be observed.
+    Each index appears at most once however many results it carried. An index at
+    `n_req` is excluded: results are attributed to the request AFTER the one that
+    asked for them, so a tool call made by the final turn lands past the end and
+    has no ingesting request at all - there is nothing there to remove. The final
+    REAL request, `n_req - 1`, is removable like any other.
     """
     return {r for r in n_scoped
             if r < n_req and n_results.get(r, 0) == n_scoped[r]}

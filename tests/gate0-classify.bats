@@ -191,8 +191,10 @@ print(len(g.removable_requests({1: 4}, {1: 4}, 5)))
   [[ "$output" == "1" ]]
 }
 
-@test "the agent last request is never removable" {
-  # Nothing follows it, so its absence cannot be observed in any later re-send.
+@test "a result with no ingesting request is not removable" {
+  # Results are attributed to the request AFTER the one that asked, so a call
+  # made by the final turn lands at index n_req - past the end, ingested by
+  # nothing. The final real request, n_req - 1, is removable like any other.
   run python3 -c "
 import importlib.util
 spec = importlib.util.spec_from_file_location('g', '$GATE0')
