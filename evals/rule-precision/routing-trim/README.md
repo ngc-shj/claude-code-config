@@ -156,7 +156,7 @@ one row and the request stays, taking the round trip with it — G1's trip term 
 ### What was checked, because a refutation needs an upper bound
 
 Gate 1 refutes on the upper end, so anything that could *understate* the saving
-is a defect that matters. Four things were checked and one was wrong:
+is a defect that matters. Five things were checked and two were wrong:
 
 - **the arithmetic itself** — with nothing retained, `gate1.py` must reduce to
   Gate 0's generous ceiling. It reproduces it to the token at all three
