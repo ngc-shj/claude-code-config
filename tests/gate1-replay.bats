@@ -25,6 +25,84 @@ g1() {
     cat; } | python3 -
 }
 
+@test "exchanging two agents' review keys changes the manifest" {
+  # The bytes are identical and Gate 0's manifest cannot see this: it hashes the
+  # transcript and its filename. But which review a transcript IS decides whose
+  # findings G1 reads, who G3 unions and which arm G4 crosses - so the key has to
+  # be inside the digest, not merely read from a `.meta.json` beside it.
+  run g1 <<'PY'
+a = [('aa', 'one.jsonl', ('W', 1, 'a')), ('bb', 'two.jsonl', ('W', 1, 'b'))]
+b = [('aa', 'one.jsonl', ('W', 1, 'b')), ('bb', 'two.jsonl', ('W', 1, 'a'))]
+print(m.manifest_digest(a) != m.manifest_digest(b))
+PY
+  [ "$status" -eq 0 ]
+  [[ "$output" == "True" ]]
+}
+
+@test "the manifest does not depend on the order the transcripts were read" {
+  run g1 <<'PY'
+e = [('aa', 'one.jsonl', ('W', 1, 'a')), ('bb', 'two.jsonl', ('W23', 9, 'c'))]
+print(m.manifest_digest(e) == m.manifest_digest(list(reversed(e))))
+PY
+  [ "$status" -eq 0 ]
+  [[ "$output" == "True" ]]
+}
+
+@test "a duplicated agent key is rejected, and so is the gap it leaves" {
+  # A digest alone cannot catch this: a corpus with one reviewer counted twice
+  # hashes to something, and that something can be re-pinned. G3 and G4 union
+  # across a review and across arms, so the gap changes what the OTHER agents
+  # retain too.
+  run g1 <<'PY'
+keys = [(a, i, p) for a in m.ARMS for i in range(1, m.REVIEWS + 1) for p in m.PARTS]
+keys[0] = keys[1]
+try:
+    m.check_keys(keys)
+    print('accepted')
+except SystemExit as e:
+    print([l.strip() for l in str(e).splitlines() if l.strip().startswith(('DUPLICATE', 'MISSING'))])
+PY
+  [ "$status" -eq 0 ]
+  [[ "$output" == "[\"DUPLICATE ('W', 1, 'b')\", \"MISSING   ('W', 1, 'a')\"]" ]]
+}
+
+@test "a corpus one reviewer short is rejected" {
+  run g1 <<'PY'
+keys = [(a, i, p) for a in m.ARMS for i in range(1, m.REVIEWS + 1) for p in m.PARTS]
+try:
+    m.check_keys(keys[:-1])
+    print('accepted')
+except SystemExit as e:
+    print(str(e).splitlines()[1].strip())
+PY
+  [ "$status" -eq 0 ]
+  [[ "$output" == "MISSING   ('W23', 25, 'c')" ]]
+}
+
+@test "a key outside the round is rejected, and the full round is accepted" {
+  run g1 <<'PY'
+keys = [(a, i, p) for a in m.ARMS for i in range(1, m.REVIEWS + 1) for p in m.PARTS]
+print(m.check_keys(keys))
+try:
+    m.check_keys(keys[:-1] + [('W23', 26, 'a')])
+    print('accepted')
+except SystemExit as e:
+    print(str(e).splitlines()[1].strip(), '|', str(e).splitlines()[2].strip())
+PY
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == "150" ]]
+  [[ "${lines[1]}" == "MISSING   ('W23', 25, 'c') | UNEXPECTED ('W23', 26, 'a')" ]]
+}
+
+@test "the agent key comes from the description, and only that shape parses" {
+  run g1 <<'PY'
+print(m.agent_key('R22 review W23-14-b'), m.agent_key('R22 review W-1-a'),
+      m.agent_key('R22 review W-1-d'), m.agent_key('R21 review W-1-a'))
+PY
+  [ "$status" -eq 0 ]
+  [[ "$output" == "('W23', 14, 'b') ('W', 1, 'a') None None" ]]
+}
+
 @test "a row line is attributed to the rule it IS, not the rules it mentions" {
   # 833 of the 3070 row lines in the corpus name more than one rule: the row for
   # R1 cross-refers to R40 and R49 in its own prose. Reading the IDs out of the

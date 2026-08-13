@@ -66,6 +66,17 @@ ID_IN_SEP = re.compile(r'((?:R|RS|RT)\d+)(?:\.md)?')
 SHELL_VAR = re.compile(r'\$\{(\w+)\}|\$(\w+)')
 BAR = 20.0
 
+# Round 22 is a full factorial: two arms, 25 reviews, three reviewers each.
+ARMS, REVIEWS, PARTS = ('W', 'W23'), 25, ('a', 'b', 'c')
+
+# The agent-file set AND the review each file is. Gate 0 pins the bytes, which is
+# all it needs - its scopes never ask which review a transcript belongs to. Gate 1
+# does: G1 reads that agent's findings out of the sheet, G3 unions its two
+# co-reviewers and G4 the other arm, so exchanging the descriptions of two
+# transcripts leaves the bytes identical and moves every retention set. This
+# digest covers `sha1  basename  key`, so that exchange breaks it.
+EXPECTED_GATE1_MANIFEST = 'c9c89ad7728d3cc062fe1f5e1f5bdcb7d6dc7cee'
+
 
 class Result:
     """One tool result inside the intervention's scope.
@@ -371,19 +382,71 @@ def retention(keys, scanned, cited):
             'G3 + the other two reviewers': g3, 'G4 + the other arm': g4}
 
 
+def agent_key(description):
+    """(arm, review index, part) for a round-22 review agent, or None."""
+    m = AGENT_NAME.match(description)
+    return (m.group(1), int(m.group(2)), m.group(3)) if m else None
+
+
+def manifest_digest(entries):
+    """sha1 over `sha1  basename  key` lines, order-independent.
+
+    The key is in the line because it is an input to every Gate 1 number, and an
+    input that is not hashed is an input that can change silently.
+    """
+    return hashlib.sha1('\n'.join(
+        sorted(f'{h}  {b}  {a}-{i}-{p}' for h, b, (a, i, p) in entries)).encode()).hexdigest()
+
+
+def check_keys(keys):
+    """The keys are exactly the round: two arms x 25 reviews x three parts.
+
+    Completeness and uniqueness are not implied by the digest - a corpus missing
+    an agent hashes to something, and that something can be re-pinned without
+    anyone noticing the arm is a reviewer short. G3 and G4 union across a review
+    and across arms, so a gap changes what the other agents retain, not only what
+    the missing one would have.
+    """
+    want = {(a, i, p) for a in ARMS for i in range(1, REVIEWS + 1) for p in PARTS}
+    seen = collections.Counter(keys)
+    bad = ([f'DUPLICATE {k}' for k, n in sorted(seen.items()) if n > 1]
+           + [f'MISSING   {k}' for k in sorted(want - set(seen))]
+           + [f'UNEXPECTED {k}' for k in sorted(set(seen) - want)])
+    if bad:
+        raise SystemExit('agent key set is not the round:\n  ' + '\n  '.join(bad)
+                         + f'\n\nExpected {len(want)} unique keys, {len(ARMS)} arms x '
+                           f'{REVIEWS} reviews x {len(PARTS)} parts.')
+    return len(seen)
+
+
 def main():
     corpus, keys, scanned, paths = [], [], [], []
     for path in g.agents():
         meta = json.load(open(path.replace('.jsonl', '.meta.json')))
-        m = AGENT_NAME.match(meta['description'])
-        corpus.append(f'{hashlib.sha1(open(path, "rb").read()).hexdigest()}  {os.path.basename(path)}')
+        key = agent_key(meta['description'])
+        if key is None:
+            raise SystemExit(f'{os.path.basename(path)} is not a round-22 review agent: '
+                             f'{meta["description"]!r}. gate0.agents() and AGENT_NAME '
+                             f'disagree about what belongs in this corpus.')
+        corpus.append((hashlib.sha1(open(path, 'rb').read()).hexdigest(),
+                       os.path.basename(path), key))
         got = scan(path)
         if not got:
             continue
         paths.append(path)
-        keys.append((m.group(1), int(m.group(2)), m.group(3)))
+        keys.append(key)
         scanned.append(got)
-    digest = hashlib.sha1('\n'.join(sorted(corpus)).encode()).hexdigest()
+    check_keys(keys)
+    gate1_digest = manifest_digest(corpus)
+    if gate1_digest != EXPECTED_GATE1_MANIFEST:
+        raise SystemExit(f'Gate 1 manifest mismatch\n  expected {EXPECTED_GATE1_MANIFEST}\n'
+                         f'  got      {gate1_digest}\n\nThe transcripts, or which review '
+                         f'each one is, are not what these numbers were computed against. '
+                         f'Re-pin EXPECTED_GATE1_MANIFEST and re-run every number if this '
+                         f'is intended.')
+    # Gate 0's own manifest as well, so a corpus that drifted from the one Gate 0
+    # reported on is caught here rather than in the self-check's arithmetic.
+    digest = hashlib.sha1('\n'.join(sorted(f'{h}  {b}' for h, b, _k in corpus)).encode()).hexdigest()
     if digest != g.EXPECTED_MANIFEST:
         raise SystemExit(f'transcript manifest mismatch\n  expected {g.EXPECTED_MANIFEST}\n'
                          f'  got      {digest}\n\nThese results were computed against a '
@@ -391,6 +454,8 @@ def main():
                          f'and re-run every number if this is intended.')
     npinned = _data.verify_inputs()
     print(f'{len(scanned)} round-22 review agents; transcript manifest sha1 {digest} (matches)')
+    print(f'agent-to-review manifest sha1 {gate1_digest} (matches); '
+          f'{len(ARMS)} arms x {REVIEWS} reviews x {len(PARTS)} parts, complete and unique')
     print(f'findings from the design audit\'s pinned sheet ({npinned} files hash-checked)')
     self_check(paths, scanned)
     print('self-check: with nothing retained, Gate 1 reproduces Gate 0\'s generous '

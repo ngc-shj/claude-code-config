@@ -5,7 +5,8 @@ saves 9.92–10.89% of raw processed tokens against a 20% bar, and the other thr
 save 2–4%. The line of work stops. Nothing was adopted or implemented, and no
 agents were spent.** `protocol.md` fixes the gates and carries six amendments;
 `gate0.py` and `gate1.py` reproduce every number here and stop if the transcript
-set they read is not the one these numbers came from.
+set they read is not the one these numbers came from — or, for Gate 1, if which
+review each transcript is has changed.
 
 **What a refutation here means.** Gate 1 bounds a *perfect* gate — one that
 decides from what the reviewer did after reading the row, which no real gate can
@@ -171,6 +172,14 @@ is a defect that matters. Four things were checked and one was wrong:
   candidate set, and 12 sampled occurrences are all real references, so the
   reading is not inflated. Citations the sheet does not carry would only *raise*
   the saving, which is the safe direction.
+- **which review each transcript is** — Gate 0 pins the transcript bytes, which
+  is all its scopes need. Gate 1 reads the agent's own findings out of the sheet
+  and unions across its co-reviewers and the other arm, so exchanging the
+  descriptions of two transcripts would leave the bytes, the manifest and the
+  self-check untouched and move every retention set. Gate 1 hashes
+  `sha1 + basename + agent key` and asserts the key set is the whole round —
+  2 arms × 25 reviews × 3 parts, complete and unique. Raised in review; the
+  figures are unchanged by it.
 - **the trip term under a different call structure** — see below.
 
 Two known slacknesses are left in, both smaller than the margin and measured:
@@ -225,7 +234,7 @@ content-only model of the saving was wrong.
 
 ## Correction, recorded
 
-Thirteen corrections. Twelve were raised in review; one — number 12 — was caught
+Fourteen corrections. Thirteen were raised in review; one — number 12 — was caught
 by a check written into the work itself, which is the first time this line of
 work found a defect without a reviewer.
 
@@ -301,6 +310,14 @@ work found a defect without a reviewer.
     bytes and the round trip for the five agents that fetch rows more than once —
     the dangerous direction, since Gate 1 refutes on an upper bound. Raised in
     review, before any Gate 1 figure was computed.
+14. **The agent-to-review mapping was read but not pinned.** Gate 1 took each
+    agent's arm, review index and part from the `.meta.json` beside the
+    transcript, while the manifest hashed only the transcript and its filename.
+    Exchanging two valid descriptions therefore passed the manifest and the
+    self-check while changing G1, G3, G4 and the verdict. This is the first item
+    on this list that was not a wrong number — it was a way for one to appear
+    later. `EXPECTED_GATE1_MANIFEST` now covers the key, and the key set is
+    asserted to be the whole round. Raised in review; no figure moves.
 
 `protocol.md` carries all six amendments in place, each with the direction it
 moves the conclusion.
