@@ -286,7 +286,11 @@ def evaluate(ag, retained, bpt, gate0_mode=False, consolidate=True):
             tok = nbytes / bpt
             later = max(0, n_req - req - 1)
             c += min(tok * (1 + later), tok + carried)
-            if gate0_mode or req in gone:
+            # The first ingestion is withheld only when something else already
+            # counts it: the trip term. Without consolidation there is no trip
+            # term to report, so withholding it there would drop the saving
+            # outright.
+            if gate0_mode or (consolidate and req in gone):
                 c -= tok
             a += tok * g.W_READ * later
         content[end] = c

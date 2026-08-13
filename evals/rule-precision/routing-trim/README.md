@@ -111,9 +111,9 @@ were pre-registered, strictest first; all four decide from what the agent did
 
 | saving, share of the round | B/tok | trip | content | **with consolidation** | content only |
 |---|---|---|---|---|---|
-| **G1** | 3.5 | 5.50% | 5.31–5.39% | **10.80–10.89%** | 5.28–5.39% |
-| | 3.8 | 5.50% | 4.89–4.96% | **10.38–10.46%** | 4.87–4.96% |
-| | 4.2 | 5.50% | 4.42–4.49% | **9.92–9.99%** | 4.40–4.49% |
+| **G1** | 3.5 | 5.50% | 5.31–5.39% | **10.80–10.89%** | 5.59–5.69% |
+| | 3.8 | 5.50% | 4.89–4.96% | **10.38–10.46%** | 5.15–5.24% |
+| | 4.2 | 5.50% | 4.42–4.49% | **9.92–9.99%** | 4.66–4.74% |
 | **G2** | 3.5 | 0.08% | 3.57% | **3.65–3.66%** | 3.54–3.57% |
 | **G3** | 3.5 | 0.08% | 2.73% | **2.81–2.82%** | 2.67–2.70% |
 | **G4** | 3.5 | 0.08% | 2.37–2.38% | **2.46%** | 2.31–2.34% |
@@ -123,7 +123,7 @@ refutes.** The ranges are the band: 14 of the 781 results in scope carry several
 pages with no boundary between them (`cat R3.md R40.md`), and both ends of that
 band are carried through. The band is worth 0.09 points at G1 — it decides
 nothing. Consolidation decides nothing either: with it G1 reaches 10.89%,
-without it 5.39%.
+without it 5.69%.
 
 ### Why it collapses
 

@@ -236,6 +236,25 @@ PY
   [[ "$output" == "1000 289.47 0 210.53" ]]
 }
 
+@test "without consolidation the first ingestion is credited, since no trip is" {
+  # The first ingestion is withheld only where the trip term already counts it.
+  # The unconsolidated variant reports no trip term at all, so withholding it
+  # there drops the saving outright - the direction that refutes too easily.
+  run g1 <<'PY'
+import collections
+u = {'input_tokens': 0, 'cache_read_input_tokens': 1000,
+     'cache_creation_input_tokens': 0, 'output_tokens': 0}
+ag = dict(usages=[dict(u) for _ in range(4)],
+          results=[m.Result(380, 1, 'rows', {'R1', 'R2'}, [('R1', 200), ('R2', 180)])],
+          n_results=collections.Counter({1: 1}), opened=set(), candidates={'R1', 'R2'})
+on = m.evaluate(ag, set(), 3.8)
+off = m.evaluate(ag, set(), 3.8, consolidate=False)
+print(f"{on[1]['upper']:.0f} {off[1]['upper']:.0f}")
+PY
+  [ "$status" -eq 0 ]
+  [[ "$output" == "200 300" ]]
+}
+
 @test "the fetch that survives consolidation is one that carries a retained ID" {
   # If the survivor were just the first row fetch, a first fetch that retains
   # nothing would be removed along with every later one - and the gate would be
