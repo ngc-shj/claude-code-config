@@ -6,12 +6,14 @@ the same commit; treat it as the author's account. Structural facts about the
 current call pattern were measured first — they are needed to specify the
 intervention at all — and are recorded below.
 
-Two clauses have since been amended, both recorded in place in Gate B0 with the
-direction they move the conclusion. Both were made **after** a figure had been
-computed, and between them they moved the verdict across the bar twice: the first
-made it refute, the second made it not. That sequence is the same failure the
-routing-trim protocol records four times over — a quantity called a ceiling that
-was not one — and it is recorded here rather than smoothed over.
+Three clauses have since been amended, each recorded in place with the direction
+it moves the conclusion. Two are in Gate B0 and were made **after** a figure had
+been computed; between them they moved the verdict across the bar twice — the
+first made it refute, the second made it not. That sequence is the same failure
+the routing-trim protocol records four times over, a quantity called a ceiling
+that was not one, and it is recorded here rather than smoothed over. The third
+replaces Gate B1, which as first written could not be executed, **before** Gate B1
+was run.
 
 This protocol governs one candidate and the order in which it may be evaluated.
 It authorises no change to any skill.
@@ -136,7 +138,9 @@ for a detail page whose necessity is stated by a row it has not read yet. The
 denominator is the whole round, all 150 agents, including any the scope never
 touches.
 
-**Scope.** The intervention names row and detail fetches, so the primary scope is
+**Scope.** The verdict rests on this choice — the strict reading falls on the
+other side of the bar — so it is stated here and repeated wherever a figure is
+quoted. The intervention names row and detail fetches, so the primary scope is
 those plus the directory traffic that comes with them — `../routing-trim`'s
 generous reading, since batching does not care whether a call names a page. Two
 further scopes are reported and neither is the figure quoted: the strict reading
@@ -148,22 +152,68 @@ claim.
 line of work stops here.** No proxy, replay, telemetry, or forward test can
 rescue an intervention whose perfect form does not clear the bar.
 
-### Gate B1 — is the batch decidable in advance? (0 agents), only if B0 passes
+### Gate B1 — the causal form (0 agents), only if B0 passes
 
-The ceiling assumes one turn issues every fetch. A reviewer that reads a row and
-*then* learns which detail page is mandatory needs two. Gate B1 asks, from the
-transcripts alone, whether the detail set is predictable from what is known
-before the row arrives:
+B0 assumes one turn issues every fetch. That is not a scheduling assumption, it
+is a knowledge assumption, and it fails in a measurable place: **79 of the 150
+agents have B0's host at the very request that ingests the digest**, and 71 have
+it later. None have it earlier. Landing the rows there requires knowing the
+candidate IDs before reading the digest that produces them. B1 prices the whole
+dependency chain instead of one link of it.
 
-- the share of agents whose opened detail pages are a function of the digest
-  candidate set alone — i.e. openable in the same turn as the row;
-- for the rest, the ceiling recomputed with **two** rounds instead of one (rows
-  in the first, details in the second), which is the honest form of the
-  intervention if the set is not predeterminable.
+> **Amendment, 2026-08-14 (third) — Gate B1 as first written was not executable.**
+>
+> It asked for "the share of agents whose opened detail pages are a function of
+> the digest candidate set alone". That test has no power over this corpus: all
+> 150 candidate sets are distinct, so no input ever repeats and **every** observed
+> detail set is trivially a function of its candidate set. The clause is withdrawn
+> and replaced by the staged form below. It also omitted the row-acquisition step
+> and said nothing about where directory traffic sits — and directory traffic is
+> the ~9 points that decide B0's verdict, so leaving it unstated would have
+> carried that choice into B1 silently. Raised in review, before Gate B1 was run.
 
-Gate B1 can refute — if the two-round ceiling is below the bar, batching cannot
-be implemented in a form that clears it — but **passing is not evidence** that
-the trimmed configuration reaches the same claims.
+**The stages, fixed.** Every agent is rebuilt as a chain, and each stage's batch
+may be ingested no earlier than the request after its input arrives:
+
+- **stage 0 — the digest.** Out of the primary scope and not moved. It is the
+  causal floor: nothing derived from it may be ingested before the request that
+  ingests it. Let that request be `d`.
+- **stage 1 — rows.** Earliest possible arrival `d + 1`. Its host is the latest
+  request in `[d + 1, first row arrival]` that survives for its own reasons; if
+  there is none, the first row arrival hosts it and survives.
+- **stage 2 — detail pages.** Earliest possible arrival `h1 + 1`, where `h1` is
+  the stage-1 host — a page is mandatory because a row says so, and the row
+  arrives at `h1`. Its host is chosen in `[h1 + 1, first detail arrival]` by the
+  same rule.
+
+**Stage 2 collapses into stage 1 only on an exact match.** If the mandatory set
+can be derived mechanically from what is known at stage 1, details ride with the
+rows and the chain is two-stage. Any such derivation must have its **rule and its
+inputs fixed in writing before it is run** — the catalogue text at the pinned
+commit, and nothing that reads the agent's own behaviour. Per agent the result is
+reported as **exact match or mismatch against the set that agent actually
+opened**, never as an agreement rate: a rule that gets four pages of six right
+does not let the sixth arrive a turn early. A derived set that is a strict
+superset does not collapse either without paying for the pages nobody read.
+
+**Directory traffic gets a stage, and the unidentifiable side goes to the upper.**
+A call that names no page belongs to no stage on its face. Each such result is
+therefore assigned to a host by its own bound:
+
+- **upper** — the **latest** stage host at or before where it actually arrived,
+  which minimises its early carry. Moving a result earlier is always causally
+  safe; moving it later is not, so this is the best placement available and the
+  assignments do not interact — a request is eliminated when all its results move,
+  whichever host they move to.
+- **lower** — the earliest stage host, which maximises the early carry.
+
+Both ends are carried through every table. **Gate B1 refutes only if the UPPER end
+is below 20% at every calibration**, and a lower end below the bar establishes
+nothing.
+
+Gate B1 can refute — if the staged ceiling is below the bar, no batching form
+that respects the reviewer's own dependency order clears it — but **passing is not
+evidence** that the batched configuration reaches the same claims.
 
 ### Gate B2 — an implementable lower bound, only if B1 passes
 

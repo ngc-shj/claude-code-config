@@ -4,7 +4,8 @@
 is worth 25.25–25.60% of raw processed tokens against a 20% bar. Gate B0 cannot
 end this line, and it proceeds to Gate B1. Nothing is adopted, nothing is
 implemented, and no agents were spent.** `protocol.md` fixes the gates and
-carries two amendments; `gate_b0.py` reproduces every number here and stops if
+carries three amendments — two that moved this verdict, and one that replaced
+Gate B1 with a form that can actually be run; `gate_b0.py` reproduces every number here and stops if
 the transcript set it reads is not the one these numbers came from.
 
 **This is a different candidate from `../routing-trim/`,** which was refuted at
@@ -142,10 +143,12 @@ than the truth, so a corrected figure moves toward refutation, not away:
 - It is not evidence that batching works, and Gate B0 can only refute or fail to
   refute. It failed to refute.
 - It is not an implementable figure. The ceiling assumes **one** turn issues every
-  fetch, which assumes the reviewer could name all of them before reading a row —
-  and a detail page is mandatory because a row it has not read yet says so.
-  **Gate B1** asks whether that set is predictable in advance, and prices the
-  two-round form if it is not. A two-round form cannot reach this ceiling.
+  fetch, and that is a knowledge assumption, not a scheduling one: **79 of the 150
+  agents have the host at the very request that ingests the digest**, so landing
+  the rows there means knowing the candidate IDs before reading the digest that
+  produces them. **Gate B1** rebuilds every agent as a causal chain —
+  digest → rows → details, each stage arriving no earlier than the request after
+  its input — and prices that. It cannot reach this ceiling.
 - It says nothing about claims reached. Batching does not change what is read, so
   the adoption rule's first three clauses are threatened only through ordering —
   which Gate B1 examines and only the forward test can settle.
