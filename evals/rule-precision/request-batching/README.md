@@ -4,9 +4,10 @@
 is worth 25.25–25.60% of raw processed tokens against a 20% bar. Gate B0 cannot
 end this line, and it proceeds to Gate B1. Nothing is adopted, nothing is
 implemented, and no agents were spent.** `protocol.md` fixes the gates and
-carries three amendments — two that moved this verdict, and one that replaced
-Gate B1 with a form that can actually be run; `gate_b0.py` reproduces every number here and stops if
-the transcript set it reads is not the one these numbers came from.
+carries four amendments — two that moved this verdict, and two that rewrote
+Gate B1 into a form that can be run and can only refute on a real upper bound.
+`gate_b0.py` reproduces every number here and stops if the transcript set it
+reads is not the one these numbers came from.
 
 **This is a different candidate from `../routing-trim/`,** which was refuted at
 its Gate 1. That one asked *which rules to read* and lost on content. This one
@@ -146,9 +147,11 @@ than the truth, so a corrected figure moves toward refutation, not away:
   fetch, and that is a knowledge assumption, not a scheduling one: **79 of the 150
   agents have the host at the very request that ingests the digest**, so landing
   the rows there means knowing the candidate IDs before reading the digest that
-  produces them. **Gate B1** rebuilds every agent as a causal chain —
-  digest → rows → details, each stage arriving no earlier than the request after
-  its input — and prices that. It cannot reach this ceiling.
+  produces them. **Gate B1** rebuilds every agent as a causal chain — the digest
+  first, then everything derived from it no earlier than the request after it
+  arrives — and prices that. It hands each agent the detail set it turned out to
+  open, so no implementable rule can beat it, and it still cannot reach this
+  ceiling.
 - It says nothing about claims reached. Batching does not change what is read, so
   the adoption rule's first three clauses are threatened only through ordering —
   which Gate B1 examines and only the forward test can settle.

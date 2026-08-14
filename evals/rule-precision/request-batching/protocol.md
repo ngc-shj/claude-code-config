@@ -6,14 +6,15 @@ the same commit; treat it as the author's account. Structural facts about the
 current call pattern were measured first — they are needed to specify the
 intervention at all — and are recorded below.
 
-Three clauses have since been amended, each recorded in place with the direction
+Four clauses have since been amended, each recorded in place with the direction
 it moves the conclusion. Two are in Gate B0 and were made **after** a figure had
 been computed; between them they moved the verdict across the bar twice — the
 first made it refute, the second made it not. That sequence is the same failure
 the routing-trim protocol records four times over, a quantity called a ceiling
 that was not one, and it is recorded here rather than smoothed over. The third
-replaces Gate B1, which as first written could not be executed, **before** Gate B1
-was run.
+and fourth rewrite Gate B1 — the first version could not be executed, the second
+could refute on the strength of a rule the author happened to pick — and both
+were made **before** Gate B1 was run.
 
 This protocol governs one candidate and the order in which it may be evaluated.
 It authorises no change to any skill.
@@ -184,36 +185,58 @@ may be ingested no earlier than the request after its input arrives:
 - **stage 2 — detail pages.** Earliest possible arrival `h1 + 1`, where `h1` is
   the stage-1 host — a page is mandatory because a row says so, and the row
   arrives at `h1`. Its host is chosen in `[h1 + 1, first detail arrival]` by the
-  same rule.
+  same rule. This stage exists for the auxiliary three-stage readout; the figure
+  the verdict is read from collapses it into stage 1, per the fourth amendment.
 
-**Stage 2 collapses into stage 1 only on an exact match.** If the mandatory set
-can be derived mechanically from what is known at stage 1, details ride with the
-rows and the chain is two-stage. Any such derivation must have its **rule and its
-inputs fixed in writing before it is run** — the catalogue text at the pinned
-commit, and nothing that reads the agent's own behaviour. Per agent the result is
-reported as **exact match or mismatch against the set that agent actually
-opened**, never as an agreement rate: a rule that gets four pages of six right
-does not let the sixth arrive a turn early. A derived set that is a strict
-superset does not collapse either without paying for the pages nobody read.
+**Stage 2 collapses into stage 1 for every agent, on the oracle set.** The figure
+Gate B1 refutes on gives each agent the detail set it turned out to open and lets
+that set ride with the rows, so the refutation chain is two-stage — digest, then
+everything else — for all 150.
+
+> **Amendment, 2026-08-15 (fourth) — collapsing only on a named rule's exact
+> match was not an upper bound over the candidate.**
+>
+> The clause above previously required a pre-fixed derivation rule to reproduce
+> the agent's opened pages exactly, and sent every mismatch to a three-stage
+> chain. One rule failing does not show that no implementable rule succeeds, and
+> with all 150 candidate sets distinct there is nothing in this corpus that could
+> tell the two apart — the same non-identifiability the third amendment retracted,
+> re-entering as a choice of rule. A figure built that way could refute "no
+> batching form clears the bar" on the strength of the rule the author happened to
+> pick.
+>
+> Corrected: the refutation UPPER always collapses stage 2 into stage 1, on the
+> oracle set. A concrete derivation's agreement with the opened pages, and the
+> three-stage chain it implies, are **auxiliary readouts** and belong to Gate B2,
+> which is where an implementable form is priced. The correction makes the saving
+> **larger**, so it moves against refutation. Raised in review, before Gate B1 was
+> run.
 
 **Directory traffic gets a stage, and the unidentifiable side goes to the upper.**
 A call that names no page belongs to no stage on its face. Each such result is
 therefore assigned to a host by its own bound:
 
 - **upper** — the **latest** stage host at or before where it actually arrived,
-  which minimises its early carry. Moving a result earlier is always causally
-  safe; moving it later is not, so this is the best placement available and the
-  assignments do not interact — a request is eliminated when all its results move,
-  whichever host they move to.
+  which minimises its early carry.
 - **lower** — the earliest stage host, which maximises the early carry.
+
+Placing such a result at a stage host at all is an **oracle relaxation, not a
+causal fact**: it assumes the reviewer knew to make that call at that point, and
+it **enlarges the saving**, because it is what lets the request that carried the
+result disappear. It is used because Gate B1 refutes on the upper end. The
+assignments do not interact — a request is eliminated when all its results move,
+whichever host each moves to — and the rule is total on this corpus: all 134
+ingested directory results arrive after the digest, so every one of them has a
+stage host at or before it and none has to be moved later than it arrived.
 
 Both ends are carried through every table. **Gate B1 refutes only if the UPPER end
 is below 20% at every calibration**, and a lower end below the bar establishes
 nothing.
 
-Gate B1 can refute — if the staged ceiling is below the bar, no batching form
-that respects the reviewer's own dependency order clears it — but **passing is not
-evidence** that the batched configuration reaches the same claims.
+Gate B1 can refute — if this ceiling is below the bar then no batching form
+clears it, because no implementable form beats an oracle that is handed the answer
+at stage 1 — but **passing is not evidence** that the batched configuration
+reaches the same claims.
 
 ### Gate B2 — an implementable lower bound, only if B1 passes
 
