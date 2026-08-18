@@ -233,10 +233,17 @@ Both ends are carried through every table. **Gate B1 refutes only if the UPPER e
 is below 20% at every calibration**, and a lower end below the bar establishes
 nothing.
 
-Gate B1 can refute — if this ceiling is below the bar then no batching form
-clears it, because no implementable form beats an oracle that is handed the answer
-at stage 1 — but **passing is not evidence** that the batched configuration
-reaches the same claims.
+**Reported alongside, and not part of the verdict.** Two forms outside the fixed
+intervention are priced and printed with it: one free to batch only the fetches
+worth batching, and one that additionally defers the host. They can only be larger
+than the registered figure. The verdict is read from the registered figure, which
+is the intervention this protocol fixed; where a variant crosses the bar, the
+refutation is stated as covering the fixed form only and the family claim is
+withheld. This adds reporting and changes nothing the gate decides on.
+
+Gate B1 can refute the intervention as fixed — no implementable form beats an
+oracle handed the answer at stage 1 — but **passing is not evidence** that the
+batched configuration reaches the same claims.
 
 ### Gate B2 — an implementable lower bound, only if B1 passes
 

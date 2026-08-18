@@ -1,9 +1,11 @@
-# Catalogue fetch batching — Gate B0 does not refute it
+# Catalogue fetch batching — Gate B1 refutes it
 
-**Removing every round trip the catalogue costs, while keeping every byte of it,
-is worth 25.25–25.60% of raw processed tokens against a 20% bar. Gate B0 cannot
-end this line, and it proceeds to Gate B1. Nothing is adopted, nothing is
-implemented, and no agents were spent.** `protocol.md` fixes the gates and
+**Gate B0 removed every round trip the catalogue costs and reached 25.25–25.60%
+of raw processed tokens against a 20% bar, so it could not end the line. Gate B1
+puts the reviewer's own dependency order back — the catalogue cannot arrive before
+the digest that names it — and the same perfect batch is worth 19.32–19.52%. That
+is below the bar at every calibration, so the line stops. Nothing is adopted,
+nothing is implemented, and no agents were spent.** `protocol.md` fixes the gates and
 carries four amendments — two that moved this verdict, and two that rewrote
 Gate B1 into a form that can be run and can only refute on a real upper bound.
 `gate_b0.py` reproduces every number here and stops if the transcript set it
@@ -139,20 +141,83 @@ than the truth, so a corrected figure moves toward refutation, not away:
   rest, or chosen without co-location, or allowed to be a request that ingests
   nothing; a removed request's output always credited, or never.
 
+## Gate B1 — with the reviewer's own dependency order
+
+B0's ceiling assumes one turn issues every fetch. That is a knowledge assumption,
+not a scheduling one, and the corpus says where it fails: **79 of the 150 agents
+have B0's host at the very request that ingests the digest**, so landing the rows
+there means knowing the candidate IDs before reading the digest that produces
+them.
+
+B1 rebuilds each agent as a chain — stage 0 the digest, out of scope and never
+moved; stage 1 everything derived from it, arriving no earlier than the request
+after the digest. Per the protocol's fourth amendment the figure the verdict is
+read from **hands each agent the detail set it turned out to open**, so the chain
+is two-stage for all 150 and no derivation rule can beat it.
+
+**The causal window has one position.** The first catalogue result arrives exactly
+one request after the digest in **all 150** agents, so the host is forced and
+there is nothing left to choose — which also means the lower/upper band the
+protocol reserved for directory traffic is empty: with a single host, every result
+moves to the same place.
+
+| | B/tok | (a) as registered | (b) move-subset | (c) + deferred host |
+|---|---|---|---|---|
+| **as measured** | 3.5 | **19.32%** | 19.91% | 19.92% |
+| | 3.8 | **19.41%** | 19.96% | 19.97% |
+| | 4.2 | **19.52%** | 20.01% | 20.02% |
+| + UTF-8 bytes | 4.2 | 19.51% | 20.01% | 20.02% |
+| + floor extractions out | 4.2 | 19.43% | 19.50% | 19.58% |
+| + moved calls charged | 4.2 | 19.40% | 19.46% | 19.55% |
+
+**(a) is the intervention this protocol fixed** — one turn issues every fetch —
+and it is below the bar at every calibration. **Gate B1 refutes it.**
+
+### The family claim does not follow, and is not made
+
+(b) and (c) are not the fixed intervention. (b) is free to batch only the fetches
+worth batching: a result whose request survives anyway buys no round trip and only
+costs early carry. (c) additionally defers the host. A refutation phrased as *no
+batching form clears the bar* would have to cover them, and it cannot: (c) reaches
+**20.02%** at the coarsest calibration, over the bar by 0.02 points.
+
+Every known approximation in that count runs the same way — all four credit the
+intervention with something it does not get — and together they are worth 0.47
+points, which would put (c) at 19.55%. They are estimates applied in the direction
+that favours refutation, so nothing here leans on them. **A subset-batching,
+deferred-host form is a different candidate and needs its own protocol.** What can
+be said is that its ceiling sits on the bar, where the fixed form is half a point
+under it.
+
+### What was checked
+
+- **the causal floor** — every one of the 781 ingested catalogue results has the
+  host at or before it, and the host is the digest arrival plus one in all 150
+  agents. Asserted, not assumed.
+- **no better placement** — the host is not taken on a closed-form rule's word.
+  (c) enumerates every position the batch could occupy at or after the floor, and
+  none beats the reported figure.
+- **the formula against the round** — (a) equals the batched round costed from
+  scratch, for every agent and calibration: one subtracts what goes, the other
+  adds up what stays.
+- **the degenerate case** — with the causal floor removed, (a) reproduces
+  `gate_b0.py`'s registered arrangement to the token, which a one-position window
+  requires. Two independently written implementations, same number.
+- **eight cases in `tests/gate-b1-causal.bats`**, all synthetic. Each rule that
+  decides the number was mutated and observed to go red — the floor ignored,
+  losses taken instead of declined, carry charged to requests the same bound is
+  removing, the enumeration reduced to the floor position, the floor extraction
+  correction disabled, the rebuilt round shifted by one request.
+
 ## What this does not license
 
 - It is not evidence that batching works, and Gate B0 can only refute or fail to
   refute. It failed to refute.
-- It is not an implementable figure. The ceiling assumes **one** turn issues every
-  fetch, and that is a knowledge assumption, not a scheduling one: **79 of the 150
-  agents have the host at the very request that ingests the digest**, so landing
-  the rows there means knowing the candidate IDs before reading the digest that
-  produces them. **Gate B1** rebuilds every agent as a causal chain — the digest
-  first, then everything derived from it no earlier than the request after it
-  arrives — and prices that. It hands each agent the detail set it turned out to
-  open, so no implementable rule can beat it, and it still cannot reach this
-  ceiling.
-- It says nothing about claims reached. Batching does not change what is read, so
-  the adoption rule's first three clauses are threatened only through ordering —
-  which Gate B1 examines and only the forward test can settle.
-- It does not adopt, implement, or schedule anything.
+- It is not an implementable figure, and Gate B1 below is what happens when the
+  reviewer's dependency order is put back.
+- It says nothing about claims reached, in either direction. Batching does not
+  change what is read; the refutation is on cost alone.
+- It does not adopt, implement, or schedule anything, and Gate B2 is not run: a
+  refutation at B1 is the point of putting the cheap gate first.
+- It does not refute trimming transport in general. What is refuted is moving the
+  same fetches into one turn, at a bar of 20%, on this fixture.
