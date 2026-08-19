@@ -6,7 +6,7 @@ the same commit; treat it as the author's account. Structural facts about the
 current call pattern were measured first — they are needed to specify the
 intervention at all — and are recorded below.
 
-Four clauses have since been amended, each recorded in place with the direction
+Five clauses have since been amended, each recorded in place with the direction
 it moves the conclusion. Two are in Gate B0 and were made **after** a figure had
 been computed; between them they moved the verdict across the bar twice — the
 first made it refute, the second made it not. That sequence is the same failure
@@ -14,7 +14,9 @@ the routing-trim protocol records four times over, a quantity called a ceiling
 that was not one, and it is recorded here rather than smoothed over. The third
 and fourth rewrite Gate B1 — the first version could not be executed, the second
 could refute on the strength of a rule the author happened to pick — and both
-were made **before** Gate B1 was run.
+were made **before** Gate B1 was run. The fifth narrows what Gate B1's refutation
+claims, after its variants were priced, and weakens the conclusion rather than
+strengthening it.
 
 This protocol governs one candidate and the order in which it may be evaluated.
 It authorises no change to any skill.
@@ -239,7 +241,26 @@ worth batching, and one that additionally defers the host. They can only be larg
 than the registered figure. The verdict is read from the registered figure, which
 is the intervention this protocol fixed; where a variant crosses the bar, the
 refutation is stated as covering the fixed form only and the family claim is
-withheld. This adds reporting and changes nothing the gate decides on.
+withheld.
+
+> **Amendment, 2026-08-19 (fifth) — the refutation's reach was narrowed after the
+> variants were priced.**
+>
+> Gate B1 was written to say that if its ceiling is below the bar then **no
+> batching form** clears it. That was more than the gate can support. The two
+> variants above — batching only what is worth batching, and deferring the host —
+> reach 20.02% at the coarsest calibration, 0.02 points over, so the family claim
+> fails while the fixed intervention is refuted by half a point.
+>
+> Corrected: Gate B1 refutes **the intervention as fixed**, and says nothing about
+> reformulations, which this protocol voids itself for in any case. The clause
+> above and the closing sentence of this section are the narrowed form.
+>
+> This was made **after** the variants were computed, and it **weakens** the
+> conclusion drawn from the gate: a broad refutation becomes a narrow one. The
+> pre-registered decision on the fixed intervention — its upper end below 20% at
+> every calibration — is untouched by it, and its figure did not move. Raised in
+> review.
 
 Gate B1 can refute the intervention as fixed — no implementable form beats an
 oracle handed the answer at stage 1 — but **passing is not evidence** that the

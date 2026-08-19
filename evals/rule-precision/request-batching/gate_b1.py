@@ -313,7 +313,7 @@ def main():
     refuted = fixed < BAR
     print(f'VERDICT: Gate B1 {"REFUTES" if refuted else "does NOT refute"} the candidate.\n')
     print(f'  the fixed intervention (a), worst calibration:         {fixed:.2f}%')
-    print(f'  largest figure ANY batching form reaches, as measured: {top:.2f}%')
+    print(f'  largest of the two reported variants, as measured:     {top:.2f}%')
     print(f'  the same with every known approximation corrected:     {corrected:.2f}%')
     if (top < BAR) != refuted:
         print(f'\n  THE FAMILY CLAIM DOES NOT FOLLOW. The intervention this protocol fixed is\n'
@@ -325,14 +325,15 @@ def main():
               f'  not lean on them. That form is a different candidate and needs its own\n'
               f'  protocol before anything is concluded about it.')
     print(f"""
-Every correction in that table moves the figure DOWN - each was a way of counting
-that credited the intervention with something it does not get - so the uncorrected
-row is the one refutation has to clear, and it is the one the verdict is read from.
+The verdict is read from the UNCORRECTED (a): the intervention this protocol fixed
+is one turn issuing every fetch, and its pre-registered figure is what Gate B1
+decides on. Every correction in the table moves the figure DOWN - each was a way of
+counting that credited the intervention with something it does not get - so the
+uncorrected row is the one a refutation has to clear.
 
-The fixed intervention is (a): one turn issues every fetch. (b) and (c) are not
-that intervention, and `protocol.md` voids itself for reformulations - but a
-refutation phrased as "no batching form clears the bar" has to cover them, so they
-are reported and the verdict is read from the largest.
+(b) and (c) are reported, not decided on. They are reformulations, which this
+protocol voids itself for; they exist here to show what the refutation does NOT
+cover, and the fifth amendment records that narrowing.
 
 {"Gate B1 ends the line of work." if refuted else
  "Gate B1 cannot end the line of work. Nothing here says batching reaches the same claims."}""")

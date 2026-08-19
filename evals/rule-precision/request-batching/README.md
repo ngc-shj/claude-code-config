@@ -6,8 +6,9 @@ puts the reviewer's own dependency order back — the catalogue cannot arrive be
 the digest that names it — and the same perfect batch is worth 19.32–19.52%. That
 is below the bar at every calibration, so the line stops. Nothing is adopted,
 nothing is implemented, and no agents were spent.** `protocol.md` fixes the gates and
-carries four amendments — two that moved this verdict, and two that rewrote
-Gate B1 into a form that can be run and can only refute on a real upper bound.
+carries five amendments — two that moved Gate B0's verdict, two that rewrote
+Gate B1 into a form that can be run and can only refute on a real upper bound,
+and one that narrowed what its refutation claims once the variants were priced.
 `gate_b0.py` reproduces every number here and stops if the transcript set it
 reads is not the one these numbers came from.
 
@@ -185,7 +186,10 @@ Every known approximation in that count runs the same way — all four credit th
 intervention with something it does not get — and together they are worth 0.47
 points, which would put (c) at 19.55%. They are estimates applied in the direction
 that favours refutation, so nothing here leans on them. **A subset-batching,
-deferred-host form is a different candidate and needs its own protocol.** What can
+deferred-host form is a different candidate and needs its own protocol.** The
+protocol's fifth amendment records this narrowing: Gate B1 was written to say that
+its ceiling falling below the bar refutes *any* batching form, and that was more
+than it can support. What can
 be said is that its ceiling sits on the bar, where the fixed form is half a point
 under it.
 
