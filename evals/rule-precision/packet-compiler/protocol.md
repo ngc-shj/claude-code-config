@@ -40,16 +40,21 @@ protocol is void and a new one is written.
 
 ## Adoption rule, lexicographic — not scalarised
 
-Unchanged from the two protocols before it:
+**`../GOAL.md` is the single source for the goal and this rule.** It is restated
+here for reading, and where the two differ that file is the one that counts.
 
 1. zero loss of Critical real claims;
-2. distinct real claims reached ≥ **95%** of current k=3;
+2. distinct real claims reached ≥ **95%** of current k=3 — a margin of about
+   **1.04 claims per review** on this fixture, not a rounding of "no worse";
 3. C/M not-a-defect no worse;
-4. among candidates passing 1–3, **minimum raw processed tokens**;
+4. among candidates passing 1–3, **minimum raw processed tokens** — subject to
+   1–3, never divided by them;
 5. api-eq is a secondary readout only.
 
-The compiler changes what reaches the reviewer, so 1–3 are live here in a way they
-were not for batching, and only the forward test can settle them.
+The 20% bar these gates use is the threshold for *investing* in a candidate, and
+decides nothing about adoption. The compiler changes what reaches the reviewer, so
+1–3 are live here in a way they were not for batching, and only the forward test
+can settle them.
 
 ## Gates, in order
 
