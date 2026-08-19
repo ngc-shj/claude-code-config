@@ -57,15 +57,17 @@ minimise tokens *subject to* 1–3, they do not divide by them.
 ### Why not a literal 100%
 
 An earlier statement of the goal said "equal or better", which reads as ≥100% and
-does not match clause 2. Reconciled on 2026-08-20 in favour of the margin, because
-a literal reading is not a rule a study can be **planned** to meet:
+does not match clause 2. Reconciled on 2026-08-20 in favour of the margin. The
+reason is not that a zero margin is unplannable in general — it is that **a finite
+margin is what lets quality maintenance be verified under a neutral candidate**,
+and a rule has to be sized for the case where the candidate changes nothing:
 
 | floor | margin vs W | n per arm | agents |
 |---|---|---|---|
 | 95% | 1.014 claims | 37 | **222** |
 | 97.5% | 0.507 claims | 148 | 888 |
 | 99% | 0.203 claims | 923 | 5,538 |
-| 100%, with confidence | 0 | unbounded **at θ=0** | not plannable |
+| 100%, with confidence | 0 | unbounded **under this θ=0 assumption** | — |
 
 (One-sided α=0.05, power 0.8, plug-in on the observed sd. `routing-trim/protocol.md`
 records a more conservative n ≈ 49 per arm — 294 agents — for the same floor, and
@@ -74,20 +76,22 @@ only**. Whether any of them is worth spending is not settled here: the
 review-efficiency audit prices a run of that order at ≈124M raw / 86.7M api-eq,
 and the design audit has already recorded a decision not to spend it once. What
 this table establishes is the ratio — a tighter floor costs four times and then
-twenty-five times the sample, and a margin of zero cannot be planned for at all.)
+twenty-five times the sample, and no n sizes a zero margin under that assumption.)
 
-**The last row is a statement about planning, not about possibility.** Every row
-is sized under the assumption a non-inferiority design makes — that the true
-difference is zero — and at that assumption the n needed to put a confidence bound
-above a margin of zero with 80% power is unbounded. It does **not** say a zero
-margin can never be shown: a candidate whose true effect is positive can produce
-an interval clear of zero at a perfectly ordinary n. What cannot be done is
-*commit in advance* to demonstrating it, which is what an adoption rule has to do.
+**θ=0 is a planning assumption this table chose, not a property of
+non-inferiority.** It is the neutral case — the candidate changes nothing — and it
+is the case an adoption rule has to survive, because a rule that only works when
+the candidate happens to be better is not a rule. Sized at θ=0, the n needed to
+put a confidence bound above a margin of **zero** with 80% power is unbounded.
 
-Requiring instead that the *point estimate* not fall below control is plannable,
-but a candidate whose true effect is exactly zero fails it about half the time —
-the test would then reject for reasons that have nothing to do with the
-intervention.
+Assume instead that the candidate is genuinely better, θ>0, and a zero margin is
+perfectly plannable at a finite n. So the last row is not "impossible" and not
+"unplannable" — it is **unbounded under the assumption this table makes**, and
+that assumption is the one worth making.
+
+Requiring instead that the *point estimate* not fall below control is applicable
+at any n, but it cannot be **sized**: at θ=0 it succeeds about half the time and
+raising n does not move that. It is a coin, not a test.
 
 **Round 22's nominal pairing did not improve precision**, so it gives no basis for
 sizing a future design as paired. Both arms review the same change at the same
