@@ -88,7 +88,7 @@ Gate B1 was forced to keep alive as a host, is not needed at all.
 - **no better position** — the fixed position is not assumed to be the best; every
   legal one is enumerated and the larger reported. This is the check that moved a
   verdict twice in `../request-batching/`.
-- **six cases in `tests/gate-c0-packet.bats`**, all synthetic. Every rule that
+- **seven cases in `tests/gate-c0-packet.bats`**, all synthetic. Every rule that
   decides the number was mutated and observed to go red: the host eliminated with
   the rest; the digest credited in requests that no longer happen; command
   payloads left behind; the packet allowed to arrive after it was used; the
