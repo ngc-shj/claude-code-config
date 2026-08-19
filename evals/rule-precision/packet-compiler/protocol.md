@@ -126,12 +126,14 @@ Only if the replayed figure still clears 20% does the work proceed to a **forwar
 design, pre-registered before any agent runs**, under `../GOAL.md`.
 
 **A small screen and the adoption decision are different things, and this protocol
-does not let one stand in for the other.** A screen of a few reviews can refute
-cheaply — one Critical real claim lost is a refutation at any n — but it cannot
-adopt: clause 2's floor needs about 222 agents at the sizing in `../GOAL.md`, and
-nothing smaller establishes non-inferiority. So a screen may be placed ahead of
-the full run to kill the candidate early, and **adoption still requires the formal
-non-inferiority evaluation at the pre-registered n**.
+does not let one stand in for the other.** A screen may be placed ahead of the full
+run to kill the candidate early — one Critical real claim lost is a refutation at
+any n — and it is **refutation-only by design: it carries no adoption
+qualification, whatever it observes.** That is a rule about what a screen is
+allowed to decide, not a claim that a small sample cannot produce a favourable
+interval; it can. Adoption goes through **a formal non-inferiority evaluation,
+pre-registered separately**, taking the plug-in sizing in `../GOAL.md` — about 222
+agents — as its starting point rather than its floor.
 
 The forward run is what checks claims reached, and nothing before it does.
 

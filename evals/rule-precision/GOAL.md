@@ -58,14 +58,14 @@ minimise tokens *subject to* 1–3, they do not divide by them.
 
 An earlier statement of the goal said "equal or better", which reads as ≥100% and
 does not match clause 2. Reconciled on 2026-08-20 in favour of the margin, because
-a literal reading is not a rule that can be met:
+a literal reading is not a rule a study can be **planned** to meet:
 
 | floor | margin vs W | n per arm | agents |
 |---|---|---|---|
 | 95% | 1.014 claims | 37 | **222** |
 | 97.5% | 0.507 claims | 148 | 888 |
 | 99% | 0.203 claims | 923 | 5,538 |
-| 100%, with confidence | 0 | unbounded | unreachable |
+| 100%, with confidence | 0 | unbounded **at θ=0** | not plannable |
 
 (One-sided α=0.05, power 0.8, plug-in on the observed sd. `routing-trim/protocol.md`
 records a more conservative n ≈ 49 per arm — 294 agents — for the same floor, and
@@ -74,12 +74,20 @@ only**. Whether any of them is worth spending is not settled here: the
 review-efficiency audit prices a run of that order at ≈124M raw / 86.7M api-eq,
 and the design audit has already recorded a decision not to spend it once. What
 this table establishes is the ratio — a tighter floor costs four times and then
-twenty-five times the sample, and a literal 100% costs an unbounded one.)
+twenty-five times the sample, and a margin of zero cannot be planned for at all.)
 
-A non-inferiority margin of zero cannot be demonstrated at any finite n. Requiring
-instead that the *point estimate* not fall below control is attainable, but a
-candidate whose true effect is exactly zero fails it about half the time — the
-test would then reject for reasons that have nothing to do with the intervention.
+**The last row is a statement about planning, not about possibility.** Every row
+is sized under the assumption a non-inferiority design makes — that the true
+difference is zero — and at that assumption the n needed to put a confidence bound
+above a margin of zero with 80% power is unbounded. It does **not** say a zero
+margin can never be shown: a candidate whose true effect is positive can produce
+an interval clear of zero at a perfectly ordinary n. What cannot be done is
+*commit in advance* to demonstrating it, which is what an adoption rule has to do.
+
+Requiring instead that the *point estimate* not fall below control is plannable,
+but a candidate whose true effect is exactly zero fails it about half the time —
+the test would then reject for reasons that have nothing to do with the
+intervention.
 
 **Round 22's nominal pairing did not improve precision**, so it gives no basis for
 sizing a future design as paired. Both arms review the same change at the same
