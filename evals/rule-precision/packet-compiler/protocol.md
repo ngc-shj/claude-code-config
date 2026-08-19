@@ -4,6 +4,10 @@
 that ordering, because this document and the first result will land in the same
 commit; treat it as the author's account.
 
+One clause has since been amended, recorded in place in Gate C0 with the direction
+it moves the conclusion: what Gate C0 computes is a **witness**, not a ceiling, and
+saying otherwise was wrong in the direction that makes the figure smaller.
+
 This protocol governs one candidate and the order in which it may be evaluated.
 It authorises no change to any skill.
 
@@ -52,7 +56,7 @@ were not for batching, and only the forward test can settle them.
 Each gate can only terminate the line of work or permit the next one. **No gate
 permits shipping.**
 
-### Gate C0 — the compiled ceiling (0 agents, oracle packet)
+### Gate C0 — the compiled witness (0 agents, oracle packet)
 
 Recompute the round under four changes and nothing else:
 
@@ -62,8 +66,9 @@ Recompute the round under four changes and nothing else:
 2. **every catalogue result the agent actually read — rows, detail pages,
    directory listings — becomes one packet**, ingested at the request that used to
    ingest the digest. This is an oracle packet: it is exactly what that agent
-   turned out to need, which no compiler can know in advance, so it bounds every
-   compiler from above.
+   turned out to need, which no compiler can know in advance, so on CONTENT it
+   bounds every compiler from above. The figure as a whole does not — see the
+   amendment below.
 3. **the round is rebuilt.** A request whose every ingested result is now in the
    packet is not made. Its **context** is saved; its **output** only if that
    response issued nothing but the fetches the packet replaces — a response that
@@ -71,6 +76,26 @@ Recompute the round under four changes and nothing else:
 4. **the moved bytes are charged where they now sit.** Each packet member is
    re-sent by every surviving request between the packet and where it used to
    arrive, and its **command payload is charged with it**.
+
+> **Amendment, 2026-08-19 (first) — what Gate C0 computes is a witness, not a
+> ceiling.**
+>
+> Clause 4 charges the command payload of every historical fetch — each `rg`, each
+> `cat`, each listing — as if it moved into the packet with its result. Under the
+> fixed intervention the model issues none of them: one compiler command replaces
+> the lot. The figure therefore carries a cost the intervention does not pay, and
+> it **understates the saving**, so calling it a bound on every compiler was
+> wrong.
+>
+> Corrected: Gate C0 reports a **conservative oracle witness** — one arrangement
+> the intervention can reach, priced with a cost it would not actually incur. A
+> witness above the bar shows the perfect form clears it; a witness **below** the
+> bar would have shown nothing, and could not have refuted. The verdict here is
+> non-refutation and the witness is 26.80%, so the conclusion is unchanged.
+>
+> Gate C1 measures the single compiler command it actually issues. Gate C0 is not
+> re-implemented as a maximisation: a witness is enough for the only decision this
+> gate is allowed to make. Raised in review.
 
 Bytes are counted in UTF-8. Tokens are modelled from bytes at three
 bytes/token calibrations, so every figure is a model-based bracket.
@@ -82,9 +107,11 @@ that first ingested a catalogue result, since the reviewer used it there — and
 larger is reported. A ceiling taken on a closed-form rule's word is how the two
 previous protocols got a verdict wrong three times between them.
 
-**If the saving is below 20% of raw processed tokens at every calibration, the
-line of work stops here.** No proxy, replay, telemetry, or forward test can rescue
-an intervention whose perfect form does not clear the bar.
+**If the witness is at or above 20% of raw processed tokens the line continues.** A
+witness below it decides nothing — see the amendment — and the gate would have to
+be re-run as a maximisation before it could stop anything. Where a gate does refute
+on a genuine ceiling, no proxy, replay, telemetry or forward test can rescue the
+intervention, which is why the cheap gate runs first.
 
 ### Gate C1 — the compiler itself (0 agents), only if C0 passes
 

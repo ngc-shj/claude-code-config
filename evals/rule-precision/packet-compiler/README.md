@@ -4,9 +4,17 @@
 need as one packet, is worth 26.80–26.90% of raw processed tokens against a 20%
 bar — 28.05–28.15% at the best position the packet may legally occupy. Gate C0
 cannot end this line, and it proceeds to Gate C1. Nothing is adopted, nothing is
-implemented, and no agents were spent.** `protocol.md` fixes the gates; `gate_c0.py`
-reproduces every number here and stops if the transcript set it reads is not the
-one these numbers came from.
+implemented, and no agents were spent.** `protocol.md` fixes the gates and carries
+one amendment; `gate_c0.py` reproduces every number here and stops if the
+transcript set it reads is not the one these numbers came from.
+
+**That figure is a WITNESS, not a ceiling.** It charges the command payload of
+every historical `rg`, `cat` and listing as if it moved into the packet, and the
+compiled form issues none of them — one compiler command replaces the lot. So it
+**understates** the saving: one arrangement the intervention can reach, priced
+with a cost it would not pay. A witness above the bar shows the perfect form
+clears it; a witness *below* the bar would have shown nothing, and Gate C0 could
+not have refuted on this arithmetic. The protocol's first amendment records that.
 
 **The packet is an oracle.** It is exactly what that agent turned out to need,
 which no compiler can know in advance. Gate C1 writes the compiler, gives it only
@@ -40,11 +48,13 @@ Four changes and nothing else:
   has work that relocates.
 - **carry** — each packet member is re-sent by every surviving request between the
   packet and where it used to arrive, **and its command payload moves with it**.
+  That last charge is why this is a witness: the compiled form issues no such
+  command, so the figure pays for something the intervention does not.
 - **position** — fixed at the digest's own arrival, and separately computed at
   every position the packet could legally occupy, which is no later than where the
   reviewer first used it. The larger is what the verdict reads.
 
-| | B/tok | digest | trip | carry | **SAVING** | best position |
+| | B/tok | digest | trip | carry | **WITNESS** | best position |
 |---|---|---|---|---|---|---|
 | packet at the digest's arrival | 3.5 | 2.79% | 27.36% | 3.34% | **26.80%** | 28.15% |
 | | 3.8 | 2.57% | 27.36% | 3.08% | **26.85%** | 28.10% |

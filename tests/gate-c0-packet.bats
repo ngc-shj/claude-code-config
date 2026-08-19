@@ -1,11 +1,13 @@
 #!/usr/bin/env bats
-# Tests for the compiled-packet ceiling in evals/rule-precision/packet-compiler/gate_c0.py
+# Tests for the compiled-packet witness in evals/rule-precision/packet-compiler/gate_c0.py
 #
 # C0 does not refute, so the risk it carries is the cheap one - continuing work
 # that should have stopped. The rules pinned here are the ones that could inflate
 # the figure: crediting the digest in requests that no longer happen, eliminating
-# the request the packet is delivered to, and forgetting that the command payloads
-# move with the results they fetched.
+# the request the packet is delivered to, and letting the packet arrive after the
+# reviewer used it. The command-payload charge is pinned too, but as the
+# CONSERVATIVE choice it is - the compiled form issues no such command, which is
+# why this figure is a witness and not a ceiling.
 #
 # No transcript is read: every fixture is built in the test.
 
@@ -72,9 +74,10 @@ PY
 }
 
 @test "a moved result carries its command payload with it" {
-  # The fetch that produced it does not happen either, but the packet has to
-  # deliver the bytes, and the command that named them moves too. Dropping the
-  # payload makes the carry smaller and the saving larger.
+  # This pins the CONSERVATIVE choice, not a ceiling: the compiled form issues no
+  # `rg` and no `cat`, so charging their payloads pays for something the
+  # intervention does not. Dropping the charge makes the figure larger, which is
+  # why Gate C0 can pass on this arithmetic but could never have refuted on it.
   run c0 <<'PY'
 ag = fixture(6, [(400, 200, 3)], [(800, 20, 1)], extra=[3])
 d, t, c = m.saving(ag, 4.0)

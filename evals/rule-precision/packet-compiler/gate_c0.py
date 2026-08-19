@@ -19,6 +19,13 @@ is rebuilt around that:
   carry     each packet member is re-sent by every surviving request between the
             packet and where it used to arrive, its command payload with it
 
+That last charge is a cost the intervention does not actually pay - the model
+issues no `rg`, no `cat`, no listing, because one compiler command replaces them -
+so what this gate computes is a conservative WITNESS, not a ceiling. A witness
+above the bar shows the perfect form clears it. A witness below the bar would show
+nothing, and Gate C0 could not have refuted on one; the protocol's first amendment
+records that.
+
 The packet is an ORACLE: it is exactly what that agent turned out to need, which
 no compiler can know in advance. Gate C1 writes the compiler and prices what it
 actually produces; this gate only asks whether the perfect version is worth
@@ -103,7 +110,11 @@ def scan(path):
 
 
 def saving(ag, bpt, where=None):
-    """(removed digest, trip, carry) in tokens, for one agent.
+    """(removed digest, trip, carry) in tokens, for one agent - a WITNESS.
+
+    The carry includes each historical fetch's command payload, which the compiled
+    form does not issue, so this is one arrangement the intervention can reach
+    rather than the best one. See the protocol's first amendment.
 
     `where` is the request the packet is ingested by; the protocol fixes it at the
     digest's own arrival and the caller may pass any legal position instead.
@@ -220,7 +231,9 @@ def main():
     print(f'  agents where the packet rides in a request that survives anyway: {hosted}')
 
     print('\nGate C0 - the digest is not read and the packet arrives once')
-    print(f'  {"":26s}{"B/tok":>7s}{"digest":>9s}{"trip":>8s}{"carry":>8s}{"SAVING":>10s}'
+    print('  WITNESS, not a ceiling: the carry charges every historical fetch command,')
+    print('  which the compiled form does not issue. It understates the saving.')
+    print(f'  {"":26s}{"B/tok":>7s}{"digest":>9s}{"trip":>8s}{"carry":>8s}{"WITNESS":>10s}'
           f'{"best host":>11s}')
     verdict, best_all = [], []
     for bpt in g.BPT:
@@ -242,12 +255,14 @@ def main():
     top = max(max(verdict), max(best_all))
     refuted = top < BAR
     print(f'\nVERDICT: Gate C0 {"REFUTES" if refuted else "does NOT refute"} the candidate.\n')
-    print(f'  as fixed, worst calibration:                  {min(verdict):.2f}%')
+    print(f'  witness as fixed, worst calibration:          {min(verdict):.2f}%')
     print(f'  best legal packet position, best calibration: {max(best_all):.2f}%')
     print(f"""
-Refutation needs every figure below {BAR:.0f}%, and the position the protocol fixed is
-not assumed to be the best one: every legal position is enumerated and the larger
-is what the verdict reads.
+A witness at or above {BAR:.0f}% shows the perfect form clears the bar. One below it would
+have shown nothing - the figure carries a cost the intervention does not pay - so
+Gate C0 could only ever pass on this arithmetic, never refute. The position the
+protocol fixed is still not assumed to be the best one: every legal position is
+enumerated and the larger is reported.
 
 The packet is an oracle - exactly what that agent turned out to need, which no
 compiler knows in advance. Gate C1 writes the compiler, feeds it only the pinned
