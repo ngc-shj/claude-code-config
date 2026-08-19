@@ -96,8 +96,9 @@ Gate B1 was forced to keep alive as a host, is not needed at all.
 
 ## What this does not license
 
-- It is not evidence that a compiler works, and Gate C0 can only refute or fail to
-  refute. It failed to refute.
+- It is not evidence that a compiler works. Gate C0 has two outcomes — it permits
+  Gate C1 or it is inconclusive — and refutation is not among them, because a
+  witness below the bar is consistent with any true saving at all.
 - It is not an implementable figure. The packet here is what the agent turned out
   to need. **Gate C1** writes the compiler with only the pinned diff and catalogue
   as input — never an agent's behaviour, never an adjudication — and prices what

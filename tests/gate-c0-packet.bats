@@ -99,6 +99,25 @@ PY
   [[ "$output" == "[1, 2, 3]" ]]
 }
 
+@test "a witness below the bar is inconclusive, never a refutation" {
+  # The figure charges a cost the compiled form does not pay, so a small witness
+  # is consistent with any true saving at all. Reading it as a refutation is the
+  # mistake the protocol's first amendment exists to prevent, and the gate said
+  # exactly that until it was corrected.
+  run c0 <<'PY'
+for w in (0.0, 12.5, 19.99):
+    out = m.outcome(w)
+    assert out.startswith("is INCONCLUSIVE"), (w, out)
+print(m.outcome(19.99))
+print(m.outcome(20.0))
+print(m.outcome(26.80))
+PY
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == "is INCONCLUSIVE - a witness below the bar refutes nothing" ]]
+  [[ "${lines[1]}" == "PERMITS Gate C1" ]]
+  [[ "${lines[2]}" == "PERMITS Gate C1" ]]
+}
+
 @test "the difference form equals the compiled round costed from scratch" {
   run c0 <<'PY'
 cases = [(6, [(400, 20, 2), (400, 20, 3)], [(800, 20, 1)], []),

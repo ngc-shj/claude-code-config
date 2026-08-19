@@ -57,6 +57,18 @@ DIGEST = 'common-rules.digest.md'
 BAR = 20.0
 
 
+def outcome(witness):
+    """What Gate C0 is allowed to conclude, which is never a refutation.
+
+    The witness charges a cost the compiled form does not pay, so it understates.
+    Above the bar that is enough to show the perfect form clears it; below the
+    bar it is consistent with any true saving at all, and reporting that as a
+    refutation is the mistake the protocol's first amendment exists to prevent.
+    """
+    return ('PERMITS Gate C1' if witness >= BAR
+            else 'is INCONCLUSIVE - a witness below the bar refutes nothing')
+
+
 def scan(path):
     """Per agent: usages, the digest results, the catalogue results, composition.
 
@@ -253,24 +265,25 @@ def main():
         best_all.append(100 * best / R)
 
     top = max(max(verdict), max(best_all))
-    refuted = top < BAR
-    print(f'\nVERDICT: Gate C0 {"REFUTES" if refuted else "does NOT refute"} the candidate.\n')
+    print(f'\nVERDICT: Gate C0 {outcome(top)}.\n')
     print(f'  witness as fixed, worst calibration:          {min(verdict):.2f}%')
     print(f'  best legal packet position, best calibration: {max(best_all):.2f}%')
     print(f"""
-A witness at or above {BAR:.0f}% shows the perfect form clears the bar. One below it would
-have shown nothing - the figure carries a cost the intervention does not pay - so
-Gate C0 could only ever pass on this arithmetic, never refute. The position the
-protocol fixed is still not assumed to be the best one: every legal position is
-enumerated and the larger is reported.
+A witness at or above {BAR:.0f}% shows the perfect form clears the bar. One below it shows
+NOTHING - the figure carries a cost the intervention does not pay, so a small
+witness is as consistent with a large true saving as with a small one. Gate C0
+therefore has two outcomes and refutation is not among them; stopping the line
+would need this gate re-run as a maximisation. The position the protocol fixed is
+still not assumed to be the best one: every legal position is enumerated and the
+larger is reported.
 
 The packet is an oracle - exactly what that agent turned out to need, which no
 compiler knows in advance. Gate C1 writes the compiler, feeds it only the pinned
 diff and catalogue, and prices what it actually produces; a packet that misses a
 rule the review used is a refutation there, and pages nobody read are charged.
 
-{"Gate C0 ends the line of work." if refuted else
- "Gate C0 cannot end the line of work; it is not evidence that a compiler works."}""")
+{"Nothing here is evidence that a compiler works." if top >= BAR else
+ "Nothing is concluded, and nothing is stopped."}""")
 
 
 if __name__ == '__main__':
