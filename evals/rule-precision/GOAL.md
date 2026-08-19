@@ -69,8 +69,12 @@ a literal reading is not a rule that can be met:
 
 (One-sided α=0.05, power 0.8, plug-in on the observed sd. `routing-trim/protocol.md`
 records a more conservative n ≈ 49 per arm — 294 agents — for the same floor, and
-notes that variance uncertainty raises it further. Either figure is affordable;
-none of the tighter floors is.)
+notes that variance uncertainty raises it further. These are **sizing figures
+only**. Whether any of them is worth spending is not settled here: the
+review-efficiency audit prices a run of that order at ≈124M raw / 86.7M api-eq,
+and the design audit has already recorded a decision not to spend it once. What
+this table establishes is the ratio — a tighter floor costs four times and then
+twenty-five times the sample, and a literal 100% costs an unbounded one.)
 
 A non-inferiority margin of zero cannot be demonstrated at any finite n. Requiring
 instead that the *point estimate* not fall below control is attainable, but a

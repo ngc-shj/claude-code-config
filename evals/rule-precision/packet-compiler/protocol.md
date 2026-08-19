@@ -122,9 +122,18 @@ the pinned commit — never an agent's behaviour, never an adjudication. Replay 
   not a cost — the packet has to carry what the review used;
 - pages it adds that nobody read are charged as real bytes.
 
-Only if the replayed figure still clears 20% does the work proceed to a small
-forward test under the adoption rule above. The forward test is what checks claims
-reached, and nothing before it does.
+Only if the replayed figure still clears 20% does the work proceed to a **forward
+design, pre-registered before any agent runs**, under `../GOAL.md`.
+
+**A small screen and the adoption decision are different things, and this protocol
+does not let one stand in for the other.** A screen of a few reviews can refute
+cheaply — one Critical real claim lost is a refutation at any n — but it cannot
+adopt: clause 2's floor needs about 222 agents at the sizing in `../GOAL.md`, and
+nothing smaller establishes non-inferiority. So a screen may be placed ahead of
+the full run to kill the candidate early, and **adoption still requires the formal
+non-inferiority evaluation at the pre-registered n**.
+
+The forward run is what checks claims reached, and nothing before it does.
 
 ## What this protocol will not do
 
