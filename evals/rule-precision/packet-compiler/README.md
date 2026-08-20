@@ -1,10 +1,10 @@
-# Deterministic review-packet compiler — Gate C0 does not refute it
+# Deterministic review-packet compiler — Gate C1 refutes it
 
-**Not reading the digest, and delivering everything the reviewer turned out to
-need as one packet, is worth 26.80–26.90% of raw processed tokens against a 20%
-bar — 28.05–28.15% at the best position the packet may legally occupy. Gate C0
-cannot end this line, and it proceeds to Gate C1. Nothing is adopted, nothing is
-implemented, and no agents were spent.** `protocol.md` fixes the gates and carries
+**Gate C0 handed each agent the packet it turned out to need and reached
+26.80–26.90% against a 20% bar. A real compiler cannot do that: it sees the change,
+not the reviewer, so it emits ONE packet for the fixture — and one packet that
+carries what every review used is worth 7.96–10.96% on the holdout. The line
+stops. Nothing is adopted, nothing is implemented, and no agents were spent.** `protocol.md` fixes the gates and carries
 one amendment; `gate_c0.py` reproduces every number here and stops if the
 transcript set it reads is not the one these numbers came from.
 
@@ -94,17 +94,85 @@ Gate B1 was forced to keep alive as a host, is not needed at all.
   payloads left behind; the packet allowed to arrive after it was used; the
   rebuilt round dropping the digest from requests that predate it.
 
+## Gate C1 — the compiler, and why its selection rule does not matter
+
+The packet in Gate C0 was per-agent. A compiler's is per-**change**, and F11 is one
+change reviewed 25 times, so a compiler emits one packet that has to serve all 150
+agents. The protocol's coverage condition — the packet carries every rule a review
+used — then has a consequence that decides the gate without reference to any
+selection rule:
+
+> One packet must contain each agent's own set, so it must contain their **union**.
+> The union is therefore the cheapest packet that can satisfy coverage, and its
+> saving is an upper bound on **every** compiler's.
+
+| packet | rules | pages | kB | dev covered | holdout covered |
+|---|---|---|---|---|---|
+| `compiler.py`, blind and unadjusted | 7 | 3 | 17.4 | 0/60 | 0/90 |
+| **the union of what agents used** | 54 | 14 | 109.0 | 60/60 | 90/90 |
+| the whole catalogue | 74 | 37 | 230.0 | 60/60 | 90/90 |
+
+| saving, raw processed tokens | B/tok | all 150 | dev | holdout |
+|---|---|---|---|---|
+| `compiler.py` (covers nothing) | 3.5 | 31.91% | 33.76% | 30.66% |
+| **the union** | 3.5 | 9.61% | 12.05% | **7.96%** |
+| | 4.2 | 12.57% | 14.95% | **10.96%** |
+| the whole catalogue | 3.5 | −19.86% | −16.65% | −22.04% |
+
+**Both refutation conditions fire, on different packets.** The blind compiler is
+cheap and misses rules in every single agent; the packet that misses none is worth
+a third of the bar. Delivering the whole catalogue costs *more* than it saves — the
+230 kB is re-sent by every request after it arrives.
+
+**54 of the 74 catalogue rules were used by at least one agent**, and the mean
+agent used 18.2. That is the shape of the problem: reviewers do not agree on which
+rules the change triggers, so a packet built to satisfy all of them is most of the
+catalogue, and a packet small enough to save tokens cannot satisfy any of them.
+
+### The split, and what it was for
+
+`protocol.md`'s second amendment fixed **dev = reviews 1–10, holdout = 11–25**
+before a line of the compiler was written — in commit `408e83d`, which contains no
+compiler and no measurement. The reason: restricting the compiler's *runtime*
+inputs to the diff and the catalogue does not stop the opened-rule set reaching it
+through the author.
+
+As it turned out the split changed nothing, and that is worth saying plainly. The
+verdict rests on the union, which is not fitted to anything — no adjustment of
+`compiler.py` on the dev split could have moved it, because no compiler beats the
+union. The blind figure was recorded anyway, as the amendment required: **0 of 150
+agents covered.**
+
+### What was checked
+
+- **The union really is the cheapest covering packet** — pinned as set logic, not
+  argued in prose.
+- **The packet is charged to every surviving request from the host onward**, not to
+  each member up to where it used to arrive. That is the difference between a
+  compiler's packet and Gate C0's bundle, and it is worth points.
+- **The digest and the historical fetches come back out** of every surviving
+  context, and the host survives even when it fetched nothing but the digest —
+  the case the first fixtures could not see, added after a mutation survived.
+- **Seven cases in `tests/gate-c1-compiler.bats`**, all synthetic, with seven
+  mutations observed to go red: the packet charged only to its old arrivals; the
+  digest or the old fetches left in; the host eliminated with the rest; generic
+  tokens kept so every rule fires; the whole-catalogue baseline selecting nothing.
+
 ## What this does not license
 
-- It is not evidence that a compiler works. Gate C0 has two outcomes — it permits
-  Gate C1 or it is inconclusive — and refutation is not among them, because a
-  witness below the bar is consistent with any true saving at all.
-- It is not an implementable figure. The packet here is what the agent turned out
-  to need. **Gate C1** writes the compiler with only the pinned diff and catalogue
-  as input — never an agent's behaviour, never an adjudication — and prices what
-  it produces. **A packet that misses a rule the review used is a refutation
-  there**, not a cost; pages nobody read are charged as real bytes.
-- It says nothing about claims reached. Unlike batching, this candidate changes
-  what reaches the reviewer, so the adoption rule's first three clauses are live —
-  and only the forward test after C1 can settle them.
-- It does not adopt, implement, or schedule anything.
+- Gate C0 was not evidence that a compiler works: it has two outcomes, permitting
+  Gate C1 or inconclusive, and refutation is not among them. Gate C1 is where the
+  refutation came from.
+- Gate C0's figure was not implementable, which is exactly what Gate C1 measured:
+  the per-agent packet was worth 26.80% and the one-packet-for-the-fixture version
+  that covers the same reviews is worth 7.96–10.96%.
+- It says nothing about claims reached, in either direction. The refutation is on
+  cost, under a coverage condition that was chosen precisely because claims reached
+  cannot be measured without a forward test.
+- It does not refute compiling a review packet in general. What is refuted is a
+  packet that carries **every rule any of these reviewers read**, at a 20% bar, on
+  this fixture. A weaker coverage condition is a different candidate and needs its
+  own protocol — and it would have to say what licenses dropping a rule a review
+  used.
+- It does not adopt, implement, or schedule anything, and no forward design is
+  written.
