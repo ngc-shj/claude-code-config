@@ -38,18 +38,17 @@ rescheduled, because the model issues none.
 **No variant of this is evaluated.** If the intervention is reformulated, this
 protocol is void and a new one is written.
 
-## Adoption rule, lexicographic — not scalarised
+## Adoption rule
 
-Unchanged from the two protocols before it:
+**`../GOAL.md` states the goal and the rule that decides it, and it is the only
+statement of them.** It is not restated here: three protocols each carrying their
+own copy is how the wording came apart from the rule once already.
 
-1. zero loss of Critical real claims;
-2. distinct real claims reached ≥ **95%** of current k=3;
-3. C/M not-a-defect no worse;
-4. among candidates passing 1–3, **minimum raw processed tokens**;
-5. api-eq is a secondary readout only.
-
-The compiler changes what reaches the reviewer, so 1–3 are live here in a way they
-were not for batching, and only the forward test can settle them.
+What matters for reading this document is that the **20% bar these gates use is
+the threshold for investing in a candidate**, and decides nothing about adoption.
+The compiler changes what reaches the reviewer, so the quality clauses are live
+here in a way they were not for batching, and only the forward test can settle
+them.
 
 ## Gates, in order
 
@@ -123,9 +122,20 @@ the pinned commit — never an agent's behaviour, never an adjudication. Replay 
   not a cost — the packet has to carry what the review used;
 - pages it adds that nobody read are charged as real bytes.
 
-Only if the replayed figure still clears 20% does the work proceed to a small
-forward test under the adoption rule above. The forward test is what checks claims
-reached, and nothing before it does.
+Only if the replayed figure still clears 20% does the work proceed to a **forward
+design, pre-registered before any agent runs**, under `../GOAL.md`.
+
+**A small screen and the adoption decision are different things, and this protocol
+does not let one stand in for the other.** A screen may be placed ahead of the full
+run to kill the candidate early — one Critical real claim lost is a refutation at
+any n — and it is **refutation-only by design: it carries no adoption
+qualification, whatever it observes.** That is a rule about what a screen is
+allowed to decide, not a claim that a small sample cannot produce a favourable
+interval; it can. Adoption goes through **a formal non-inferiority evaluation,
+pre-registered separately**, taking the plug-in sizing in `../GOAL.md` — about 222
+agents — as its starting point rather than its floor.
+
+The forward run is what checks claims reached, and nothing before it does.
 
 ## What this protocol will not do
 
