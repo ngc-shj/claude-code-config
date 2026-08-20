@@ -4,9 +4,11 @@
 that ordering, because this document and the first result will land in the same
 commit; treat it as the author's account.
 
-One clause has since been amended, recorded in place in Gate C0 with the direction
-it moves the conclusion: what Gate C0 computes is a **witness**, not a ceiling, and
-saying otherwise was wrong in the direction that makes the figure smaller.
+Two clauses have since been amended, each recorded in place. The first: what Gate
+C0 computes is a **witness**, not a ceiling, and saying otherwise was wrong in the
+direction that makes the figure smaller. The second fixes Gate C1's dev/holdout
+split **before any of its code was written**, so that this repository's history
+evidences the ordering rather than merely asserting it.
 
 This protocol governs one candidate and the order in which it may be evaluated.
 It authorises no change to any skill.
@@ -114,13 +116,44 @@ intervention, which is why the cheap gate runs first.
 
 ### Gate C1 — the compiler itself (0 agents), only if C0 passes
 
-Write the compiler. Its **only** inputs are the pinned diff and the catalogue at
-the pinned commit — never an agent's behaviour, never an adjudication. Replay it:
+Write the compiler. Its **runtime** inputs are the pinned diff
+(`../../rule-ablation/fixtures/F11-exports.diff`) and arm W's catalogue as round 22
+pinned it — never an agent's behaviour, never an adjudication. Replay it:
 
 - the packet it produces, its size, and the requests it removes;
-- **a run that misses any rule the agent historically opened is a refutation**,
+- **a run that misses any rule an agent historically opened is a refutation**,
   not a cost — the packet has to carry what the review used;
 - pages it adds that nobody read are charged as real bytes.
+
+> **Amendment, 2026-08-20 (second) — the author is an input too, and this clause
+> is fixed before a line of the compiler is written.**
+>
+> Restricting the compiler's *runtime* inputs to the diff and the catalogue does
+> not stop the historical opened-rule set reaching it: the author reads that set,
+> adjusts a selection rule, and the packet is fitted to the very thing it is
+> scored against. "Runtime inputs are diff and catalogue only" is then true and
+> beside the point. Raised in review, before Gate C1 was implemented.
+>
+> **The historical opened-rule set is the SCORER, and nothing else.** If it is
+> used to shape a selection rule, that use is confined to a split fixed here, in
+> advance:
+>
+> - **dev — reviews 1–10** (60 agents, both arms). Selection rules may be
+>   adjusted against these.
+> - **holdout — reviews 11–25** (90 agents, both arms). Scored **once**, at the
+>   end. **The verdict is read from the holdout**, both for the missing-rule
+>   refutation and for the token figure; the same figures over all 150 are
+>   reported beside them and decide nothing.
+>
+> F11 is a single change reviewed 25 times, so the split does not partition the
+> compiler's input — it partitions the reviewers whose behaviour scores it. That
+> is the leak this is closing: a packet fitted to the rules 60 agents opened has
+> to cover the rules 90 unseen agents opened.
+>
+> **The first version is written blind** — no opened-rule set consulted — and its
+> coverage over all 150 agents is recorded before any adjustment. That number is
+> the honest one; everything after it is fitted to some degree, and the holdout is
+> what says by how much.
 
 Only if the replayed figure still clears 20% does the work proceed to a **forward
 design, pre-registered before any agent runs**, under `../GOAL.md`.
