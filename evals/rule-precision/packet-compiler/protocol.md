@@ -4,11 +4,13 @@
 that ordering, because this document and the first result will land in the same
 commit; treat it as the author's account.
 
-Two clauses have since been amended, each recorded in place. The first: what Gate
-C0 computes is a **witness**, not a ceiling, and saying otherwise was wrong in the
-direction that makes the figure smaller. The second fixes Gate C1's dev/holdout
+Three clauses have since been amended, each recorded in place. The first: what
+Gate C0 computes is a **witness**, not a ceiling, and saying otherwise was wrong in
+the direction that makes the figure smaller. The second fixes Gate C1's dev/holdout
 split **before any of its code was written**, so that this repository's history
-evidences the ordering rather than merely asserting it.
+evidences the ordering rather than merely asserting it. The third, made after Gate
+C1's first figures, scopes them to the control arm and to the holdout's own union
+— which weakens the refutation without moving it.
 
 This protocol governs one candidate and the order in which it may be evaluated.
 It authorises no change to any skill.
@@ -154,6 +156,24 @@ pinned it — never an agent's behaviour, never an adjudication. Replay it:
 > coverage over all 150 agents is recorded before any adjustment. That number is
 > the honest one; everything after it is fitted to some degree, and the holdout is
 > what says by how much.
+
+> **Amendment, 2026-08-21 (third) — the figure was scored against both arms.**
+>
+> The first run took the union over all 150 agents and scored it over the whole
+> holdout. Both are wrong against `../GOAL.md`, which fixes **arm W** as the
+> control: W23 is the arm with clause 1 removed and is not the configuration a
+> candidate replaces. And the bound for the holdout has to be built from the
+> holdout's own union, not from a union that has seen the dev split.
+>
+> Corrected: the figure the verdict reads is **arm W, holdout — 45 agents** — with
+> the covering packet taken as the union over exactly those agents. Both arms and
+> all 150 are reported beside it and decide nothing.
+>
+> Made **after** the first figures were computed. It **weakens** the refutation:
+> the covering packet shrinks from 54 rules to 46 and the saving rises from
+> 7.96–10.96% to 12.22–14.63%. Still below the bar, so the verdict does not move —
+> but the direction is the one that demands scrutiny, not the one that grants it.
+> Raised in review.
 
 Only if the replayed figure still clears 20% does the work proceed to a **forward
 design, pre-registered before any agent runs**, under `../GOAL.md`.
