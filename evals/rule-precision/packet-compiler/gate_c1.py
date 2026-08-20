@@ -43,10 +43,24 @@ g = _load('gate0', os.path.join(HERE, os.pardir, 'routing-trim', 'gate0.py'))
 b0 = _load('gate_b0', os.path.join(HERE, os.pardir, 'request-batching', 'gate_b0.py'))
 c0 = _load('gate_c0', os.path.join(HERE, 'gate_c0.py'))
 C = _load('compiler', os.path.join(HERE, 'compiler.py'))
+g1 = _load('gate1', os.path.join(HERE, os.pardir, 'routing-trim', 'gate1.py'))
 
 AGENT = re.compile(r'^R22 review (W23|W)-(\d+)-([abc])$')
 DEV_LAST = 10          # reviews 1-10 are dev; 11-25 are holdout. Fixed in `408e83d`.
+CONTROL = 'W'          # `../GOAL.md`: W23 is the arm with clause 1 removed.
 BAR = 20.0
+
+# The compiler's own invocation. It is issued once and its result is the packet,
+# and it is charged like a packet member because the protocol says this gate
+# measures the command it actually issues.
+COMMAND = ('python3 evals/rule-precision/packet-compiler/compiler.py '
+           '--diff evals/rule-ablation/fixtures/F11-exports.diff '
+           '--catalogue skills/triangulate')
+
+# The inputs, pinned. Printing a hash is not checking one: a different catalogue
+# or a different diff produced numbers just as happily until these were compared.
+EXPECTED_CATALOGUE = 'b78f25e5e76c3c17aefa0d076a2644730ce9b6a0'
+EXPECTED_DIFF = 'ff54f2e6afae8f26d250952acabaa10597116497'
 
 
 def used_rules(path):
@@ -77,6 +91,17 @@ def used_pages(path):
     return out
 
 
+def catalogue_manifest(root):
+    """sha1 over `relative path + content hash` for every file in the catalogue."""
+    lines = []
+    for dirpath, _dirs, files in sorted(os.walk(root)):
+        for name in sorted(files):
+            full = os.path.join(dirpath, name)
+            lines.append(f'{os.path.relpath(full, root)}  '
+                         f'{hashlib.sha1(open(full, "rb").read()).hexdigest()}')
+    return hashlib.sha1('\n'.join(sorted(lines)).encode()).hexdigest()
+
+
 def compiled_round(ag, packet, bpt):
     """Raw tokens saved when THIS packet replaces the digest and the fetches.
 
@@ -103,7 +128,7 @@ def compiled_round(ag, packet, bpt):
         after -= sum(nbytes / bpt for nbytes, _c, req in ag['digest'] if req <= q)
         after -= sum(nbytes / bpt for nbytes, _c, req in ag['packet'] if req <= q)
         if q >= host:
-            after += packet / bpt
+            after += (packet + len(COMMAND.encode('utf-8'))) / bpt
     return before - after
 
 
@@ -111,47 +136,71 @@ def main():
     root, diff_path = os.environ.get('CAT_W'), os.environ.get('F11_DIFF')
     if not root or not diff_path:
         raise SystemExit('set CAT_W (arm W catalogue) and F11_DIFF (the pinned diff)')
-    cat_manifest = hashlib.sha1(b''.join(
-        open(os.path.join(dp, f), 'rb').read()
-        for dp, _d, fs in sorted(os.walk(root)) for f in sorted(fs))).hexdigest()
+    cat_manifest = catalogue_manifest(root)
     diff = open(diff_path, encoding='utf-8').read()
-    print(f'catalogue {root}\n  content sha1 {cat_manifest}')
-    print(f'diff {os.path.basename(diff_path)}  '
-          f'sha1 {hashlib.sha1(diff.encode()).hexdigest()}  {len(diff)} bytes')
+    diff_sha = hashlib.sha1(diff.encode()).hexdigest()
+    for label, got, want in (('catalogue', cat_manifest, EXPECTED_CATALOGUE),
+                             ('diff', diff_sha, EXPECTED_DIFF)):
+        if got != want:
+            raise SystemExit(f'{label} manifest mismatch\n  expected {want}\n'
+                             f'  got      {got}\n\nThese numbers were computed against a '
+                             f'different {label}. Re-pin and re-run every figure if this '
+                             f'is intended.')
+    print(f'catalogue {root}\n  path+content manifest sha1 {cat_manifest} (matches)')
+    print(f'diff {os.path.basename(diff_path)}  sha1 {diff_sha} (matches)  {len(diff)} bytes')
 
     corpus, data, keys, used, pages = [], [], [], {}, {}
     for path in g.agents():
         meta = json.load(open(path.replace('.jsonl', '.meta.json')))
-        m = AGENT.match(meta['description'])
-        corpus.append(f'{hashlib.sha1(open(path, "rb").read()).hexdigest()}  {os.path.basename(path)}')
+        k = g1.agent_key(meta['description'])
+        if k is None:
+            raise SystemExit(f'{os.path.basename(path)} is not a round-22 review agent')
+        corpus.append((hashlib.sha1(open(path, 'rb').read()).hexdigest(),
+                       os.path.basename(path), k))
         got = c0.scan(path)
         if not got:
             continue
-        k = (m.group(1), int(m.group(2)), m.group(3))
         keys.append(k)
         data.append(got)
         used[k] = used_rules(path)
         pages[k] = used_pages(path)
-    digest = hashlib.sha1('\n'.join(sorted(corpus)).encode()).hexdigest()
-    if digest != g.EXPECTED_MANIFEST:
-        raise SystemExit(f'transcript manifest mismatch\n  expected {g.EXPECTED_MANIFEST}\n'
-                         f'  got      {digest}')
-    print(f'{len(data)} round-22 review agents; transcript manifest sha1 {digest} (matches)')
+    # Which review each transcript IS decides which agents the control arm and the
+    # holdout contain, so it is hashed with the bytes - `gate1.py` already does
+    # exactly this and is imported rather than copied.
+    g1.check_keys(keys)
+    assert sum(1 for k in keys if k[0] == CONTROL) == g1.REVIEWS * len(g1.PARTS)
+    got_manifest = g1.manifest_digest(corpus)
+    if got_manifest != g1.EXPECTED_GATE1_MANIFEST:
+        raise SystemExit(f'agent-to-review manifest mismatch\n'
+                         f'  expected {g1.EXPECTED_GATE1_MANIFEST}\n'
+                         f'  got      {got_manifest}\n\nThe transcripts, or which review '
+                         f'each one is, are not what these numbers came from.')
+    print(f'{len(data)} round-22 review agents; agent-to-review manifest sha1 '
+          f'{got_manifest} (matches); {CONTROL} is complete at '
+          f'{g1.REVIEWS} x {len(g1.PARTS)}')
 
     dev = [k for k in keys if k[1] <= DEV_LAST]
     hold = [k for k in keys if k[1] > DEV_LAST]
+    # The primary is the control arm's holdout, and the covering packet for it is
+    # built from those agents alone: a union that has seen the dev split is not a
+    # bound on an unseen one.
+    hold_w = [k for k in hold if k[0] == CONTROL]
     rows, pagetext = C.catalogue(root)
 
-    union = set().union(*used.values())
-    union_pages = set().union(*pages.values())
+    union_w = set().union(*(used[k] for k in hold_w))
+    union_w_pages = set().union(*(pages[k] for k in hold_w))
+    union_all = set().union(*used.values())
+    union_all_pages = set().union(*pages.values())
     blind, blind_pages = C.compile_packet(diff, root)
     whole, whole_pages = C.compile_packet(diff, root, everything=True)
 
-    print('\nCoverage - a packet must carry every rule the review used')
-    print(f'  {"packet":34s}{"rules":>7s}{"pages":>7s}{"kB":>8s}'
-          f'{"dev":>10s}{"holdout":>10s}')
+    print(f'\nCoverage - a packet must carry every rule the review used '
+          f'({CONTROL} holdout is {len(hold_w)} agents, of {len(keys)})')
+    print(f'  {"packet":36s}{"rules":>7s}{"pages":>7s}{"kB":>8s}'
+          f'{"W holdout":>12s}{"all 150":>10s}')
     packets = (('compiler.py, blind and unadjusted', blind, blind_pages),
-               ('the union of what agents used', union, union_pages),
+               ('union over the W holdout (primary)', union_w, union_w_pages),
+               ('union over all 150', union_all, union_all_pages),
                ('the whole catalogue', whole, whole_pages))
     sizes = {}
     for name, sel, pgs in packets:
@@ -159,42 +208,49 @@ def main():
                   + sum(len(pagetext[r].encode('utf-8')) for r in pgs if r in pagetext))
         sizes[name] = nbytes
         ok = lambda ks: sum(1 for k in ks if used[k] <= sel)
-        print(f'  {name:34s}{len(sel):7d}{len(pgs):7d}{nbytes / 1000:8.1f}'
-              f'{ok(dev):>7d}/{len(dev):<3d}{ok(hold):>7d}/{len(hold):<3d}')
-    print(f'  ({len(union)} of the {len(rows)} catalogue rules were used by at least one '
-          f'agent; mean {st.mean(len(v) for v in used.values()):.1f} per agent)')
+        print(f'  {name:36s}{len(sel):7d}{len(pgs):7d}{nbytes / 1000:8.2f}'
+              f'{ok(hold_w):>8d}/{len(hold_w):<3d}{ok(keys):>6d}/{len(keys):<3d}')
+    print(f'  ({len(union_all)} of the {len(rows)} catalogue rules were used by at least '
+          f'one agent; mean {st.mean(len(v) for v in used.values()):.1f} per agent)')
 
     print('\nGate C1 - raw-token saving with a packet that covers the review')
-    print(f'  {"packet":34s}{"B/tok":>7s}{"all 150":>10s}{"dev":>9s}{"holdout":>9s}')
+    print(f'  {"packet":36s}{"B/tok":>7s}{"W holdout":>12s}{"W dev":>9s}{"all 150":>10s}')
     verdict = {}
+    groups = (('W hold', hold_w), ('W dev', [k for k in dev if k[0] == CONTROL]),
+              ('all', keys))
     for name, sel, pgs in packets:
         for bpt in g.BPT:
             share = {}
-            for label, ks in (('all', keys), ('dev', dev), ('hold', hold)):
-                idx = [i for i, k in enumerate(keys) if k in set(ks)]
+            for label, ks in groups:
+                want = set(ks)
+                idx = [i for i, k in enumerate(keys) if k in want]
                 R = sum(g.raw_of(data[i]['usages']) for i in idx)
                 S = sum(compiled_round(data[i], sizes[name], bpt) for i in idx)
                 share[label] = 100 * S / R
-            print(f'  {name if bpt == g.BPT[0] else "":34s}{bpt:7.1f}'
-                  f'{share["all"]:9.2f}%{share["dev"]:8.2f}%{share["hold"]:8.2f}%')
-            verdict.setdefault(name, []).append(share['hold'])
+            print(f'  {name if bpt == g.BPT[0] else "":36s}{bpt:7.1f}'
+                  f'{share["W hold"]:11.2f}%{share["W dev"]:8.2f}%{share["all"]:9.2f}%')
+            verdict.setdefault(name, []).append(share['W hold'])
         print()
 
-    cover_name = 'the union of what agents used'
+    cover_name = 'union over the W holdout (primary)'
     best = max(verdict[cover_name])
-    covered = all(used[k] <= union for k in hold)
+    covered = all(used[k] <= union_w for k in hold_w)
     refuted = best < BAR
     print(f'VERDICT: Gate C1 {"REFUTES" if refuted else "does NOT refute"} the candidate.\n')
-    print(f'  cheapest packet that covers every holdout agent: {min(verdict[cover_name]):.2f}'
-          f'-{best:.2f}% (holdout)')
-    print(f'  every holdout agent covered by it: {covered}')
+    print(f'  cheapest packet covering every {CONTROL} holdout agent: '
+          f'{min(verdict[cover_name]):.2f}-{best:.2f}%')
+    print(f'  every {CONTROL} holdout agent covered by it: {covered}')
     print(f"""
-The union is the smallest packet that can satisfy the coverage condition, because
-one packet serves every review and must contain each agent's own set. Any compiler
-that covers the review emits at least this, so its saving is at most this figure -
-whatever its selection rule. That is why the verdict does not depend on how well
-`compiler.py` is written, and why no amount of adjusting it on the dev split could
-change the answer.
+The union is the smallest packet that can satisfy the coverage condition on those
+agents, because one packet serves every review and must contain each agent's own
+set. Any compiler that covers them emits at least this, so its saving is at most
+this figure - whatever its selection rule. That is why the verdict does not depend
+on how well `compiler.py` is written, and why no adjustment of it on the dev split
+could change the answer.
+
+The control is arm {CONTROL}; W23 is the arm with clause 1 removed and is reported
+beside the primary rather than in it. `../GOAL.md` fixes that, and the protocol's
+third amendment records that this figure was scoped after the first was computed.
 
 {"Gate C1 ends the line of work: no compiler that carries what the review used clears the bar."
  if refuted else "Gate C1 cannot end the line of work."}""")

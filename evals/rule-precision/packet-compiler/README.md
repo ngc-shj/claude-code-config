@@ -3,10 +3,12 @@
 **Gate C0 handed each agent the packet it turned out to need and reached
 26.80–26.90% against a 20% bar. A real compiler cannot do that: it sees the change,
 not the reviewer, so it emits ONE packet for the fixture — and one packet that
-carries what every review used is worth 7.96–10.96% on the holdout. The line
+carries what every review used is worth **12.19–14.60%** on the control arm's
+holdout. The line
 stops. Nothing is adopted, nothing is implemented, and no agents were spent.** `protocol.md` fixes the gates and carries
-one amendment; `gate_c0.py` reproduces every number here and stops if the
-transcript set it reads is not the one these numbers came from.
+three amendments. `gate_c0.py` reproduces the Gate C0 figures and `gate_c1.py` the
+Gate C1 ones; each stops unless the transcripts, the agent-to-review mapping, the
+catalogue and the diff are the ones these numbers came from.
 
 **That figure is a WITNESS, not a ceiling.** It charges the command payload of
 every historical `rg`, `cat` and listing as if it moved into the packet, and the
@@ -106,26 +108,31 @@ selection rule:
 > The union is therefore the cheapest packet that can satisfy coverage, and its
 > saving is an upper bound on **every** compiler's.
 
-| packet | rules | pages | kB | dev covered | holdout covered |
-|---|---|---|---|---|---|
-| `compiler.py`, blind and unadjusted | 7 | 3 | 17.4 | 0/60 | 0/90 |
-| **the union of what agents used** | 54 | 14 | 109.0 | 60/60 | 90/90 |
-| the whole catalogue | 74 | 37 | 230.0 | 60/60 | 90/90 |
+The control is **arm W** — `../GOAL.md` fixes that, W23 being the arm with clause 1
+removed — so the figure the verdict reads is W's holdout, 45 agents, with the
+covering packet built from those agents alone.
 
-| saving, raw processed tokens | B/tok | all 150 | dev | holdout |
+| packet | rules | pages | kB | W holdout | all 150 |
+|---|---|---|---|---|---|
+| `compiler.py`, blind and unadjusted | 7 | 3 | 17.40 | 0/45 | 0/150 |
+| **union over the W holdout** (primary) | 46 | 12 | 94.94 | 45/45 | 147/150 |
+| union over all 150 | 54 | 14 | 108.98 | 45/45 | 150/150 |
+| the whole catalogue | 74 | 37 | 230.02 | 45/45 | 150/150 |
+
+| saving, raw processed tokens | B/tok | **W holdout** | W dev | all 150 |
 |---|---|---|---|---|
-| `compiler.py` (covers nothing) | 3.5 | 31.91% | 33.76% | 30.66% |
-| **the union** | 3.5 | 9.61% | 12.05% | **7.96%** |
-| | 4.2 | 12.57% | 14.95% | **10.96%** |
-| the whole catalogue | 3.5 | −19.86% | −16.65% | −22.04% |
+| `compiler.py` (covers nothing) | 3.5 | 31.18% | 33.36% | 31.88% |
+| **union over the W holdout** | 3.5 | **12.19%** | 15.06% | 13.00% |
+| | 4.2 | **14.60%** | 17.37% | 15.39% |
+| the whole catalogue | 3.5 | −20.91% | −16.84% | −19.90% |
 
 **Both refutation conditions fire, on different packets.** The blind compiler is
 cheap and misses rules in every single agent; the packet that misses none is worth
 a third of the bar. Delivering the whole catalogue costs *more* than it saves — the
 230 kB is re-sent by every request after it arrives.
 
-**54 of the 74 catalogue rules were used by at least one agent**, and the mean
-agent used 18.2. That is the shape of the problem: reviewers do not agree on which
+**54 of the 74 catalogue rules were used by at least one agent** (46 by the control
+arm's holdout alone), and the mean agent used 18.2. That is the shape of the problem: reviewers do not agree on which
 rules the change triggers, so a packet built to satisfy all of them is most of the
 catalogue, and a packet small enough to save tokens cannot satisfy any of them.
 
@@ -143,20 +150,35 @@ verdict rests on the union, which is not fitted to anything — no adjustment of
 union. The blind figure was recorded anyway, as the amendment required: **0 of 150
 agents covered.**
 
+The **third** amendment is a different matter: the first run took its union over
+all 150 agents and scored both arms, which is not the control `../GOAL.md` fixes.
+Scoping it to arm W's holdout **weakens** the refutation — 7.96–10.96% becomes
+12.19–14.60% — and it was made after those figures existed, which is the direction
+that needs recording rather than the one that excuses it.
+
 ### What was checked
 
 - **The union really is the cheapest covering packet** — pinned as set logic, not
   argued in prose.
+- **The inputs are checked, not merely printed.** Gate C1 stops unless the
+  catalogue's path-and-content manifest, the diff's hash, and the agent-to-review
+  manifest all match what these numbers came from, and unless arm W is complete at
+  25 × 3. The agent side reuses `routing-trim/gate1.py`'s manifest and key check
+  rather than restating them.
+- **The compiler's own invocation is charged**, 140 bytes carried from the host
+  onward. Leaving it out makes the saving larger, which is not a direction a
+  refutation may be generous in.
 - **The packet is charged to every surviving request from the host onward**, not to
   each member up to where it used to arrive. That is the difference between a
   compiler's packet and Gate C0's bundle, and it is worth points.
 - **The digest and the historical fetches come back out** of every surviving
   context, and the host survives even when it fetched nothing but the digest —
   the case the first fixtures could not see, added after a mutation survived.
-- **Seven cases in `tests/gate-c1-compiler.bats`**, all synthetic, with seven
-  mutations observed to go red: the packet charged only to its old arrivals; the
-  digest or the old fetches left in; the host eliminated with the rest; generic
-  tokens kept so every rule fires; the whole-catalogue baseline selecting nothing.
+- **Eight cases in `tests/gate-c1-compiler.bats`**, all synthetic, with every rule
+  mutated and observed to go red: the packet charged only to its old arrivals; the
+  digest or the old fetches left in; the host eliminated with the rest; the
+  compiler invocation left uncharged; generic tokens kept so every rule fires; the
+  whole-catalogue baseline selecting nothing.
 
 ## What this does not license
 
@@ -165,7 +187,7 @@ agents covered.**
   refutation came from.
 - Gate C0's figure was not implementable, which is exactly what Gate C1 measured:
   the per-agent packet was worth 26.80% and the one-packet-for-the-fixture version
-  that covers the same reviews is worth 7.96–10.96%.
+  that covers the same reviews is worth 12.19–14.60%.
 - It says nothing about claims reached, in either direction. The refutation is on
   cost, under a coverage condition that was chosen precisely because claims reached
   cannot be measured without a forward test.

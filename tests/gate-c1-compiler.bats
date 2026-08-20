@@ -47,11 +47,12 @@ c1() {
   # up to each member's old arrival would understate what a compiler costs.
   run c1 <<'PY'
 ag = fixture(6, [(400, 20, 2)], [(800, 20, 1)], extra=[1, 2, 3, 4, 5])
-# digest 800B and the old fetch 400B come out; a 4000B packet goes in from req 1
+# digest 800B and the old fetch 400B come out; a 4000B packet plus the 140B
+# compiler invocation goes in from req 1
 print(f"{m.compiled_round(ag, 4000, 4.0):.0f}")
 PY
   [ "$status" -eq 0 ]
-  [[ "$output" == "-3600" ]]
+  [[ "$output" == "-3775" ]]
 }
 
 @test "a packet small enough still wins, so the sign is not built in" {
@@ -60,13 +61,13 @@ ag = fixture(6, [(400, 20, 2)], [(800, 20, 1)], extra=[1, 2, 3, 4, 5])
 print(f"{m.compiled_round(ag, 100, 4.0):.0f}")
 PY
   [ "$status" -eq 0 ]
-  [[ "$output" == "1275" ]]
+  [[ "$output" == "1100" ]]
 }
 
 @test "a request whose every result the packet replaces is not made" {
-  # Request 2 fetched nothing but catalogue, so it goes and the saving is 2000.
+  # Request 2 fetched nothing but catalogue, so it goes and the saving is 1860.
   # Give it one result the packet does not replace and it survives, taking its
-  # round trip with it - 1275.
+  # round trip with it - 1100.
   run c1 <<'PY'
 ag = fixture(6, [(400, 20, 2)], [(800, 20, 1)], extra=[1])
 with_trip = m.compiled_round(ag, 100, 4.0)
@@ -74,7 +75,7 @@ ag2 = fixture(6, [(400, 20, 2)], [(800, 20, 1)], extra=[1, 2])
 print(f"{with_trip:.0f} {m.compiled_round(ag2, 100, 4.0):.0f}")
 PY
   [ "$status" -eq 0 ]
-  [[ "$output" == "2000 1275" ]]
+  [[ "$output" == "1860 1100" ]]
 }
 
 @test "the host survives even when it fetched nothing but the digest" {
@@ -87,7 +88,21 @@ ag = fixture(6, [(400, 20, 3)], [(800, 20, 1)], extra=[2, 4, 5])
 print(f"{m.compiled_round(ag, 100, 4.0):.0f}")
 PY
   [ "$status" -eq 0 ]
-  [[ "$output" == "1900" ]]
+  [[ "$output" == "1760" ]]
+}
+
+@test "the compiler's own invocation is charged, not assumed free" {
+  # The protocol says this gate measures the command it actually issues. Leaving
+  # it out makes the saving larger, which is the direction a refutation must not
+  # be generous in.
+  run c1 <<'PY'
+ag = fixture(6, [(400, 20, 2)], [(800, 20, 1)], extra=[1, 2, 3, 4, 5])
+free = m.compiled_round(ag, 100, 4.0)
+padded = m.compiled_round(ag, 100 + len(m.COMMAND.encode("utf-8")), 4.0)
+print(f"{len(m.COMMAND.encode('utf-8'))} {free - padded:.0f}")
+PY
+  [ "$status" -eq 0 ]
+  [[ "$output" == "140 175" ]]
 }
 
 @test "the union of what agents used is the cheapest packet that covers them" {
