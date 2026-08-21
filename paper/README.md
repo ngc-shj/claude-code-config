@@ -14,8 +14,8 @@ manufacture the same class of defect at chapter scale.
 
 > Improving LLM code review has to be measured as a decision problem under
 > **pre-declared quality constraints** — zero Critical loss, non-inferior claim
-> reach at a stated margin — not as the presence or absence of individual
-> rules. Claim-level adjudication, same-batch controls, and inference separated
+> reach at a stated margin, and no worsening of Critical/Major not-a-defect
+> findings — not as the presence or absence of individual rules. Claim-level adjudication, same-batch controls, and inference separated
 > from power (MDE) identify interventions whose effects **replicate across
 > fixtures** and keep what does not resolve **explicitly open** rather than
 > silently assumed; causal replay over pinned session transcripts **refutes
@@ -103,16 +103,20 @@ change in either. Decomposition: clause 1 CONFIRMED on F10 (paired CI
 [−2.27, −0.39]); clauses 2–3 nulls inside their MDEs, no deletion licensed.
 The open edge, reported as such: F11 transfer not resolved (round 21 CI
 crosses zero; round 22's sensitivity gate fired, 1.41 vs 1.33), ≈86M raw /
-≈61M api-eq spent on the two F11 rounds, and the recorded decision not to run
-round 23.
-*Sources:* `../evals/rule-precision/round-12/` and `round-17/` … `round-22/`
-under the same directory; `../evals/rule-precision/design-audit/`.
+≈61M api-eq processed by the two F11 rounds' review agents alone, and the
+recorded decision not to run round 23.
+*Sources:* `../evals/rule-precision/round-12/`,
+`../evals/rule-precision/round-17/`, `../evals/rule-precision/round-18/`,
+`../evals/rule-precision/round-19/`, `../evals/rule-precision/round-20/`,
+`../evals/rule-precision/round-21/`, `../evals/rule-precision/round-22/`;
+`../evals/rule-precision/design-audit/`.
 
 ### 5. Token accounting: the number everyone reports is not consumption
 
-`subagent_tokens` is final-request context (identification: median relative
-error 0.0009 across 552 agents), undercounting processing 5.1×. The real
-shape: ≈421.6k raw per review agent across a mean 7.6 requests, 93.6%
+`subagent_tokens` is final-request context — that identification is what the
+552-agent reconciliation establishes (median relative error 0.0009). In round
+22, final-context accounting understated raw processing by 5.1×; the round-22
+shape is ≈421.6k raw per review agent across a mean 7.6 requests, 93.6%
 transport. Costs for rounds 17–22 — the rounds whose review transcripts were
 recovered — restated in raw / api-eq; earlier rounds keep only their reported
 final-context figures, and the chapter says which is which.
@@ -128,15 +132,18 @@ W holdout, 54/74 for the round, mean 18.2 per agent). Each refuted below the
 20% bar by causal replay over pinned transcripts. The amendment history is
 data, not embarrassment: verdicts crossed the bar twice in one protocol
 before settling, each move recorded with its direction.
-*Sources:*
-`../evals/rule-precision/{routing-trim,request-batching,packet-compiler}/`;
+*Sources:* `../evals/rule-precision/routing-trim/`,
+`../evals/rule-precision/request-batching/`,
+`../evals/rule-precision/packet-compiler/`;
 `../evals/rule-precision/GOAL.md` for the closure and resume conditions.
 
 ### 7. The method, stated as reusable gate design
 
 Oracle-before-run; same-batch controls; MDE/inference separation
 (`../evals/rule-precision/methods.md`); saturation checks before reuse; blinded re-scoring;
-pre-registration with **directional amendments**; the witness/ceiling
+pre-registration, plus **post-result directional amendment records** — an
+amendment is a correction made after a figure existed, recorded with the
+direction it moves the conclusion, and is not part of the pre-registration; the witness/ceiling
 distinction (a witness or lower bound below the bar cannot refute; only an
 upper bound below the bar can); the union argument
 (coverage conditions turn per-agent oracles into compiler-independent
