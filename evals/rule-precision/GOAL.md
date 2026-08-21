@@ -115,12 +115,19 @@ Three candidates were priced on F11 and all three were refuted below the bar:
 **Nothing was adopted, no forward test was run, and the goal above is unmet.** The
 search on this fixture is closed — not paused pending a better idea, closed.
 
-The reason they converge is measured rather than guessed: **54 of the 74 catalogue
-rules were used by at least one agent and the mean agent used 18.2**. Reviewers do
-not agree on what a change triggers, so material that satisfies all of them is most
-of the catalogue and material small enough to save tokens satisfies none. And 93.6%
-of raw tokens is the same content re-sent, which the three candidates between them
-have now attacked from every side that costs nothing to try.
+**They were refuted for three separate measured reasons, not one.** Routing trim
+ran out of removable mass: the content it gates is a small share of the round.
+Batching ran into the causal window, which is **one request wide in all 150
+agents** — the first catalogue result always arrives one request after the digest,
+so a form that leaves the model selecting cannot cross it. Only the packet
+compiler's failure is explained by reviewer disagreement: **54 of the 74 catalogue
+rules were used by at least one agent and the mean agent used 18.2**, so one packet
+that satisfies all of them is most of the catalogue and one small enough to save
+tokens satisfies none.
+
+Nothing here establishes that the remaining directions are exhausted. 93.6% of raw
+tokens is the same content re-sent, and three attempts on that mass failed; that is
+three data points, not a proof that a cheap fourth does not exist.
 
 **Do not open a fourth candidate to keep the line moving.** Work resumes only when
 a specific intervention can, from data already in hand, do all three of:
@@ -129,8 +136,10 @@ a specific intervention can, from data already in hand, do all three of:
 2. explain the mechanism by which coverage is preserved;
 3. be refuted cheaply by a 0-agent gate.
 
-Absent that, running nothing is what the goal asks for: it is the option with the
-lowest tokens and no loss of review quality.
+Absent that, not starting a new candidate is the **lowest-cost decision consistent
+with the current evidence**. It costs no review quality — and it does not achieve
+the goal, which stays unmet. The two are different things and this file does not
+let one read as the other.
 
 ## What this file does not settle
 
