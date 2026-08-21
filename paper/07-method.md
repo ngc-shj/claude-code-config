@@ -262,9 +262,12 @@ any code exists.
 - **Two forms of the total, where both were built.** In the batching and
   compiled-witness gates the closed-form difference is checked against the
   same quantity rebuilt from scratch — costing the transformed round request
-  by request — for every agent, calibration, and arrangement; the other gates
-  carry different self-checks (the routing-trim replay's degenerate-case
-  equality, Gate C1's union logic pinned as set algebra). Where the two forms
+  by request — over each gate's own domain: B0 across every agent, scope,
+  calibration and both registered arrangements; B1 for the fixed intervention
+  across every agent and calibration; C0 across every agent, calibration and
+  legal packet position. The other gates carry different self-checks (the
+  routing-trim replay's degenerate-case equality, Gate C1's union logic
+  pinned as set algebra). Where the two forms
   exist, what is independent is the **aggregation path**, not the inputs: both
   consume the same classifier, request mapping and cost primitives, so
   agreement is evidence against arithmetic error in either path and none about
