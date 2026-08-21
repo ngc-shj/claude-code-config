@@ -3,9 +3,11 @@
 This chapter states the method the measurement series converged on, as design
 rules a reader could apply to their own review system. Two limits govern
 everything in it. First, the rules were extracted from one series — one
-repository, one model epoch, three fixtures — and nothing here claims they are
-generally valid; what would make them portable is Chapter 8's open obligation,
-not this chapter's assertion. Second, the chapter describes **two method
+repository, one model epoch, and authored fixtures whose count differs by
+line: eight behind the ablation conclusions, three (F9, F10, F11) behind the
+precision conclusions, and **one** (F11) behind every replay figure — and
+nothing here claims they are generally valid; what would make them portable is
+Chapter 8's open obligation, not this chapter's assertion. Second, the chapter describes **two method
 families that are deliberately not merged**, because they answer different
 questions and neither did the other's job:
 
@@ -21,6 +23,14 @@ line of work or permit the next step** — never confirm, never ship. The
 asymmetry is the point: a gate that a candidate survives has established
 nothing about the candidate except that the cheapest available refutation
 failed.
+
+A note on grades, because this chapter is bound by the writing rules it cites.
+The numbers here are **method exhibits** — probe counts, retractions, gate
+firings, amendment tallies — documenting what a procedure caught, not what an
+intervention did. Each is a process record from the cited round document or
+protocol and carries the grade **MEASURED** unless tagged otherwise. No effect
+claim is made in this chapter; those live in Chapters 2–6 under their ledger
+grades.
 
 ## 7.1 Identification under pre-declared quality constraints
 
@@ -45,13 +55,18 @@ round:
    judged. Re-judging would let the standard drift between arms and rounds.
 3. **Convergence is checked, not assumed.** The inventory earned reuse when 599
    new findings produced six claims the earlier round had not recorded
-   (`../evals/rule-precision/README.md`, Round 12).
+   (MEASURED; `../evals/rule-precision/README.md`, Round 12).
 
 The panel's standing assumption — judge the diff as a real pull request into a
 working codebase where everything not shown exists and is correct — does most
 of the work in the `not-a-defect` verdict and is applied identically to both
-arms. It cannot bias a comparison; it does move the absolute level, and every
-absolute number in this monograph inherits it.
+arms. What that buys is bounded: holding the explicit standard fixed prevents
+*drift* in the standard between arms and rounds. It does not make the contrast
+unbiased — an intervention that changes the **kinds** of claims reviewers
+produce meets the panel's per-kind error rates differently, and measurement
+invariance across arms was not tested. Panel error therefore sits in the
+contrasts in principle, not only in the absolute levels, and every number in
+this monograph inherits the assumption either way.
 
 ### 7.1.2 Controls: same batch, one variable, wiring before content
 
@@ -59,7 +74,7 @@ absolute number in this monograph inherits it.
   never across batches. The series' standing exhibit is a saturation claim that
   read 1/8 → 8/8 across batches and shrank to something honest when the
   control ran in-batch
-  (`../docs/archive/audit/2026-08-04-rule-ablation.md`, Round 9).
+  (MEASURED; `../docs/archive/audit/2026-08-04-rule-ablation.md`, Round 9).
 - **One variable per round.** Arms differ in shipped files, never in prompts;
   where a round tests a structure, both arms are rendered from one template so
   the manipulation is the role line and nothing else
@@ -68,7 +83,7 @@ absolute number in this monograph inherits it.
   a tool-call-trace probe establishes that reviewers read it at all. The Remedy
   Floor as merged was read by zero of four probed reviewers — ablating it
   against absence would have compared two arms that both lacked it in practice
-  (`../evals/rule-ablation/README.md`, Round 7). The general rule: **a
+  (MEASURED; `../evals/rule-ablation/README.md`, Round 7). The general rule: **a
   documented control that nothing routes to is dead text, and measuring its
   content before its wiring measures nothing.**
 
@@ -88,7 +103,7 @@ absolute number in this monograph inherits it.
 - **Saturation check before reuse.** An instrument at its ceiling returns a
   null whatever the arms do. Round 11 caught its rubric saturated (9.00/9)
   before reuse and rebuilt it, frozen, before the first arm ran
-  (`../evals/rule-ablation/README.md`, Rounds 10–11).
+  (MEASURED; `../evals/rule-ablation/README.md`, Rounds 10–11).
 - **Structured extraction, not per-round regexes.** The heading regex lost
   findings twice, both times in the arm whose treatment makes reviewers invent
   heading shapes — a loss correlated with the arm is a bias, not noise
@@ -99,18 +114,28 @@ absolute number in this monograph inherits it.
 `../evals/rule-precision/methods.md` is the normative statement; the design
 rules are three:
 
-- **The MDE is a design quantity.** Computed from a borrowed sd before the
-  run, it answers "is this n worth running?" and gates the spend — run first
-  and alone, before any arm comparison is looked at. When the observed MDE
-  exceeds the pre-registered ceiling, the round reports itself underpowered
-  and does **not** extend n (Round 22 is the executed example: gate fired,
-  no confirmatory claim, everything below it descriptive).
+- **Before the run, the planned MDE is an investment quantity.** Computed
+  from a borrowed sd, it answers "is this n worth running?" and gates the
+  spend: if it exceeds the effect the round is sized for, the round is resized
+  or abandoned before an agent runs.
+- **After the data, before the comparison, the observed-MDE sensitivity gate
+  is an inference-eligibility quantity.** Recomputed from the observed sds and
+  checked against a pre-registered ceiling — run first and alone, before any
+  arm difference is looked at — it decides whether confirmatory inference is
+  licensed, not whether the round should have run: by the time it can fire,
+  the spend is committed. Round 22 is the executed example (ledger: OPEN): the
+  gate fired after all fifty reviews existed, the pre-registered response was
+  to report the primary underpowered and **not** extend n, and everything
+  below the gate is descriptive. The two MDEs are the same formula at
+  different times doing different jobs, and conflating them is how a
+  spend-gate quietly becomes a result-gate.
 - **The test and interval are observation quantities.** An observed effect
   does not have to exceed the MDE to be significant; requiring that is a
   stricter test than α = .05 applied by accident. Round 19 is the worked
-  example — CI [−3.76, −0.24] excluding zero, and a pre-registered rule that
-  demanded more and was wrong to; the record keeps both statements and does
-  not rewrite the rule after the fact.
+  example (MEASURED; `../evals/rule-precision/methods.md`) — CI
+  [−3.76, −0.24] excluding zero, and a pre-registered rule that demanded more
+  and was wrong to; the record keeps both statements and does not rewrite the
+  rule after the fact.
 - **Confirmatory is a label about timing, not about strength.** A comparison
   is confirmatory only if its decision rule predates the data and is applied
   as written; everything else is exploratory and stays exploratory, however
@@ -169,9 +194,15 @@ refutation, ask what arrangement would have saved more**: the series' verdicts
 crossed the bar twice in one protocol because a quantity called a ceiling was
 not one, and both crossings were found by exactly this question
 (`../evals/rule-precision/request-batching/protocol.md`, amendments one and
-two). And **every remaining looseness is measured with its direction stated**:
-a refutation must show its known approximations all inflate the saving, so a
-corrected figure moves toward the verdict rather than away from it.
+two). And **every remaining looseness is measured with its direction stated,
+and the dangerous direction is bounded, not banished**: a looseness that
+understates the saving gets a quantified ceiling, and the refutation stands
+only if the figure remains below the bar after those corrections are added.
+The record is not that every approximation ran the safe way — the routing-trim
+refutation carried a quantified ≤0.03-point understatement from code-point
+byte counting, small against a multi-point margin, and said so
+(`../evals/rule-precision/routing-trim/README.md`, MEASURED). A refutation
+resting on an unquantified dangerous-direction looseness is not one.
 
 ### 7.2.3 Replay accounting
 
@@ -199,15 +230,23 @@ generally:
 
 Where an intervention must produce **one artifact serving many consumers**
 under a coverage condition — here, one packet that must carry every rule any
-reviewer used — the per-consumer oracle converts into a bound that no
-implementation can beat: the artifact must contain each consumer's set, hence
-their **union**, so the union is the cheapest artifact satisfying coverage and
-its cost bounds every implementation's from below, whatever selection rule
-produced it. The verdict then does not depend on how well the evaluated
-implementation was written, and no amount of tuning on a dev split can move it
-(`../evals/rule-precision/packet-compiler/gate_c1.py`). This is the replay
-family's strongest move, and the condition for it — a coverage requirement
-plus a shared artifact — is checkable before any code exists.
+reviewer used — the per-consumer oracle converts into a bound on **every
+selection rule within the fixed intervention**: the artifact must contain each
+consumer's set, hence their **union**, so the union is the cheapest artifact
+satisfying coverage, whatever rule chose its members. The verdict then does
+not depend on how well the evaluated implementation was written, and no tuning
+on a dev split can move it (`../evals/rule-precision/packet-compiler/gate_c1.py`).
+
+The conditions are narrower than "coverage plus a shared artifact", and all of
+them did hold in the case measured: a **fixed representation** of the
+artifact's members (catalogue rows and pages as shipped), a **fixed shared
+delivery form** (one packet, one arrival), and a **cost model monotone in
+added members**. Compressing the members, re-representing them, or delivering
+per-consumer subsets are outside the bound — in this series they are
+reformulations, which void the protocol and require their own. What the
+argument buys, inside its conditions, is a verdict independent of the
+selection rule or compiler mapping — and the conditions are checkable before
+any code exists.
 
 ### 7.2.5 Pinning, and checks that can fail
 
@@ -219,8 +258,12 @@ plus a shared artifact — is checkable before any code exists.
   (`../evals/rule-precision/packet-compiler/gate_c1.py`, review history).
 - **Two forms of every total.** The closed-form difference is checked against
   the same quantity rebuilt from scratch — costing the transformed round
-  request by request — for every agent, calibration, and arrangement. The two
-  share no terms, so agreement is evidence rather than tautology.
+  request by request — for every agent, calibration, and arrangement. What is
+  independent is the **aggregation path**, not the inputs: both forms consume
+  the same classifier, request mapping and cost primitives, so agreement is
+  evidence against arithmetic error in either path and none at all about a
+  defect in the shared classification — which is what the degenerate-case
+  check across independently written gates exists to catch.
 - **Degenerate-case equality across independently written gates.** With its
   distinguishing feature disabled, a new gate must reproduce the prior gate's
   figure to the token. The routing-trim replay's empty-retention case must
@@ -264,18 +307,25 @@ Chapter 8 as obligations rather than caveats:
 
 - **No external calibration.** Every gate parameter — the 20% investment bar
   above all — was chosen, not derived, and the whole apparatus has run in one
-  repository, one model epoch, one fixture family. Nothing here shows the
-  gates' verdicts track anything outside that setting.
+  repository and one model epoch, on eight ablation fixtures, three precision
+  fixtures, and a single replay fixture. Nothing here shows the gates'
+  verdicts track anything outside that setting.
 - **No positive control.** The replay family has never passed a candidate
   through to a forward test, so a gate chain that quietly refutes everything
   is empirically indistinguishable from one that refutes the right things.
   Chapter 8 specifies the validation this requires: predictions fixed before
   a forward test, verdicts compared with outcomes, and at least one
   gate-passing candidate or positive control in the design.
-- **No false-refutation estimate.** The bound discipline of §7.2.2 controls
-  the *direction* of error inside a replay; it does not quantify how often a
-  correctly-computed upper bound under-prices an intervention a forward test
-  would have vindicated. That risk is unmeasured.
+- **No false-refutation estimate — and the risk is external validity, not
+  arithmetic.** A genuinely valid upper bound on the same intervention and the
+  same estimand cannot under-price it; that much is definitional. The risk is
+  that the replayed quantity fails to be that bound for the deployed one:
+  reviewer behaviour changes under the intervention, the deployment
+  distribution drifts from the replayed round, or the fixed intervention and
+  the deployed intervention are not the same object. How often that happens —
+  a replay verdict of "refute" beside a forward test that would have
+  vindicated — is unmeasured, and §7.2.2's bound discipline cannot measure
+  it, because it controls error direction inside the replay only.
 - **Identification's own external validity** is inherited from its
   instruments: panel judgement is not ground truth, and the fixtures were
   partly authored by people who knew the rules (Chapter 8, with the ledger's
