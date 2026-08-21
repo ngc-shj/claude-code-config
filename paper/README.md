@@ -3,7 +3,7 @@
 **Working title:** *Evidence-Calibrated Improvement of LLM Code Review: Rule
 Ablation, Claim-Level Quality, and Cheap Falsification of Token Optimizations*
 
-**Status: skeleton.** No chapter is drafted. This file fixes the thesis, the
+**Status:** chapter 7 drafted (`07-method.md`); chapters 1–6 and 8 undrafted. This file fixes the thesis, the
 chapter-to-evidence mapping, and the writing rules **before prose exists**, for
 the same reason every protocol in `../evals/` fixed its rules before its
 numbers: the ledger (`../evals/README.md`) took two review rounds to purge ten
