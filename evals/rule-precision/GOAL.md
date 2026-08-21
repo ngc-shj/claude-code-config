@@ -119,11 +119,15 @@ search on this fixture is closed — not paused pending a better idea, closed.
 ran out of removable mass: the content it gates is a small share of the round.
 Batching ran into the causal window, which is **one request wide in all 150
 agents** — the first catalogue result always arrives one request after the digest,
-so a form that leaves the model selecting cannot cross it. Only the packet
-compiler's failure is explained by reviewer disagreement: **54 of the 74 catalogue
-rules were used by at least one agent and the mean agent used 18.2**, so one packet
-that satisfies all of them is most of the catalogue and one small enough to save
-tokens satisfies none.
+and **the batching intervention as fixed could not cross it**. That is the claim
+`request-batching/` makes and no more: it withheld the wider one about every
+batching form, because a subset-batching variant reached the bar's edge.
+
+Only the packet compiler's failure is explained by reviewer disagreement. The
+covering packet the verdict reads — arm W's holdout — needed **46 of the 74
+rules**; across all 150 agents the union was **54 of 74**, with a mean of **18.2**
+per agent. Either way, one packet that satisfies every reviewer is most of the
+catalogue and one small enough to save tokens satisfies none.
 
 Nothing here establishes that the remaining directions are exhausted. 93.6% of raw
 tokens is the same content re-sent, and three attempts on that mass failed; that is
