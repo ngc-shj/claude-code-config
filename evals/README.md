@@ -41,13 +41,16 @@ Each line exists because the previous one was blind to something:
 
 ### What reviews get wrong, and the floor that fixes part of it
 
-- **MEASURED — the failure mode is not misreading.** Of 128 non-defect findings
-  in the founding 574-finding adjudication, 5 misread the code; 34 asserted
-  requirements about code outside the change; 83 stated preferences as defects.
-  This diagnosis is the Finding Floor's entire justification and is written into
-  the catalogue itself.
-- **REPLICATED — the Finding Floor cuts Critical/Major non-defects with flat
-  coverage.** Round 12 (F9): 1.62 vs 4.12 per review, t = −4.11. Round 17 (F10,
+- **MEASURED — the failure mode is not misreading.** Re-run from the pinned
+  round-11 material (`rule-precision/measure.py`): 574 findings, **127 not
+  adjudicated `real`, of which 2 misread the code**; at claim level 39 real /
+  43 not-a-defect / 1 wrong. The catalogue's Finding Floor preamble carries a
+  finer historical breakdown ("5 of 128", ungrounded requirements vs
+  preferences) that no pinned input reproduces — it is cited there as the
+  floor's recorded rationale, and this ledger's numbers are the re-runnable
+  ones.
+- **REPLICATED — the Finding Floor cuts Critical/Major non-defects with no
+  detectable coverage change.** Round 12 (F9): 1.62 vs 4.12 per review, t = −4.11. Round 17 (F10,
   a fixture built blind to the floor): 2.44 vs 4.56, t = −3.05. Coverage showed
   no detectable change in either (nulls inside their MDEs, not equivalence). The floor's digest wiring line exists because round 7 proved a
   section no routing path names is dead text.
@@ -83,8 +86,9 @@ Each line exists because the previous one was blind to something:
 - **MEASURED (F9) — conditioning a second wave.** Telling wave two what wave one
   found cuts restatement 96% and spends the freed attention on more ground, less
   accurately: +43% real, +89% non-defects. Recorded with no recommendation;
-  round 15 found a titles-only base equal to the full one and round 14's cost
-  penalty did not replicate.
+  round 15 found no detectable titles-only-vs-full difference (primary 7.83 vs
+  7.83, t = 0.00, but MDE 2.86 — identical point estimates are not equivalence)
+  and round 14's cost penalty did not replicate.
 
 ### What the rules themselves do
 
@@ -102,8 +106,8 @@ Each line exists because the previous one was blind to something:
   require — the deficit is the catalogue's, not one rule's.
 - **MEASURED — taught obligations get produced.** R54's six added obligations
   went from 0/29 appearances to produced when shipped (round 8, one variable per
-  round). The Remedy Floor moved its own clauses and left mechanism flat once
-  wired (round 7: +1.6/8 and +3.6/5, agreement ≥89.8%).
+  round). The Remedy Floor moved its own clauses with no detectable mechanism
+  change once wired (round 7: +1.6/8 and +3.6/5, agreement ≥89.8%).
 - **MEASURED, load-bearing null — a name-only catalogue showed no detectable
   difference from no catalogue** (arm B, rounds 1–3; same power caveat as the
   detection nulls). Shrinking rows to their digest names re-proposes something
@@ -128,8 +132,10 @@ Each line exists because the previous one was blind to something:
   k=3), false positives no worse, fewer raw tokens than current, on forward
   data — is unmet**, and GOAL.md fixes the resume conditions.
 - **MEASURED — what deciding costs.** A forward non-inferiority test at the 95%
-  floor is ≈222–294 agents (≈124M raw / 86.7M api-eq at the audit's pricing);
-  round-22's nominal pairing does not tighten it (r = 0.136).
+  floor is ≈222 agents at GOAL.md's plug-in sizing — ≈94M raw / 65.5M api-eq at
+  the efficiency audit's per-agent figures — or ≈294 at `routing-trim/`'s more
+  conservative sizing, ≈124M raw / 86.7M api-eq. Round-22's nominal pairing
+  tightens neither (r = 0.136).
 
 ## What the skill ships because of this, and despite it
 
@@ -148,7 +154,7 @@ Each line exists because the previous one was blind to something:
 ## Validity, in one place
 
 Ablation fixtures were written by people who knew the rules — a null there means
-"adds nothing on a fixture I wrote", a positive is stronger. F10 and F11 were
+"no detectable effect on a fixture I wrote", a positive is stronger. F10 and F11 were
 authored blind to their arms. `real` is a three-agent panel's judgement under a
 stated assumption (agreement 84–94%), not ground truth; coverage counts are of
 the discovered set, not the fixture. Three fixtures (F9, F10, F11) carry the
