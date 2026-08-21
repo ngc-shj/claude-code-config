@@ -127,8 +127,9 @@ covering packet built from those agents alone.
 | the whole catalogue | 3.5 | −20.91% | −16.84% | −19.90% |
 
 **Both refutation conditions fire, on different packets.** The blind compiler is
-cheap and misses rules in every single agent; the packet that misses none is worth
-a third of the bar. Delivering the whole catalogue costs *more* than it saves — the
+cheap and misses rules in every single agent; the packet that misses none reaches
+14.60% at best, which is under three-quarters of the bar and not close enough to it
+for any of the loose ends to matter. Delivering the whole catalogue costs *more* than it saves — the
 230 kB is re-sent by every request after it arrives.
 
 **54 of the 74 catalogue rules were used by at least one agent** (46 by the control

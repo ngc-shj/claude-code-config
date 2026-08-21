@@ -18,7 +18,7 @@ it, and the tokens it states are what this matches against the change.
 The whole-catalogue packet is also available as a baseline: it cannot miss a rule
 by construction, and it pays for that in bytes.
 
-Usage:  packet-compiler/compiler.py [--all]   (prints the packet's rule set)
+Usage:  compiler.py --diff <path> --catalogue <dir> [--all]
 """
 import os
 import re
@@ -92,10 +92,30 @@ def packet_bytes(selected, followed, root):
     return n + sum(len(pages[r].encode('utf-8')) for r in followed)
 
 
-def main():
-    root = os.environ.get('CAT_W', '')
-    diff = open(os.environ['F11_DIFF'], encoding='utf-8').read()
-    selected, followed = compile_packet(diff, root, everything='--all' in sys.argv)
+def main(argv=None):
+    """`compiler.py --diff <path> --catalogue <dir> [--all]`.
+
+    This is the invocation Gate C1 charges for, so it has to be the invocation
+    that runs: a command priced into a refutation and not executable is a cost
+    attributed to something that does not exist.
+    """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    args = {}
+    while argv:
+        flag = argv.pop(0)
+        if flag == '--all':
+            args['all'] = True
+        elif flag in ('--diff', '--catalogue') and argv:
+            args[flag[2:]] = argv.pop(0)
+        else:
+            raise SystemExit(f'usage: compiler.py --diff <path> --catalogue <dir> [--all]\n'
+                             f'  unexpected argument: {flag}')
+    diff_path = args.get('diff') or os.environ.get('F11_DIFF')
+    root = args.get('catalogue') or os.environ.get('CAT_W')
+    if not diff_path or not root:
+        raise SystemExit('usage: compiler.py --diff <path> --catalogue <dir> [--all]')
+    diff = open(diff_path, encoding='utf-8').read()
+    selected, followed = compile_packet(diff, root, everything=args.get('all', False))
     print(f'{len(selected)} rules, {len(followed)} detail pages, '
           f'{packet_bytes(selected, followed, root) / 1000:.1f} kB')
     print(' '.join(sorted(selected)))

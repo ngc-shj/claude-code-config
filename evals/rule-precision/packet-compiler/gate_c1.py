@@ -7,10 +7,14 @@ and not the reviewer. A real compiler emits ONE packet for the fixture, and the
 protocol's coverage condition says it must carry every rule any review used.
 
 That makes the verdict independent of how well any particular selection rule is
-written. One packet covering every agent must contain the UNION of what the agents
-used, so the union is the cheapest packet that satisfies the condition, and its
-cost is a bound on every compiler's cost from below - a bound on the saving from
-above. If the union fails the bar, no compiler passes it.
+written. One packet covering a set of agents must contain the UNION of what those
+agents used, so the union is the cheapest packet that satisfies the condition, and
+its cost is a bound on every compiler's cost from below - a bound on the saving
+from above. If the union fails the bar, no compiler passes it.
+
+The set the verdict reads is arm W's holdout: `../GOAL.md` fixes W as the control,
+and a bound for the holdout is built from the holdout's own agents. Both arms and
+all 150 are reported beside it and decide nothing.
 
 `compiler.py`'s own selection is reported beside it, blind and unadjusted, because
 the protocol required that number recorded before anything was fitted.
@@ -52,7 +56,10 @@ BAR = 20.0
 
 # The compiler's own invocation. It is issued once and its result is the packet,
 # and it is charged like a packet member because the protocol says this gate
-# measures the command it actually issues.
+# measures the command it actually issues. It names the installed catalogue,
+# because that is what a shipped compiler would read; the replay below measures
+# against round 22's pinned copy instead, which is a different path and the same
+# command shape. `tests/gate-c1-compiler.bats` runs this string.
 COMMAND = ('python3 evals/rule-precision/packet-compiler/compiler.py '
            '--diff evals/rule-ablation/fixtures/F11-exports.diff '
            '--catalogue skills/triangulate')

@@ -105,6 +105,26 @@ PY
   [[ "$output" == "140 175" ]]
 }
 
+@test "the command Gate C1 charges for is the command that runs" {
+  # A cost priced into a refutation has to be a cost something actually incurs.
+  # The first version charged 140 bytes for an invocation compiler.py could not
+  # parse - it read environment variables - so the charge was attributed to a
+  # command that did not exist.
+  cd "$(dirname "$BATS_TEST_FILENAME")/.."
+  run python3 - <<'PY'
+import importlib.util, subprocess, sys
+s = importlib.util.spec_from_file_location(
+    'gate_c1', 'evals/rule-precision/packet-compiler/gate_c1.py')
+m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+out = subprocess.run(m.COMMAND.split(), capture_output=True, text=True)
+assert out.returncode == 0, (out.returncode, out.stderr[-400:])
+assert 'rules,' in out.stdout, out.stdout
+print(len(m.COMMAND.encode('utf-8')))
+PY
+  [ "$status" -eq 0 ]
+  [[ "$output" == "140" ]]
+}
+
 @test "the union of what agents used is the cheapest packet that covers them" {
   # The verdict rests on this and not on compiler.py: one packet serves every
   # review, so it must contain each agent's own set, so it must contain their

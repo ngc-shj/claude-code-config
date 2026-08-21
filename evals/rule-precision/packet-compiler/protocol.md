@@ -171,9 +171,11 @@ pinned it — never an agent's behaviour, never an adjudication. Replay it:
 >
 > Made **after** the first figures were computed. It **weakens** the refutation:
 > the covering packet shrinks from 54 rules to 46 and the saving rises from
-> 7.96–10.96% to 12.22–14.63%. Still below the bar, so the verdict does not move —
-> but the direction is the one that demands scrutiny, not the one that grants it.
-> Raised in review.
+> 7.96–10.96% to **12.22–14.63%** — and to **12.19–14.60%** once the compiler's own
+> invocation is charged, which is the figure `gate_c1.py` prints and the one the
+> verdict reads. Still below the bar, so the verdict does not move — but the
+> direction is the one that demands scrutiny, not the one that grants it. Raised in
+> review.
 
 Only if the replayed figure still clears 20% does the work proceed to a **forward
 design, pre-registered before any agent runs**, under `../GOAL.md`.
