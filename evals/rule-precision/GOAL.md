@@ -102,9 +102,39 @@ it supports only the sizing statement: it is not a finding about where review
 variance comes from. A design that intends to pair has to establish its own
 correlation first.
 
+## Status, 2026-08-21 — stopped, unmet
+
+Three candidates were priced on F11 and all three were refuted below the bar:
+
+| candidate | what it changed | |
+|---|---|---|
+| `routing-trim/` | **what** the reviewer reads | 9.92–10.89% |
+| `request-batching/` | **when** its own fetches arrive | 19.32–19.52% |
+| `packet-compiler/` | **who** selects and fetches | 12.19–14.60% |
+
+**Nothing was adopted, no forward test was run, and the goal above is unmet.** The
+search on this fixture is closed — not paused pending a better idea, closed.
+
+The reason they converge is measured rather than guessed: **54 of the 74 catalogue
+rules were used by at least one agent and the mean agent used 18.2**. Reviewers do
+not agree on what a change triggers, so material that satisfies all of them is most
+of the catalogue and material small enough to save tokens satisfies none. And 93.6%
+of raw tokens is the same content re-sent, which the three candidates between them
+have now attacked from every side that costs nothing to try.
+
+**Do not open a fourth candidate to keep the line moving.** Work resumes only when
+a specific intervention can, from data already in hand, do all three of:
+
+1. show headroom above 20% **before** it is built;
+2. explain the mechanism by which coverage is preserved;
+3. be refuted cheaply by a 0-agent gate.
+
+Absent that, running nothing is what the goal asks for: it is the option with the
+lowest tokens and no loss of review quality.
+
 ## What this file does not settle
 
-- Whether any candidate reaches the goal. Three have been priced; two are refuted
-  and one is at Gate C1.
-- The forward test's design beyond its floor and its endpoint.
-- Anything about a second fixture: every figure here is F11 unless stated.
+- The forward test's design beyond its floor and its endpoint. None was written.
+- Anything about a second fixture: every figure here is F11 unless stated. Whether
+  the agreement problem above is a property of F11 or of reviewing is not known,
+  and finding out is not free.
