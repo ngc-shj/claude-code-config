@@ -140,8 +140,9 @@ verified, in `../claude-code-config-eval-raw/round-22/transcripts/`, whose READM
 carries the manifests and the re-run recipe. The catalogues need no archive: arm W
 is `skills/triangulate` at `f14d992` (manifest asserted by `gate_c1.py`), and arm
 W23 reconstructs from it via `git apply` of `round-22/arms.diff` (verified against
-the live snapshot before it expired). The archive is a plain directory on this
-machine, not a git remote — its durability is the machine's.
+the live snapshot before it expired). The archive is a local git repository
+(`bf611aa`) with no remote — integrity is checked, but durability is still the
+machine's.
 
 **Do not open a fourth candidate to keep the line moving.** Work resumes only when
 a specific intervention can, from data already in hand, do all three of:
