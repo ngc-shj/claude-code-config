@@ -276,9 +276,11 @@ any code exists.
   use them asymmetrically.** The `is_detail` defect was caught because two
   independently written scans exercised the shared predicate differently; a
   shared defect that biases both paths identically passes every such check.
-  The residual exposure is named rather than waved at: classifier-level
-  defects are covered by their own pinned behavioural tests
-  (`../tests/gate0-classify.bats`), not by cross-gate agreement.
+  The residual exposure is named rather than waved at: known classifier
+  behaviours are pinned by behavioural tests (`../tests/gate0-classify.bats`),
+  which mitigates but does not eliminate classifier-level misspecification —
+  an unknown shared misreading of the transcripts survives both the tests and
+  every cross-gate agreement.
 - **Degenerate-case equality across independently written gates.** With its
   distinguishing feature disabled, a new gate must reproduce the prior gate's
   figure to the token. The routing-trim replay's empty-retention case must
