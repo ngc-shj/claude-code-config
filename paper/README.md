@@ -12,14 +12,19 @@ manufacture the same class of defect at chapter scale.
 
 ## Thesis
 
-> Improving LLM code review has to be measured as a decision problem with
-> quality held fixed, not as the presence or absence of individual rules.
-> Combining claim-level adjudication, same-batch controls, inference separated
-> from power (MDE), and causal replay over session transcripts makes it
-> possible to (i) identify interventions whose effects **replicate across
-> fixtures**, (ii) keep what does not resolve **explicitly open** rather than
-> silently assumed, and (iii) **refute expensive optimization candidates
-> before any forward test**, at zero marginal review cost.
+> Improving LLM code review has to be measured as a decision problem under
+> **pre-declared quality constraints** — zero Critical loss, non-inferior claim
+> reach at a stated margin — not as the presence or absence of individual
+> rules. Claim-level adjudication, same-batch controls, and inference separated
+> from power (MDE) identify interventions whose effects **replicate across
+> fixtures** and keep what does not resolve **explicitly open** rather than
+> silently assumed; causal replay over pinned session transcripts **refutes
+> some optimization candidates before any forward test**, at zero new
+> review-agent cost.
+
+The two method families are deliberately not merged: the first identified and
+bounded the Finding Floor, the second refuted the three efficiency candidates,
+and neither did the other's job.
 
 The earlier phrasing "identify effective interventions" is deliberately not
 used: the ledger's grades support *replicated on two fixtures, open on a
@@ -75,7 +80,7 @@ correction history, which is part of the argument.
   names is dead text (round 7: 0/4 read it; wired: +1.6/8, +3.6/5).
 - Taught obligations get produced (round 8: 0/29 → produced).
 *Sources:* `../evals/rule-ablation/README.md`,
-`../../docs/archive/audit/2026-08-04-rule-ablation.md`.
+`../docs/archive/audit/2026-08-04-rule-ablation.md`.
 
 ### 3. Finding precision and what buys coverage
 
@@ -85,8 +90,9 @@ reviewer (+4.8 vs +2.5, Jaccard 0.116 vs 0.246); the reviewer-count curve
 (10.8 → 20.0 real, 0.7 → 4.4 non-defects, N=1..6); conditioning (+43% real,
 +89% non-defects, restatement −96%; titles-only vs full: no detectable
 difference, identical point estimates beside MDE 2.86).
-*Sources:* `../evals/rule-precision/README.md` rounds 11–15, `measure.py`
-re-runs.
+*Sources:* `../evals/rule-precision/README.md` rounds 11–15;
+`../evals/rule-precision/measure.py` and
+`../evals/rule-precision/round-15/measure.py` re-runs.
 
 ### 4. The Finding Floor: a replicated intervention and its open edge
 
@@ -99,14 +105,17 @@ The open edge, reported as such: F11 transfer not resolved (round 21 CI
 crosses zero; round 22's sensitivity gate fired, 1.41 vs 1.33), ≈86M raw /
 ≈61M api-eq spent on the two F11 rounds, and the recorded decision not to run
 round 23.
-*Sources:* rounds 12, 17–22; `../evals/rule-precision/design-audit/`.
+*Sources:* `../evals/rule-precision/round-12/` and `round-17/` … `round-22/`
+under the same directory; `../evals/rule-precision/design-audit/`.
 
 ### 5. Token accounting: the number everyone reports is not consumption
 
 `subagent_tokens` is final-request context (identification: median relative
 error 0.0009 across 552 agents), undercounting processing 5.1×. The real
 shape: ≈421.6k raw per review agent across a mean 7.6 requests, 93.6%
-transport. Every published round cost restated in raw / api-eq.
+transport. Costs for rounds 17–22 — the rounds whose review transcripts were
+recovered — restated in raw / api-eq; earlier rounds keep only their reported
+final-context figures, and the chapter says which is which.
 *Source:* `../evals/rule-precision/review-efficiency/`.
 
 ### 6. Cheap falsification: three optimization candidates, zero agents
@@ -119,28 +128,37 @@ W holdout, 54/74 for the round, mean 18.2 per agent). Each refuted below the
 20% bar by causal replay over pinned transcripts. The amendment history is
 data, not embarrassment: verdicts crossed the bar twice in one protocol
 before settling, each move recorded with its direction.
-*Sources:* the three protocol directories; `GOAL.md`'s closure and resume
-conditions.
+*Sources:*
+`../evals/rule-precision/{routing-trim,request-batching,packet-compiler}/`;
+`../evals/rule-precision/GOAL.md` for the closure and resume conditions.
 
 ### 7. The method, stated as reusable gate design
 
 Oracle-before-run; same-batch controls; MDE/inference separation
-(`methods.md`); saturation checks before reuse; blinded re-scoring;
+(`../evals/rule-precision/methods.md`); saturation checks before reuse; blinded re-scoring;
 pre-registration with **directional amendments**; the witness/ceiling
-distinction (a bound that understates cannot refute); the union argument
+distinction (a witness or lower bound below the bar cannot refute; only an
+upper bound below the bar can); the union argument
 (coverage conditions turn per-agent oracles into compiler-independent
 bounds); manifest pinning for transcripts, catalogues, and agent-to-review
 mappings; pre-registering splits in their own commit so git evidences the
-ordering; mutation red-proofs for every rule a verdict rests on.
+ordering; mutation red-proofs for every rule an efficiency-gate verdict rests
+on — practiced there, not retrofitted onto the earlier rounds, and adopted as
+a rule for anything this monograph's claims come to rest on.
 
 ### 8. Limits, and what completion as a doctoral claim requires
 
 Fixture authorship bias and its direction; panel judgement is not ground
 truth; three fixtures behind precision, one behind efficiency; one model
 epoch; whether reviewer disagreement is F11's property or reviewing's is
-unknown. **Open obligations:** related-work novelty check; prospective
-validation of the gate method on a second repository and model — which is
-method validation, and distinct from the efficiency search GOAL.md closed.
+unknown. **Open obligations:** a related-work novelty check, and prospective
+validation of the gate method — which is method validation, distinct from the
+efficiency search GOAL.md closed, and underspecified as "try it elsewhere".
+What it requires: an independent repository and model; **gate predictions fixed
+before the forward test runs**; the gate verdicts compared against the forward
+outcomes; **at least one positive control or gate-passing candidate**, so the
+exercise can detect a gate that refutes everything; and an assessment of the
+false-refutation risk that comparison implies.
 
 ## Order of drafting
 
