@@ -1,5 +1,8 @@
 # Rule ablation
 
+> Cross-line ledger — what every round established, at what strength, and what
+> it changed in the shipped skill: [`../README.md`](../README.md).
+
 The gates in `hooks/` must be red-proved: delete the thing they check and the
 gate has to fail. The 74 rules in `skills/triangulate/common-rules.md` had no
 equivalent. Every one was added on the theory that a review missed something
