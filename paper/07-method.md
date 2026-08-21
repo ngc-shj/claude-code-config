@@ -28,9 +28,11 @@ A note on grades, because this chapter is bound by the writing rules it cites.
 The numbers here are **method exhibits** — probe counts, retractions, gate
 firings, amendment tallies — documenting what a procedure caught, not what an
 intervention did. Each is a process record from the cited round document or
-protocol and carries the grade **MEASURED** unless tagged otherwise. No effect
-claim is made in this chapter; those live in Chapters 2–6 under their ledger
-grades.
+protocol and carries the grade **MEASURED** unless tagged otherwise. **No new
+effect estimate is introduced here**; where the chapter names the series'
+substantive results in passing, it names them with their ledger grades — the
+Finding Floor's effect (REPLICATED), the three candidate refutations
+(REFUTED) — and their full statements live in Chapters 2–6.
 
 ## 7.1 Identification under pre-declared quality constraints
 
@@ -96,10 +98,10 @@ this monograph inherits the assumption either way.
   scores the rule-holding arm against the document it was handed; part of the
   measured advantage is then definitional. The series rebuilt its rubric with
   panels that never saw the rule, and the **blinded re-score** of the old
-  fixes against it moved results in both directions — confirming one fixture's
-  effect, halving another's (`../evals/README.md`, ledger; the ablation audit,
-  Rounds 5 and 6.5). Self-scoring had erred both ways, which is the argument
-  for blinding stated as an observation.
+  fixes against it moved results in both directions — it retained the F6 gap
+  and reduced the F9 gap (MEASURED; `../evals/README.md`, ledger; the ablation
+  audit, Rounds 5 and 6.5). Self-scoring had erred both ways, which is the
+  argument for blinding stated as an observation.
 - **Saturation check before reuse.** An instrument at its ceiling returns a
   null whatever the arms do. Round 11 caught its rubric saturated (9.00/9)
   before reuse and rebuilt it, frozen, before the first arm ran
@@ -112,7 +114,7 @@ this monograph inherits the assumption either way.
 ### 7.1.4 Power and inference, separated
 
 `../evals/rule-precision/methods.md` is the normative statement; the design
-rules are three:
+rules are four:
 
 - **Before the run, the planned MDE is an investment quantity.** Computed
   from a borrowed sd, it answers "is this n worth running?" and gates the
@@ -124,8 +126,9 @@ rules are three:
   arm difference is looked at — it decides whether confirmatory inference is
   licensed, not whether the round should have run: by the time it can fire,
   the spend is committed. Round 22 is the executed example (ledger: OPEN): the
-  gate fired after all fifty reviews existed, the pre-registered response was
-  to report the primary underpowered and **not** extend n, and everything
+  gate fired after all observations existed — 25 reviews per arm, each a
+  three-agent review, 150 agent outputs in all — the pre-registered response
+  was to report the primary underpowered and **not** extend n, and everything
   below the gate is descriptive. The two MDEs are the same formula at
   different times doing different jobs, and conflating them is how a
   spend-gate quietly becomes a result-gate.
@@ -256,14 +259,23 @@ any code exists.
   path-and-content, the fixture diff — each gate stops on mismatch. A hash
   that is displayed but never compared accepts any input
   (`../evals/rule-precision/packet-compiler/gate_c1.py`, review history).
-- **Two forms of every total.** The closed-form difference is checked against
-  the same quantity rebuilt from scratch — costing the transformed round
-  request by request — for every agent, calibration, and arrangement. What is
-  independent is the **aggregation path**, not the inputs: both forms consume
-  the same classifier, request mapping and cost primitives, so agreement is
-  evidence against arithmetic error in either path and none at all about a
-  defect in the shared classification — which is what the degenerate-case
-  check across independently written gates exists to catch.
+- **Two forms of the total, where both were built.** In the batching and
+  compiled-witness gates the closed-form difference is checked against the
+  same quantity rebuilt from scratch — costing the transformed round request
+  by request — for every agent, calibration, and arrangement; the other gates
+  carry different self-checks (the routing-trim replay's degenerate-case
+  equality, Gate C1's union logic pinned as set algebra). Where the two forms
+  exist, what is independent is the **aggregation path**, not the inputs: both
+  consume the same classifier, request mapping and cost primitives, so
+  agreement is evidence against arithmetic error in either path and none about
+  a defect in the shared classification.
+- **Degenerate-case equality catches shared-input defects only when the paths
+  use them asymmetrically.** The `is_detail` defect was caught because two
+  independently written scans exercised the shared predicate differently; a
+  shared defect that biases both paths identically passes every such check.
+  The residual exposure is named rather than waved at: classifier-level
+  defects are covered by their own pinned behavioural tests
+  (`../tests/gate0-classify.bats`), not by cross-gate agreement.
 - **Degenerate-case equality across independently written gates.** With its
   distinguishing feature disabled, a new gate must reproduce the prior gate's
   figure to the token. The routing-trim replay's empty-retention case must
