@@ -2,8 +2,9 @@
 
 Measurement ran against the triangulate review skill from 2026-08-04 to
 2026-08-21: the rule-ablation rounds (1–11), the finding-precision rounds
-(11–22, the first reusing the ablation line's material), two retrospective
-audits, and three pre-registered efficiency candidates.
+(11–22, the first reusing the ablation line's material), three retrospective
+audits (variance, design, review-efficiency), and three pre-registered
+efficiency candidates.
 Their conclusions are scattered across twenty READMEs and protocols, each scoped
 to its own round. This file is the cross-line ledger: every claim the line
 established, at the strength it actually has, and what each one changed — or
@@ -20,18 +21,21 @@ is never graded as equivalence.
 Each line exists because the previous one was blind to something:
 
 1. `rule-ablation/` rounds 1–3 asked whether catalogue rules change **detection**
-   of a seeded defect. They don't, detectably — and the harness could not see the
-   other thirty findings per review.
+   of a seeded defect. No detectable difference — at a power that could only have
+   caught a very large one — and the harness could not see the other thirty
+   findings per review.
 2. Rounds 4–9 asked whether rules change the **remedy** — and whether the
    catalogue's problem was content or wiring.
 3. `rule-precision/` rounds 11–22 asked whether findings are **true**, what the
    second and third reviewer add, and whether the Finding Floor built from that
    diagnosis survives contact with fixtures nobody built for it.
-4. The two audits asked what a round **costs** and whether another one would
-   change any decision.
+4. The three audits asked what the rounds vary by, what they **cost**, and
+   whether another one would change any decision.
 5. `rule-precision/{routing-trim,request-batching,packet-compiler}/` asked
-   whether the cost can come down without the quality. No. (`rule-precision/GOAL.md`
-   is the canonical statement of that goal, its decision rule, and the closure.)
+   whether the cost can come down without the quality. **These three interventions
+   could not**; whether other directions exist is not established.
+   (`rule-precision/GOAL.md` is the canonical statement of the goal, its decision
+   rule, the closure, and the resume conditions.)
 
 ## The ledger
 
@@ -44,8 +48,8 @@ Each line exists because the previous one was blind to something:
   the catalogue itself.
 - **REPLICATED — the Finding Floor cuts Critical/Major non-defects with flat
   coverage.** Round 12 (F9): 1.62 vs 4.12 per review, t = −4.11. Round 17 (F10,
-  a fixture built blind to the floor): 2.44 vs 4.56, t = −3.05. Coverage moved
-  in neither. The floor's digest wiring line exists because round 7 proved a
+  a fixture built blind to the floor): 2.44 vs 4.56, t = −3.05. Coverage showed
+  no detectable change in either (nulls inside their MDEs, not equivalence). The floor's digest wiring line exists because round 7 proved a
   section no routing path names is dead text.
 - **CONFIRMED (F10) — clause 1 is the active component.** Round 20's 2×2: W −
   W₂₃ = −1.33, paired CI [−2.27, −0.39]. Clause 2 alone is indistinguishable
@@ -56,7 +60,9 @@ Each line exists because the previous one was blind to something:
   CI [−1.60, +0.27]). Round 22: the pre-registered sensitivity gate fired
   (observed MDE 1.41 vs ceiling 1.33) and the round makes no confirmatory claim;
   its descriptive tables lean the same ambiguous way, real claims 20.28 (W) vs
-  21.48 (W₂₃). Two F11 rounds cost ≈19M raw tokens without resolving it, and the
+  21.48 (W₂₃). Two F11 rounds processed ≈86M raw tokens (≈61M api-eq, review
+  agents alone; the design audit's own "≈19M" was final-context accounting, which
+  the efficiency audit superseded at 5.1×) without resolving it, and the
   design audit's recorded decision is **do not run round 23** — break-even on
   the false-positive/coverage trade sits at ρ ≈ 0.6–1.1 and another round does
   not move a decision that depends on ρ. Clause 1 ships unchanged.
@@ -82,22 +88,27 @@ Each line exists because the previous one was blind to something:
 
 ### What the rules themselves do
 
-- **MEASURED, replicated null — rules do not move detection.** Rounds 1–3, eight
-  fixtures: no detection difference survived replication. Two early n=3 claims
-  in both directions were retracted at n=8.
-- **CONFIRMED (blinded re-score) — procedure-bearing rules move the remedy,
-  where the fixture is hard.** F6: the full R54 procedure 8/8 at Critical rank 1
-  vs 6/8 without. The blinded round-6.5 re-score confirmed F6, halved F9, and
-  showed self-scoring had erred in both directions. Round 6's panels: catalogue
-  rows carry 2–5 of the ~11–15 properties independent panels require — the
-  deficit is the catalogue's, not one rule's.
+- **MEASURED — no detectable detection difference.** Rounds 1–3, eight fixtures:
+  no detection difference survived replication — and the power audit's caveat is
+  part of the result: binary scoring at n=8 could only have ruled out a very
+  large effect. Two early n=3 claims in both directions were retracted at n=8.
+- **MEASURED (blinded re-score) — procedure-bearing rules move the remedy,
+  where the fixture is hard.** F6, remedy quality against the independent rubric:
+  **6.25/9 with the full R54 procedure vs 4.40/9 without** — diff 1.85 against an
+  MDE of 1.21, scored blind to arm. (The oft-quoted 8/8 vs 6/8 is the detection
+  count, a different and weaker observation.) The round-6.5 re-score confirmed
+  F6, halved F9, and showed self-scoring had erred in both directions. Round 6's
+  panels: catalogue rows carry 2–5 of the ~11–15 properties independent panels
+  require — the deficit is the catalogue's, not one rule's.
 - **MEASURED — taught obligations get produced.** R54's six added obligations
   went from 0/29 appearances to produced when shipped (round 8, one variable per
   round). The Remedy Floor moved its own clauses and left mechanism flat once
   wired (round 7: +1.6/8 and +3.6/5, agreement ≥89.8%).
-- **MEASURED, load-bearing null — a name-only catalogue equals no catalogue**
-  (arm B, rounds 1–3). Anyone tempted to shrink rows to their digest names is
-  re-proposing a measured zero.
+- **MEASURED, load-bearing null — a name-only catalogue showed no detectable
+  difference from no catalogue** (arm B, rounds 1–3; same power caveat as the
+  detection nulls). Shrinking rows to their digest names re-proposes something
+  measured to show no detectable benefit, and the ablation audit's first listed
+  consequence is "do not".
 
 ### What it costs, and the closed search
 
@@ -113,8 +124,9 @@ Each line exists because the previous one was blind to something:
   argument makes this bind every selection rule). Reviewer disagreement is the
   packet-compiler's measured cause: 46 of 74 rules were needed by the W-holdout
   alone, 54 of 74 by the round, mean 18.2 per agent. **Nothing was adopted; the
-  goal — same claims, fewer tokens, on forward data — is unmet**, and GOAL.md
-  fixes the resume conditions.
+  goal — real-claim reach practically intact (zero Critical loss, ≥95% of current
+  k=3), false positives no worse, fewer raw tokens than current, on forward
+  data — is unmet**, and GOAL.md fixes the resume conditions.
 - **MEASURED — what deciding costs.** A forward non-inferiority test at the 95%
   floor is ≈222–294 agents (≈124M raw / 86.7M api-eq at the audit's pricing);
   round-22's nominal pairing does not tighten it (r = 0.136).
@@ -139,8 +151,9 @@ Ablation fixtures were written by people who knew the rules — a null there mea
 "adds nothing on a fixture I wrote", a positive is stronger. F10 and F11 were
 authored blind to their arms. `real` is a three-agent panel's judgement under a
 stated assumption (agreement 84–94%), not ground truth; coverage counts are of
-the discovered set, not the fixture. Two fixtures carry every precision
-conclusion; one carries every efficiency figure. Everything is one model epoch.
+the discovered set, not the fixture. Three fixtures (F9, F10, F11) carry the
+precision conclusions; one (F11) carries every efficiency figure. Everything is
+one model epoch.
 Whether reviewer disagreement (the packet-compiler's cause of death) is a
 property of F11 or of reviewing is not known.
 
