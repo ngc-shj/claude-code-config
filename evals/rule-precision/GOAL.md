@@ -133,6 +133,18 @@ Nothing here establishes that the remaining directions are exhausted. 93.6% of r
 tokens is the same content re-sent, and three attempts on that mass failed; that is
 three data points, not a proof that a cheap fourth does not exist.
 
+**Every figure above is re-runnable, and the raw material is out of harm's way.**
+The gates read the round-22 session transcripts, which lived only under
+`~/.claude/projects/` (subject to transcript cleanup) — they are archived, sha1-
+verified, in `../claude-code-config-eval-raw/round-22/transcripts/`, whose README
+carries the manifests and the re-run recipe. The catalogues need no archive: arm W
+is `skills/triangulate` at `f14d992` (manifest asserted by `gate_c1.py`), and arm
+W23 reconstructs from it via `git apply` of `round-22/arms.diff` (verified against
+the live snapshot before it expired). The archive is a git repository
+(`bf611aa`) with a **private** GitHub remote
+(`ngc-shj/claude-code-config-eval-raw`) — integrity git-checked, durability
+off-machine, contents unpublished.
+
 **Do not open a fourth candidate to keep the line moving.** Work resumes only when
 a specific intervention can, from data already in hand, do all three of:
 
