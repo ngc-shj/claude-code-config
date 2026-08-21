@@ -1,5 +1,8 @@
 # Rule firing frequency
 
+> Cross-line ledger — what every round established, at what strength, and what
+> it changed in the shipped skill: [`../README.md`](../README.md).
+
 `evals/rule-ablation/` asks whether a rule *changes* a review — expensive, one
 mechanism at a time, two authored fixtures per question. This asks the cheaper
 question that should come first: **does the rule ever fire at all?**

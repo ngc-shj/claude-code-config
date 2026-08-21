@@ -1,5 +1,8 @@
 # Finding precision
 
+> Cross-line ledger — what every round established, at what strength, and what
+> it changed in the shipped skill: [`../README.md`](../README.md).
+
 `../rule-ablation/` asks whether a review's fix for **one seeded defect** has the
 properties a correct fix needs. Eleven rounds of that measured remedy quality and
 nothing else — and remedy quality on one defect is a small part of what a review
