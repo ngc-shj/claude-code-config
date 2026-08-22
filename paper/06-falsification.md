@@ -4,9 +4,10 @@ Chapter 5 established what a review costs and where the cost sits: in round 22,
 ≈421.6k raw tokens per review agent across a mean of 7.6 requests, 93.6% of it
 transport — the same content re-sent — rather than new bytes (MEASURED;
 `../evals/rule-precision/review-efficiency/`). A cost with that shape invites
-optimization, and this chapter is about three attempts to buy it down — one per
-axis a delivery pipeline has: **what** is read, **when** it is fetched, and
-**who** selects it. All three were REFUTED below a pre-declared investment bar
+optimization, and this chapter is about three attempts to buy it down, on
+three examined axes of the delivery pipeline: **what** is read, **when** it is
+fetched, and **who** selects it. Three axes were examined; nothing below
+claims they are all the axes there are. All three were REFUTED below a pre-declared investment bar
 by causal replay over pinned transcripts (§7.2), and the price of all three
 verdicts together was **zero new review agents**: every figure derives from the
 150 round-22 transcripts that already existed
@@ -21,11 +22,12 @@ Three scope statements govern everything below.
 - **Each refutation binds the intervention as fixed in its protocol.** A
   reformulation voids the protocol (§7.2.1), and one refutation below
   explicitly withholds its family claim for exactly that reason.
-- **Every replay figure rests on one fixture** — F11, round 22 — and on the
-  interventions' perfect forms, not their implementations. The chapter shows
-  three refutations, not the exhaustion of a direction space; the goal these
-  candidates served is unmet and its resume conditions are fixed
-  (`../evals/rule-precision/GOAL.md`).
+- **Every refutation verdict rests on one fixture** — F11, round 22 — and
+  binds the interventions' perfect forms through oracle bounds. Some reported
+  figures price implementations rather than bounds (the blind compiler below)
+  and are labelled as such. The chapter shows three refutations, not the
+  exhaustion of a direction space; the goal these candidates served is unmet
+  and its resume conditions are fixed (`../evals/rule-precision/GOAL.md`).
 
 The candidates are presented in the order they were priced, because each
 refutation located the constraint the next candidate was built to escape.
@@ -33,14 +35,17 @@ refutation located the constraint the next candidate was built to escape.
 ## 6.1 The shared frame
 
 All three protocols share the replay contract of §7.2 and differ only in the
-intervention they fix: pinned transcripts under checked manifests; token
-figures modelled from bytes at three calibrations (3.5, 3.8, 4.2 bytes/token),
-so every result is a bracket; the request-elimination, carry, and
+intervention they fix: pinned transcripts under checked manifests;
+token-saving quantities modelled from bytes and evaluated at three
+calibrations (3.5, 3.8, 4.2 bytes/token), so each saving is reported as a
+bracket; the request-elimination, carry, and
 relocated-output accounting of §7.2.3; and the bound discipline of §7.2.2 —
 only an upper bound below the bar refutes. Their amendment records are
 post-result directional corrections in the sense of §7.3, and this chapter
-treats them as data about the method: fourteen across the three protocols, and
-the two that moved verdicts across the bar are reported in place.
+treats them as data about the method: fourteen across the three protocols.
+Several moved verdicts — the routing ceiling's own history reversed its gate
+more than once (§6.2) — and §6.3 reports, in place, the two crossings of the
+bar inside the batching protocol.
 
 ## 6.2 What is read: evidence-gated row routing
 
@@ -91,9 +96,12 @@ code-point byte counting, per §7.2.2's bounded-not-banished rule.
 
 ## 6.3 When it is fetched: catalogue batching
 
-The routing refutation left transport untouched: 93.6% of the round is re-sent
-context, and Gate 0 had measured 31.82% of the round sitting in round trips
-the catalogue costs. **The intervention, as fixed:** keep every catalogue byte
+The routing refutation could reach transport only where a request's every
+result vanished — its ceiling's 21.67 trip points are exactly that — and it
+changed nothing about when the remaining fetches happen or how they aggregate.
+That residue is the second candidate's target: 93.6% of the round is re-sent
+context, and routing's own Gate 0 had measured 31.82% of the round sitting in
+round trips the catalogue costs. **The intervention, as fixed:** keep every catalogue byte
 the reviewer reads and issue the fetches in one turn, so one request ingests
 every result (`../evals/rule-precision/request-batching/protocol.md`).
 
@@ -133,10 +141,12 @@ arithmetic could not support.
 
 ## 6.4 Who selects: the deterministic packet compiler
 
-The batching refutation located a constraint no model-in-the-loop form can
-escape: a reviewer that chooses what to read cannot receive its choices
-earlier than the material the choices derive from. The third candidate
-removes the chooser. **The intervention, as fixed:** the reviewer no longer
+The batching refutation established something narrower than a law: the
+**fixed, digest-derived intervention** could not cross its own causal window,
+because a reviewer whose choices derive from the digest cannot receive them
+earlier than the digest. Other model-in-the-loop forms — selecting from the
+diff directly, say — are unexamined. The third candidate steps around the
+question by removing the chooser. **The intervention, as fixed:** the reviewer no longer
 reads the digest and selects rows; a deterministic script derives one review
 packet from the change and the catalogue, delivered once — k=3, the role
 split, and the finding format unchanged
@@ -159,11 +169,12 @@ entirely.
 
 **Gate C1 — one packet must serve every reviewer.** A compiler sees the
 change, not the reviewer, and F11 is one change reviewed 25 times per arm —
-so it emits one packet for all of them, and the protocol's coverage condition
-(the packet carries every rule a review used; a miss is a refutation, not a
-cost) triggers the union argument of §7.2.4, whose conditions — fixed
-representation, fixed shared delivery, cost monotone in members — all hold
-here. The cheapest covering packet for the control arm's holdout is the union
+so it emits one packet for all of them, and the protocol's coverage
+condition — the packet carries every rule a scored review used, a miss being
+a refutation rather than a cost, with the verdict read over the control arm's
+holdout of 45 agents — triggers the union argument of §7.2.4, whose
+conditions (fixed representation, fixed shared delivery, cost monotone in
+members) all hold here. The cheapest covering packet for the control arm's holdout is the union
 of what those 45 agents used: **46 of the 74 catalogue rules, 94.94 kB**,
 worth **12.19–14.60%** — below the bar at every calibration, **REFUTED**,
 independently of any selection rule
@@ -176,9 +187,12 @@ packets miss. Delivering the whole catalogue covers everyone and saves
 **−20.91% to −12.98%**: total packets cost more than they save, because 230 kB
 rides every request from arrival onward. The measured cause is reviewer
 disagreement: 54 of 74 rules were used by at least one agent in the round, 46
-by the control holdout alone, against a mean of 18.2 per agent (MEASURED) —
-so a packet satisfying every reviewer is most of the catalogue, and a packet
-small enough to save tokens satisfies no one.
+by the control holdout alone, against a mean of 18.2 per agent (MEASURED).
+What follows is exactly two statements: every packet that covers the holdout
+costs at least the union, so **no covering packet clears the bar** — and the
+one sub-catalogue packet actually measured, the blind compile, covered
+nobody. Whether some other small packet satisfies some other coverage
+condition is not measured and not claimed.
 
 Two records matter beyond the number. The dev/holdout split was fixed in a
 commit containing no compiler and no measurement, because the author is an
@@ -198,20 +212,25 @@ Compilation died of reviewer disagreement: coverage for all is most of the
 catalogue. The three reasons were discovered in that order, and each successor
 candidate escaped its predecessor's constraint and met its own.
 
-**What was bought.** Three verdicts that would otherwise each have needed at
-minimum a pilot — tens of agents at ≈421.6k raw tokens each — and at the
-adoption rule's floor a forward test of ≈222 agents (≈94M raw / 65.5M api-eq
-at the audit's per-agent figures; ≈294 and ≈124M / 86.7M at the conservative
-sizing). The replay verdicts cost zero review agents. That asymmetry — the
-cost of a wrong optimization priced before it is built — is the chapter's
-thesis contribution: refutation is the cheap direction, and a system
-instrumented for replay can afford to be wrong about candidates repeatedly.
+**What was bought, stated at its real size.** Three candidates were refuted
+**without starting a forward review-agent experiment**: zero new review-agent
+tokens. What that avoided, had a candidate advanced, is priced by the adoption
+rule's floor — ≈222 agents, ≈94M raw / 65.5M api-eq at the audit's per-agent
+figures (≈294 and ≈124M / 86.7M at the conservative sizing) — a comparison
+with the next step, not a counterfactual claim about what would otherwise
+have run. And the verdicts were not free: the protocols, the gate
+implementations, the fourteen amendments and the human-and-model review that
+forced them are real costs, uncounted here. The asymmetry that remains after
+both qualifications is the thesis contribution: the expensive instrument —
+forward review agents — was never spent on a candidate that a replay could
+kill first.
 
 **What was not bought.** No candidate passed, so the chain has never been
 observed to pass anything — Chapter 7's missing positive control (§7.4). The
 refutations bind fixed interventions at a chosen bar on one fixture; whether
 the disagreement that killed the compiler is a property of F11 or of
-reviewing is not known. And the goal all three candidates served — the same
-review quality for fewer tokens, on forward data — is **unmet**: the line is
-closed with resume conditions, not resolved
-(`../evals/rule-precision/GOAL.md`, status).
+reviewing is not known. And the goal all three candidates served — zero
+Critical loss, distinct real claims at ≥95% of current k=3, Critical/Major
+not-a-defect no worse, and raw tokens below current k=3, demonstrated on
+forward data — is **unmet**: the line is closed with resume conditions, not
+resolved (`../evals/rule-precision/GOAL.md`, status).
