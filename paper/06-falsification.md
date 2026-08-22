@@ -183,8 +183,8 @@ independently of any selection rule
 The flanking measurements locate the two tested endpoints — they do not
 survey the space between. A compiler written blind
 to the reviewers — 7 rules, 17.40 kB, from the catalogue's own trigger
-vocabulary — would save 30.43–31.18% and covers **0 of 150** agents: cheap
-packets miss. Delivering the whole catalogue covers everyone and saves
+vocabulary — would save 30.43–31.18% and covers **0 of 150** agents: the
+measured blind packet was cheap and missed every agent. Delivering the whole catalogue covers everyone and saves
 **−20.91% to −12.98%**: total packets cost more than they save, because 230 kB
 rides every request from arrival onward. The measured cause is reviewer
 disagreement: 54 of 74 rules were used by at least one agent in the round, 46
