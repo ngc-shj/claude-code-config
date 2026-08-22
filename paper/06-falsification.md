@@ -167,7 +167,7 @@ needs no request of its own — *and* the request the reviewer spent fetching
 rows, which B1 was forced to keep alive as the batch's host, is gone
 entirely.
 
-**Gate C1 — one packet must serve every reviewer.** A compiler sees the
+**Gate C1 — one packet must serve every scored reviewer.** A compiler sees the
 change, not the reviewer, and F11 is one change reviewed 25 times per arm —
 so it emits one packet for all of them, and the protocol's coverage
 condition — the packet carries every rule a scored review used, a miss being
@@ -180,7 +180,8 @@ worth **12.19–14.60%** — below the bar at every calibration, **REFUTED**,
 independently of any selection rule
 (`../evals/rule-precision/packet-compiler/README.md`, Gate C1).
 
-The flanking measurements close the escape routes. A compiler written blind
+The flanking measurements locate the two tested endpoints — they do not
+survey the space between. A compiler written blind
 to the reviewers — 7 rules, 17.40 kB, from the catalogue's own trigger
 vocabulary — would save 30.43–31.18% and covers **0 of 150** agents: cheap
 packets miss. Delivering the whole catalogue covers everyone and saves
@@ -205,12 +206,14 @@ direction that demands scrutiny, and the verdict survived it.
 ## 6.5 What the three refutations establish, and what they do not
 
 **Three separate measured reasons, not one** (`../evals/rule-precision/GOAL.md`,
-closure). Routing died of thin removable mass: content is a sliver of a round
-that is 93.6% transport. Batching died of the causal window: one request wide,
-in every agent, impassable by anything that leaves the model selecting.
-Compilation died of reviewer disagreement: coverage for all is most of the
-catalogue. The three reasons were discovered in that order, and each successor
-candidate escaped its predecessor's constraint and met its own.
+closure). Routing died of thin removable mass: keeping what the reviews used
+leaves an upper bound of 10.89%, vanished requests included. Batching died of
+the causal window: one request wide in every agent, and the **fixed,
+digest-derived intervention** could not cross it — no wider claim. Compilation
+died of reviewer disagreement: covering the W holdout alone takes 46 of the 74
+rules (54 of 74 across all 150 is the side figure). The three reasons were
+discovered in that order, and each successor candidate escaped its
+predecessor's constraint and met its own.
 
 **What was bought, stated at its real size.** Three candidates were refuted
 **without starting a forward review-agent experiment**: zero new review-agent
