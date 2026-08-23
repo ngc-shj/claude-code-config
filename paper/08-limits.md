@@ -31,6 +31,13 @@ not been done.
   results are thin at the edge: the Finding Floor's effect has exactly one
   fixture beyond its origin, and clause 1's confirmation has **none** — its
   one transfer attempt stands OPEN.
+- **The measured configuration is not the shipped one.** Round 22 — the
+  corpus behind the quality floor's control and every replay verdict — runs
+  three identical generalists per review; the shipped skill runs three
+  specialised roles. Chapter 3 measured the two structures differing in both
+  precision and coverage, so the mismatch is not presumptively neutral:
+  the floor's control and the refutations are scoped to the generalist
+  configuration, and nothing here transfers them to the specialist split.
 - **One model epoch, one repository, one review skill.** Every number in the
   monograph. Whether the reviewer disagreement that killed the packet
   compiler is a property of F11, of this catalogue, of this model, or of
@@ -88,7 +95,11 @@ specified.** "Try it on another repository" is underspecified in the way
    has never been exercised;
 5. an explicit assessment of false-refutation risk as the external-validity
    question it is (§7.4): how often a replay verdict of "refute" sits beside
-   a forward outcome that would have cleared the adoption rule.
+   a forward outcome that would have cleared the adoption rule;
+6. calibration of the chosen thresholds against the new setting's outcomes —
+   the 20% investment bar above all — so the bar Chapter 1 flags as chosen
+   stops being an uncalibrated choice wherever the method is claimed to
+   carry.
 
 These obligations are distinct from the resume conditions in
 `../evals/rule-precision/GOAL.md`: those govern re-opening the *efficiency

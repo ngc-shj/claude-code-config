@@ -58,11 +58,15 @@ Eight reviews of six identical generalists, sub-sampled to a six-point curve
 | C/M non-defects | 0.7 | 1.5 | 2.2 | 2.9 | 3.6 | 4.4 |
 
 Coverage decays toward the discovered-set ceiling while the false-positive
-cost climbs linearly at ~0.7 per reviewer. Splicing in §3.2's structure
-result: **three specialised experts reach what five identical generalists
-reach, for roughly 60% of the tokens.** That is the measured case for the
-shipped k = 3. No change to k was ever adopted, and none of Chapter 6's
-three refuted candidates touches it.
+cost climbs linearly at ~0.7 per reviewer. Within this batch, that is the
+measured case for stopping near k = 3: the third reviewer's marginal claims
+already halve the second's. A widely quotable splice — §3.2's specialists at
+19.1 matching this curve's five-generalist point for roughly 60% of the
+tokens — crosses batches, which §7.1.2 classifies as context rather than a
+control, and the source audit says the same of cross-batch numbers; it is
+reported here as context and **not** carried as a measured case. No change to
+k was ever adopted, and none of Chapter 6's three refuted candidates touches
+it.
 
 ## 3.4 Conditioning a second wave: the trade nobody shipped
 
@@ -102,9 +106,9 @@ is what made Chapter 4's replication affordable.
 
 On one fixture and one batch each: structure trades precision for coverage
 and pays at the third reviewer; reviewer count buys coverage at a linear
-false-positive cost, with three specialists matching five generalists at 60%
-of the tokens; conditioning eliminates restatement and inflates both yield
-and error, and was not shipped; a titles-only base is not detectably
+false-positive cost (the specialists-match-five-generalists splice is
+cross-batch context, not a result); conditioning eliminates restatement and
+inflates both yield and error, and was not shipped; a titles-only base is not detectably
 different from a full one, beside its MDE. The 39-claim denominator is the
 union of what these 48 replies found — coverage of the discovered set, not of
 the fixture; `real` is a panel's judgement under a stated assumption; the

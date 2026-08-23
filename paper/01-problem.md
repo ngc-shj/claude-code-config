@@ -39,8 +39,12 @@ Three features carry the argument. The rule is **not scalarised**: no token
 saving buys back a Critical claim, and clause 4 is what makes the exercise a
 reduction rather than a tournament among candidates that might all cost more
 than what runs today. The floor in clause 2 is a **stated margin, not
-rhetoric**: 95% of the control arm's 20.28 distinct real claims per review is
-a concession of 1.014 claims, and the rule's honesty is that it says so.
+rhetoric**: 95% of the measured control's 20.28 distinct real claims per
+review is a concession of 1.014 claims, and the rule's honesty is that it
+says so — with one scope caveat the rule inherits from its data: the control
+is round 22's W arm, **three identical generalists per review**, standing in
+for a shipped configuration that runs three specialised roles. Chapter 8
+records the mismatch as a limit.
 And the familiar-sounding alternative — "equal or better" — is not a rule a
 study can be *planned* to meet: sized at the planning assumption a
 non-inferiority design must survive (θ = 0, the candidate changes nothing),
@@ -62,8 +66,8 @@ A separate threshold governs *investment*: a candidate whose perfect form
 cannot save 20% of raw tokens is not worth a forward test, and the cheap
 gates of Chapter 6 exist to apply that threshold at zero review-agent cost.
 Clearing the bar decides nothing about adoption — the asymmetry §7.2 builds
-on. The 20% figure was chosen, not derived; its external calibration is one
-of Chapter 8's obligations.
+on. The 20% figure was chosen, not derived; its external calibration is
+specified inside Chapter 8's validation obligation (item 6 of §8.3).
 
 ## 1.4 The goal document as an instrument
 

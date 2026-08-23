@@ -11,7 +11,13 @@ claims they are all the axes there are. All three were REFUTED below a pre-decla
 by causal replay over pinned transcripts (§7.2), and the price of all three
 verdicts together was **zero new review agents**: every figure derives from the
 150 round-22 transcripts that already existed
-(`../evals/README.md`, "the closed search").
+(`../evals/README.md`, "the closed search"). One property of that corpus scopes
+every verdict below: round 22's reviews are **three identical generalists per
+review** (`../evals/rule-precision/round-22/measure.py`), while the shipped
+skill runs three specialised roles — so each refutation binds its intervention
+**on the round-22 generalist configuration**, and rule-use unions, request
+orderings and packet coverage under the specialist split are untested by these
+replays.
 
 Three scope statements govern everything below.
 
@@ -150,7 +156,10 @@ question by removing the chooser. **The intervention, as fixed:** the reviewer n
 reads the digest and selects rows; a deterministic script derives one review
 packet from the change and the catalogue, delivered once — k=3, the role
 split, and the finding format unchanged
-(`../evals/rule-precision/packet-compiler/protocol.md`).
+(`../evals/rule-precision/packet-compiler/protocol.md`). The protocol's
+"role split unchanged" fixes the intervention; the replay that prices it runs
+on the generalist corpus above, so the coverage unions below are generalist
+unions, and the verdict carries that scope.
 
 **Gate C0 — a witness, with no refutation path.** Handing each agent exactly
 the material it turned out to use, at the digest's own arrival, is worth
@@ -213,7 +222,9 @@ digest-derived intervention** could not cross it — no wider claim. Compilation
 died of reviewer disagreement: covering the W holdout alone takes 46 of the 74
 rules (54 of 74 across all 150 is the side figure). The three reasons were
 discovered in that order, and each successor candidate escaped its
-predecessor's constraint and met its own.
+predecessor's constraint and met its own. All three verdicts are bounds on the
+round-22 generalist configuration, per the corpus note in the chapter's
+opening; none has been computed on specialist transcripts.
 
 **What was bought, stated at its real size.** Three candidates were refuted
 **without starting a forward review-agent experiment**: zero new review-agent

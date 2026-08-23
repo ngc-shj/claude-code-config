@@ -3,7 +3,9 @@
 **Working title:** *Evidence-Calibrated Improvement of LLM Code Review: Rule
 Ablation, Claim-Level Quality, and Cheap Falsification of Token Optimizations*
 
-**Status:** all eight chapters drafted (`01`–`08`); chapters 7 and 6 merged after review, 4 under review, 1–3, 5 and 8 awaiting review. This file fixes the thesis, the
+**Status:** all eight chapters drafted (`01`–`08`); chapters 7 and 6 merged
+after review; 4, 2, 3, 5, 1 and 8 under batch review on one branch, per the
+amended rule 5. This file fixes the thesis, the
 chapter-to-evidence mapping, and the writing rules **before prose exists**, for
 the same reason every protocol in `../evals/` fixed its rules before its
 numbers: the ledger (`../evals/README.md`) took two review rounds to purge ten
@@ -68,8 +70,9 @@ of current k=3 distinct real claims, false positives no worse, then and only
 then fewer raw tokens), the 95% floor as a stated margin (1.014 claims/review
 against control W at 20.28), θ=0 as the chosen planning assumption, and the
 20% bar as an investment threshold that decides nothing about adoption.
-*Source:* `../evals/rule-precision/GOAL.md` — including its own five-round
-correction history, which is part of the argument.
+*Source:* `../evals/rule-precision/GOAL.md` — including its recorded
+correction history (more corrections than the chapter's five selected
+rule-shaping ones), which is part of the argument.
 
 ### 2. Rule ablation: what the catalogue does and does not do
 

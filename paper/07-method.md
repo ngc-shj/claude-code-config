@@ -113,8 +113,11 @@ this monograph inherits the assumption either way.
 
 ### 7.1.4 Power and inference, separated
 
-`../evals/rule-precision/methods.md` is the normative statement; the design
-rules are four:
+`../evals/rule-precision/methods.md` is the normative statement — including
+its 2026-08-23 amendment, which separates the observed-MDE sensitivity gate
+from the pre-run power quantity this chapter's second rule describes; the
+amendment exists because this chapter stated the three-stage form before the
+normative document did. The design rules are four:
 
 - **Before the run, the planned MDE is an investment quantity.** Computed
   from a borrowed sd, it answers "is this n worth running?" and gates the
