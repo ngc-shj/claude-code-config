@@ -120,7 +120,10 @@ evals/rule-precision/round-13/measure.py
 ```
 
 Coverage decays, cost is linear at +0.7 per reviewer, and **three specialised
-experts reach what five identical generalists reach for 60% of the tokens**.
+experts reach what five identical generalists reach for 60% of the tokens** —
+a cross-batch comparison (the specialist figures are round 11's batch):
+context, not a control, per the same-batch rule (noted 2026-08-23; the
+numbers stand as written).
 
 Two method notes worth carrying to any repeat: sub-sampling is unbiased **only
 for identical reviewers**, and the inventory is what makes a third round nearly

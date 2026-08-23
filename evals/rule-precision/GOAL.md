@@ -41,13 +41,19 @@ rhetorical. On F11, round 22, measured over the pinned sheet:
 
 | | |
 |---|---|
-| **current k=3** — arm W, the control | **20.28** distinct real claims per review |
+| **the control** — round 22's W arm: k=3, **three identical generalists** per review | **20.28** distinct real claims per review |
 | a 95% floor of that | **1.014 claims per review** |
 | pooled sd plug-in, unpaired | 1.752 |
 
-Arm W23 reaches 21.48, but it is the arm with clause 1 removed, not the current
-configuration; averaging the two would set the floor against something nobody
-runs. The control is W.
+Arm W23 reaches 21.48, but it is the arm with clause 1 removed, not the
+control's configuration; averaging the two would set the floor against
+something nobody runs. The control is W — and W is a **proxy**: the shipped
+skill runs three specialised roles, whose claim floor and token baseline are
+**unmeasured**. "Current k=3" in the rule above reads through this proxy, the
+structure comparison on F9 measured generalists and specialists differing in
+both precision and coverage, and every verdict in this line binds the
+generalist corpus; nothing transfers it to the specialist split (scope
+recorded 2026-08-23).
 
 So the rule permits a candidate that loses **about one claim per review** and pays
 for it in tokens. It forbids losing a Critical one at any price, and it forbids

@@ -58,9 +58,10 @@ Eight reviews of six identical generalists, sub-sampled to a six-point curve
 | C/M non-defects | 0.7 | 1.5 | 2.2 | 2.9 | 3.6 | 4.4 |
 
 Coverage decays toward the discovered-set ceiling while the false-positive
-cost climbs linearly at ~0.7 per reviewer. Within this batch, that is the
-measured case for stopping near k = 3: the third reviewer's marginal claims
-already halve the second's. A widely quotable splice — §3.2's specialists at
+cost climbs linearly at ~0.7 per reviewer. Within this batch, the shipped
+k = 3 is a choice based on this curve, not a measured optimum: the third
+reviewer's marginal claims fall to about three-fifths of the second's
+(+2.1 against +3.5) while the cost stays linear. A widely quotable splice — §3.2's specialists at
 19.1 matching this curve's five-generalist point for roughly 60% of the
 tokens — crosses batches, which §7.1.2 classifies as context rather than a
 control, and the source audit says the same of cross-batch numbers; it is

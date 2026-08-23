@@ -79,10 +79,14 @@ Each line exists because the previous one was blind to something:
   specialised replies overlap half as much (Jaccard 0.116 vs 0.246). This is the
   measured case for the three-expert split.
 - **MEASURED (F9) — the reviewer-count curve.** 10.8 real claims at N=1 rising
-  to 20.0 at N=6, non-defects rising 0.7 → 4.4; three specialists reach what
-  five generalists reach for ~60% of the tokens. This is the measured case for
-  k=3, and the efficiency line later re-derived its other half: cutting k loses
-  claims out of all proportion to what it saves.
+  to 20.0 at N=6, non-defects rising 0.7 → 4.4. The shipped k=3 is a choice
+  based on this curve — the third reviewer's marginal claims fall to about
+  three-fifths of the second's (+2.1 vs +3.5) while the false-positive cost is
+  linear. The oft-quoted splice — specialists at 19.1 matching the
+  five-generalist point for ~60% of the tokens — crosses batches (the
+  specialist figures are round 11's), which the method classifies as context,
+  not a control; it is retracted as "the measured case for k=3" (corrected
+  2026-08-23).
 - **MEASURED (F9) — conditioning a second wave.** Telling wave two what wave one
   found cuts restatement 96% and spends the freed attention on more ground, less
   accurately: +43% real, +89% non-defects. Recorded with no recommendation;
@@ -120,8 +124,11 @@ Each line exists because the previous one was blind to something:
   tokens across a mean 7.6 requests; **93.6% is transport** — the same content
   re-sent — not new bytes. `subagent_tokens` in every round README is final-
   request context (median relative error 0.0009), not spend.
-- **REFUTED, three times —** the efficiency search
-  (`rule-precision/GOAL.md`): trimming what a reviewer reads (oracle ceiling
+- **REFUTED, three times, on the round-22 generalist configuration —** the
+  efficiency search (`rule-precision/GOAL.md`); round 22's reviews are three
+  identical generalists per review, while the shipped skill runs three
+  specialised roles, so the verdicts bind the generalist corpus and are
+  untested on the specialist split: trimming what a reviewer reads (oracle ceiling
   9.92–10.89% vs the 20% investment bar), batching when its fetches arrive
   (19.32–19.52%; the digest→rows causal window is one request wide in all 150
   agents), compiling the packet deterministically (12.19–14.60%; the union
