@@ -166,16 +166,31 @@ repository and serves all three adjudication passes.
 
 `rule-precision/round-24/briefs/render.py` performs the substitution and **exits
 non-zero on any unsubstituted slot** — a brief still naming a template slot would
-send an agent to a path that does not exist. It renders five briefs, and prints
-the template hash and the rendered hash for each:
+send an agent to a path that does not exist. It renders **six** briefs, and
+prints the template hash and the rendered hash for each:
 
 | rendered | from | substitutions |
 |---|---|---|
-| `brief-W.md`, `brief-N.md` | `review.template.md` | `{FIXTURE} {REPO} {CAT}` |
+| `brief-W.md` | `review.template.md` | `{FIXTURE} {REPO} {CAT}` |
+| `brief-N.md` | `review.template.md` | `{FIXTURE} {REPO} {CAT}` |
 | `brief-cluster.md` | `cluster.template.md` | `{FIXTURE} {INVENTORY} {N_CLAIMS}` |
 | `adjudicate-new.md` | `adjudication-brief.md` | `{DIFF} {CLAIMS} {N}` |
 | `adjudicate-bridge.md` | `adjudication-brief.md` | `{DIFF} {CLAIMS} {N}` = 24 |
 | `adjudicate-tiebreak.md` | `adjudication-brief.md` | `{DIFF} {CLAIMS} {N}` |
+
+**A brief is not allowed to lie about its own input.** For every claims file the
+renderer is given — the inventory, the new claims, the bridge sample, the
+tie-break set — it checks that the file exists and that its data-row count equals
+the `{N}` the brief will state. An agent told to produce 24 rows from a file of
+23 fails quietly and produces a number nobody questions; this fails loudly
+instead, before a single agent is launched.
+
+**The bridge brief accepts one file and no other.** `bridge-input.tsv` is
+committed with this protocol and `render.py` compares the `--bridge-claims`
+argument to it by hash, refusing anything else. Its sibling `bridge-sample.tsv`
+carries the same 24 claims **with their frozen verdicts attached**, and handing
+that to the panel by a slip of the shell would unblind the one measurement whose
+whole value is that it is blind.
 
 Both hash columns go in the round README beside the numbers they produced. The
 template hash is what this protocol pins as the instrument; the rendered hash is
@@ -305,8 +320,9 @@ exhaustion, tool error, truncated or unparseable output, an orchestration fault.
   so the arms stay balanced, and **n falls to 11 rather than being backfilled.**
   Backfilling an index whose output was seen is the round-17 defect this round
   exists to avoid.
-- A shortfall in n is reported as a deviation with its cause. It is never a
-  reason to add an index.
+- Every replacement and every void is written to `round-24/reviews.tsv` as it
+  happens, with its cause. A shortfall in n is reported as a deviation. It is
+  never a reason to add an index.
 
 ### The design-integrity floor: n ≥ 11
 
@@ -322,8 +338,43 @@ the round that was registered, whatever its interval says.
 point.** That gate reads the *observed variance* and can convert a completed
 round into nothing on the strength of a sample fluctuation. This one reads the
 *executed sample size*, a fact about whether the registered design was carried
-out, known without looking at any arm value. `round-24/measure.py` enforces it
-and prints which indices are void.
+out, known without looking at any arm value.
+
+### n comes from a manifest, never from the findings
+
+`round-24/reviews.tsv` records all **24 registered (index × arm) pairs** — the
+twelve indices in each arm — with `status` of `complete` or `void`, and a cause
+for every void. It is written as the round runs and it is what the analysis
+counts.
+
+Deriving n from `findings.tsv` instead, as an earlier draft did, fails in three
+ways that all point the same direction:
+
+- a completed review whose three agents wrote nothing above Minor has **no rows
+  at all**, and is indistinguishable from one that never ran. It must count as a
+  zero, not vanish from the denominator;
+- an index the protocol never registered would be analysed if it happened to
+  appear in both arms;
+- an index present in one arm only would be dropped in silence.
+
+`measure.py` refuses the round unless every index is in 1..12, every pair appears
+exactly once, both arms mark the **same** set complete (the void rule voids an
+index in both), and every finding sits on an index the manifest calls complete.
+The series is then built over the manifest's indices, so an empty completed
+review contributes 0.
+
+### Every sheet is checked before it can move a number
+
+Adjudication is where a malformed file turns into a verdict turns into the
+primary, so `measure.py` validates rather than assumes: **exactly three sheets**
+when there are new claims, each judging **exactly** the new-claim set — no
+missing row, no extra id — every verdict one of the three legal values, and no
+cluster id twice within a sheet. `tiebreak.tsv`'s id set must equal the split set
+exactly, and a tie-break file with nothing to break is an error rather than a
+no-op. If there are no new claims at all, the round runs with no adjudication
+pass, which is the correct behaviour and not a special case. The bridge panel is
+held to the same standard: three sheets × 24 claims = 72 judgements, no more and
+no fewer.
 
 ## Metrics
 
@@ -361,6 +412,15 @@ never as the primary.
 
 The observed difference is **not** required to exceed the MDE. That was round
 19's error and `methods.md` records the separation.
+
+**The critical value is the exact Student-t quantile at the Satterthwaite df**,
+computed by bisection on the regularised incomplete beta in
+`round-24/measure.py`. Satterthwaite df is not an integer, so a table cannot be
+looked up and an earlier draft used a Cornish–Fisher expansion instead — which
+returns 2.2254 at df = 10 against the true 2.2281, small and in the direction
+that narrows the interval. This is the registered rule: the quantile itself,
+computed the same way on every call, checked against published values at
+df = 1, 10, 30 and 1000 in `tests/round-24-measure.bats`.
 
 **Fixed n. No peek. No extension.** No arm mean, no difference, and no per-review
 value is computed or looked at until all 24 reviews have landed and the
@@ -440,6 +500,12 @@ two adjudication generations silently.
   any round-24 output exists. `--bridge` reads that committed file rather than
   re-deriving it, and **refuses to run if the two disagree**, so a later edit to
   the sampler cannot silently move which claims the agreement is over.
+- **What the panel receives is a different file.** `bridge-sample.tsv` carries
+  the frozen verdicts, for the record; the panel must never see them.
+  `--bridge-input` emits the same 24 claims in the same order with **`cluster_id`
+  and canonical claim text only**, committed as
+  **`round-24/bridge-input.tsv`**, and the bridge brief is rendered against that
+  file and no other — enforced by hash in `render.py`, not by care.
 - **Three numbers are reported, because they answer different questions:**
   1. **individual judgements** — all 72 (3 agents × 24 claims) against the frozen
      verdict. This is inter-generation agreement at the judgement level.
@@ -448,6 +514,13 @@ two adjudication generations silently.
   3. **three-way splits** — how many of the 24 drew three different verdicts.
      A panel that cannot agree with itself is a different finding from a panel
      that agrees with itself and disagrees with 2026-08-08.
+
+  **A three-way split has no majority, and is not given one.** The same
+  `Counter.most_common` filename tie-break that the new-claim pass sends to a
+  fourth adjudicator would, here, invent a majority out of sheet order and score
+  it against the frozen verdict. Split claims are excluded from the
+  majority-agreement denominator, which is reported as **x / (24 − splits)** with
+  the split count printed beside it.
 
   Agreement is also broken out per frozen class. The primary counts
   `not-a-defect` and neither of the other two, so its boundaries — against
@@ -510,16 +583,27 @@ means for the corresponding roles.
 | adjudication, new claims only | 3 | 0.53M | 0.29M |
 | tie-break, all three-way splits in one pass | ≤1 | 0.18M | 0.10M |
 | bridge re-adjudication | 3 | 0.53M | 0.29M |
-| **total** | **≤92** | **≈35.0M** | **≈25.4M** |
+| **base — no split** | **91** | **≈34.85M** | **≈25.34M** |
+| **maximum — tie-break runs** | **92** | **≈35.03M** | **≈25.44M** |
 
-**The headline 27.8M is review agents alone.** The round costs ≈34.9M raw.
-Ancillary per-agent means are borrowed across rounds and are estimates; the
-review line is measured on this exact configuration and this exact fixture.
+**The headline 27.8M is review agents alone.** The round itself is **≈34.85M raw
+/ ≈25.34M api-eq at base — 91 agents with no three-way split — and ≈35.03M /
+≈25.44M at maximum**, when the tie-break pass runs. Ancillary per-agent means are
+borrowed across rounds and are estimates; the review line is measured on this
+exact configuration and this exact fixture.
 
 Reviews are batched **one review index at a time** (2 arms × 3 parts = 6),
 confirmed landed before the next, across twelve batches spanning several
 five-hour windows. `../../rule-precision/preflight.py` runs before every batch
 and the round pauses rather than losing agents to a full window.
+
+**All six agents in a batch are launched together**, so within an index neither
+arm sits systematically earlier. Where the harness serialises them anyway, the
+order alternates by index — **W first on odd indices, N first on even** — so any
+drift across a batch, or across a window boundary, falls on the two arms equally
+instead of always on the same one. Round 17 interleaved arms review by review for
+the same reason; this states the rule at agent granularity, which round 17 did
+not.
 
 ## The analysis is committed with the protocol, not written afterwards
 
@@ -528,16 +612,27 @@ every decision that could otherwise be taken once the numbers are visible:
 
 | flag | what it fixes |
 |---|---|
-| `--bridge-sample` | the 24 bridge claims, from the frozen files alone. Runs today; its output is committed as `bridge-sample.tsv` |
+| `--bridge-sample` | the 24 bridge claims with their frozen verdicts, from the frozen files alone. Runs today; committed as `bridge-sample.tsv` |
+| `--bridge-input` | the same 24 claims, claim text and no verdict — the file the panel reads. Committed as `bridge-input.tsv` |
 | `--splits` | which claims drew three different verdicts and must go to the tie-break pass |
 | `--bridge` | the three agreement numbers, against the committed sample, refusing a sample that has moved |
-| (none) | the arm table, the Welch interval, the confirmatory rule, and the n ≥ 11 floor |
+| (none) | the manifest checks, the sheet checks, the arm table, the exact-quantile Welch interval, the confirmatory rule, and the n ≥ 11 floor |
 
-Written before the data, it can still be checked before the data: each branch is
-exercised on synthetic input — the rule firing, two mutations that make it
-*not* fire, the split blocking the arm table until a tie-break exists, the n ≤ 10
-floor, and a tampered `bridge-sample.tsv` being refused. A gate nobody has seen
-fire reports PASS by never running.
+Committed alongside it, before any measurement: `bridge-sample.tsv`,
+`bridge-input.tsv`, the two brief templates and `render.py`.
+
+Written before the data, it can still be checked before the data.
+`tests/round-24-measure.bats` and `tests/round-24-briefs.bats` exercise each
+branch on synthetic input — the rule firing and two mutations that make it *not*
+fire; the exact quantile against published tables; the manifest refusing an
+out-of-range index, arms that disagree on which indices completed, a missing
+pair, an uncaused void, and a finding on a void index; a completed review with no
+findings counting as a zero; the split blocking the arm table until a tie-break
+exists, and the tie-break verdict changing the primary; sheets that are too few,
+incomplete, over-complete, duplicated or illegally valued; the n ≤ 10 floor; a
+tampered `bridge-sample.tsv` refused; a bridge brief refusing anything but
+`bridge-input.tsv`; and a claims file whose row count contradicts its brief. **A
+gate nobody has seen fire reports PASS by never running.**
 
 One edge case is decided here rather than on the day: if **both arms are
 constant** the Welch interval collapses to a point, which is an artifact of the

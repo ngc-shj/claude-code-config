@@ -48,6 +48,28 @@ FIXTURE = os.path.join(REPO, 'evals', 'rule-ablation', 'fixtures', 'F10-webhooks
 ADJUDICATE = os.path.join(HERE, '..', '..', 'adjudication-brief.md')
 
 LEFTOVER = re.compile(r'\{[A-Z_]+\}')
+# The bridge panel must receive claim text and no verdicts. `measure.py
+# --bridge-input` emits that file and it is committed; the bridge render accepts
+# nothing else, so `bridge-sample.tsv` — same claims, with the frozen verdicts
+# attached — cannot be handed to the panel by a slip of the shell.
+BRIDGE_INPUT = os.path.join(HERE, '..', 'bridge-input.tsv')
+
+
+def data_rows(path):
+    """Row count excluding the header, or an exit if the file is not there."""
+    if not os.path.exists(path):
+        sys.exit(f'{path}: no such file — a brief cannot name a path that does '
+                 f'not exist')
+    with open(path, newline='') as f:
+        return max(0, sum(1 for _ in f) - 1)
+
+
+def expect_rows(path, n, what):
+    got = data_rows(path)
+    if got != n:
+        sys.exit(f'{what}: {path} has {got} data row(s) but the brief would say '
+                 f'{n}.\nAn agent told to produce {n} rows from a file of {got} '
+                 f'is being set up to fail quietly.')
 
 
 def render(template, subs, out_path):
@@ -86,6 +108,7 @@ def main():
     a = p.parse_args()
 
     os.makedirs(a.out, exist_ok=True)
+    expect_rows(a.inventory, a.n_claims, 'clustering brief')
     jobs = [
         ('brief-W.md', 'review.template.md',
          {'FIXTURE': FIXTURE, 'REPO': REPO, 'CAT': a.cat_w}),
@@ -101,6 +124,12 @@ def main():
             continue
         if n is None:
             sys.exit(f'{name}: claim file given without its row count')
+        expect_rows(claims, n, name)
+        if name == 'adjudicate-bridge.md' and sha1(claims) != sha1(BRIDGE_INPUT):
+            sys.exit(f'{name}: {claims} is not the committed bridge input.\n'
+                     f'The bridge panel reads {os.path.normpath(BRIDGE_INPUT)} and '
+                     f'nothing else — a file\nof the same 24 claims carrying their '
+                     f'frozen verdicts would unblind it.')
         jobs.append((name, ADJUDICATE, {'DIFF': FIXTURE, 'CLAIMS': claims, 'N': n}))
 
     print(f'{"rendered":26s}{"template sha1":>42s}{"output sha1":>42s}')
