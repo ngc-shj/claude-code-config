@@ -55,11 +55,14 @@ nothing about the arms. The composite primary fell from 4.56 to **2.44**
 (t = −3.05, MDE 2.05, n = 9), coverage again with no detectable change
 (33.78 vs 34.78, MDE 2.94). Direction and size replicate: −2.50 on F9, −2.11
 on F10. The round's own deviations are part of the record: n reached 9 by a
-declared extension after the pre-registered variance gate fired at n = 6, the
-gate remains literally exceeded at n = 9, and the extension was authorised by
-someone who had seen the n = 6 table
-(`../evals/rule-precision/round-17/README.md`). **REPLICATED**, with those
-qualifications attached rather than absorbed.
+declared extension after the pre-registered variance gate fired at n = 6, and
+the extension was authorised by someone who had seen the n = 6 table. The
+gate's two readings are both recorded and both carried here: applied
+literally, the sd ceiling is still exceeded at n = 9 and the round reads
+**underpowered**; read through the n-dependent MDE it was written to proxy,
+the round is powered (`../evals/rule-precision/round-17/README.md`).
+**REPLICATED**, with those qualifications — including the stricter reading —
+attached rather than absorbed.
 
 A post-hoc decomposition sharpens what the primary measures and is labelled
 as post-hoc (`../evals/rule-precision/README.md`, "The primary metric mixes
@@ -90,14 +93,15 @@ the round recorded no confirmatory claim — and the rule itself was wrong, a
 design quantity pressed into inference duty (§7.1.4; the correction went into
 `../evals/rule-precision/methods.md` for later rounds instead of being
 applied retroactively). What the arms show, labelled as the protocol labels
-them: clause 2 alone is indistinguishable from no floor (W₂ − N = −0.17), and
+them: clause 2 alone shows no detectable difference from no floor
+(W₂ − N = −0.17, MDE 2.23 — a null inside a wide MDE, not equivalence), and
 the measured gap sits between the full floor and clause 2 (−1.83,
 CI [−2.62, −1.04], **exploratory** — strong, and not promoted).
 
 **Round 20** (`../evals/rule-precision/round-20/`), the 2×2 in clause 1 ×
 clause 3 with clause 2 always present, is where a confirmatory rule fires:
-removing clause 1 costs −1.33 of the effect, paired CI **[−2.27, −0.39]** —
-**CONFIRMED**, on F10. Clause 1 shows an effect in both of its cells
+clause 1 contributes **−1.33** to the non-defect count — removing it raises
+the metric by 1.33 — paired CI **[−2.27, −0.39]**: **CONFIRMED**, on F10. Clause 1 shows an effect in both of its cells
 (the other: −1.89, CI [−3.30, −0.48], exploratory); clause 3's intervals
 straddle zero in both cells, and the interaction crosses zero. The protocol's
 own reading is the one that stands: clause 1 has positive evidence; the
