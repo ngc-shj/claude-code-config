@@ -169,9 +169,9 @@ detectable coverage change, on two fixtures, one of them built blind to it —
 REPLICATED, with round 17's recorded deviations attached. Clause 1 is the
 only component with positive evidence, on F10 — CONFIRMED there and OPEN on
 F11, where one round was a powered non-detection and the next was ruled
-ineligible for confirmatory inference by its own gate. Clause 2 alone is
-indistinguishable from no floor at the powers run; clause 3 has no positive
-evidence and no licensed deletion. Every absolute number inherits the
+ineligible for confirmatory inference by its own gate. Clause 2 alone shows
+no detectable difference from no floor at the powers run; clause 3 has no
+positive evidence and no licensed deletion. Every absolute number inherits the
 adjudication assumption of §7.1.1, panel error sits in the contrasts in
 principle, and nothing in this chapter extends beyond the three fixtures
 named — F9, F10, F11 — or the model epoch all of them share.
