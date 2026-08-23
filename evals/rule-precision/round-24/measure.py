@@ -155,9 +155,11 @@ def verdicts():
     if unresolved and not os.path.exists(tb_path):
         die(f'{len(unresolved)} three-way split(s) and no tiebreak.tsv: '
             f'{unresolved}\n  Run the tie-break pass before any arm table.')
-    tb = sheet(tb_path, unresolved) if os.path.exists(tb_path) else {}
-    if not unresolved and tb:
+    # Existence, not content: a header-only tiebreak.tsv reads as an empty dict
+    # and would otherwise slip past a truthiness check.
+    if not unresolved and os.path.exists(tb_path):
         die('tiebreak.tsv exists but no claim split three ways')
+    tb = sheet(tb_path, unresolved) if unresolved else {}
 
     for cid in new:
         got = [s[cid] for s in sheets] + ([tb[cid]] if cid in tb else [])
@@ -352,14 +354,19 @@ def bridge_sample(v):
 
 
 def pinned_sample(v):
-    """The committed sample, checked against the sampler that produced it."""
+    """The committed sample, checked against the sampler that produced it.
+
+    Both columns are compared, not just the ids: `frozen_verdict` is what every
+    agreement number is scored against, so an edit there moves the result
+    without moving a single claim.
+    """
     pinned = os.path.join(HERE, 'bridge-sample.tsv')
-    sample = [r['cluster_id'] for r in rows(pinned)]
-    if sample != [c for c, _ in bridge_sample(v)]:
+    got = [(r['cluster_id'], r['frozen_verdict'].strip()) for r in rows(pinned)]
+    if got != bridge_sample(v):
         die('bridge-sample.tsv no longer matches --bridge-sample. The committed '
             'file\n  is the pre-registered sample; investigate the difference '
             'rather than\n  overwriting it.')
-    return sample
+    return [c for c, _ in got]
 
 
 def report_bridge(v):

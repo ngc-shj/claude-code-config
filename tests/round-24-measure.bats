@@ -299,6 +299,28 @@ PY
   [ "$status" -ne 0 ]
 }
 
+@test "a header-only tiebreak sheet is refused on existence, not on content" {
+  # An empty sheet reads as an empty dict; a truthiness check would let it pass.
+  build 12 1 4 split
+  printf 'cluster_id\tverdict\nNEW24-01\tnot-a-defect\n' > "$R24/adjudications/a2.tsv"
+  printf 'cluster_id\tverdict\nNEW24-01\tnot-a-defect\n' > "$R24/adjudications/a3.tsv"
+  run_measure --splits
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"0 three-way split(s)"* ]]
+  printf 'cluster_id\tverdict\n' > "$R24/tiebreak.tsv"
+  run_measure
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no claim split three ways"* ]]
+}
+
+@test "a header-only tiebreak sheet is refused when there are no new claims" {
+  build 12 1 4
+  printf 'cluster_id\tverdict\n' > "$R24/tiebreak.tsv"
+  run_measure
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no new claims to split"* ]]
+}
+
 @test "two adjudication sheets instead of three is refused" {
   build 12 1 4 split
   rm "$R24/adjudications/a3.tsv"
@@ -394,11 +416,26 @@ PY
   [ "$status" -ne 0 ]
 }
 
-@test "a bridge sample that no longer matches the sampler is refused" {
+@test "a bridge sample whose claim ids moved is refused" {
   build 12 1 4
   mkdir -p "$R24/bridge"
   printf 'cluster_id\tverdict\n' > "$R24/bridge/panel-1.tsv"
   sed -i '2s/^[A-Za-z0-9-]*/DELIVERY-01/' "$R24/bridge-sample.tsv"
+  run_measure --bridge
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no longer matches"* ]]
+}
+
+@test "a bridge sample whose frozen verdicts were edited is refused" {
+  # The ids are untouched; only the column every agreement number is scored
+  # against has moved. Comparing ids alone would let this through.
+  build 12 1 4
+  mkdir -p "$R24/bridge"
+  printf 'cluster_id\tverdict\n' > "$R24/bridge/panel-1.tsv"
+  sed -i '2s/\treal$/\twrong/' "$R24/bridge-sample.tsv"
+  run diff "$R24/bridge-sample.tsv" "$RP/round-24/bridge-sample.tsv"
+  [ "$status" -eq 1 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^[<>]')" -eq 2 ]
   run_measure --bridge
   [ "$status" -ne 0 ]
   [[ "$output" == *"no longer matches"* ]]

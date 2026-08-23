@@ -423,7 +423,8 @@ computed the same way on every call, checked against published values at
 df = 1, 10, 30 and 1000 in `tests/round-24-measure.bats`.
 
 **Fixed n. No peek. No extension.** No arm mean, no difference, and no per-review
-value is computed or looked at until all 24 reviews have landed and the
+value is computed or looked at until **all 24 registered (index × arm) pairs have
+reached a terminal status — `complete` or `void` — in `reviews.tsv`**, and the
 adjudication of new claims is complete. Nobody who could authorise a change to
 this protocol sees a partial table. If n falls short by the exchange rule above,
 the round is analysed at the n it has.
@@ -551,17 +552,22 @@ No row changes what ships.
 ## Publication, pre-registered
 
 **The result is published whichever way it comes out**, in the round README, in
-`../../README.md`'s ledger, and in `../../../paper/04-finding-floor.md`, in all
-three outcomes:
+`../../README.md`'s ledger, and in `../../../paper/04-finding-floor.md`. **Every
+way this round can end has a row**, including the three where the confirmatory
+rule never runs:
 
 | outcome | what the ledger says afterwards |
 |---|---|
 | CI below zero | the floor's effect on the `not-a-defect` metric becomes **CONFIRMED (F10)**, with the interval quoted and the size left to it |
 | CI crosses zero | the current wording — MEASURED with qualified replication evidence — **stands unchanged**, with this round's interval added beside it and the non-identifiability recorded |
 | CI above zero | the current wording stands, **and the reversed interval is recorded in the same entry** as evidence that did not go the hypothesis's way. It is not filed as a null and not omitted |
+| n ≤ 10, the design-integrity floor | the current wording stands; the round is published as **descriptive**, with its table, its n, and the cause of every void from `reviews.tsv`. No grade moves |
+| both arms constant | the current wording stands; the point estimate is published as **descriptive**, with the reason the interval was not read |
+| reachability gate stopped the round | published as a **wiring result**: the gate's branch, the trace counts, and the decision to stop. **No arm effect was measured**, and nothing about the floor's effect is said in either direction |
 
-The third row exists because it is the one a measurement line is most tempted to
-lose.
+The last four rows exist because they are the ones a measurement line is most
+tempted to lose — three of them can be told as "the round didn't really happen",
+and one as "the result went the wrong way".
 
 Publishing only on success is the selection bias this line exists to avoid, and
 committing to it before the run is the only time the commitment is worth
