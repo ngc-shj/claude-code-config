@@ -3,7 +3,9 @@
 **Working title:** *Evidence-Calibrated Improvement of LLM Code Review: Rule
 Ablation, Claim-Level Quality, and Cheap Falsification of Token Optimizations*
 
-**Status:** chapters 7 (`07-method.md`) and 6 (`06-falsification.md`) drafted; chapters 1–5 and 8 undrafted. This file fixes the thesis, the
+**Status:** all eight chapters drafted (`01`–`08`); chapters 7 and 6 merged
+after review; 4, 2, 3, 5, 1 and 8 under batch review on one branch, per the
+amended rule 5. This file fixes the thesis, the
 chapter-to-evidence mapping, and the writing rules **before prose exists**, for
 the same reason every protocol in `../evals/` fixed its rules before its
 numbers: the ledger (`../evals/README.md`) took two review rounds to purge ten
@@ -16,19 +18,23 @@ manufacture the same class of defect at chapter scale.
 > **pre-declared quality constraints** — zero Critical loss, non-inferior claim
 > reach at a stated margin, and no worsening of Critical/Major not-a-defect
 > findings — not as the presence or absence of individual rules. Claim-level adjudication, same-batch controls, and inference separated
-> from power (MDE) identify interventions whose effects **replicate across
-> fixtures** and keep what does not resolve **explicitly open** rather than
-> silently assumed; causal replay over pinned session transcripts **refutes
-> some optimization candidates before any forward test**, at zero new
-> review-agent cost.
+> from power (MDE) identify interventions whose effects **repeat across
+> fixtures, at graded strength**, and keep what does not resolve **explicitly
+> open** rather than silently assumed; causal replay over pinned session
+> transcripts **replay-refutes some optimization candidates before any
+> forward test** — trace-conditional verdicts — at zero new review-agent
+> cost.
 
 The two method families are deliberately not merged: the first identified and
-bounded the Finding Floor, the second refuted the three efficiency candidates,
-and neither did the other's job.
+bounded the Finding Floor, the second replay-refuted the three efficiency
+candidates under the trace-conditional model, and neither did the other's
+job.
 
 The earlier phrasing "identify effective interventions" is deliberately not
-used: the ledger's grades support *replicated on two fixtures, open on a
-third* for the strongest positive result, and the thesis claims exactly that.
+used: the ledger's grades support *measured on one fixture, with qualified
+replication evidence on a second, open on a third* for the strongest positive
+result — the F10 repeat's post-hoc n-extension keeps it short of the
+REPLICATED bar — and the thesis claims exactly that and no more.
 
 ## What this can and cannot be, on current evidence
 
@@ -49,10 +55,17 @@ third* for the strongest positive result, and the thesis claims exactly that.
 3. **Costs in the efficiency audit's units** (raw / api-eq), never
    final-context. The 19M-vs-86M error is the standing example.
 4. **Every empirical sentence carries its grade** — REPLICATED / CONFIRMED /
-   MEASURED / REFUTED / OPEN — or cites a ledger entry that does.
-5. **One chapter per PR**, reviewed like everything else here. The ledger is
-   the source of figures; chapters cite it and the round documents, and a
-   chapter that needs a number the ledger lacks adds it to the ledger first.
+   MEASURED / REPLAY-REFUTED / OPEN, per the ledger's key — or cites a ledger
+   entry that does. (REPLAY-REFUTED is trace-conditional; no current entry
+   meets the REPLICATED bar.)
+5. **Chapters are reviewed like everything else here.** Rule as first written:
+   one chapter per PR. Amended 2026-08-23, at the owner's direction, once the
+   vocabulary and rule set had stabilised over chapters 7, 6 and 4: the
+   remaining chapters (2, 3, 5, 1, 8) are drafted as one commit each on a
+   single branch and reviewed as a batch — reviewer round-trips, not drafting,
+   being the scarce resource. The ledger remains the source of figures;
+   chapters cite it and the round documents, and a chapter that needs a number
+   the ledger lacks adds it to the ledger first.
 
 ## Chapters, each pinned to its evidence
 
@@ -61,10 +74,12 @@ third* for the strongest positive result, and the thesis claims exactly that.
 The decision frame: a lexicographic adoption rule (zero Critical loss, ≥95%
 of current k=3 distinct real claims, false positives no worse, then and only
 then fewer raw tokens), the 95% floor as a stated margin (1.014 claims/review
-against control W at 20.28), θ=0 as the chosen planning assumption, and the
+against control W at 20.28 — round 22's W arm, three identical generalists,
+the proxy for "current"), θ=0 as the chosen planning assumption, and the
 20% bar as an investment threshold that decides nothing about adoption.
-*Source:* `../evals/rule-precision/GOAL.md` — including its own five-round
-correction history, which is part of the argument.
+*Source:* `../evals/rule-precision/GOAL.md` — including its recorded
+correction history (more corrections than the chapter's five selected
+rule-shaping ones), which is part of the argument.
 
 ### 2. Rule ablation: what the catalogue does and does not do
 
@@ -94,7 +109,7 @@ difference, identical point estimates beside MDE 2.86).
 `../evals/rule-precision/measure.py` and
 `../evals/rule-precision/round-15/measure.py` re-runs.
 
-### 4. The Finding Floor: a replicated intervention and its open edge
+### 4. The Finding Floor: a measured intervention with qualified replication evidence, and its open edge
 
 Diagnosis re-run: 127 of 574 findings non-real, 2 misread — the failure mode
 is ungrounded assertion, not misreading. Effect: 1.62 vs 4.12 (F9), 2.44 vs
@@ -129,7 +144,8 @@ The three axes — **what** is read (routing-trim, oracle ceiling 9.92–10.89%)
 window), **who** selects (packet compiler, 12.19–14.60%, the union argument
 binding every selection rule; reviewer disagreement measured at 46/74 for the
 W holdout, 54/74 for the round, mean 18.2 per agent). Each refuted below the
-20% bar by causal replay over pinned transcripts. The amendment history is
+20% bar by causal replay over pinned transcripts — the round-22 generalist
+configuration; the shipped specialist split is untested by the replays. The amendment history is
 data, not embarrassment: verdicts crossed the bar twice in one protocol
 before settling, each move recorded with its direction.
 *Sources:* `../evals/rule-precision/routing-trim/`,
@@ -155,8 +171,8 @@ a rule for anything this monograph's claims come to rest on.
 
 ### 8. Limits, and what completion as a doctoral claim requires
 
-Fixture authorship bias and its direction; panel judgement is not ground
-truth; three fixtures behind precision, one behind efficiency; one model
+Fixture authorship bias, its direction indeterminate in principle; panel
+judgement is not ground truth; three fixtures behind precision, one behind efficiency; one model
 epoch; whether reviewer disagreement is F11's property or reviewing's is
 unknown. **Open obligations:** a related-work novelty check, and prospective
 validation of the gate method — which is method validation, distinct from the

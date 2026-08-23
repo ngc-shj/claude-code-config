@@ -7,11 +7,19 @@ transport — the same content re-sent — rather than new bytes (MEASURED;
 optimization, and this chapter is about three attempts to buy it down, on
 three examined axes of the delivery pipeline: **what** is read, **when** it is
 fetched, and **who** selects it. Three axes were examined; nothing below
-claims they are all the axes there are. All three were REFUTED below a pre-declared investment bar
-by causal replay over pinned transcripts (§7.2), and the price of all three
+claims they are all the axes there are. All three were **REPLAY-REFUTED**
+below a pre-declared investment bar by causal replay over pinned transcripts
+(§7.2) — trace-conditional verdicts, per the identification assumption stated
+in the scope bullets below — and the price of all three
 verdicts together was **zero new review agents**: every figure derives from the
 150 round-22 transcripts that already existed
-(`../evals/README.md`, "the closed search").
+(`../evals/README.md`, "the closed search"). One property of that corpus scopes
+every verdict below: round 22's reviews are **three identical generalists per
+review** (`../evals/rule-precision/round-22/measure.py`), while the shipped
+skill runs three specialised roles — so each refutation binds its intervention
+**on the round-22 generalist configuration**, and rule-use unions, request
+orderings and packet coverage under the specialist split are untested by these
+replays.
 
 Three scope statements govern everything below.
 
@@ -19,9 +27,12 @@ Three scope statements govern everything below.
   candidate below 20% raw-token reduction is not worth a forward test; one
   above it has earned nothing but the next, more expensive question
   (`../evals/rule-precision/GOAL.md`).
-- **Each refutation binds the intervention as fixed in its protocol.** A
-  reformulation voids the protocol (§7.2.1), and one refutation below
-  explicitly withholds its family claim for exactly that reason.
+- **Each refutation binds the intervention as fixed in its protocol, and is
+  trace-conditional.** A reformulation voids the protocol (§7.2.1); one
+  refutation below explicitly withholds its family claim for exactly that
+  reason; and every verdict assumes reviewer behaviour under the intervention
+  matches the replayed behaviour — the identification assumption §7.4 names
+  and Chapter 8's validation is designed to test.
 - **Every refutation verdict rests on one fixture** — F11, round 22 — and
   binds the interventions' perfect forms through oracle bounds. Some reported
   figures price implementations rather than bounds (the blind compiler below)
@@ -71,7 +82,7 @@ rules, pre-registered strictest-first, each deciding from what the agent did
 rules an agent cited in its own findings (G1) saves **9.92–10.89%**; adding
 the pages it opened (G2), 3.66%; unioning across the review's three reviewers
 (G3), 2.82%; across both arms (G4), 2.46% — every upper end below the bar at
-every calibration, so the candidate is **REFUTED**
+every calibration, so the candidate is **REPLAY-REFUTED**
 (`../evals/rule-precision/routing-trim/README.md`, Gate 1).
 
 The collapse has two measured mechanisms. From G2 on, every page the agent
@@ -127,7 +138,8 @@ and measures the constraint: **the causal window is one request wide in all
 150 agents** (MEASURED; the first catalogue result always arrives exactly one
 request after the digest). The batch's host is forced, and the intervention
 as fixed is worth **19.32–19.52%**: below the bar at every calibration,
-**REFUTED** (`../evals/rule-precision/request-batching/README.md`, Gate B1).
+**REPLAY-REFUTED**
+(`../evals/rule-precision/request-batching/README.md`, Gate B1).
 
 The refutation's reach was then narrowed rather than stretched. Two variants
 outside the fixed intervention — batching only the fetches worth batching,
@@ -150,7 +162,10 @@ question by removing the chooser. **The intervention, as fixed:** the reviewer n
 reads the digest and selects rows; a deterministic script derives one review
 packet from the change and the catalogue, delivered once — k=3, the role
 split, and the finding format unchanged
-(`../evals/rule-precision/packet-compiler/protocol.md`).
+(`../evals/rule-precision/packet-compiler/protocol.md`). The protocol's
+"role split unchanged" fixes the intervention; the replay that prices it runs
+on the generalist corpus above, so the coverage unions below are generalist
+unions, and the verdict carries that scope.
 
 **Gate C0 — a witness, with no refutation path.** Handing each agent exactly
 the material it turned out to use, at the digest's own arrival, is worth
@@ -176,7 +191,8 @@ holdout of 45 agents — triggers the union argument of §7.2.4, whose
 conditions (fixed representation, fixed shared delivery, cost monotone in
 members) all hold here. The cheapest covering packet for the control arm's holdout is the union
 of what those 45 agents used: **46 of the 74 catalogue rules, 94.94 kB**,
-worth **12.19–14.60%** — below the bar at every calibration, **REFUTED**,
+worth **12.19–14.60%** — below the bar at every calibration,
+**REPLAY-REFUTED**,
 independently of any selection rule
 (`../evals/rule-precision/packet-compiler/README.md`, Gate C1).
 
@@ -213,7 +229,9 @@ digest-derived intervention** could not cross it — no wider claim. Compilation
 died of reviewer disagreement: covering the W holdout alone takes 46 of the 74
 rules (54 of 74 across all 150 is the side figure). The three reasons were
 discovered in that order, and each successor candidate escaped its
-predecessor's constraint and met its own.
+predecessor's constraint and met its own. All three verdicts are bounds on the
+round-22 generalist configuration, per the corpus note in the chapter's
+opening; none has been computed on specialist transcripts.
 
 **What was bought, stated at its real size.** Three candidates were refuted
 **without starting a forward review-agent experiment**: zero new review-agent

@@ -81,3 +81,30 @@ before the round started and cannot be rewritten afterwards.
 > `<CI excludes zero | CI beyond SESOI = z>`.
 >
 > **Everything else is exploratory**, reported with numbers and labelled.
+
+## Amendment, 2026-08-23 — the observed-MDE gate is a third job, not part of the first
+
+This document opens by saying the MDE was doing two jobs; the rounds it governs
+had already given it a third, and the template above mislabels it. The gate
+rounds 21 and 22 ran — recompute the MDE from the **observed** sds and compare
+it against a pre-registered ceiling, first and alone, before any arm comparison
+is looked at — is not a *before-the-run* power quantity: it can only fire after
+every observation exists, when the spend is already committed. What it decides
+is **inference eligibility** — whether a confirmatory claim may be made at all
+(round 22: gate fired, no confirmatory claim, no extension of n, everything
+below it descriptive) — not whether the round was worth running.
+
+The separation, restated with the third member in place:
+
+1. **planned MDE** — before the run, from a borrowed sd: an investment
+   quantity; gates the spend.
+2. **observed-MDE sensitivity gate** — after the data, before the comparison,
+   against a pre-registered ceiling: an inference-eligibility quantity; gates
+   the confirmatory claim, never the spend, and never licenses extending n.
+3. **test and interval** — the observation quantities; §2 unchanged.
+
+The template's "Power (before the run)" block should carry only (1); its gate
+sentence describes (2) and belongs in its own block between power and
+inference. Raised in monograph review (chapter 7 had stated the three-stage
+form as if this document already did); recorded here forward, with the
+document's opening "two jobs" superseded rather than rewritten.

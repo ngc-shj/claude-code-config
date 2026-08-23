@@ -34,6 +34,17 @@ is running today.
 *investing* in a candidate at all — the bar the cheap gates use to stop work
 early. Clearing it decides nothing about adoption.
 
+**Operational status of the clauses (recorded 2026-08-23, on review).** Only
+clause 2 is a fully operationalised statistical rule (estimand, margin,
+sizing). Clause 1 is an **action tripwire**: any *observed* loss of a Critical
+real claim fails the candidate at any n — a rule about what to do, not an
+inference; a run with no observed loss establishes nothing about the true
+rate, and quantifying that residual risk is deferred to a forward design.
+Clause 3 is **not yet operationalised**: it names no margin, interval, or
+error rate, and a forward design must pre-register them before the rule can
+run end-to-end. Clauses 4–5 are arithmetic over measured totals. No decision
+taken so far has exercised clauses 1 or 3.
+
 ## "Practically intact" is a margin, and the margin is stated
 
 Clause 2 concedes a bounded loss, and the concession is real rather than
@@ -41,13 +52,19 @@ rhetorical. On F11, round 22, measured over the pinned sheet:
 
 | | |
 |---|---|
-| **current k=3** — arm W, the control | **20.28** distinct real claims per review |
+| **the control** — round 22's W arm: k=3, **three identical generalists** per review | **20.28** distinct real claims per review |
 | a 95% floor of that | **1.014 claims per review** |
 | pooled sd plug-in, unpaired | 1.752 |
 
-Arm W23 reaches 21.48, but it is the arm with clause 1 removed, not the current
-configuration; averaging the two would set the floor against something nobody
-runs. The control is W.
+Arm W23 reaches 21.48, but it is the arm with clause 1 removed, not the
+control's configuration; averaging the two would set the floor against
+something nobody runs. The control is W — and W is a **proxy**: the shipped
+skill runs three specialised roles, whose claim floor and token baseline are
+**unmeasured**. "Current k=3" in the rule above reads through this proxy, the
+structure comparison on F9 measured generalists and specialists differing in
+both precision and coverage, and every verdict in this line binds the
+generalist corpus; nothing transfers it to the specialist split (scope
+recorded 2026-08-23).
 
 So the rule permits a candidate that loses **about one claim per review** and pays
 for it in tokens. It forbids losing a Critical one at any price, and it forbids
@@ -104,7 +121,10 @@ correlation first.
 
 ## Status, 2026-08-21 — stopped, unmet
 
-Three candidates were priced on F11 and all three were refuted below the bar:
+Three candidates were priced on F11 and all three were **replay-refuted**
+below the bar — trace-conditional verdicts: each assumes reviewer behaviour
+under the intervention matches the replayed round-22 behaviour, an
+identification assumption no forward test has checked:
 
 | candidate | what it changed | |
 |---|---|---|

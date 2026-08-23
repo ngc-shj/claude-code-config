@@ -10,11 +10,15 @@ to its own round. This file is the cross-line ledger: every claim the line
 established, at the strength it actually has, and what each one changed — or
 refused to change — in the shipped skill.
 
-Grades, strictest first: **REPLICATED** (confirmed on two fixtures),
-**CONFIRMED** (one pre-registered confirmatory interval, one fixture),
-**MEASURED** (descriptive or single-batch, no confirmatory rule), **REFUTED**
-(a pre-registered gate ended it), **OPEN** (attempted and not resolved). A null
-is never graded as equivalence.
+Grades, strictest first: **REPLICATED** (confirmed on two fixtures, each
+under a pre-registered rule applied as written — no current entry meets this
+bar), **CONFIRMED** (one pre-registered confirmatory interval, one fixture),
+**MEASURED** (descriptive or single-batch, no confirmatory rule),
+**REPLAY-REFUTED** (a pre-registered replay gate ended it; a trace-conditional
+verdict — it assumes reviewer behaviour under the intervention matches the
+replayed behaviour, an identification assumption no forward test has checked),
+**OPEN** (attempted and not resolved). A null is never graded as equivalence.
+The protocols' internal verb "refutes" reads as replay-refutes throughout.
 
 ## The chain of questions
 
@@ -32,8 +36,9 @@ Each line exists because the previous one was blind to something:
 4. The three audits asked what the rounds vary by, what they **cost**, and
    whether another one would change any decision.
 5. `rule-precision/{routing-trim,request-batching,packet-compiler}/` asked
-   whether the cost can come down without the quality. **These three interventions
-   could not**; whether other directions exist is not established.
+   whether the cost can come down without the quality. **These three
+   interventions were replay-refuted under the trace-conditional model**;
+   whether other directions exist is not established.
    (`rule-precision/GOAL.md` is the canonical statement of the goal, its decision
    rule, the closure, and the resume conditions.)
 
@@ -49,10 +54,16 @@ Each line exists because the previous one was blind to something:
   preferences) that no pinned input reproduces — it is cited there as the
   floor's recorded rationale, and this ledger's numbers are the re-runnable
   ones.
-- **REPLICATED — the Finding Floor cuts Critical/Major non-defects with no
-  detectable coverage change.** Round 12 (F9): 1.62 vs 4.12 per review, t = −4.11. Round 17 (F10,
-  a fixture built blind to the floor): 2.44 vs 4.56, t = −3.05. Coverage showed
-  no detectable change in either (nulls inside their MDEs, not equivalence). The floor's digest wiring line exists because round 7 proved a
+- **MEASURED, with qualified replication evidence — the Finding Floor cuts
+  Critical/Major non-defects with no detectable coverage change.** Round 12
+  (F9): 1.62 vs 4.12 per review, t = −4.11, pre-registered and clean. Round 17
+  (F10, a fixture built blind to the floor): 2.44 vs 4.56, t = −3.05 — same
+  direction, same size, **but its n-extension was authorised after the arm
+  table had been seen and its literal sd gate still fails at n = 9**, so the
+  repeat does not meet this ledger's REPLICATED bar. Disclosure does not
+  restore confirmatory status; an independent fixed-n, no-peek replication
+  would. Coverage showed no detectable change in either (nulls inside their
+  MDEs, not equivalence). (Downgraded from REPLICATED 2026-08-23, on review.) The floor's digest wiring line exists because round 7 proved a
   section no routing path names is dead text.
 - **CONFIRMED (F10) — clause 1 is the active component.** Round 20's 2×2: W −
   W₂₃ = −1.33, paired CI [−2.27, −0.39]. Clause 2 alone is indistinguishable
@@ -79,10 +90,14 @@ Each line exists because the previous one was blind to something:
   specialised replies overlap half as much (Jaccard 0.116 vs 0.246). This is the
   measured case for the three-expert split.
 - **MEASURED (F9) — the reviewer-count curve.** 10.8 real claims at N=1 rising
-  to 20.0 at N=6, non-defects rising 0.7 → 4.4; three specialists reach what
-  five generalists reach for ~60% of the tokens. This is the measured case for
-  k=3, and the efficiency line later re-derived its other half: cutting k loses
-  claims out of all proportion to what it saves.
+  to 20.0 at N=6, non-defects rising 0.7 → 4.4. The shipped k=3 is a choice
+  based on this curve — the third reviewer's marginal claims fall to about
+  three-fifths of the second's (+2.1 vs +3.5) while the false-positive cost is
+  linear. The oft-quoted splice — specialists at 19.1 matching the
+  five-generalist point for ~60% of the tokens — crosses batches (the
+  specialist figures are round 11's), which the method classifies as context,
+  not a control; it is retracted as "the measured case for k=3" (corrected
+  2026-08-23).
 - **MEASURED (F9) — conditioning a second wave.** Telling wave two what wave one
   found cuts restatement 96% and spends the freed attention on more ground, less
   accurately: +43% real, +89% non-defects. Recorded with no recommendation;
@@ -120,8 +135,12 @@ Each line exists because the previous one was blind to something:
   tokens across a mean 7.6 requests; **93.6% is transport** — the same content
   re-sent — not new bytes. `subagent_tokens` in every round README is final-
   request context (median relative error 0.0009), not spend.
-- **REFUTED, three times —** the efficiency search
-  (`rule-precision/GOAL.md`): trimming what a reviewer reads (oracle ceiling
+- **REPLAY-REFUTED, three times, on the round-22 generalist configuration —**
+  the efficiency search (`rule-precision/GOAL.md`); the verdicts are
+  trace-conditional per the grade key; round 22's reviews are three
+  identical generalists per review, while the shipped skill runs three
+  specialised roles, so the verdicts bind the generalist corpus and are
+  untested on the specialist split: trimming what a reviewer reads (oracle ceiling
   9.92–10.89% vs the 20% investment bar), batching when its fetches arrive
   (19.32–19.52%; the digest→rows causal window is one request wide in all 150
   agents), compiling the packet deterministically (12.19–14.60%; the union
@@ -141,21 +160,24 @@ Each line exists because the previous one was blind to something:
 
 | shipped element | evidence | grade |
 |---|---|---|
-| Finding Floor, digest-wired | rounds 11 (diagnosis), 12, 17, 7 (wiring) | REPLICATED |
+| Finding Floor, digest-wired | rounds 11 (diagnosis), 12, 17, 7 (wiring) | MEASURED (F9) + qualified replication (F10) |
 | .. clause 1 kept | round 20 | CONFIRMED (F10); OPEN (F11) |
 | .. clauses 2, 3 kept | rounds 18, 19, 20 — nulls inside their MDEs | no deletion licensed |
 | Remedy Floor, wired | round 7 | MEASURED |
 | R54 extended obligations | rounds 6.5, 8 | MEASURED |
 | three specialised experts | precision S/G + marginal reviewer | MEASURED (F9) |
-| k=3 | round 13 curve; efficiency audits | MEASURED |
+| k=3 | round 13 curve; efficiency audits | choice based on a MEASURED curve; not a measured optimum |
 | full rows, not digest names | arm B null | MEASURED null |
-| no efficiency change | three refuted candidates | REFUTED |
+| no efficiency change | three replay-refuted candidates | REPLAY-REFUTED (trace-conditional) |
 
 ## Validity, in one place
 
-Ablation fixtures were written by people who knew the rules — a null there means
-"no detectable effect on a fixture I wrote", a positive is stronger. F10 and F11 were
-authored blind to their arms. `real` is a three-agent panel's judgement under a
+Ablation fixtures were written by people who knew the rules, and the bias this
+induces has **no determinable direction**: that knowledge can make the seeded
+defect legible to every arm (shrinking differences) or shape it to the rule's
+own vocabulary (favouring the rule-holding arm) — nulls and positives both
+inherit it. F10 and F11 were authored blind to their arms, which removes the
+arm-aligned component. (Direction claim retracted 2026-08-23, on review.) `real` is a three-agent panel's judgement under a
 stated assumption (agreement 84–94%), not ground truth; coverage counts are of
 the discovered set, not the fixture. Three fixtures (F9, F10, F11) carry the
 precision conclusions; one (F11) carries every efficiency figure. Everything is
