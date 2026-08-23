@@ -9,8 +9,14 @@ Protocol: `../../rule-ablation/protocols/round-24.md`.
 Reproduce everything below with:
 
 ```bash
-evals/rule-precision/round-24/preflight.py --out <dir>   # add --write to rewrite the manifest
+evals/rule-precision/round-24/preflight.py --out <dir>
 ```
+
+A plain run **compares every row of `preflight-manifest.tsv` against a fresh
+build** and fails on any difference; it does not merely print hashes. `--write`
+creates the manifest and **refuses to replace one that exists** — moving the
+registered starting line takes `--re-register`, which says so loudly and is
+never routine.
 
 ## Baseline
 
@@ -18,6 +24,7 @@ evals/rule-precision/round-24/preflight.py --out <dir>   # add --write to rewrit
 |---|---|
 | protocol baseline commit | **`9f4026c11d6630cc451f0c479de0f906043c353a`** |
 | | *Pre-register round 24: the clean F10 confirmation, with its analysis committed first* (#185), squash-merged 2026-08-23T22:57:35+09:00 |
+| | Held as the constant `PROTOCOL_BASELINE` in `preflight.py`, **not** read from `HEAD` or `origin/main` — a baseline taken from the current branch silently becomes whatever was committed last. The preflight asserts it is an ancestor of `HEAD`. |
 | preflight run | **2026-08-23T23:09:51+09:00**, timezone **JST (UTC+09:00)** |
 | host | Linux 6.17.0-1021-nvidia, Python 3.14.6 |
 | repository | `ngc-shj/claude-code-config`, branch `main` |
@@ -43,9 +50,17 @@ be obtained it says so instead of estimating.
 | reasoning effort | `high` | `CLAUDE_EFFORT` |
 | model pinned in settings | none — `settings.json` sets no `model` | `grep '"model"' settings.json` |
 
+**Registered intent, before the run:** every role — review, clustering, merge,
+adjudication, tie-break, bridge — runs on the **session model with no per-call
+override**. No round-24 call sets a model, and none may. Round 22's working rule
+was "sub-agent models are not changed"; this states the same thing as an intent
+that can be checked against the agent records afterwards rather than assumed.
+
 **The per-role model identifier is the one thing this preflight cannot supply,
 and it is required.** It must be captured from the first batch's own agent
-records and appended here before any arm table is read.
+records and appended here before any arm table is read. If any role's observed
+identifier differs from the orchestrator's, that is a deviation to declare, not
+a detail to absorb.
 
 ### Contamination check
 
@@ -121,19 +136,38 @@ decision gets taken again with the facts in front of it.
 
 ## Pinned material, re-verified
 
-All 17 files the protocol pins hash as the protocol states. Full list in
-`preflight-manifest.tsv`; the templates and the frozen bridge artifacts:
+All 18 files the protocol pins hash as the protocol states, and every one is a
+row in `preflight-manifest.tsv` that a plain run re-checks. The templates and
+the frozen inputs:
 
 | file | sha1 |
 |---|---|
 | `briefs/review.template.md` | `1eacfac5de5c37d067f566642626b78f44f2c183` |
 | `briefs/cluster.template.md` | `66f9c6acd23869299a624d3085fb46c400205a54` |
 | `../adjudication-brief.md` | `64d9827be5206e1739a95f8bbdef6576493ab43f` |
+| `cluster-inventory.tsv` | `5278058c57e364ae5cbee55854106210290abddf` |
 | `bridge-sample.tsv` | `e5026fea2629a2eec253b2afbc4dc2be925761b7` |
 | `bridge-input.tsv` | `beaf2e39e21eb89dd046697241467adb42a0df8e` |
 
-`bridge-sample.tsv` and `bridge-input.tsv` were re-emitted from `measure.py` and
-match the committed files byte for byte.
+All three generated files were re-emitted from `measure.py` and match the
+committed copies byte for byte.
+
+### The clustering brief points at 94 claims, not 64
+
+`cluster-inventory.tsv` is emitted by `measure.py --cluster-inventory`: the
+**94 frozen claims** — round 16's 64 seed claims plus the 30 round 17 added —
+with `cluster_id` and canonical claim text only, sorted, ids unique. It is
+committed here as a zero-data artifact and the preflight checks it regenerates
+from its two sources.
+
+It exists because the obvious file to hand the clustering agent is
+`round-16/seed/inventory.tsv`, and that is **the seed alone**. A clustering
+brief that names 64 claims cannot recognise the 30 that round 17 adjudicated, so
+those thirty come back as new claims, get re-adjudicated by a second panel, and
+the append-only rule that makes `real` mean the same thing across rounds is
+broken from the inside. The preflight renders `brief-cluster.md` against this
+file with `--n-claims 94`, and `render.py`'s row-count check makes a mismatch
+between the file and the number fatal.
 
 ## Briefs
 
@@ -154,7 +188,7 @@ and must be recorded then, beside the template hashes above.
 |---|---|
 | `brief-W.md` | `0c305475de9ff85a604378553429b81faae78821` |
 | `brief-N.md` | `7f442857bbb70a93cffd1428f113bb20cabb5167` |
-| `brief-cluster.md` | `8d4710ca3c0fb1d90e14438feca8ce4d802015c6` |
+| `brief-cluster.md` | `0938500dd7e432aaa9d3ae82126c1971743d0ad2` |
 | `adjudicate-bridge.md` | `750b7c38d0550dcec466823a3e892654a2360e84` |
 
 ## State

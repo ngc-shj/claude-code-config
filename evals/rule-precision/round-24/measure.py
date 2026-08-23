@@ -7,6 +7,11 @@ combine when they disagree three ways, which claims the bridge panel re-judges,
 what happens when a review index is lost, and which interval the confirmatory
 rule reads. Protocol: `../../rule-ablation/protocols/round-24.md`.
 
+  --cluster-inventory
+                    all 94 frozen claims, cluster_id and canonical claim text,
+                    sorted. This is the file the CLUSTERING brief points at: it
+                    must carry every claim already recorded on F10, or a claim
+                    round 17 already adjudicated comes back as new.
   --bridge-sample   the 24 claims the bridge panel re-judges, with their frozen
                     verdicts, for the record. Runs from the frozen files alone.
   --bridge-input    the same 24 claims in the same order, cluster_id and claim
@@ -419,6 +424,19 @@ def main():
         print('\nThe verdict column is for the record and must NOT reach the '
               'panel.\nUse --bridge-input for the file the bridge brief points '
               'at.', file=sys.stderr)
+        return
+
+    if '--cluster-inventory' in sys.argv:
+        v, text = frozen(), frozen_text()
+        missing = sorted(c for c in v if not text.get(c, '').strip())
+        if missing:
+            die(f'{len(missing)} frozen claim(s) with no canonical text: {missing}')
+        print('cluster_id\tclaim')
+        for cid in sorted(v):
+            print(f'{cid}\t{text[cid]}')
+        print(f'\n{len(v)} claims — every claim already recorded on F10. The '
+              f'clustering brief\nmust name this file and this count, or round '
+              f'17\'s claims reopen as new.', file=sys.stderr)
         return
 
     if '--bridge-input' in sys.argv:

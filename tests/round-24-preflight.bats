@@ -132,10 +132,88 @@ print('ok')"
   [ "$status" -eq 0 ]
 }
 
-@test "the manifest records the merged protocol baseline" {
-  run grep -F "$(git -C "$REPO" rev-parse origin/main)" "$R24/preflight-manifest.tsv"
+@test "the baseline is a constant, not whatever branch tip is current" {
+  # Comparing against origin/main would break the moment this merges: the
+  # registered starting line is a fixed commit, not the newest one.
+  pf "
+line = [l for l in open(p.MANIFEST).read().splitlines() if l.startswith('baseline')]
+assert len(line) == 1, line
+assert line[0].split('\t')[2] == p.PROTOCOL_BASELINE, line
+src = open('$R24/preflight.py').read()
+assert 'rev-parse' not in src.split('def manifest_rows')[1].split('def main')[0]
+print(p.PROTOCOL_BASELINE)"
   [ "$status" -eq 0 ]
-  [[ "$output" == baseline* ]]
+  [ "$output" = "9f4026c11d6630cc451f0c479de0f906043c353a" ]
+}
+
+@test "the registered baseline is an ancestor of HEAD" {
+  run git -C "$REPO" merge-base --is-ancestor 9f4026c11d6630cc451f0c479de0f906043c353a HEAD
+  [ "$status" -eq 0 ]
+}
+
+@test "--write refuses to replace a manifest that already exists" {
+  cp "$R24/preflight-manifest.tsv" "$SANDBOX/before.tsv"
+  run python3 "$R24/preflight.py" --out "$SANDBOX/build" --write
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"already exists"* ]]
+  [[ "$output" == *"--re-register"* ]]
+  # refused means untouched, not "refused after writing"
+  run diff "$SANDBOX/before.tsv" "$R24/preflight-manifest.tsv"
+  [ "$status" -eq 0 ]
+}
+
+@test "a plain run compares every manifest row, and a changed pinned file fails it" {
+  # Without the comparison, a pinned file could change and the run would print
+  # its new hash and pass.
+  pf "
+rows = [tuple(l.split('\t')) for l in
+        open(p.MANIFEST).read().splitlines()[1:] if l]
+kinds = {k for k, _, _ in rows}
+assert kinds == {'baseline', 'arm', 'arm-file', 'pinned'}, kinds
+pinned = [r for r in rows if r[0] == 'pinned']
+assert len(pinned) == len(p.PINNED), (len(pinned), len(p.PINNED))
+# every pinned row is the file's real hash today
+for _, rel, sha in pinned:
+    got = p.file_sha1(p.os.path.join(p.REPO, 'evals', rel))
+    assert got == sha, (rel, sha, got)
+print(len(rows))"
+  [ "$status" -eq 0 ]
+  [ "$output" = "109" ]
+}
+
+@test "the clustering inventory is all 94 frozen claims, not round 16's 64" {
+  # Pointing the clustering brief at the seed alone would let the 30 claims
+  # round 17 adjudicated come back as new.
+  pf "
+import csv
+rows = list(csv.DictReader(open('$R24/cluster-inventory.tsv', newline=''), delimiter='\t'))
+ids = [r['cluster_id'] for r in rows]
+assert len(ids) == p.N_CLUSTER_CLAIMS == 94, len(ids)
+assert len(set(ids)) == 94
+assert ids == sorted(ids), 'not sorted'
+assert all(r['claim'].strip() for r in rows)
+print(len(ids))"
+  [ "$status" -eq 0 ]
+  [ "$output" = "94" ]
+}
+
+@test "the clustering inventory regenerates from the two frozen sources" {
+  run bash -c "python3 '$R24/measure.py' --cluster-inventory 2>/dev/null | diff - '$R24/cluster-inventory.tsv'"
+  [ "$status" -eq 0 ]
+}
+
+@test "every frozen claim carries canonical text, and the ids match the verdicts" {
+  run python3 -c "
+import importlib.util, csv
+s = importlib.util.spec_from_file_location('m', '$R24/measure.py')
+m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+v, t = m.frozen(), m.frozen_text()
+inv = {r['cluster_id'] for r in csv.DictReader(open('$R24/cluster-inventory.tsv', newline=''), delimiter='\t')}
+assert set(v) == inv, set(v) ^ inv
+assert all(t.get(c, '').strip() for c in v)
+print(len(v))"
+  [ "$status" -eq 0 ]
+  [ "$output" = "94" ]
 }
 
 @test "no measurement artifact exists in round-24" {

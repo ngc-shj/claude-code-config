@@ -627,6 +627,16 @@ every decision that could otherwise be taken once the numbers are visible:
 Committed alongside it, before any measurement: `bridge-sample.tsv`,
 `bridge-input.tsv`, the two brief templates and `render.py`.
 
+> **Amendment, 2026-08-23, after merge and before any agent ran.** The preflight
+> (`round-24/preflight.py`, `round-24/README.md`) added a fourth committed
+> artifact, **`cluster-inventory.tsv`** — the 94 frozen claims with their
+> canonical text, emitted by `measure.py --cluster-inventory`. It **realises a
+> requirement this protocol already states** (§"The fixture…": the frozen
+> inventory is 94 claims) rather than changing one: without a file that carries
+> all 94, the clustering brief would be pointed at round 16's 64-claim seed and
+> the 30 claims round 17 adjudicated would reopen as new. Recorded as an
+> amendment rather than edited into the text above, per this line's own rule.
+
 Written before the data, it can still be checked before the data.
 `tests/round-24-measure.bats` and `tests/round-24-briefs.bats` exercise each
 branch on synthetic input — the rule firing and two mutations that make it *not*

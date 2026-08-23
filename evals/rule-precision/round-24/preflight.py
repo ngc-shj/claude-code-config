@@ -33,6 +33,12 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 RP = os.path.dirname(HERE)
 REPO = os.path.dirname(os.path.dirname(RP))
+
+# The commit that merged the protocol. A CONSTANT, not `git rev-parse HEAD`:
+# the baseline is the state the round was registered against, and reading it
+# from the current branch means it silently becomes whatever was committed last.
+PROTOCOL_BASELINE = '9f4026c11d6630cc451f0c479de0f906043c353a'
+
 CATALOGUE_COMMIT = 'bc0f966'
 CATALOGUE_PATH = 'skills/triangulate'
 ARMS_DIFF = os.path.join(RP, 'round-17', 'arms.diff')
@@ -64,7 +70,14 @@ PINNED = (
     'rule-precision/adjudication-brief.md',
     'rule-precision/round-24/bridge-sample.tsv',
     'rule-precision/round-24/bridge-input.tsv',
+    'rule-precision/round-24/cluster-inventory.tsv',
 )
+
+# The clustering brief must name every claim already recorded on F10 — the 64
+# seed claims AND the 30 round 17 added. Point it at round 16's seed alone and
+# thirty adjudicated claims come back as new.
+CLUSTER_INVENTORY = os.path.join(HERE, 'cluster-inventory.tsv')
+N_CLUSTER_CLAIMS = 94
 
 # Anything here means the round has started and this is not a preflight.
 MEASUREMENT = ('findings.tsv', 'clusters.tsv', 'reviews.tsv', 'tiebreak.tsv',
@@ -159,11 +172,25 @@ def tree_hash(entries):
     return h.hexdigest()
 
 
+def manifest_rows(entries, pinned):
+    """Every line the manifest holds, built the same way for writing and checking."""
+    out = [('baseline', 'protocol-head', PROTOCOL_BASELINE)]
+    for label in ('W', 'N'):
+        out.append(('arm', f'cat-{label}', tree_hash(entries[label])))
+        out += [('arm-file', f'cat-{label}/{rel}', sha)
+                for rel, _, sha in entries[label]]
+    out += [('pinned', rel, sha) for rel, sha in pinned]
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', required=True, help='where to build the arms')
     ap.add_argument('--write', action='store_true',
-                    help='rewrite preflight-manifest.tsv from this run')
+                    help='write preflight-manifest.tsv; refused if one exists')
+    ap.add_argument('--re-register', action='store_true',
+                    help='overwrite an existing manifest. This retires the '
+                         'registered starting line and is never routine.')
     a = ap.parse_args()
     out = os.path.abspath(a.out)
     cat_w, cat_n = os.path.join(out, 'cat-W'), os.path.join(out, 'cat-N')
@@ -173,13 +200,19 @@ def main():
     code, head, _ = sh('git', 'rev-parse', 'HEAD')
     head = head.strip()
     _, dirty, _ = sh('git', 'status', '--porcelain')
+    print(f'baseline    {PROTOCOL_BASELINE}')
     print(f'repo HEAD   {head}')
     print(f'worktree    {"clean" if not dirty.strip() else "DIRTY"}')
     code, ver, _ = sh('claude', '--version')
     print(f'cli         {ver.strip() or "unavailable"}')
     print(f'built at    {out}\n')
 
-    print('1. the round has not started')
+    print('0. the registered baseline is behind us')
+    code, _, _ = sh('git', 'merge-base', '--is-ancestor', PROTOCOL_BASELINE, 'HEAD')
+    check(code == 0, f'{PROTOCOL_BASELINE[:7]} is an ancestor of HEAD',
+          'the protocol commit is not in this history' if code else '')
+
+    print('\n1. the round has not started')
     started = [n for n in MEASUREMENT if os.path.exists(os.path.join(HERE, n))]
     check(not started, 'no measurement artifact in round-24/',
           f'found {started}' if started else '')
@@ -261,14 +294,21 @@ def main():
     code, got, _ = sh(sys.executable, measure, '--bridge-input')
     with open(os.path.join(HERE, 'bridge-input.tsv')) as f:
         check(got == f.read(), 'bridge-input.tsv reproduces from measure.py')
+    code, got, _ = sh(sys.executable, measure, '--cluster-inventory')
+    with open(CLUSTER_INVENTORY) as f:
+        body = f.read()
+        check(got == body, 'cluster-inventory.tsv reproduces from measure.py')
+    ids = [l.split('\t')[0] for l in body.splitlines()[1:]]
+    check(len(ids) == N_CLUSTER_CLAIMS and len(set(ids)) == N_CLUSTER_CLAIMS,
+          f'the clustering inventory holds {N_CLUSTER_CLAIMS} unique claims',
+          f'{len(ids)} rows, {len(set(ids))} unique')
 
     print('\n7. briefs render, and W and N differ only in the catalogue path')
     briefs = os.path.join(out, 'briefs')
     code, _, err = sh(sys.executable, os.path.join(HERE, 'briefs', 'render.py'),
                       '--out', briefs, '--cat-w', cat_w, '--cat-n', cat_n,
-                      '--inventory', os.path.join(RP, 'round-16', 'seed',
-                                                  'inventory.tsv'),
-                      '--n-claims', '64',
+                      '--inventory', CLUSTER_INVENTORY,
+                      '--n-claims', str(N_CLUSTER_CLAIMS),
                       '--bridge-claims', os.path.join(HERE, 'bridge-input.tsv'),
                       '--n-bridge', '24')
     if not check(code == 0, 'render.py exits clean', err.strip()):
@@ -288,17 +328,39 @@ def main():
 
 
 def finish(a, head, ver, out, entries, pinned):
-    if a.write:
+    rows = manifest_rows(entries, pinned) if entries and pinned else []
+    exists = os.path.exists(MANIFEST)
+
+    if a.write or a.re_register:
+        if exists and not a.re_register:
+            sys.exit(f'\n{os.path.relpath(MANIFEST, REPO)} already exists. It is '
+                     f'the registered\nstarting line, and --write will not '
+                     f'silently replace it. Compare first;\nif the starting line '
+                     f'genuinely has to move, say --re-register and say why in\n'
+                     f'the commit message.')
+        if exists:
+            print('\n*** --re-register: replacing a manifest that was already '
+                  'registered. ***')
         with open(MANIFEST, 'w') as f:
             f.write('kind\tname\tsha1\n')
-            f.write(f'baseline\tprotocol-head\t{head}\n')
-            for label in ('W', 'N'):
-                f.write(f'arm\tcat-{label}\t{tree_hash(entries[label])}\n')
-                for rel, mode, sha in entries[label]:
-                    f.write(f'arm-file\tcat-{label}/{rel}\t{sha}\n')
-            for rel, sha in pinned:
-                f.write(f'pinned\t{rel}\t{sha}\n')
-        print(f'\nwrote {os.path.relpath(MANIFEST, REPO)}')
+            for kind, name, sha in rows:
+                f.write(f'{kind}\t{name}\t{sha}\n')
+        print(f'wrote {os.path.relpath(MANIFEST, REPO)}')
+    elif rows:
+        print('\n9. the committed manifest still describes this build')
+        if not check(exists, 'preflight-manifest.tsv exists'):
+            pass
+        else:
+            want = [tuple(l.split('\t')) for l in
+                    open(MANIFEST).read().splitlines()[1:] if l]
+            missing = [r for r in want if r not in rows]
+            added = [r for r in rows if r not in want]
+            check(not missing and not added,
+                  f'all {len(rows)} manifest rows match',
+                  f'{len(missing)} changed/missing, {len(added)} new')
+            for r in (missing + added)[:10]:
+                print(f'        {"was" if r in missing else "now"}  '
+                      f'{r[0]}\t{r[1]}\t{r[2]}')
 
     print(f'\n{"PREFLIGHT PASSED" if not FAILURES else "PREFLIGHT FAILED"} — '
           f'{len(FAILURES)} failure(s){": " + ", ".join(FAILURES) if FAILURES else ""}')
