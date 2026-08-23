@@ -195,7 +195,7 @@ and must be recorded then, beside the template hashes above.
 
 | | |
 |---|---|
-| reachability probe | **NOT RUN** |
+| reachability probe | **RUN — 3/3, gate passed** (see below); its 3 agents enter no metric |
 | review agents launched | **0 of 72** |
 | measurement rows on disk | **0** — no `findings.tsv`, `clusters.tsv`, `reviews.tsv`, `tiebreak.tsv`, `adjudications/` or `bridge/` |
 | preflight verdict | **PASSED**, 0 failures |
@@ -234,14 +234,222 @@ is checked and every pinned row is verified against the file it names — so thi
 is a hardening gap rather than a live hole, and it is recorded here instead of
 being fixed in the same commit that records a verification result.
 
+## Reachability gate — RUN, 3/3
+
+The one gate that runs before any arm. Three agents took the **W** catalogue over
+F10; their tool-call traces were read and nothing else.
+
+| | |
+|---|---|
+| launch HEAD | **`6bdcd8dda8535116e6fbd20ebc115ad0059ee845`** |
+| validated preflight tree | `88d16da`; the only difference to launch HEAD is this README, which touches no measurement-affecting material |
+| launched | 2026-08-23T23:56:35+09:00 (JST) |
+| agent window | 2026-08-23T14:56:53Z → 15:04:14Z |
+| agents | exactly 3, arm W, no per-call model override |
+| preflight at launch | PASSED, 0 failures, worktree clean |
+
+**Result: 3 of 3 executed the Finding Floor extraction** — issued the call *and*
+had it return without error. All three also read the digest first, which is the
+weaker precondition. The gate's other two branches — 1–2/3 and 0/3, both "stop
+and investigate the wiring" — did not fire.
+
+| agent | tool calls | all returned ok | digest read | Finding Floor extraction |
+|---|---|---|---|---|
+| `a3ed8e17…` | 9 | yes | yes | **yes** |
+| `a95a6cd7…` | 12 | yes | yes | **yes** |
+| `a7fef430…` | 9 | yes | yes | **yes** |
+
+Counts are of tool calls in the trace, recorded because the protocol asks what
+the agents *did*. They are not finding counts.
+
+**Issuing is not executing.** A `Bash` call that names the Finding Floor and then
+fails still puts the command in the trace, and the first draft of the analyser
+would have counted it. Each `tool_use` is now joined to the `tool_result`
+carrying its id, and the outcome is read as one of four states — only the first
+is an execution:
+
+| state | meaning |
+|---|---|
+| `ok` | the result carries `is_error` as the boolean **`false`** |
+| `ERROR` | the result carries `is_error` as the boolean `true` |
+| `no-flag` | a result exists and says nothing usable about success |
+| `no-result` | no result carries this id at all |
+
+`bool(block.get('is_error'))` was the second draft and reads a *missing* flag as
+`False`, i.e. as success. That is the one direction this gate must never be
+generous in: a transcript shape that omitted the field would have turned every
+issued call into an executed one. All three real results carry an explicit
+`false`, so the 3/3 is unchanged — but it is now 3/3 for the stated reason.
+
+**The three transcripts are named, not searched for.**
+`reachability-manifest.tsv` pins the session, the three agent ids and each
+transcript's **git blob sha1** — `sha1("blob <len>\0" + bytes)`, what
+`git hash-object` prints, **not** the plain file digest `sha1sum` prints. The
+column is named `git_blob_sha1` so nobody has to infer that from a mismatch.
+The analyser reads those three files and no others. The
+first draft selected "every sub-agent after time T", which cannot survive the
+round: once 72 review agents have run in the same session, a timestamp no longer
+identifies the probe. Naming them also makes an edited transcript fail on the
+hash rather than pass quietly, and makes the gate replayable by anyone holding
+the files:
+
+```bash
+evals/rule-precision/round-24/reachability.py    # re-derives 3/3 from the pinned three
+```
+
+**How "only the traces" is enforced.** The analyser emits `tool_use` blocks only:
+assistant `text` and `thinking` blocks — where a review's findings live — and
+`tool_result` *content* are dropped before anything is printed; the only thing
+ever taken from a result is its `is_error` flag. Printed tool inputs are reduced
+to a path or a matched marker. There is no flag to disable that. The brief also
+ends "reply with the single word `DONE`", and all three did, so no finding
+reached the orchestrator's context by the return path either.
+
+The three review files were written to `<scratchpad>/round-24-run/probe-*.md` and
+**were never opened**. They are outside the analyser's reach by construction — it
+resolves transcripts from the manifest and never touches a review file — and
+nothing from these agents enters any metric.
+
+> **They are also gone.** The host rebooted at **2026-08-24 00:28:06 JST** —
+> 24 minutes after the probe finished — and `/tmp` did not survive it, taking the
+> whole session scratchpad with it. (An earlier draft of this paragraph said
+> "cleared between sessions". That was wrong: the session id never changed. The
+> cause was the reboot.) Nothing measured depends on it: the gate was derived
+> from the transcripts, which live under `~/.claude/projects/…` — outside `/tmp`,
+> which is why they survive — are pinned by hash above, and re-derive 3/3 on
+> demand. The reviews themselves entered no metric by design. They are
+> recoverable in principle — each agent's `Write` call carries its content in the
+> transcript — but **recovering them means reading them**, which is exactly what
+> this gate forbids, so it is not done and they are left unread. Recorded because
+> a record that quietly loses a named artifact is worse than one that says where
+> it went.
+
+### Where the measurement is written, and why not `/tmp`
+
+**Forward operational amendment, 2026-08-24, before any review agent ran.**
+
+The measurement gets its own directory, and that directory is **outside `/tmp`
+and outside the repository**:
+
+```
+/home/noguchi/.local/state/claude-code-config/round-24-measurement/
+```
+
+Arms, rendered briefs and all 72 review outputs are written **there directly
+from the first batch** — not staged in `/tmp` and copied afterwards, because a
+copy-after-batch scheme leaves a window in which a reboot destroys the batch it
+has not yet saved.
+
+The reason is measured rather than hypothetical: the probe's three reviews were
+written to `/tmp` and a reboot 24 minutes later removed them. The probe survived
+that because its evidence is the transcripts, which live under
+`~/.claude/projects/…`; the round would not. Twelve batches spanning several
+five-hour windows is many hours of exposure to exactly the event that has
+already happened once during this round's preparation.
+
+The directory also isolates the probe: nothing named `probe-*` may exist under
+it, and extraction takes **the 72 registered output paths explicitly** — it never
+runs `*.md` over a shared tree. `preflight.py --out <dir>` enforces the first
+half by walking the tree and failing on any `probe-*` file at any depth;
+`measurement-outputs.tsv` is the registered list that enforces the second.
+
+`register-outputs.py` generates that list — 12 indices × 2 arms × 3 parts — and
+**refuses to write it if any of the 72 already exists**, so it can only ever be a
+reservation. The registry is committed before the first batch.
+
+### Pre-launch verification, against the persistent root
+
+Run after the amendment above and before any review agent:
+
+| check | result |
+|---|---|
+| `preflight.py --out <persistent root>` | **PASSED**, 0 failures — 21 checks including `no probe output under round-24-measurement` |
+| `reachability.py` replay from the pinned three transcripts | **3/3**, gate passes, no agent re-run |
+| arms `cat-W` / `cat-N` normalised tree hashes | `2f241a02…` / `641e83e2…` — unchanged from `preflight-manifest.tsv` |
+| template hashes | `1eacfac5…`, `66f9c6ac…`, `64d9827b…` — unchanged |
+| pinned material | 18 files, all 109 manifest rows match |
+| CLI / SDK / entrypoint / effort | 2.1.211 / 0.3.220 / `claude-vscode` / `high` — unchanged from the probe |
+| model pinned in `settings.json` | none, as at the probe |
+| kernel | `6.17.0-1031-nvidia` — **changed**, declared above |
+| 72 output paths | reserved in `measurement-outputs.tsv`, none exists |
+
+Everything that could change what the gate measured is unchanged. What changed
+is the kernel and the storage location, both declared.
+
+Rendered `brief-W.md` / `brief-N.md` hash differently from the preflight build
+because they name the catalogue directory, which moved with the root — that is
+the path-dependence recorded above, not a change of instrument. Their **template**
+hashes are identical, and `diff` over the two rendered briefs still returns only
+the catalogue-path lines.
+
+Also visible in the traces, and worth recording: no agent read anything under the
+repository except the fixture. The brief's prohibition held.
+
+### Deviation to declare: the sub-agent model identifier
+
+The registered intent was that every role runs on the session model with no
+per-call override. **No override was passed** — and the observed identifiers
+still differ:
+
+| | |
+|---|---|
+| orchestrator | `claude-opus-5[1m]` |
+| all three probe agents | **`claude-opus-5`** |
+
+The `[1m]` suffix is the 1M-context variant, a main-loop setting that sub-agents
+do not inherit. The intent held; the identifier is not the orchestrator's, and
+this record says so rather than absorbing it.
+
+**What this establishes is the probe-side model, and only that.** `claude-opus-5`
+is what these three agents ran on. It is a strong prediction for the review,
+clustering and adjudication roles — same harness, same absence of override — and
+it is **not** a measurement of them. Each role's identifier is recorded from its
+own agents' records when that role runs, and a difference from this one is a
+deviation to declare at that point.
+
+The reason to record any of it: round 17 wrote none of it down, which is what
+makes its null unidentifiable. Registering the intent in a form that could be
+checked is what turned "sub-agents inherit the session model" from an assumption
+into an observation that turned out to be half wrong.
+
+### Deviation to declare: the host kernel changed between the gate and the round
+
+The host rebooted at 2026-08-24 00:28:06 JST, between the reachability probe and
+the review batches, onto a **different kernel**:
+
+| | |
+|---|---|
+| kernel at the probe | `6.17.0-1021-nvidia` |
+| kernel for the round | `6.17.0-1031-nvidia` |
+
+Declared because this record's whole discipline is that unrecorded execution
+differences are what make a null unidentifiable, and "the machine was rebuilt
+mid-round" is exactly the kind of thing round 17 would not have noticed.
+
+**It is not a reason to re-run the probe.** The gate measures whether the
+Finding Floor's digest wiring reaches a reviewer, and the things that could
+change that answer — the catalogue, the arm construction, the brief templates
+and their rendered output, the CLI, the SDK, the model identifiers — are
+re-verified by hash before the round starts and are unchanged. A kernel version
+and a storage location are operational facts to declare, not instrument changes
+to re-measure. **If any of the hashed items had moved, the round would stop here
+instead** and the question would be re-opened as its own forward amendment.
+
+Re-running three agents now would also create an unregistered *second* gate with
+no rule for combining it with the first — a worse record than the one this
+paragraph replaces.
+
 ## What happens next, in order
 
-1. This preflight commit is reviewed.
-2. **Reachability gate only — 3 agents, arm W, explicitly approved.** Tool-call
-   traces are read; no finding, severity or count from those agents enters any
-   metric.
-3. **3/3** → the 72 review agents become a separate decision.
-   **1–2/3 or 0/3** → the round stops, per protocol, and the gate result is
-   published as a wiring result with no arm effect measured.
+1. ~~The preflight commit is reviewed.~~ **Done** — #186, re-verified on merged
+   `main`.
+2. ~~Reachability gate only, 3 agents, arm W, explicitly approved.~~ **Done —
+   3/3.** Recorded above with the launch HEAD, the timestamps, and the
+   sub-agent model identifier the round will carry.
+3. **The 72 review agents are a separate decision, and it has not been taken.**
+   The gate passing licenses nothing by itself: it says the manipulation
+   arrives, which is the precondition for the ablation meaning anything, not a
+   reason to spend ≈27.8M raw tokens on it.
 
-Nothing beyond step 1 has been authorised.
+**Nothing beyond step 2 has been authorised.** The next thing that happens is
+someone deciding whether to run the round, with this record in front of them.
