@@ -16,8 +16,10 @@ that reported one: median relative error **0.0009**, the notification running
 ~73 tokens high; summed over rounds 21 and 22 it reproduces the published
 4.53M and 12.5M (MEASURED;
 `../evals/rule-precision/review-efficiency/README.md`). The identification is
-the chapter's one strong claim: the reported number is peak context, to
-within a tenth of a percent, across every agent that reported one.
+the chapter's one strong claim, at exactly its measured strength: the
+reported number is peak context, with **median** relative error 0.0009 over
+the reporting agents — a median, not a bound, and individual agents exceed
+it.
 
 What peak context omits is everything an agentic loop does: it counts no
 re-sent context from earlier turns and no output at all. For a round-22

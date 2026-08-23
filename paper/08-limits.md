@@ -13,8 +13,9 @@ not been done.
   of them — were written by someone who knew the rule under test. A null
   there reads "no detectable effect on a fixture I wrote"; a positive is
   stronger, because the bias runs against it. F10 and F11 were authored blind
-  to their arms, which reverses the direction for the precision and replay
-  lines; the seed defects still went where an author put them.
+  to their arms, which removes that arm-aligned authorship bias for the
+  precision and replay lines — removal, not reversal; the seed defects still
+  went where an author put them.
 - **The panel is not ground truth.** `real` is three agents' majority under a
   stated assumption, agreeing 84–94% of the time. Holding the assumption
   fixed prevents drift in the standard; it does not make contrasts unbiased,

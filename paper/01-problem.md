@@ -69,8 +69,9 @@ of Chapter 8's obligations.
 
 `../evals/rule-precision/GOAL.md` is the single source for the goal and the
 rule, and its history is part of this chapter's evidence rather than its
-housekeeping. The statement above reached its final form through five
-recorded review corrections: the margin re-based from a two-arm mean to the
+housekeeping. The statement above reached its final form through recorded
+review corrections — more than are listed here; five rule-shaping ones,
+selected: the margin re-based from a two-arm mean to the
 control arm actually running; a beat-current clause added when the rule was
 found to permit adopting a candidate dearer than the incumbent; the
 sizing-table row for a zero margin conditioned on its planning assumption

@@ -38,10 +38,13 @@ generalists' adds +2.5, their replies overlapping half as much (Jaccard 0.116
 vs 0.246). Structure buys coverage by buying *decorrelation*, and pays for it
 in precision.
 
-The coverage difference carries the round's own caveat verbatim: 2.3 claims
-is significant and under-powered at once — smaller than the 3.23 the design
-detects at 80% power — so the *size* is not to be leaned on without
-replication. One batch, one fixture.
+The coverage difference is significant (t = −2.22) and small relative to
+what the round was built to see: the design's MDE was 3.23 claims at 80%
+power — a statement about the design's sizing, not a post-hoc verdict on the
+observed effect (§7.1.4 keeps those apart; the source round's own
+"significant and under-powered at once" predates that separation). The
+size's uncertainty is a matter for an interval and for replication, and
+neither exists here. One batch, one fixture.
 
 ## 3.3 The reviewer-count curve, and the case for k = 3
 
@@ -58,8 +61,8 @@ Coverage decays toward the discovered-set ceiling while the false-positive
 cost climbs linearly at ~0.7 per reviewer. Splicing in §3.2's structure
 result: **three specialised experts reach what five identical generalists
 reach, for roughly 60% of the tokens.** That is the measured case for the
-shipped k = 3 — and Chapter 6 later prices the other side of it, when the
-efficiency search rejects cutting k as a candidate class.
+shipped k = 3. No change to k was ever adopted, and none of Chapter 6's
+three refuted candidates touches it.
 
 ## 3.4 Conditioning a second wave: the trade nobody shipped
 

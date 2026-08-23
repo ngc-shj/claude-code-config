@@ -17,15 +17,15 @@ instance of the target rule's defect class plus five to fifteen competing
 defects; an oracle written before any run; arms differing only in catalogue
 material — the spotlit rule (A), pattern names only (B), nothing (C), and the
 deployed configuration (F); scoring against the oracle by the experimenter,
-never by the reviewing agent. Three trials is a look, not a result: the one
-claim this line retracted came from n = 3 and vanished at n = 8.
+never by the reviewing agent. Three trials is a look, not a result: two
+early n = 3 claims, one in each direction, vanished at n = 8.
 
 ## 2.1 Detection: no detectable difference, stated at its true weight
 
 Across rounds 1–3 — eight fixtures, single-file to eight-file, cued and
 uncued — **no detection difference survived replication** (MEASURED;
-`../docs/archive/audit/2026-08-04-rule-ablation.md`, Rounds 1–3). Two early
-n = 3 claims, one in each direction, were retracted at n = 8.
+`../docs/archive/audit/2026-08-04-rule-ablation.md`, Rounds 1–3) — the two
+n = 3 retractions of the protocol section among the casualties.
 
 The power audit is part of the claim, not a footnote to it: detection was
 scored as a binary at n = 8 per arm, where 8/8 against 6/8 is p = 0.47 and
@@ -123,9 +123,12 @@ not established where the platform idiom already encodes the fix (F9, inside
 its MDE), and bounded tight only where the nulls were tight — rounds 10–11's
 remedy nulls bound their effects at roughly 5–9% of the rubric (MEASURED; the
 audit's power section). What the catalogue demonstrably does is transmit:
-clauses it states arrive in fixes at near-ceiling rates, clauses it omits
-appear nowhere, a section nothing routes to might as well not exist, and a
-clause's wording is part of whether it arrives. Every fixture was authored by
+clauses it states arrive in fixes at near-ceiling rates; the one untaught
+property tracked to zero everywhere — the concurrency test — never appeared
+(0/29, then 0/16 in the later unextended arm), while other untaught
+properties appeared rarely rather than never (the throw-path test: 2/16 and
+1/16); a section nothing routes to might as well not exist; and a clause's
+wording is part of whether it arrives. Every fixture was authored by
 someone who knew the rule under test — the bias direction Chapter 8 owns —
 and every figure above is one model epoch, blind-scored where stated, and
 re-runnable from the archived sheets.
