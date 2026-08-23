@@ -1,0 +1,25 @@
+cluster_id	claim
+DELIVERY-08	_claim_batch selects pending rows with no FOR UPDATE SKIP LOCKED and no conditional update, so concurrent claimers can select and deliver the same rows.
+DELIVERY-17	asyncio.gather is called without return_exceptions=True, so the first delivery to raise propagates out and its sibling coroutines are abandoned.
+TESTS-04	the new HTTP routes create_webhook_endpoint, list_webhook_endpoints and list_deliveries have no tests, so the URL validation and org scoping are unexercised.
+SETTINGS-02	create_webhook_endpoint performs no host validation, so a caller can register a loopback, link-local, or internal address that the delivery worker will then POST to from inside the network.
+NEWSET-03	EndpointIn.event_types bounds neither the number of elements nor the length of each string, so an arbitrarily large array is accepted and stored in the JSONB column.
+MIGRATION-08	the migration contains only forward DDL with no down or rollback section, so the two new tables and the organizations column cannot be reverted by the migration tool.
+NEWDEL-06	the success path calls _finish with response.text, persisting the customer's 2xx response body even though nothing reads it, since WebhookDelivery.to_dict does not expose response_body.
+NEWDEL-03	endpoint.active is filtered only in enqueue_for_event and is re-checked in neither _claim_batch nor deliver, so rows queued before an endpoint was deactivated are still POSTed to it.
+MODELS-05	WebhookDelivery.updated_at has a creation default but no onupdate, so writes that do not go through _finish, such as the in_flight flip, leave the timestamp stale.
+DELIVERY-04	_acquire_lock reads LOCK_KEY and then sets it as separate operations, so two workers that both observe an empty key both acquire the lock.
+DELIVERY-30	the POSTed body is the bare event payload with no event_id or event_type in the body or headers, so a receiver has no id to deduplicate on.
+TESTS-10	the tests substitute hand-rolled FakeEndpoint and FakeDelivery class-attribute stubs for the real ORM models, so detached-instance and missing-row behaviour is never exercised.
+B2TD-02	the test module defines its test secret as the literal "whsec_testsecret", duplicating signing.SECRET_PREFIX instead of deriving the value from the constant the same file imports.
+NEWTD-02	the documented retry table lists four delays (2s, 4s, 8s, 16s) while MAX_ATTEMPTS = 5 implies a fifth attempt whose 32s wait is neither documented nor covered by test_backoff_grows_exponentially, which parametrizes only attempts 1-4.
+SIGNING-02	sign MACs only the serialised payload, so the X-Acme-Timestamp header is unauthenticated and a replayer can rewrite it without invalidating the signature.
+DELIVERY-12	backoff_for returns exactly BASE_DELAY_SECONDS ** attempt seconds with no randomisation, so there is no jitter and deliveries failing together retry at the same instants.
+SETTINGS-09	the change adds only create and read routes, so an endpoint cannot be deactivated, deleted, or have its signing secret rotated through the API.
+NEWSET-01	None of the three new routes create_webhook_endpoint, list_webhook_endpoints and list_deliveries carries a rate-limit dependency or decorator, so each is callable without any per-caller throttle.
+NEWTD-04	the two coroutine tests are marked @pytest.mark.asyncio while the change adds neither a pytest-asyncio dependency nor an asyncio_mode configuration, so they may never actually run.
+MIGRATION-04	the only index available to the claim query is on status, while _claim_batch also filters on and orders by next_attempt_at, so the pending set is sorted on every poll.
+DISPATCH-04	the unguarded for subscriber ...: await subscriber(envelope) loop runs before the webhook block, so one raising subscriber prevents the webhook enqueue for an already-committed event.
+NEWSCH-02	webhook_deliveries stores a full copy of every event payload and the full remote response_body with no retention policy, TTL, purge job, or size bound.
+SIGNING-06	SECRET_BYTES = 32 is used as a character count over a 62-symbol alphabet, so the constant's name misstates the entropy of the secret it produces.
+DELIVERY-18	batch is assigned only inside the try while if not batch is evaluated after the try/finally, so a failure in _claim_batch can reach the test with batch unbound.
