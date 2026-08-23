@@ -31,8 +31,9 @@ intervention did. Each is a process record from the cited round document or
 protocol and carries the grade **MEASURED** unless tagged otherwise. **No new
 effect estimate is introduced here**; where the chapter names the series'
 substantive results in passing, it names them with their ledger grades — the
-Finding Floor's effect (REPLICATED), the three candidate refutations
-(REFUTED) — and their full statements live in Chapters 2–6.
+Finding Floor's effect (MEASURED, with qualified replication evidence), the
+three candidate refutations (REPLAY-REFUTED, trace-conditional) — and their
+full statements live in Chapters 2–6.
 
 ## 7.1 Identification under pre-declared quality constraints
 
@@ -161,7 +162,11 @@ The second family prices an intervention's *perfect form* against transcripts
 of the system as it ran, at zero new review-agent cost. Its logic is an
 asymmetry: an oracle bound that fails the bar refutes every implementable form
 below it, while a bound that clears the bar establishes nothing — so the replay
-can only terminate work or permit the next, more expensive question.
+can only terminate work or permit the next, more expensive question. The whole
+family is **trace-conditional**: "refutes every implementable form" holds under
+the identification assumption that reviewer behaviour with the intervention in
+place matches the replayed behaviour without it — §7.4's false-refutation risk
+is exactly this assumption failing, and no forward test has checked it.
 
 ### 7.2.1 The pre-registration contract
 
@@ -305,7 +310,8 @@ any code exists.
   direction is part of the record rather than commentary
   (`../evals/rule-precision/routing-trim/protocol.md`, first amendment).
 - **Graded claims.** Every empirical statement carries REPLICATED / CONFIRMED
-  / MEASURED / REFUTED / OPEN, per the ledger's key (`../evals/README.md`),
+  / MEASURED / REPLAY-REFUTED / OPEN, per the ledger's key
+  (`../evals/README.md`),
   and an interval that crosses zero is a failure to detect, never a
   demonstration of nothing.
 - **Mutation red-proofs, scoped.** In the efficiency gates, every rule a

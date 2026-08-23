@@ -129,6 +129,7 @@ property tracked to zero everywhere — the concurrency test — never appeared
 properties appeared rarely rather than never (the throw-path test: 2/16 and
 1/16); a section nothing routes to might as well not exist; and a clause's
 wording is part of whether it arrives. Every fixture was authored by
-someone who knew the rule under test — the bias direction Chapter 8 owns —
+someone who knew the rule under test — an authorship bias whose direction
+Chapter 8 argues cannot be assigned —
 and every figure above is one model epoch, blind-scored where stated, and
 re-runnable from the archived sheets.

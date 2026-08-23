@@ -60,6 +60,18 @@ non-inferiority — a candidate that is genuinely better sizes a zero margin at
 finite n — but an adoption rule has to survive the neutral case, because a
 rule that only works when the candidate happens to be better is not a rule.
 
+One honesty the rule owes the reader before it is used anywhere: **only
+clause 2 is a fully operationalised statistical rule.** Clause 1 is an action
+tripwire — any *observed* Critical loss fails the candidate at any n, which
+governs what is done, not what is inferred; a run with no observed loss
+establishes nothing about the true loss rate, for the same finite-n reason a
+zero margin cannot be planned for, and that residual risk is unquantified.
+Clause 3 names no margin, interval, or error rate at all. A forward design
+must pre-register both operationalisations before the rule can run
+end-to-end — Chapter 8 carries this as a prerequisite of its validation
+obligation — and until then the rule is one executable clause, one tripwire,
+and one stated value. No decision in this series exercised clauses 1 or 3.
+
 ## 1.3 The bar that is not part of the rule
 
 A separate threshold governs *investment*: a candidate whose perfect form

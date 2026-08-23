@@ -18,19 +18,22 @@ manufacture the same class of defect at chapter scale.
 > **pre-declared quality constraints** — zero Critical loss, non-inferior claim
 > reach at a stated margin, and no worsening of Critical/Major not-a-defect
 > findings — not as the presence or absence of individual rules. Claim-level adjudication, same-batch controls, and inference separated
-> from power (MDE) identify interventions whose effects **replicate across
-> fixtures** and keep what does not resolve **explicitly open** rather than
-> silently assumed; causal replay over pinned session transcripts **refutes
-> some optimization candidates before any forward test**, at zero new
-> review-agent cost.
+> from power (MDE) identify interventions whose effects **repeat across
+> fixtures, at graded strength**, and keep what does not resolve **explicitly
+> open** rather than silently assumed; causal replay over pinned session
+> transcripts **replay-refutes some optimization candidates before any
+> forward test** — trace-conditional verdicts — at zero new review-agent
+> cost.
 
 The two method families are deliberately not merged: the first identified and
 bounded the Finding Floor, the second refuted the three efficiency candidates,
 and neither did the other's job.
 
 The earlier phrasing "identify effective interventions" is deliberately not
-used: the ledger's grades support *replicated on two fixtures, open on a
-third* for the strongest positive result, and the thesis claims exactly that.
+used: the ledger's grades support *measured on one fixture, with qualified
+replication evidence on a second, open on a third* for the strongest positive
+result — the F10 repeat's post-hoc n-extension keeps it short of the
+REPLICATED bar — and the thesis claims exactly that and no more.
 
 ## What this can and cannot be, on current evidence
 
@@ -51,7 +54,9 @@ third* for the strongest positive result, and the thesis claims exactly that.
 3. **Costs in the efficiency audit's units** (raw / api-eq), never
    final-context. The 19M-vs-86M error is the standing example.
 4. **Every empirical sentence carries its grade** — REPLICATED / CONFIRMED /
-   MEASURED / REFUTED / OPEN — or cites a ledger entry that does.
+   MEASURED / REPLAY-REFUTED / OPEN, per the ledger's key — or cites a ledger
+   entry that does. (REPLAY-REFUTED is trace-conditional; no current entry
+   meets the REPLICATED bar.)
 5. **Chapters are reviewed like everything else here.** Rule as first written:
    one chapter per PR. Amended 2026-08-23, at the owner's direction, once the
    vocabulary and rule set had stabilised over chapters 7, 6 and 4: the

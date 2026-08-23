@@ -9,13 +9,15 @@ not been done.
 
 ## 8.1 The limits, in one place
 
-- **Fixture authorship, with its direction.** The ablation fixtures — eight
-  of them — were written by someone who knew the rule under test. A null
-  there reads "no detectable effect on a fixture I wrote"; a positive is
-  stronger, because the bias runs against it. F10 and F11 were authored blind
-  to their arms, which removes that arm-aligned authorship bias for the
-  precision and replay lines — removal, not reversal; the seed defects still
-  went where an author put them.
+- **Fixture authorship, with no determinable direction.** The ablation
+  fixtures — eight of them — were written by someone who knew the rule under
+  test, and that knowledge cuts both ways: it can make the seeded defect
+  legible to every arm, shrinking differences, or shape the defect to the
+  rule's own vocabulary, favouring the arm that holds the rule. Nulls and
+  positives both inherit arm-aligned authorship, and no direction can be
+  assigned in principle. F10 and F11 were authored blind to their arms, which
+  removes the arm-aligned component — removal, not reversal; the seed defects
+  still went where an author put them.
 - **The panel is not ground truth.** `real` is three agents' majority under a
   stated assumption, agreeing 84–94% of the time. Holding the assumption
   fixed prevents drift in the standard; it does not make contrasts unbiased,
@@ -52,10 +54,13 @@ not been done.
 
 A master's-scale empirical claim: on this repository, under these
 instruments, the Finding Floor reduces Critical/Major non-defect findings
-with no detectable coverage change on two fixtures (REPLICATED); clause 1 is
-its only component with positive evidence, on one of them (CONFIRMED);
-three token-optimization candidates fail their bounds by causal replay
-(REFUTED, at zero new review-agent cost); the reported cost figures were
+with no detectable coverage change on F9, repeating in direction and size on
+F10 (MEASURED, with qualified replication evidence — the repeat's post-hoc
+extension keeps it short of REPLICATED); clause 1 is its only component with
+positive evidence, on one fixture (CONFIRMED); three token-optimization
+candidates fail their bounds by causal replay (REPLAY-REFUTED —
+trace-conditional, at zero new review-agent cost); the reported cost figures
+were
 final-request context, off by 5.1× on the round measured (MEASURED); and the
 method that produced all of the above is stated as reusable design rules
 (Chapter 7), with its evidence archived, manifested, and re-runnable. The
@@ -77,8 +82,12 @@ written to survive that survey (methods and measurements, not priority), but
 writing it down is not the same as having done it.
 
 **Prospective validation of the gate method — an experimental obligation,
-specified.** "Try it on another repository" is underspecified in the way
-§7.4 warns about; what completion requires is:
+specified.** One prerequisite precedes it: **clauses 1 and 3 of the adoption
+rule must first be operationalised** — estimand, margin, one-sided rule and
+error rates pre-registered — because a forward test scored against a tripwire
+and an unoperationalised constraint cannot certify the rule it claims to
+(Chapter 1 records the current status). "Try it on another repository" is
+underspecified in the way §7.4 warns about; what completion requires is:
 
 1. an independent repository and model, with the gate apparatus ported before
    any candidate is examined;

@@ -34,6 +34,17 @@ is running today.
 *investing* in a candidate at all — the bar the cheap gates use to stop work
 early. Clearing it decides nothing about adoption.
 
+**Operational status of the clauses (recorded 2026-08-23, on review).** Only
+clause 2 is a fully operationalised statistical rule (estimand, margin,
+sizing). Clause 1 is an **action tripwire**: any *observed* loss of a Critical
+real claim fails the candidate at any n — a rule about what to do, not an
+inference; a run with no observed loss establishes nothing about the true
+rate, and quantifying that residual risk is deferred to a forward design.
+Clause 3 is **not yet operationalised**: it names no margin, interval, or
+error rate, and a forward design must pre-register them before the rule can
+run end-to-end. Clauses 4–5 are arithmetic over measured totals. No decision
+taken so far has exercised clauses 1 or 3.
+
 ## "Practically intact" is a margin, and the margin is stated
 
 Clause 2 concedes a bounded loss, and the concession is real rather than
@@ -110,7 +121,10 @@ correlation first.
 
 ## Status, 2026-08-21 — stopped, unmet
 
-Three candidates were priced on F11 and all three were refuted below the bar:
+Three candidates were priced on F11 and all three were **replay-refuted**
+below the bar — trace-conditional verdicts: each assumes reviewer behaviour
+under the intervention matches the replayed round-22 behaviour, an
+identification assumption no forward test has checked:
 
 | candidate | what it changed | |
 |---|---|---|

@@ -10,10 +10,11 @@ its full arc: the diagnosis it answers, the effect measured twice, the
 decomposition into clauses, the replication attempt that did not resolve, and
 the recorded decision to stop measuring. Its grades, up front and in the
 ledger's vocabulary (`../evals/README.md`): the effect on Critical/Major
-non-defect findings is **REPLICATED** (F9, F10); clause 1 as the active
-component is **CONFIRMED** on F10; the transfer of that component to F11 is
-**OPEN**; and the clauses ship as they are, two of them on nulls that license
-nothing.
+non-defect findings is **MEASURED on F9, with qualified replication evidence
+on F10** — the repeat does not meet the ledger's REPLICATED bar, for reasons
+§4.2 states rather than absorbs; clause 1 as the active component is
+**CONFIRMED** on F10; the transfer of that component to F11 is **OPEN**; and
+the clauses ship as they are, two of them on nulls that license nothing.
 
 ## 4.1 The diagnosis it answers
 
@@ -60,9 +61,12 @@ the extension was authorised by someone who had seen the n = 6 table. The
 gate's two readings are both recorded and both carried here: applied
 literally, the sd ceiling is still exceeded at n = 9 and the round reads
 **underpowered**; read through the n-dependent MDE it was written to proxy,
-the round is powered (`../evals/rule-precision/round-17/README.md`).
-**REPLICATED**, with those qualifications — including the stricter reading —
-attached rather than absorbed.
+the round is powered (`../evals/rule-precision/round-17/README.md`). The
+grade follows the defects, not the disclosure: the extension was not
+pre-registered and was authorised in sight of the arm table, so F10 is
+**qualified replication evidence — direction and size repeat — and not a
+confirmed replication**; disclosure does not restore confirmatory status,
+and an independent fixed-n, no-peek replication would.
 
 A post-hoc decomposition sharpens what the primary measures and is labelled
 as post-hoc (`../evals/rule-precision/README.md`, "The primary metric mixes
@@ -165,8 +169,9 @@ So the floor ships as follows, and the traceability is the point:
 ## 4.6 What this chapter claims, and no more
 
 The Finding Floor reduces Critical/Major non-defect findings with no
-detectable coverage change, on two fixtures, one of them built blind to it —
-REPLICATED, with round 17's recorded deviations attached. Clause 1 is the
+detectable coverage change on F9, and repeats that in direction and size on a
+fixture built blind to it — MEASURED, with qualified replication evidence,
+the F10 round's post-hoc extension keeping it short of REPLICATED. Clause 1 is the
 only component with positive evidence, on F10 — CONFIRMED there and OPEN on
 F11, where one round was a powered non-detection and the next was ruled
 ineligible for confirmatory inference by its own gate. Clause 2 alone shows
