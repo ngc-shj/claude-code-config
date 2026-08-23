@@ -203,6 +203,37 @@ and must be recorded then, beside the template hashes above.
 The preflight asserts the last row rather than trusting it: it fails if any
 round-24 measurement artifact exists.
 
+### Re-verified on merged `main`
+
+The preflight was written on a branch, so it was re-run against the merged
+result rather than trusted from the branch it was authored on.
+
+| | |
+|---|---|
+| preflight merged as | **`88d16da9630e1b035b133141ede02897b671226e`** (#186), 2026-08-23T23:38:18+09:00 |
+| worktree at that commit | clean |
+| `preflight.py` | **PASSED**, 0 failures — all 20 checks, including the baseline ancestry, the two-file `diff -rq`, 18 pinned hashes and all 109 manifest rows |
+| `bats tests/` | **1236 pass, 0 fail** |
+| state | unchanged: reachability **NOT RUN**, review agents **0 of 72**, measurement rows **0** |
+
+Two baselines are recorded because they answer different questions. `9f4026c` is
+the **protocol** baseline — the design the round is registered against.
+`88d16da` is the **validated preflight tree**: the last measurement-affecting
+tree whose arms, manifest and briefs were checked. It is not the launch commit.
+**The actual launch HEAD is recorded with the reachability result**, and
+record-only descendants of `88d16da` — commits that add no measurement-affecting
+material — do not alter the arms, the manifest or the briefs, so they do not
+move the validated tree.
+
+### Known, not yet closed
+
+The manifest comparison in `preflight.py` tests row **membership** in both
+directions, not sequence equality, so a manifest with a duplicated row would
+still compare clean. The committed manifest has no duplicates — the row count
+is checked and every pinned row is verified against the file it names — so this
+is a hardening gap rather than a live hole, and it is recorded here instead of
+being fixed in the same commit that records a verification result.
+
 ## What happens next, in order
 
 1. This preflight commit is reviewed.
