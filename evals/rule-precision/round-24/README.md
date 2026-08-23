@@ -310,25 +310,77 @@ The three review files were written to `<scratchpad>/round-24-run/probe-*.md` an
 resolves transcripts from the manifest and never touches a review file — and
 nothing from these agents enters any metric.
 
-> **They are also gone.** The session scratchpad was cleared between sessions and
-> took them with it. Nothing measured depends on that: the gate was derived from
-> the transcripts, which survive under
-> `~/.claude/projects/<project>/<session>/subagents/`, are pinned by hash above,
-> and re-derive 3/3 on demand. The reviews themselves entered no metric by
-> design. They are recoverable in principle — each agent's `Write` call carries
-> its content in the transcript — but **recovering them means reading them**,
-> which is exactly what this gate forbids, so it is not done here. Recorded
-> because a record that quietly loses a named artifact is worse than one that
-> says where it went.
+> **They are also gone.** The host rebooted at **2026-08-24 00:28:06 JST** —
+> 24 minutes after the probe finished — and `/tmp` did not survive it, taking the
+> whole session scratchpad with it. (An earlier draft of this paragraph said
+> "cleared between sessions". That was wrong: the session id never changed. The
+> cause was the reboot.) Nothing measured depends on it: the gate was derived
+> from the transcripts, which live under `~/.claude/projects/…` — outside `/tmp`,
+> which is why they survive — are pinned by hash above, and re-derive 3/3 on
+> demand. The reviews themselves entered no metric by design. They are
+> recoverable in principle — each agent's `Write` call carries its content in the
+> transcript — but **recovering them means reading them**, which is exactly what
+> this gate forbids, so it is not done and they are left unread. Recorded because
+> a record that quietly loses a named artifact is worse than one that says where
+> it went.
 
-### Start condition for the measurement run
+### Where the measurement is written, and why not `/tmp`
 
-The measurement gets **its own directory**, `<scratchpad>/round-24-measurement/`
-— arms, rendered briefs and the 72 review outputs — so that no later step can
-reach a probe review through a glob it did not mean to widen. Extraction takes
-**the 72 registered output paths explicitly**; it never runs `*.md` over a shared
-tree. `preflight.py` enforces the directory half: it walks `--out` and fails if
-any `probe-*` file is found at any depth.
+**Forward operational amendment, 2026-08-24, before any review agent ran.**
+
+The measurement gets its own directory, and that directory is **outside `/tmp`
+and outside the repository**:
+
+```
+/home/noguchi/.local/state/claude-code-config/round-24-measurement/
+```
+
+Arms, rendered briefs and all 72 review outputs are written **there directly
+from the first batch** — not staged in `/tmp` and copied afterwards, because a
+copy-after-batch scheme leaves a window in which a reboot destroys the batch it
+has not yet saved.
+
+The reason is measured rather than hypothetical: the probe's three reviews were
+written to `/tmp` and a reboot 24 minutes later removed them. The probe survived
+that because its evidence is the transcripts, which live under
+`~/.claude/projects/…`; the round would not. Twelve batches spanning several
+five-hour windows is many hours of exposure to exactly the event that has
+already happened once during this round's preparation.
+
+The directory also isolates the probe: nothing named `probe-*` may exist under
+it, and extraction takes **the 72 registered output paths explicitly** — it never
+runs `*.md` over a shared tree. `preflight.py --out <dir>` enforces the first
+half by walking the tree and failing on any `probe-*` file at any depth;
+`measurement-outputs.tsv` is the registered list that enforces the second.
+
+`register-outputs.py` generates that list — 12 indices × 2 arms × 3 parts — and
+**refuses to write it if any of the 72 already exists**, so it can only ever be a
+reservation. The registry is committed before the first batch.
+
+### Pre-launch verification, against the persistent root
+
+Run after the amendment above and before any review agent:
+
+| check | result |
+|---|---|
+| `preflight.py --out <persistent root>` | **PASSED**, 0 failures — 21 checks including `no probe output under round-24-measurement` |
+| `reachability.py` replay from the pinned three transcripts | **3/3**, gate passes, no agent re-run |
+| arms `cat-W` / `cat-N` normalised tree hashes | `2f241a02…` / `641e83e2…` — unchanged from `preflight-manifest.tsv` |
+| template hashes | `1eacfac5…`, `66f9c6ac…`, `64d9827b…` — unchanged |
+| pinned material | 18 files, all 109 manifest rows match |
+| CLI / SDK / entrypoint / effort | 2.1.211 / 0.3.220 / `claude-vscode` / `high` — unchanged from the probe |
+| model pinned in `settings.json` | none, as at the probe |
+| kernel | `6.17.0-1031-nvidia` — **changed**, declared above |
+| 72 output paths | reserved in `measurement-outputs.tsv`, none exists |
+
+Everything that could change what the gate measured is unchanged. What changed
+is the kernel and the storage location, both declared.
+
+Rendered `brief-W.md` / `brief-N.md` hash differently from the preflight build
+because they name the catalogue directory, which moved with the root — that is
+the path-dependence recorded above, not a change of instrument. Their **template**
+hashes are identical, and `diff` over the two rendered briefs still returns only
+the catalogue-path lines.
 
 Also visible in the traces, and worth recording: no agent read anything under the
 repository except the fixture. The brief's prohibition held.
@@ -359,6 +411,33 @@ The reason to record any of it: round 17 wrote none of it down, which is what
 makes its null unidentifiable. Registering the intent in a form that could be
 checked is what turned "sub-agents inherit the session model" from an assumption
 into an observation that turned out to be half wrong.
+
+### Deviation to declare: the host kernel changed between the gate and the round
+
+The host rebooted at 2026-08-24 00:28:06 JST, between the reachability probe and
+the review batches, onto a **different kernel**:
+
+| | |
+|---|---|
+| kernel at the probe | `6.17.0-1021-nvidia` |
+| kernel for the round | `6.17.0-1031-nvidia` |
+
+Declared because this record's whole discipline is that unrecorded execution
+differences are what make a null unidentifiable, and "the machine was rebuilt
+mid-round" is exactly the kind of thing round 17 would not have noticed.
+
+**It is not a reason to re-run the probe.** The gate measures whether the
+Finding Floor's digest wiring reaches a reviewer, and the things that could
+change that answer — the catalogue, the arm construction, the brief templates
+and their rendered output, the CLI, the SDK, the model identifiers — are
+re-verified by hash before the round starts and are unchanged. A kernel version
+and a storage location are operational facts to declare, not instrument changes
+to re-measure. **If any of the hashed items had moved, the round would stop here
+instead** and the question would be re-opened as its own forward amendment.
+
+Re-running three agents now would also create an unregistered *second* gate with
+no rule for combining it with the first — a worse record than the one this
+paragraph replaces.
 
 ## What happens next, in order
 
