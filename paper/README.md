@@ -68,7 +68,8 @@ third* for the strongest positive result, and the thesis claims exactly that.
 The decision frame: a lexicographic adoption rule (zero Critical loss, ≥95%
 of current k=3 distinct real claims, false positives no worse, then and only
 then fewer raw tokens), the 95% floor as a stated margin (1.014 claims/review
-against control W at 20.28), θ=0 as the chosen planning assumption, and the
+against control W at 20.28 — round 22's W arm, three identical generalists,
+the proxy for "current"), θ=0 as the chosen planning assumption, and the
 20% bar as an investment threshold that decides nothing about adoption.
 *Source:* `../evals/rule-precision/GOAL.md` — including its recorded
 correction history (more corrections than the chapter's five selected
@@ -137,7 +138,8 @@ The three axes — **what** is read (routing-trim, oracle ceiling 9.92–10.89%)
 window), **who** selects (packet compiler, 12.19–14.60%, the union argument
 binding every selection rule; reviewer disagreement measured at 46/74 for the
 W holdout, 54/74 for the round, mean 18.2 per agent). Each refuted below the
-20% bar by causal replay over pinned transcripts. The amendment history is
+20% bar by causal replay over pinned transcripts — the round-22 generalist
+configuration; the shipped specialist split is untested by the replays. The amendment history is
 data, not embarrassment: verdicts crossed the bar twice in one protocol
 before settling, each move recorded with its direction.
 *Sources:* `../evals/rule-precision/routing-trim/`,

@@ -154,7 +154,7 @@ Each line exists because the previous one was blind to something:
 | Remedy Floor, wired | round 7 | MEASURED |
 | R54 extended obligations | rounds 6.5, 8 | MEASURED |
 | three specialised experts | precision S/G + marginal reviewer | MEASURED (F9) |
-| k=3 | round 13 curve; efficiency audits | MEASURED |
+| k=3 | round 13 curve; efficiency audits | choice based on a MEASURED curve; not a measured optimum |
 | full rows, not digest names | arm B null | MEASURED null |
 | no efficiency change | three refuted candidates | REFUTED |
 
