@@ -216,10 +216,14 @@ result rather than trusted from the branch it was authored on.
 | `bats tests/` | **1236 pass, 0 fail** |
 | state | unchanged: reachability **NOT RUN**, review agents **0 of 72**, measurement rows **0** |
 
-**This is the commit the round would start from.** `9f4026c` remains the
-*protocol* baseline — the design the round is registered against — and
-`88d16da` is the *preflight* baseline, the tree whose arms, manifest and briefs
-were checked. Both are recorded because they answer different questions.
+Two baselines are recorded because they answer different questions. `9f4026c` is
+the **protocol** baseline — the design the round is registered against.
+`88d16da` is the **validated preflight tree**: the last measurement-affecting
+tree whose arms, manifest and briefs were checked. It is not the launch commit.
+**The actual launch HEAD is recorded with the reachability result**, and
+record-only descendants of `88d16da` — commits that add no measurement-affecting
+material — do not alter the arms, the manifest or the briefs, so they do not
+move the validated tree.
 
 ### Known, not yet closed
 
