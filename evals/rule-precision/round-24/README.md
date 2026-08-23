@@ -195,7 +195,7 @@ and must be recorded then, beside the template hashes above.
 
 | | |
 |---|---|
-| reachability probe | **NOT RUN** |
+| reachability probe | **RUN — 3/3, gate passed** (see below); its 3 agents enter no metric |
 | review agents launched | **0 of 72** |
 | measurement rows on disk | **0** — no `findings.tsv`, `clusters.tsv`, `reviews.tsv`, `tiebreak.tsv`, `adjudications/` or `bridge/` |
 | preflight verdict | **PASSED**, 0 failures |
@@ -234,14 +234,74 @@ is checked and every pinned row is verified against the file it names — so thi
 is a hardening gap rather than a live hole, and it is recorded here instead of
 being fixed in the same commit that records a verification result.
 
+## Reachability gate — RUN, 3/3
+
+The one gate that runs before any arm. Three agents took the **W** catalogue over
+F10; their tool-call traces were read and nothing else.
+
+| | |
+|---|---|
+| launch HEAD | **`6bdcd8dda8535116e6fbd20ebc115ad0059ee845`** |
+| validated preflight tree | `88d16da`; the only difference to launch HEAD is this README, which touches no measurement-affecting material |
+| launched | 2026-08-23T23:56:35+09:00 (JST) |
+| agent window | 2026-08-23T14:56:53Z → 15:04:14Z |
+| agents | exactly 3, arm W, no per-call model override |
+| preflight at launch | PASSED, 0 failures, worktree clean |
+
+**Result: 3 of 3 executed the Finding Floor extraction.** All three also read the
+digest first, which is the weaker precondition. The gate's other two branches —
+1–2/3 and 0/3, both "stop and investigate the wiring" — did not fire.
+
+| agent | tool calls | digest read | Finding Floor extraction |
+|---|---|---|---|
+| `a3ed8e17…` | 9 | yes | **yes** |
+| `a95a6cd7…` | 12 | yes | **yes** |
+| `a7fef430…` | 9 | yes | **yes** |
+
+Counts are of tool calls in the trace, recorded because the protocol asks what
+the agents *did*. They are not finding counts.
+
+**How "only the traces" was enforced.** `round-24/reachability.py` parses each
+transcript and emits `tool_use` blocks only: assistant `text` blocks — where a
+review's findings would be — and `tool_result` blocks are dropped before
+anything is printed, and printed tool inputs are reduced to a path or a matched
+marker. There is no flag to disable that. The brief also ends "reply with the
+single word `DONE`", and all three did, so no finding reached the orchestrator's
+context by the return path either. The three review files were written to a
+scratchpad path and **have not been opened**. Nothing from these agents enters
+any metric.
+
+Also visible in the traces, and worth recording: no agent read anything under the
+repository except the fixture. The brief's prohibition held.
+
+### Deviation to declare: the sub-agent model identifier
+
+The registered intent was that every role runs on the session model with no
+per-call override. **No override was passed** — and the observed identifiers
+still differ:
+
+| | |
+|---|---|
+| orchestrator | `claude-opus-5[1m]` |
+| all three probe agents | **`claude-opus-5`** |
+
+The `[1m]` suffix is the 1M-context variant, a main-loop setting that sub-agents
+do not inherit. The intent held; the identifier is not the orchestrator's, and
+this record says so rather than absorbing it. **The reviewer-side model for this
+round is `claude-opus-5`** — which is the fact round 17 never wrote down, and the
+reason the intent was registered in a form that could be checked.
+
 ## What happens next, in order
 
-1. This preflight commit is reviewed.
-2. **Reachability gate only — 3 agents, arm W, explicitly approved.** Tool-call
-   traces are read; no finding, severity or count from those agents enters any
-   metric.
-3. **3/3** → the 72 review agents become a separate decision.
-   **1–2/3 or 0/3** → the round stops, per protocol, and the gate result is
-   published as a wiring result with no arm effect measured.
+1. ~~The preflight commit is reviewed.~~ **Done** — #186, re-verified on merged
+   `main`.
+2. ~~Reachability gate only, 3 agents, arm W, explicitly approved.~~ **Done —
+   3/3.** Recorded above with the launch HEAD, the timestamps, and the
+   sub-agent model identifier the round will carry.
+3. **The 72 review agents are a separate decision, and it has not been taken.**
+   The gate passing licenses nothing by itself: it says the manipulation
+   arrives, which is the precondition for the ablation meaning anything, not a
+   reason to spend ≈27.8M raw tokens on it.
 
-Nothing beyond step 1 has been authorised.
+**Nothing beyond step 2 has been authorised.** The next thing that happens is
+someone deciding whether to run the round, with this record in front of them.
