@@ -17,3 +17,9 @@ batch	review	arm	part	agent_id	model	tool_calls	tool_errors	output_git_blob_sha1
 3	3	W	a	aace2eb50fcd8b32b	claude-opus-5	13	0	a25f9639011beadc7ea0ae5138889f03e9051835
 3	3	W	b	a68de6c2216f474b3	claude-opus-5	7	0	77ee62aa40079e13faab08d0599d64fbbb9f9348
 3	3	W	c	a93cca4704cb00f9b	claude-opus-5	11	0	d0e88353b5b5062e567480b9d8afe41698f5dc60
+4	4	N	a	a21d4b87e4a4ab2f0	claude-opus-5	8	0	cb230bc216edd392e237081242b0f4fe9e49d28e
+4	4	N	b	a111992bb9ae0a7d1	claude-opus-5	10	0	7bc933d3208825433b15d9953ddebe5493abf33b
+4	4	N	c	adf1a163db32dadcb	claude-opus-5	11	0	8c68dccae53b0026acfdf2d95d76628fda18b219
+4	4	W	a	a9005523f22fb4438	claude-opus-5	13	0	f5a9ed3a4a86c04cd4d01a9e602318ca87a590af
+4	4	W	b	a51c7c953e12c800a	claude-opus-5	19	1	ca681f5ecb481181e5baf800c4885f0e648e28c7
+4	4	W	c	a289482cc997b9d74	claude-opus-5	10	0	4de7aa1a9aca12958832775f83d5cb418731d43c
