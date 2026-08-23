@@ -265,12 +265,28 @@ the agents *did*. They are not finding counts.
 **Issuing is not executing.** A `Bash` call that names the Finding Floor and then
 fails still puts the command in the trace, and the first draft of the analyser
 would have counted it. Each `tool_use` is now joined to the `tool_result`
-carrying its id, and only a result with `is_error` false counts — a call with no
-matching result counts as `no-result`, which is not an execution either.
+carrying its id, and the outcome is read as one of four states — only the first
+is an execution:
+
+| state | meaning |
+|---|---|
+| `ok` | the result carries `is_error` as the boolean **`false`** |
+| `ERROR` | the result carries `is_error` as the boolean `true` |
+| `no-flag` | a result exists and says nothing usable about success |
+| `no-result` | no result carries this id at all |
+
+`bool(block.get('is_error'))` was the second draft and reads a *missing* flag as
+`False`, i.e. as success. That is the one direction this gate must never be
+generous in: a transcript shape that omitted the field would have turned every
+issued call into an executed one. All three real results carry an explicit
+`false`, so the 3/3 is unchanged — but it is now 3/3 for the stated reason.
 
 **The three transcripts are named, not searched for.**
 `reachability-manifest.tsv` pins the session, the three agent ids and each
-transcript's sha1, and the analyser reads those three files and no others. The
+transcript's **git blob sha1** — `sha1("blob <len>\0" + bytes)`, what
+`git hash-object` prints, **not** the plain file digest `sha1sum` prints. The
+column is named `git_blob_sha1` so nobody has to infer that from a mismatch.
+The analyser reads those three files and no others. The
 first draft selected "every sub-agent after time T", which cannot survive the
 round: once 72 review agents have run in the same session, a timestamp no longer
 identifies the probe. Naming them also makes an edited transcript fail on the
@@ -289,10 +305,30 @@ to a path or a matched marker. There is no flag to disable that. The brief also
 ends "reply with the single word `DONE`", and all three did, so no finding
 reached the orchestrator's context by the return path either.
 
-The three review files sit at `<scratchpad>/round-24-run/probe-*.md` and **have
-not been opened**. They are outside the analyser's reach by construction — it
+The three review files were written to `<scratchpad>/round-24-run/probe-*.md` and
+**were never opened**. They are outside the analyser's reach by construction — it
 resolves transcripts from the manifest and never touches a review file — and
 nothing from these agents enters any metric.
+
+> **They are also gone.** The session scratchpad was cleared between sessions and
+> took them with it. Nothing measured depends on that: the gate was derived from
+> the transcripts, which survive under
+> `~/.claude/projects/<project>/<session>/subagents/`, are pinned by hash above,
+> and re-derive 3/3 on demand. The reviews themselves entered no metric by
+> design. They are recoverable in principle — each agent's `Write` call carries
+> its content in the transcript — but **recovering them means reading them**,
+> which is exactly what this gate forbids, so it is not done here. Recorded
+> because a record that quietly loses a named artifact is worse than one that
+> says where it went.
+
+### Start condition for the measurement run
+
+The measurement gets **its own directory**, `<scratchpad>/round-24-measurement/`
+— arms, rendered briefs and the 72 review outputs — so that no later step can
+reach a probe review through a glob it did not mean to widen. Extraction takes
+**the 72 registered output paths explicitly**; it never runs `*.md` over a shared
+tree. `preflight.py` enforces the directory half: it walks `--out` and fails if
+any `probe-*` file is found at any depth.
 
 Also visible in the traces, and worth recording: no agent read anything under the
 repository except the fixture. The brief's prohibition held.

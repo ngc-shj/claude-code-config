@@ -217,6 +217,17 @@ def main():
     check(not started, 'no measurement artifact in round-24/',
           f'found {started}' if started else '')
 
+    # The reachability probe's three reviews are unopened and stay that way. The
+    # measurement run gets its own directory so that no later step can reach
+    # them by a glob it did not mean to widen — extraction takes the 72
+    # registered output paths explicitly, never `*.md` over a shared tree.
+    strays = []
+    for dirpath, _, names in os.walk(out) if os.path.isdir(out) else ():
+        strays += [os.path.relpath(os.path.join(dirpath, n), out)
+                   for n in names if n.startswith('probe-')]
+    check(not strays, f'no probe output under {os.path.basename(out) or out}',
+          f'found {strays}' if strays else '')
+
     print('\n2. arms built from the committed catalogue and diff')
     for d in (cat_w, cat_n):
         shutil.rmtree(d, ignore_errors=True)

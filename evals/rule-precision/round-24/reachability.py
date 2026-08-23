@@ -16,16 +16,19 @@ path or a matched marker rather than echoed, and the only thing ever taken from
 a `tool_result` is its `is_error` flag. There is no flag to turn that off.
 
 **The three transcripts are named, not searched for.** `reachability-manifest.tsv`
-pins the session, the three agent ids and each transcript's sha1. A `--since`
-timestamp was the first draft and cannot survive the round: once 72 review agents
-have run in the same session, "everything after time T" no longer selects the
-probe. Naming them also makes the analysis re-runnable by anyone holding the
-transcripts, and makes an edited transcript fail rather than pass quietly.
+pins the session, the three agent ids and each transcript's **git blob sha1** —
+`sha1("blob <len>\\0" + bytes)`, what `git hash-object` prints, not the plain
+file digest `sha1sum` prints. A `--since` timestamp was the first draft and
+cannot survive the round: once 72 review agents have run in the same session,
+"everything after time T" no longer selects the probe. Naming them also makes the
+analysis re-runnable by anyone holding the transcripts, and makes an edited
+transcript fail rather than pass quietly.
 
 **Issuing the extraction is not executing it.** A `Bash` call that names the
 Finding Floor and then fails still put the command in the trace. Each `tool_use`
-is joined to the `tool_result` carrying its id, and only a result with
-`is_error` false counts.
+is joined to the `tool_result` carrying its id, and only an **explicit boolean
+`is_error: false`** counts — a missing or non-boolean flag is unknown, and
+unknown is not success.
 
 The gate, per the protocol's table:
 
@@ -99,11 +102,23 @@ def summarise(inp):
     return '<no path>'
 
 
-def trace(path):
-    """(tool, summary, ok) per tool_use, joined to its result by tool_use_id.
+MISSING = object()          # no tool_result carried this id
 
-    `ok` is None when no result carries that id — an issued call whose outcome
-    is unknown, which is not an execution either.
+
+def trace(path):
+    """(tool, summary, state) per tool_use, joined to its result by tool_use_id.
+
+    `state` is one of:
+
+      'ok'         the result carries `is_error` as the boolean False
+      'ERROR'      the result carries `is_error` as the boolean True
+      'no-flag'    a result exists but says nothing usable about success
+      'no-result'  no result carries this id at all
+
+    Only 'ok' is an execution. `bool(block.get('is_error'))` was the first
+    draft and reads a *missing* flag as success, which is the one direction
+    this gate must never be generous in: a transcript shape that omits the
+    field would have turned every issued call into an executed one.
     """
     calls, results = [], {}
     with open(path) as f:
@@ -124,17 +139,23 @@ def trace(path):
                                   summarise(block.get('input') or {})))
                 elif block.get('type') == 'tool_result':
                     # the flag, and nothing else from this block, ever
-                    results[block.get('tool_use_id')] = bool(block.get('is_error'))
+                    results[block.get('tool_use_id')] = block.get('is_error', MISSING)
     out = []
     for cid, name, s in calls:
-        ok = None if cid not in results else (not results[cid])
-        out.append((name, s, ok))
+        raw = results.get(cid, MISSING)
+        if raw is MISSING and cid not in results:
+            state = 'no-result'
+        elif not isinstance(raw, bool):
+            state = 'no-flag'
+        else:
+            state = 'ERROR' if raw else 'ok'
+        out.append((name, s, state))
     return out
 
 
 def executed(calls, marker):
-    """Did a call naming `marker` come back without an error?"""
-    return any(marker in s and ok for _, s, ok in calls)
+    """Did a call naming `marker` come back explicitly not-an-error?"""
+    return any(marker in s and state == 'ok' for _, s, state in calls)
 
 
 def main():
@@ -158,10 +179,10 @@ def main():
             print(f'agent {i}  {row["agent_id"][:8]}…  TRANSCRIPT MISSING')
             continue
         got = sha1(path)
-        if got != row['sha1']:
+        if got != row['git_blob_sha1']:
             FAILED.append(f'{row["agent_id"]}: transcript sha1 moved')
             print(f'agent {i}  {row["agent_id"][:8]}…  SHA1 MISMATCH  '
-                  f'pinned {row["sha1"][:12]}  found {got[:12]}')
+                  f'pinned {row["git_blob_sha1"][:12]}  found {got[:12]}')
             continue
 
         calls = trace(path)
@@ -171,8 +192,7 @@ def main():
         print(f'agent {i}  {row["agent_id"][:8]}…  {len(calls)} tool calls  '
               f'digest={"yes" if digest else "NO"}  '
               f'FindingFloor={"YES" if floor else "no"}')
-        for name, s, ok in calls:
-            state = 'ok' if ok else ('ERROR' if ok is False else 'no-result')
+        for name, s, state in calls:
             print(f'          {name:12s} {state:9s} {s}')
 
     print(f'\nFinding Floor extraction, issued AND returning without error: '

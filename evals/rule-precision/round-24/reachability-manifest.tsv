@@ -1,4 +1,4 @@
-session	agent_id	sha1
+session	agent_id	git_blob_sha1
 59c8e83b-cc8c-4aed-a0f5-b144265ae700	a3ed8e17ab309fbc6	ccc71c78361dbc34027b142c6cddbb66209e33ae
 59c8e83b-cc8c-4aed-a0f5-b144265ae700	a7fef430438c15f00	3ccb3c7adbf3995a49439eff4e4c804bfaeb9754
 59c8e83b-cc8c-4aed-a0f5-b144265ae700	a95a6cd7e4a7457b5	462e4641706700d4eaeadc86f412c3bd20b53f6d

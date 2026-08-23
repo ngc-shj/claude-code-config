@@ -30,7 +30,7 @@ teardown() {
   rm -rf "$SANDBOX"
 }
 
-# agent <id> <floor-result: ok|error|missing|absent>
+# agent <id> <floor-result: ok|error|missing|no-flag|absent>
 #
 # Writes a transcript that reads the digest, extracts the Finding Floor, and
 # writes a review. The review text is real prose so that a leak would be visible
@@ -64,6 +64,11 @@ if floor != 'absent':
         result('t2')
     elif floor == 'error':
         result('t2', is_error=True)
+    elif floor == 'no-flag':
+        # a result exists and simply does not say whether it failed
+        lines.append({'message': {'role': 'user', 'content': [
+            {'type': 'tool_result', 'tool_use_id': 't2',
+             'content': 'FILE BODY ' + SECRET}]}})
     # 'missing' writes no result at all
 assistant([{'type': 'tool_use', 'id': 't3', 'name': 'Write',
             'input': {'file_path': '/x/probe.md'}}])
@@ -77,7 +82,7 @@ PY
 }
 
 manifest() {
-  { printf 'session\tagent_id\tsha1\n'
+  { printf 'session\tagent_id\tgit_blob_sha1\n'
     for id in "$@"; do
       printf '%s\t%s\t%s\n' "$SESSION" "$id" \
         "$(git -C "$REPO" hash-object "$SUB/agent-$id.jsonl")"
@@ -115,6 +120,18 @@ probe() { run python3 "$SCRIPT" --manifest "$MAN" --transcript-dir "$SANDBOX"; }
   [[ "$output" == *"0/3"* ]]
   [[ "$output" == *"would measure nothing"* ]]
   [[ "$output" == *"no-result"* ]]
+}
+
+@test "a tool-result with no is_error flag is unknown, not success" {
+  # `bool(block.get("is_error"))` reads a missing flag as False, i.e. as
+  # success — the one direction this gate must never be generous in.
+  agent aaa1 no-flag; agent aaa2 no-flag; agent aaa3 no-flag
+  manifest aaa1 aaa2 aaa3
+  probe
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"0/3"* ]]
+  [[ "$output" == *"no-flag"* ]]
+  [[ "$output" == *"would measure nothing"* ]]
 }
 
 @test "no extraction issued at all is 0/3" {
@@ -180,7 +197,13 @@ rows = list(csv.DictReader(open('$R24/reachability-manifest.tsv', newline=''), d
 assert len(rows) == 3, len(rows)
 assert len({r['agent_id'] for r in rows}) == 3
 assert len({r['session'] for r in rows}) == 1
-assert all(len(r['sha1']) == 40 for r in rows)
+assert all(len(r['git_blob_sha1']) == 40 for r in rows)
+# git blob sha1, not the plain file digest: prove they differ for a real file
+import hashlib, subprocess
+b = open('$R24/reachability-manifest.tsv','rb').read()
+plain = hashlib.sha1(b).hexdigest()
+blob = hashlib.sha1(b'blob %d\\0' % len(b) + b).hexdigest()
+assert plain != blob
 print('ok')"
   [ "$status" -eq 0 ]
   [[ "$output" == "ok" ]]
