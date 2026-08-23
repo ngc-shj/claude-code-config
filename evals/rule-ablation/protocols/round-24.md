@@ -5,9 +5,11 @@
 
 > **The Finding Floor reduces Critical/Major `not-a-defect` findings on F10.**
 
-That is round 17's claim with two things changed and nothing else: the primary is
-the `not-a-defect` class rather than the composite round 17 pre-registered, and
-the design is fixed-n with no peek and an interval rule.
+That is round 17's claim with **two planned design changes**: the primary is the
+`not-a-defect` class rather than the composite round 17 pre-registered, and the
+design is fixed-n with no peek and an interval rule. Those are the changes this
+round chooses. They are not the only differences — §"What is deliberately the
+same" states the ones it cannot hold fixed.
 
 ## Why this is round 24, with 23 left vacant
 
@@ -44,10 +46,12 @@ contrast — W − W₂₃, the *clause 1* effect with clauses 2 and 3 present. 
 the floor against its absence. The two are different quantities and the write-up
 must not merge them.
 
-**REPLICATED remains out of reach and out of scope.** It needs a second fixture
-confirmed under this same rule and this same contrast. No spend in this round
-moves toward it, and the write-up may not describe this round as a step toward
-it.
+**REPLICATED is not reachable by this round alone and is not what the spend is
+for.** It needs two fixtures confirmed under this same rule and this same
+contrast; success here satisfies **one** of them, and the grade stays CONFIRMED
+(F10). The write-up may say that and no more — in particular it may not present
+the round as an instalment on a REPLICATED grade whose second fixture nobody has
+costed.
 
 ## Why the `not-a-defect` class, and why not the composite at a larger n
 
@@ -78,10 +82,13 @@ effect of 2.11):
 | 20 | 99% | 83% | 59% | 120 |
 | 25 | 100% | 91% | 69% | 150 |
 
-The composite reaches at n = 25 the margin the primary reaches at n = 12, for
-**twice the review agents**, and leaves the two-fixture shortfall exactly where
-it was. Grade names are not worth that. **The composite is pre-registered here as
-a SECONDARY, it fires no rule, and its grade is not promoted whatever it shows.**
+Under ×1.5 inflation the primary clears 90% power at n = 9 and sits at 99% at
+n = 12; the composite does not clear 90% until n = 25 — **twice the review
+agents** — and reaches 91% there against the primary's 99%. Under ×2 the gap is
+starker still: 90% for the primary at n = 12, 69% for the composite at n = 25.
+The composite buys less sensitivity for more money and leaves the two-fixture
+shortfall exactly where it was. **It is pre-registered here as a SECONDARY, it
+fires no rule, and its grade is not promoted whatever it shows.**
 
 ## Arms
 
@@ -120,14 +127,64 @@ e16783e5c8e12ddabafac108b7c905482aa3b8d4  rule-precision/round-17/adjudications/
 46d24719d7054ea52809891ccca6bc57ffc1dadf  rule-precision/round-17/briefs/adjudicate-brief.md
 ```
 
-Verified with `git hash-object <path>` before the first batch. The briefs are
-reused verbatim: a reworded brief is a different instrument.
+Verified with `git hash-object <path>` before the first batch. Paths in the hash
+blocks are relative to `evals/`; a bare `round-NN/…` elsewhere in this file is
+relative to `evals/rule-precision/`.
 
 `round-16/seed/inventory.tsv` supplies the 64 seed claims — generated
 independently before any arm ever ran, which is what makes F10's inventory
-stronger than F11's. `round-17/clusters.tsv` and the three sheets supply the 25
+stronger than F11's. `round-17/clusters.tsv` and the three sheets supply the 30
 claims round 17 added and their verdicts. `round-17/measure.py` is pinned because
 it encodes how they combine.
+
+### The briefs are re-rendered, not reused — and why that is not a loosening
+
+Every round in this series committed its briefs as **rendered artifacts**, with
+that session's scratchpad paths and that round's counts baked in. Round 17's are
+pinned above as the historical record and **cannot be run**: they point at
+`/tmp/.../e392c887-.../r17/`, which no longer exists; `adjudicate-brief.md` asks
+for 25 rows; and `brief-cluster.md` says "89 claims" in one place and "the 64
+existing claims" in two others. Round 22's carry the same shape with its own dead
+session id. "Reuse the briefs verbatim" is not something this protocol can ask
+for, and pretending otherwise would have surfaced on the first batch.
+
+What is reusable is the instrument — the role, the standing assumption, the
+clustering rule, the obligations, the output shape. That is separated from the
+per-run substitutions and pinned in its own right:
+
+```
+1eacfac5de5c37d067f566642626b78f44f2c183  rule-precision/round-24/briefs/review.template.md
+66f9c6acd23869299a624d3085fb46c400205a54  rule-precision/round-24/briefs/cluster.template.md
+64d9827be5206e1739a95f8bbdef6576493ab43f  rule-precision/adjudication-brief.md
+```
+
+The two round-24 templates are round 17's briefs with **only** paths and counts
+lifted into slots; `diff` against the pinned originals shows nothing else moved,
+and `brief-cluster.md`'s 89/64 disagreement is resolved to one slot rather than
+being re-decided. The adjudication brief was already a template in this
+repository and serves all three adjudication passes.
+
+`rule-precision/round-24/briefs/render.py` performs the substitution and **exits
+non-zero on any unsubstituted slot** — a brief still naming a template slot would
+send an agent to a path that does not exist. It renders five briefs, and prints
+the template hash and the rendered hash for each:
+
+| rendered | from | substitutions |
+|---|---|---|
+| `brief-W.md`, `brief-N.md` | `review.template.md` | `{FIXTURE} {REPO} {CAT}` |
+| `brief-cluster.md` | `cluster.template.md` | `{FIXTURE} {INVENTORY} {N_CLAIMS}` |
+| `adjudicate-new.md` | `adjudication-brief.md` | `{DIFF} {CLAIMS} {N}` |
+| `adjudicate-bridge.md` | `adjudication-brief.md` | `{DIFF} {CLAIMS} {N}` = 24 |
+| `adjudicate-tiebreak.md` | `adjudication-brief.md` | `{DIFF} {CLAIMS} {N}` |
+
+Both hash columns go in the round README beside the numbers they produced. The
+template hash is what this protocol pins as the instrument; the rendered hash is
+what the agents actually read.
+
+**W and N differ in the `{CAT}` value and nothing else** — `diff` over the two
+rendered briefs must return exactly the catalogue-path lines, checked before the
+first batch, so the arm variable stays in the catalogue where `arms.diff` puts it
+and never leaks into the brief.
 
 **How this round's findings meet that inventory**, unchanged from round 22's
 rules:
@@ -138,10 +195,28 @@ rules:
   byte for byte.** A reworded claim is a different claim and the recorded verdict
   stops applying to it. Checked mechanically at merge.
 - Only a finding matching no existing claim opens a new cluster, adjudicated
-  afterwards by the pinned standing brief.
+  afterwards by a rendered `adjudicate-new.md`.
 - **Reported, not assumed:** the count of new claims and their share of the
   primary, defined per arm as *C+M findings assigned to a claim new in this round
   and adjudicated `not-a-defect` ÷ that arm's total primary findings.*
+
+### When the three adjudicators disagree three ways
+
+Round 17's `measure.py` takes `Counter(...).most_common(1)[0][0]`, which breaks a
+three-way tie **by insertion order — that is, by adjudication sheet filename.**
+On the `wrong` / `not-a-defect` boundary that is a filename deciding a value the
+primary is made of, and it is not a degree of freedom this round can carry.
+
+> **A claim on which the three adjudicators return three different verdicts goes
+> to a fourth blind adjudicator**, under a rendered `adjudicate-tiebreak.md`,
+> judging those claims and nothing else. The verdict space has exactly three
+> members, so the fourth verdict necessarily duplicates one of the three and the
+> majority is then unique. One agent handles all such claims in one pass.
+
+`round-24/measure.py --splits` lists them, and the arm table **refuses to compute
+at all** while any split lacks a tie-break verdict. The count of splits is
+reported: a round that needed many is telling you something about the panel, and
+that belongs in the record next to the number it produced.
 
 The prediction — not a premise — is that new claims will be fewer than round
 17's, since F10's claim space has now been through two rounds.
@@ -233,6 +308,23 @@ exhaustion, tool error, truncated or unparseable output, an orchestration fault.
 - A shortfall in n is reported as a deviation with its cause. It is never a
   reason to add an index.
 
+### The design-integrity floor: n ≥ 11
+
+The rule above describes losing one index. Losing several is the case that needs
+deciding in advance, because a round that ran at half its registered size is not
+the round that was registered, whatever its interval says.
+
+> **n = 12 planned. At n = 11 the round is analysed exactly as registered. At
+> n ≤ 10 it is DESCRIPTIVE ONLY: the confirmatory rule is not applied, no grade
+> changes, and n is still not extended.**
+
+**This is not the observed-MDE gate removed above, and the distinction is the
+point.** That gate reads the *observed variance* and can convert a completed
+round into nothing on the strength of a sample fluctuation. This one reads the
+*executed sample size*, a fact about whether the registered design was carried
+out, known without looking at any arm value. `round-24/measure.py` enforces it
+and prints which indices are void.
+
 ## Metrics
 
 1. **PRIMARY (confirmatory)** — Critical/Major findings whose claim is
@@ -314,13 +406,16 @@ cutoff; the harness version; and the date.
 
 F10's diff and round 17's numbers are committed in this public repository, dated
 2026-08-09. If the executing model's stated training cutoff precedes that date,
-pretraining exposure to the fixture and to round 17's arm table is excluded, and
-the comparison is recorded as the evidence rather than asserted.
+**ordinary pretraining exposure to the fixture and to round 17's arm table is not
+supported by the stated timeline** — which is what a cutoff date can establish. It
+is not a proof of absence, and the wording stays at that strength; the comparison
+is recorded as the evidence rather than asserted.
 
 Two limits survive that check and are stated rather than resolved:
 
-- The check covers pretraining. A model that has encountered this repository by
-  another route is not excluded by a cutoff date.
+- The check covers ordinary pretraining, and only as far as a published cutoff
+  date is accurate. A model that has encountered this repository by another route
+  is not touched by it.
 - The review brief supplies the diff and the catalogue; it names neither the
   round, the arms, this repository, nor the existence of an experiment. That
   reduces the chance of recognition. It does not exclude it.
@@ -331,15 +426,33 @@ Round 17's verdicts were produced by a panel of that date; this round's new
 claims are adjudicated by a panel of today's. Without a bridge, the primary mixes
 two adjudication generations silently.
 
-- **3 agents, blind**, under the pinned `adjudicate-brief.md`, re-judge a
-  **stratified sample of 24 claims** from the frozen 94-claim inventory. The
-  strata are fixed here, not chosen later: **both 2 `wrong` claims, 15 of the 64
-  `real`, and 7 of the 28 `not-a-defect`** — the two large strata in proportion,
-  rounded to the nearest claim. Selection within a stratum is by sorting cluster
-  ids and taking every *k*-th, so the sample is reproducible from the pinned
-  files and no judgement enters it. Claims are shuffled, counts withheld, and the
-  original verdicts are not shown.
-- **Reported:** raw agreement with the frozen verdicts, overall and per class.
+- **3 agents, blind**, under a rendered `adjudicate-bridge.md`, re-judge a
+  **stratified sample of 24 claims** from the frozen 94-claim inventory: **both 2
+  `wrong`, 15 of the 64 `real`, 7 of the 28 `not-a-defect`.**
+- **The sample is not described, it is committed.** Within each stratum, cluster
+  ids are sorted lexicographically and the claims at 1-indexed positions
+  `ceil(j*N/m)` for `j = 1..m` are taken — no start offset to choose, no rounding
+  left open. For the 64 `real` that is positions 5, 9, 13, 18, 22, 26, 30, 35,
+  39, 43, 47, 52, 56, 60, 64. The panel sees one fixed shuffle, seed **24**, so
+  no claim's position carries information about its stratum.
+  `round-24/measure.py --bridge-sample` emits it from the frozen files alone and
+  it is committed as **`round-24/bridge-sample.tsv`** with this protocol, before
+  any round-24 output exists. `--bridge` reads that committed file rather than
+  re-deriving it, and **refuses to run if the two disagree**, so a later edit to
+  the sampler cannot silently move which claims the agreement is over.
+- **Three numbers are reported, because they answer different questions:**
+  1. **individual judgements** — all 72 (3 agents × 24 claims) against the frozen
+     verdict. This is inter-generation agreement at the judgement level.
+  2. **panel-majority verdicts** — the 24 majority verdicts against the frozen
+     verdict. This is agreement at the level the primary actually consumes.
+  3. **three-way splits** — how many of the 24 drew three different verdicts.
+     A panel that cannot agree with itself is a different finding from a panel
+     that agrees with itself and disagrees with 2026-08-08.
+
+  Agreement is also broken out per frozen class. The primary counts
+  `not-a-defect` and neither of the other two, so its boundaries — against
+  `wrong` and against `real` alike — are where panel drift would move the number,
+  and a single overall percentage would hide which boundary moved.
 - **The frozen verdicts are not rewritten.** They remain the measurement standard
   for the primary, exactly as the append-only rule requires.
 - **Storage is outside the measurement path.** `round-17/measure.py` reads
@@ -354,9 +467,9 @@ two adjudication generations silently.
 
 | PRIMARY, Welch 95% CI for W − N | reading |
 |---|---|
-| entirely below zero | **the Finding Floor's effect on F10 is CONFIRMED.** Round 17's direction and size held under a fixed-n, no-peek design |
+| entirely below zero | **the Finding Floor's effect on F10 is CONFIRMED.** Round 17's **direction** held under a fixed-n, no-peek design. The rule fires on any negative interval, so it says nothing about size: **the interval, not the rule, states the magnitude**, and it may sit well below round 17's 2.67 |
 | crosses zero | **no effect was detected under this design.** The interval, not the MDE, states which effect sizes remain compatible. This does **not** show the effect absent, does **not** establish it smaller than any value, and does **not** identify which of the two null causes above applies |
-| entirely above zero | recorded as observed, with no story attached |
+| entirely above zero | **an effect in the opposite direction on F10's primary** — the floor associated with *more* Critical/Major non-defect findings, not fewer. Reported with its interval as a confirmatory-strength observation against the hypothesis, **with no cause identified**: this design cannot say whether it is the floor, the execution environment, or the adjudication generation |
 
 No row licenses an equivalence claim. No row licenses deleting a clause — that
 would need a non-inferiority design with a declared margin, which this is not.
@@ -365,11 +478,17 @@ No row changes what ships.
 ## Publication, pre-registered
 
 **The result is published whichever way it comes out**, in the round README, in
-`../../README.md`'s ledger, and in `../../../paper/04-finding-floor.md`. A
-confirmed result upgrades the floor's grade to CONFIRMED (F10) on the
-`not-a-defect` metric; a null leaves the ledger's current wording — MEASURED with
-qualified replication evidence — standing, with this round's interval added
-beside it and the non-identifiability recorded.
+`../../README.md`'s ledger, and in `../../../paper/04-finding-floor.md`, in all
+three outcomes:
+
+| outcome | what the ledger says afterwards |
+|---|---|
+| CI below zero | the floor's effect on the `not-a-defect` metric becomes **CONFIRMED (F10)**, with the interval quoted and the size left to it |
+| CI crosses zero | the current wording — MEASURED with qualified replication evidence — **stands unchanged**, with this round's interval added beside it and the non-identifiability recorded |
+| CI above zero | the current wording stands, **and the reversed interval is recorded in the same entry** as evidence that did not go the hypothesis's way. It is not filed as a null and not omitted |
+
+The third row exists because it is the one a measurement line is most tempted to
+lose.
 
 Publishing only on success is the selection bias this line exists to avoid, and
 committing to it before the run is the only time the commitment is worth
@@ -389,8 +508,9 @@ means for the corresponding roles.
 | clustering, one per changed file — F10 has 8 | 8 | 3.71M | 1.49M |
 | merge and verbatim-claim check | 2 | 1.14M | 0.61M |
 | adjudication, new claims only | 3 | 0.53M | 0.29M |
+| tie-break, all three-way splits in one pass | ≤1 | 0.18M | 0.10M |
 | bridge re-adjudication | 3 | 0.53M | 0.29M |
-| **total** | **91** | **≈34.9M** | **≈25.3M** |
+| **total** | **≤92** | **≈35.0M** | **≈25.4M** |
 
 **The headline 27.8M is review agents alone.** The round costs ≈34.9M raw.
 Ancillary per-agent means are borrowed across rounds and are estimates; the
@@ -400,6 +520,30 @@ Reviews are batched **one review index at a time** (2 arms × 3 parts = 6),
 confirmed landed before the next, across twelve batches spanning several
 five-hour windows. `../../rule-precision/preflight.py` runs before every batch
 and the round pauses rather than losing agents to a full window.
+
+## The analysis is committed with the protocol, not written afterwards
+
+`rule-precision/round-24/measure.py` exists before the round does, and it holds
+every decision that could otherwise be taken once the numbers are visible:
+
+| flag | what it fixes |
+|---|---|
+| `--bridge-sample` | the 24 bridge claims, from the frozen files alone. Runs today; its output is committed as `bridge-sample.tsv` |
+| `--splits` | which claims drew three different verdicts and must go to the tie-break pass |
+| `--bridge` | the three agreement numbers, against the committed sample, refusing a sample that has moved |
+| (none) | the arm table, the Welch interval, the confirmatory rule, and the n ≥ 11 floor |
+
+Written before the data, it can still be checked before the data: each branch is
+exercised on synthetic input — the rule firing, two mutations that make it
+*not* fire, the split blocking the arm table until a tie-break exists, the n ≤ 10
+floor, and a tampered `bridge-sample.tsv` being refused. A gate nobody has seen
+fire reports PASS by never running.
+
+One edge case is decided here rather than on the day: if **both arms are
+constant** the Welch interval collapses to a point, which is an artifact of the
+sample and not a measurement of infinite precision. `measure.py` returns NaN
+degrees of freedom and the round is reported descriptively rather than firing on
+a zero-width interval.
 
 ## Working rules carried in
 
@@ -412,6 +556,9 @@ and the round pauses rather than losing agents to a full window.
   `../../rule-precision/split_clusters.py`, which reads the changed-file set from
   the fixture rather than from an extension list.
 - Existing claims reused verbatim, checked mechanically at merge.
+- Briefs rendered by `../../rule-precision/round-24/briefs/render.py`, never
+  hand-edited, with both hash columns recorded. `diff` over the rendered
+  `brief-W.md` and `brief-N.md` must return only the catalogue-path lines.
 - **Changed from round 22:** sub-agent models are not *varied* within the round,
   and the identifier in force is **recorded**. Round 22's rule was "sub-agent
   models are not changed", which silently assumed a fact no round wrote down.
