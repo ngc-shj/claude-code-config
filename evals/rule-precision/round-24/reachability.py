@@ -8,12 +8,24 @@ probe agents *did*, not at what they *found* — and the protocol says so:
     Only the traces are inspected. No finding, severity, or count from these
     three agents is read, and none of them enters any metric.
 
-A promise is not a mechanism. This script parses each agent's transcript and
-emits `tool_use` blocks only. Assistant `text` blocks — where a review's
-findings live — and `tool_result` blocks — where the file contents the agent
-read come back — are dropped before anything is printed, and the tool inputs
-that are printed are reduced to a path or a matched marker rather than echoed.
-There is no flag to turn that off.
+A promise is not a mechanism. This script emits `tool_use` blocks only.
+Assistant `text` and `thinking` blocks — where a review's findings live — and
+`tool_result` content — where the bytes an agent read come back — are dropped
+before anything is printed. The tool inputs that are printed are reduced to a
+path or a matched marker rather than echoed, and the only thing ever taken from
+a `tool_result` is its `is_error` flag. There is no flag to turn that off.
+
+**The three transcripts are named, not searched for.** `reachability-manifest.tsv`
+pins the session, the three agent ids and each transcript's sha1. A `--since`
+timestamp was the first draft and cannot survive the round: once 72 review agents
+have run in the same session, "everything after time T" no longer selects the
+probe. Naming them also makes the analysis re-runnable by anyone holding the
+transcripts, and makes an edited transcript fail rather than pass quietly.
+
+**Issuing the extraction is not executing it.** A `Bash` call that names the
+Finding Floor and then fails still put the command in the trace. Each `tool_use`
+is joined to the `tool_result` carrying its id, and only a result with
+`is_error` false counts.
 
 The gate, per the protocol's table:
 
@@ -27,46 +39,51 @@ the one that is zero when the wiring is dead. Reading the digest at all is
 reported beside it as the weaker precondition.
 
 Usage:
-  round-24/reachability.py --session <uuid> [--since <ISO8601>]
+  round-24/reachability.py [--manifest <path>] [--transcript-dir <dir>]
 """
 import argparse
-import glob
+import csv
+import hashlib
 import json
 import os
 import sys
 
+HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT = '-home-noguchi-ghq-github-com-ngc-shj-claude-code-config'
 ROOT = os.path.expanduser(f'~/.claude/projects/{PROJECT}')
+MANIFEST = os.path.join(HERE, 'reachability-manifest.tsv')
 
 DIGEST = 'common-rules.digest.md'
 FLOOR = '### Finding Floor'          # the marker the digest's awk anchors on
 GATE_N = 3
 
+FAILED = []
 
-def tool_calls(path):
-    """Every tool_use in one transcript, as (tool, one-line input summary).
 
-    Nothing else leaves this function. `text` blocks and `tool_result` blocks
-    are not returned, not logged, and not counted.
-    """
-    out = []
-    with open(path) as f:
-        for line in f:
-            try:
-                rec = json.loads(line)
-            except ValueError:
-                continue
-            msg = rec.get('message') or {}
-            if msg.get('role') != 'assistant':
-                continue
-            content = msg.get('content')
-            if not isinstance(content, list):
-                continue
-            for block in content:
-                if not isinstance(block, dict) or block.get('type') != 'tool_use':
-                    continue
-                out.append((block.get('name', '?'), summarise(block.get('input') or {})))
-    return out
+def die(msg):
+    sys.exit(f'reachability: {msg}')
+
+
+def sha1(path):
+    with open(path, 'rb') as f:
+        body = f.read()
+    return hashlib.sha1(b'blob %d\0' % len(body) + body).hexdigest()
+
+
+def read_manifest(path):
+    if not os.path.exists(path):
+        die(f'{os.path.relpath(path, HERE)} is missing — the probe transcripts '
+            f'are named, not searched for')
+    with open(path, newline='') as f:
+        rows = [r for r in csv.DictReader(f, delimiter='\t')]
+    if len(rows) != GATE_N:
+        die(f'{len(rows)} agents in the manifest, expected exactly {GATE_N}')
+    sessions = {r['session'] for r in rows}
+    if len(sessions) != 1:
+        die(f'the probe must be one session; manifest names {sorted(sessions)}')
+    if len({r['agent_id'] for r in rows}) != GATE_N:
+        die('duplicate agent_id in the manifest')
+    return rows
 
 
 def summarise(inp):
@@ -82,51 +99,92 @@ def summarise(inp):
     return '<no path>'
 
 
-def verdict(calls):
-    floor = any(FLOOR in s for _, s in calls)
-    digest = any(DIGEST in s for _, s in calls)
-    return floor, digest
+def trace(path):
+    """(tool, summary, ok) per tool_use, joined to its result by tool_use_id.
+
+    `ok` is None when no result carries that id — an issued call whose outcome
+    is unknown, which is not an execution either.
+    """
+    calls, results = [], {}
+    with open(path) as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            msg = rec.get('message') or {}
+            content = msg.get('content')
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get('type') == 'tool_use':
+                    calls.append((block.get('id'), block.get('name', '?'),
+                                  summarise(block.get('input') or {})))
+                elif block.get('type') == 'tool_result':
+                    # the flag, and nothing else from this block, ever
+                    results[block.get('tool_use_id')] = bool(block.get('is_error'))
+    out = []
+    for cid, name, s in calls:
+        ok = None if cid not in results else (not results[cid])
+        out.append((name, s, ok))
+    return out
+
+
+def executed(calls, marker):
+    """Did a call naming `marker` come back without an error?"""
+    return any(marker in s and ok for _, s, ok in calls)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--session', required=True)
-    ap.add_argument('--since', default='', help='ISO timestamp; ignore older files')
+    ap.add_argument('--manifest', default=MANIFEST)
+    ap.add_argument('--transcript-dir', default=ROOT,
+                    help='project transcript root; the manifest supplies the session')
     a = ap.parse_args()
-
-    pattern = os.path.join(ROOT, a.session, 'subagents', '*.jsonl')
-    paths = sorted(glob.glob(pattern), key=os.path.getmtime)
-    if a.since:
-        import datetime
-        cut = datetime.datetime.fromisoformat(a.since).timestamp()
-        paths = [p for p in paths if os.path.getmtime(p) >= cut]
-    if not paths:
-        sys.exit(f'no subagent transcripts under {os.path.dirname(pattern)}')
+    rows = read_manifest(a.manifest)
 
     print('REACHABILITY PROBE — tool calls only. No finding, severity, count or\n'
-          'review text is read by this script or printed by it.\n')
-    executed = 0
-    for i, path in enumerate(paths, 1):
-        calls = tool_calls(path)
-        floor, digest = verdict(calls)
-        executed += floor
-        print(f'agent {i}  {os.path.basename(path)[:8]}…  {len(calls)} tool calls  '
+          'review text is read by this script or printed by it. Only the three\n'
+          'agents named in the manifest are analysed.\n')
+
+    n_ok = 0
+    for i, row in enumerate(rows, 1):
+        path = os.path.join(a.transcript_dir, row['session'], 'subagents',
+                            f'agent-{row["agent_id"]}.jsonl')
+        if not os.path.exists(path):
+            FAILED.append(f'{row["agent_id"]}: transcript missing')
+            print(f'agent {i}  {row["agent_id"][:8]}…  TRANSCRIPT MISSING')
+            continue
+        got = sha1(path)
+        if got != row['sha1']:
+            FAILED.append(f'{row["agent_id"]}: transcript sha1 moved')
+            print(f'agent {i}  {row["agent_id"][:8]}…  SHA1 MISMATCH  '
+                  f'pinned {row["sha1"][:12]}  found {got[:12]}')
+            continue
+
+        calls = trace(path)
+        floor = executed(calls, FLOOR)
+        digest = executed(calls, DIGEST)
+        n_ok += floor
+        print(f'agent {i}  {row["agent_id"][:8]}…  {len(calls)} tool calls  '
               f'digest={"yes" if digest else "NO"}  '
               f'FindingFloor={"YES" if floor else "no"}')
-        for name, s in calls:
-            print(f'          {name:12s} {s}')
+        for name, s, ok in calls:
+            state = 'ok' if ok else ('ERROR' if ok is False else 'no-result')
+            print(f'          {name:12s} {state:9s} {s}')
 
-    n = len(paths)
-    print(f'\nFinding Floor extraction: {executed}/{n}')
-    if n != GATE_N:
-        print(f'*** {n} transcripts, expected {GATE_N}. The gate is defined over '
-              f'exactly {GATE_N} probe agents.')
+    print(f'\nFinding Floor extraction, issued AND returning without error: '
+          f'{n_ok}/{len(rows)}')
+    if FAILED:
+        print('*** ' + '\n*** '.join(FAILED))
         sys.exit(2)
-    if executed == GATE_N:
+    if n_ok == GATE_N:
         print('GATE: 3/3 — proceed. The manipulation arrives.')
         sys.exit(0)
-    print(f'GATE: {executed}/3 — STOP.' + (
-        ' W is an uncontrolled mixture; investigate the wiring.' if executed
+    print(f'GATE: {n_ok}/3 — STOP.' + (
+        ' W is an uncontrolled mixture; investigate the wiring.' if n_ok
         else ' Wiring investigation; the ablation would measure nothing.'))
     sys.exit(1)
 

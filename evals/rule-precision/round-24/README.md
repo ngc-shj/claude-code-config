@@ -248,28 +248,51 @@ F10; their tool-call traces were read and nothing else.
 | agents | exactly 3, arm W, no per-call model override |
 | preflight at launch | PASSED, 0 failures, worktree clean |
 
-**Result: 3 of 3 executed the Finding Floor extraction.** All three also read the
-digest first, which is the weaker precondition. The gate's other two branches —
-1–2/3 and 0/3, both "stop and investigate the wiring" — did not fire.
+**Result: 3 of 3 executed the Finding Floor extraction** — issued the call *and*
+had it return without error. All three also read the digest first, which is the
+weaker precondition. The gate's other two branches — 1–2/3 and 0/3, both "stop
+and investigate the wiring" — did not fire.
 
-| agent | tool calls | digest read | Finding Floor extraction |
-|---|---|---|---|
-| `a3ed8e17…` | 9 | yes | **yes** |
-| `a95a6cd7…` | 12 | yes | **yes** |
-| `a7fef430…` | 9 | yes | **yes** |
+| agent | tool calls | all returned ok | digest read | Finding Floor extraction |
+|---|---|---|---|---|
+| `a3ed8e17…` | 9 | yes | yes | **yes** |
+| `a95a6cd7…` | 12 | yes | yes | **yes** |
+| `a7fef430…` | 9 | yes | yes | **yes** |
 
 Counts are of tool calls in the trace, recorded because the protocol asks what
 the agents *did*. They are not finding counts.
 
-**How "only the traces" was enforced.** `round-24/reachability.py` parses each
-transcript and emits `tool_use` blocks only: assistant `text` blocks — where a
-review's findings would be — and `tool_result` blocks are dropped before
-anything is printed, and printed tool inputs are reduced to a path or a matched
-marker. There is no flag to disable that. The brief also ends "reply with the
-single word `DONE`", and all three did, so no finding reached the orchestrator's
-context by the return path either. The three review files were written to a
-scratchpad path and **have not been opened**. Nothing from these agents enters
-any metric.
+**Issuing is not executing.** A `Bash` call that names the Finding Floor and then
+fails still puts the command in the trace, and the first draft of the analyser
+would have counted it. Each `tool_use` is now joined to the `tool_result`
+carrying its id, and only a result with `is_error` false counts — a call with no
+matching result counts as `no-result`, which is not an execution either.
+
+**The three transcripts are named, not searched for.**
+`reachability-manifest.tsv` pins the session, the three agent ids and each
+transcript's sha1, and the analyser reads those three files and no others. The
+first draft selected "every sub-agent after time T", which cannot survive the
+round: once 72 review agents have run in the same session, a timestamp no longer
+identifies the probe. Naming them also makes an edited transcript fail on the
+hash rather than pass quietly, and makes the gate replayable by anyone holding
+the files:
+
+```bash
+evals/rule-precision/round-24/reachability.py    # re-derives 3/3 from the pinned three
+```
+
+**How "only the traces" is enforced.** The analyser emits `tool_use` blocks only:
+assistant `text` and `thinking` blocks — where a review's findings live — and
+`tool_result` *content* are dropped before anything is printed; the only thing
+ever taken from a result is its `is_error` flag. Printed tool inputs are reduced
+to a path or a matched marker. There is no flag to disable that. The brief also
+ends "reply with the single word `DONE`", and all three did, so no finding
+reached the orchestrator's context by the return path either.
+
+The three review files sit at `<scratchpad>/round-24-run/probe-*.md` and **have
+not been opened**. They are outside the analyser's reach by construction — it
+resolves transcripts from the manifest and never touches a review file — and
+nothing from these agents enters any metric.
 
 Also visible in the traces, and worth recording: no agent read anything under the
 repository except the fixture. The brief's prohibition held.
@@ -287,9 +310,19 @@ still differ:
 
 The `[1m]` suffix is the 1M-context variant, a main-loop setting that sub-agents
 do not inherit. The intent held; the identifier is not the orchestrator's, and
-this record says so rather than absorbing it. **The reviewer-side model for this
-round is `claude-opus-5`** — which is the fact round 17 never wrote down, and the
-reason the intent was registered in a form that could be checked.
+this record says so rather than absorbing it.
+
+**What this establishes is the probe-side model, and only that.** `claude-opus-5`
+is what these three agents ran on. It is a strong prediction for the review,
+clustering and adjudication roles — same harness, same absence of override — and
+it is **not** a measurement of them. Each role's identifier is recorded from its
+own agents' records when that role runs, and a difference from this one is a
+deviation to declare at that point.
+
+The reason to record any of it: round 17 wrote none of it down, which is what
+makes its null unidentifiable. Registering the intent in a form that could be
+checked is what turned "sub-agents inherit the session model" from an assumption
+into an observation that turned out to be half wrong.
 
 ## What happens next, in order
 
