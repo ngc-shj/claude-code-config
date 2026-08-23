@@ -15,8 +15,9 @@ questions and neither did the other's job:
   inference separated from power. This family identified the Finding Floor's
   effect and bounded what remained open (Chapters 3–4).
 - **refutation** — causal replay over pinned session transcripts. This family
-  refuted three optimization candidates before any forward test (Chapter 6).
-  It identified nothing and cannot: its verdicts are bounds, not effects.
+  replay-refuted three optimization candidates before any forward test
+  (Chapter 6), under the trace-conditional model §7.2 states. It identified
+  nothing and cannot: its verdicts are bounds, not effects.
 
 A **gate**, throughout, is a decision procedure that can only **terminate a
 line of work or permit the next step** — never confirm, never ship. The

@@ -26,8 +26,9 @@ manufacture the same class of defect at chapter scale.
 > cost.
 
 The two method families are deliberately not merged: the first identified and
-bounded the Finding Floor, the second refuted the three efficiency candidates,
-and neither did the other's job.
+bounded the Finding Floor, the second replay-refuted the three efficiency
+candidates under the trace-conditional model, and neither did the other's
+job.
 
 The earlier phrasing "identify effective interventions" is deliberately not
 used: the ledger's grades support *measured on one fixture, with qualified
@@ -108,7 +109,7 @@ difference, identical point estimates beside MDE 2.86).
 `../evals/rule-precision/measure.py` and
 `../evals/rule-precision/round-15/measure.py` re-runs.
 
-### 4. The Finding Floor: a replicated intervention and its open edge
+### 4. The Finding Floor: a measured intervention with qualified replication evidence, and its open edge
 
 Diagnosis re-run: 127 of 574 findings non-real, 2 misread — the failure mode
 is ungrounded assertion, not misreading. Effect: 1.62 vs 4.12 (F9), 2.44 vs
@@ -170,8 +171,8 @@ a rule for anything this monograph's claims come to rest on.
 
 ### 8. Limits, and what completion as a doctoral claim requires
 
-Fixture authorship bias and its direction; panel judgement is not ground
-truth; three fixtures behind precision, one behind efficiency; one model
+Fixture authorship bias, its direction indeterminate in principle; panel
+judgement is not ground truth; three fixtures behind precision, one behind efficiency; one model
 epoch; whether reviewer disagreement is F11's property or reviewing's is
 unknown. **Open obligations:** a related-work novelty check, and prospective
 validation of the gate method — which is method validation, distinct from the

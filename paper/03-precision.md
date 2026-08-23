@@ -91,7 +91,8 @@ the eight pre-registered reviews ran, both deviations recorded).
 
 Five conclusions rested on F9 alone, so round 16 bought F10: authored by an
 agent told the domain, the file shape and the line budget and **nothing about
-the arms** — the authorship bias running the other way for once — with a
+the arms** — removing the arm-aligned authorship component, removal rather
+than reversal — with a
 361-entry seed inventory panel-reduced to 54 adjudicated real claims
 (MEASURED; `../evals/rule-precision/round-16/`). The round's substantive
 question was never answered: its pre-registered manipulation check — replies

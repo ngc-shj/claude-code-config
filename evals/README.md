@@ -36,8 +36,9 @@ Each line exists because the previous one was blind to something:
 4. The three audits asked what the rounds vary by, what they **cost**, and
    whether another one would change any decision.
 5. `rule-precision/{routing-trim,request-batching,packet-compiler}/` asked
-   whether the cost can come down without the quality. **These three interventions
-   could not**; whether other directions exist is not established.
+   whether the cost can come down without the quality. **These three
+   interventions were replay-refuted under the trace-conditional model**;
+   whether other directions exist is not established.
    (`rule-precision/GOAL.md` is the canonical statement of the goal, its decision
    rule, the closure, and the resume conditions.)
 

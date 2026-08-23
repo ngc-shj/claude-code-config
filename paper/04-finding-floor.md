@@ -1,12 +1,13 @@
-# 4. The Finding Floor: a replicated intervention and its open edge
+# 4. The Finding Floor: a measured intervention with qualified replication evidence, and its open edge
 
 The Finding Floor is three clauses inherited by every finding a reviewer
 writes, whichever rule routed it there: point at the evidence inside the
 change; treat a requirement you cannot ground as a question, ranked Minor;
 never state a preference as a defect
 (`../skills/triangulate/common-rules.md`, "Finding Floor"). It is the series'
-one intervention with a replicated effect, and this chapter follows it through
-its full arc: the diagnosis it answers, the effect measured twice, the
+one intervention whose effect repeated on a second fixture — at qualified
+strength, short of the ledger's REPLICATED bar — and this chapter follows it
+through its full arc: the diagnosis it answers, the effect measured twice, the
 decomposition into clauses, the replication attempt that did not resolve, and
 the recorded decision to stop measuring. Its grades, up front and in the
 ledger's vocabulary (`../evals/README.md`): the effect on Critical/Major
