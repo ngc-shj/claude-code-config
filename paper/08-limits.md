@@ -26,10 +26,10 @@ not been done.
   found, not of the fixture.
 - **Evidence per line, counted.** Eight fixtures behind the ablation
   conclusions; three (F9, F10, F11) behind precision; **one** (F11, one
-  round, 150 transcripts) behind every replay figure. Two of the strongest
-  results — the Finding Floor's effect and clause 1's confirmation — have
-  exactly one fixture each beyond their origin, and the clause-1 transfer is
-  OPEN.
+  round, 150 transcripts) behind every replay figure. The two strongest
+  results are thin at the edge: the Finding Floor's effect has exactly one
+  fixture beyond its origin, and clause 1's confirmation has **none** — its
+  one transfer attempt stands OPEN.
 - **One model epoch, one repository, one review skill.** Every number in the
   monograph. Whether the reviewer disagreement that killed the packet
   compiler is a property of F11, of this catalogue, of this model, or of

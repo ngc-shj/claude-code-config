@@ -3,7 +3,7 @@
 **Working title:** *Evidence-Calibrated Improvement of LLM Code Review: Rule
 Ablation, Claim-Level Quality, and Cheap Falsification of Token Optimizations*
 
-**Status:** chapters 7 (`07-method.md`), 6 (`06-falsification.md`) and 4 (`04-finding-floor.md`) drafted; chapters 1–3, 5 and 8 undrafted. This file fixes the thesis, the
+**Status:** all eight chapters drafted (`01`–`08`); chapters 7 and 6 merged after review, 4 under review, 1–3, 5 and 8 awaiting review. This file fixes the thesis, the
 chapter-to-evidence mapping, and the writing rules **before prose exists**, for
 the same reason every protocol in `../evals/` fixed its rules before its
 numbers: the ledger (`../evals/README.md`) took two review rounds to purge ten
@@ -50,9 +50,14 @@ third* for the strongest positive result, and the thesis claims exactly that.
    final-context. The 19M-vs-86M error is the standing example.
 4. **Every empirical sentence carries its grade** — REPLICATED / CONFIRMED /
    MEASURED / REFUTED / OPEN — or cites a ledger entry that does.
-5. **One chapter per PR**, reviewed like everything else here. The ledger is
-   the source of figures; chapters cite it and the round documents, and a
-   chapter that needs a number the ledger lacks adds it to the ledger first.
+5. **Chapters are reviewed like everything else here.** Rule as first written:
+   one chapter per PR. Amended 2026-08-23, at the owner's direction, once the
+   vocabulary and rule set had stabilised over chapters 7, 6 and 4: the
+   remaining chapters (2, 3, 5, 1, 8) are drafted as one commit each on a
+   single branch and reviewed as a batch — reviewer round-trips, not drafting,
+   being the scarce resource. The ledger remains the source of figures;
+   chapters cite it and the round documents, and a chapter that needs a number
+   the ledger lacks adds it to the ledger first.
 
 ## Chapters, each pinned to its evidence
 
