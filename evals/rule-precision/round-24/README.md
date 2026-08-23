@@ -1,0 +1,216 @@
+# Round 24 — preflight record
+
+**No agent has been launched. No measurement exists.** This file records the
+state the round would start from, written before the reachability probe and
+before any review, so that what was true at the starting line is on record
+rather than reconstructed afterwards.
+
+Protocol: `../../rule-ablation/protocols/round-24.md`.
+Reproduce everything below with:
+
+```bash
+evals/rule-precision/round-24/preflight.py --out <dir>
+```
+
+A plain run **compares every row of `preflight-manifest.tsv` against a fresh
+build** and fails on any difference; it does not merely print hashes. `--write`
+creates the manifest and **refuses to replace one that exists** — moving the
+registered starting line takes `--re-register`, which says so loudly and is
+never routine.
+
+## Baseline
+
+| | |
+|---|---|
+| protocol baseline commit | **`9f4026c11d6630cc451f0c479de0f906043c353a`** |
+| | *Pre-register round 24: the clean F10 confirmation, with its analysis committed first* (#185), squash-merged 2026-08-23T22:57:35+09:00 |
+| | Held as the constant `PROTOCOL_BASELINE` in `preflight.py`, **not** read from `HEAD` or `origin/main` — a baseline taken from the current branch silently becomes whatever was committed last. The preflight asserts it is an ancestor of `HEAD`. |
+| preflight run | **2026-08-23T23:09:51+09:00**, timezone **JST (UTC+09:00)** |
+| host | Linux 6.17.0-1021-nvidia, Python 3.14.6 |
+| repository | `ngc-shj/claude-code-config`, branch `main` |
+
+## Execution environment
+
+The protocol requires this recorded before the first batch, because round 17
+recorded none of it and that is what makes a null unidentifiable. Each row gives
+the most specific string obtainable **and its provenance**; where a value cannot
+be obtained it says so instead of estimating.
+
+| | value | source |
+|---|---|---|
+| orchestrator model id | **`claude-opus-5[1m]`** | session environment, "The exact model ID is …" |
+| orchestrator model name | Opus 5 (1M context) | same |
+| model snapshot / build date | **NOT OBTAINABLE** — no dated snapshot identifier is exposed to the session. Not estimated. | — |
+| training cutoff | **May 2026** | session environment, "Assistant knowledge cutoff is May 2026". Month granularity is all that is published; no day is inferred. |
+| reviewer / clustering / adjudicator model | **NOT YET OBSERVED.** No round-24 agent has run. Sub-agents inherit the session model unless a call overrides it, and no round-24 call exists to inspect. | — |
+| system-prompt fingerprint | **NOT OBTAINABLE** — the system prompt is not readable as a file from the session, so no hash can be taken. Not estimated. | — |
+| CLI | Claude Code **2.1.211** | `claude --version` |
+| Agent SDK | **0.3.220** | `CLAUDE_AGENT_SDK_VERSION` |
+| entrypoint | `claude-vscode` | `CLAUDE_CODE_ENTRYPOINT` |
+| reasoning effort | `high` | `CLAUDE_EFFORT` |
+| model pinned in settings | none — `settings.json` sets no `model` | `grep '"model"' settings.json` |
+
+**Registered intent, before the run:** every role — review, clustering, merge,
+adjudication, tie-break, bridge — runs on the **session model with no per-call
+override**. No round-24 call sets a model, and none may. Round 22's working rule
+was "sub-agent models are not changed"; this states the same thing as an intent
+that can be checked against the agent records afterwards rather than assumed.
+
+**The per-role model identifier is the one thing this preflight cannot supply,
+and it is required.** It must be captured from the first batch's own agent
+records and appended here before any arm table is read. If any role's observed
+identifier differs from the orchestrator's, that is a deviation to declare, not
+a detail to absorb.
+
+### Contamination check
+
+Round 17's material is committed in this public repository dated **2026-08-09**;
+its reviews ran 2026-08-08. The executing model's stated training cutoff is
+**May 2026**, which precedes that. Per the protocol's wording: **ordinary
+pretraining exposure to the fixture and to round 17's arm table is not supported
+by the stated timeline.** That is what a cutoff date can establish and no more —
+it is not proof of absence, and it does not cover a model that has encountered
+this repository by another route. Recorded as the evidence, not asserted as a
+conclusion.
+
+## Arms
+
+Built by `preflight.py` from `bc0f966:skills/triangulate` plus
+`../round-17/arms.diff`, with no agent involved.
+
+1. `git archive bc0f966:skills/triangulate | tar -x` into `cat-W` and `cat-N`.
+2. In **each** arm, `common-rules.digest.md` has `skills/triangulate/` rewritten
+   to that arm's own directory — the digest, and only the digest, exactly as
+   `arms.diff`'s preamble describes.
+3. In `cat-N`, `arms.diff` is applied with `git apply -p0`, its `<CAT>` slot
+   substituted for `cat-N`. The Finding Floor section leaves `common-rules.md`
+   and the digest paragraph that routes to it leaves the digest.
+
+**Hashes are taken over a normalised copy** — each arm's own directory path
+replaced by `<CAT>` — because a literal hash would depend on where the arm was
+built. Verified: two builds under different directories produce byte-identical
+manifests.
+
+| arm | files | normalised tree hash |
+|---|---|---|
+| `cat-W` | 44 | `2f241a02802bdaf35bd99c94ecfe9aba6a15fd50` |
+| `cat-N` | 44 | `641e83e2d88986867adafec6b22a98f6a35da294` |
+
+Per-file hashes for both arms are in `preflight-manifest.tsv`.
+
+### `diff -rq` — the complete result
+
+```
+Files <out>/cat-W/common-rules.digest.md and <out>/cat-N/common-rules.digest.md differ
+Files <out>/cat-W/common-rules.md and <out>/cat-N/common-rules.md differ
+```
+
+**Two files, and no `Only in` line.** 42 of 44 files are byte-identical; the two
+that differ are the one variable.
+
+### A preflight finding: one path an arm copy does not capture
+
+`preflight.py` step 3b records something round 17 did not. Two files in the
+catalogue name `skills/triangulate/` — the digest, which each arm rewrites to
+itself, and **`phases/phase-3-review.md`, which is left alone**. It carries
+
+```
+awk '/^### Remedy Floor/,/^### Anti-Deferral/' skills/triangulate/common-rules.md
+```
+
+a **repository** path, not an arm path. A reviewer who follows it reads the live
+catalogue rather than its own arm's copy.
+
+What it is not: it extracts the **Remedy** Floor, which both arms hold
+unchanged, so it cannot carry the arm variable into `N`. What it is: a path by
+which the run could read bytes from a catalogue that has moved since `bc0f966`.
+
+Rewriting that path would close it, and would also make a third file differ
+between the arms — breaking the very `diff -rq` invariant the protocol registers,
+and building arms that are not round 17's. **The construction is left matching
+round 17, and the risk is bounded by assertion instead**: the preflight fails if
+`skills/triangulate/common-rules.md` at HEAD is not byte-identical to `bc0f966`,
+or if any third file starts naming the repository path. Both pass today. If the
+catalogue is edited before the round runs, the preflight goes red and this
+decision gets taken again with the facts in front of it.
+
+## Pinned material, re-verified
+
+All 18 files the protocol pins hash as the protocol states, and every one is a
+row in `preflight-manifest.tsv` that a plain run re-checks. The templates and
+the frozen inputs:
+
+| file | sha1 |
+|---|---|
+| `briefs/review.template.md` | `1eacfac5de5c37d067f566642626b78f44f2c183` |
+| `briefs/cluster.template.md` | `66f9c6acd23869299a624d3085fb46c400205a54` |
+| `../adjudication-brief.md` | `64d9827be5206e1739a95f8bbdef6576493ab43f` |
+| `cluster-inventory.tsv` | `5278058c57e364ae5cbee55854106210290abddf` |
+| `bridge-sample.tsv` | `e5026fea2629a2eec253b2afbc4dc2be925761b7` |
+| `bridge-input.tsv` | `beaf2e39e21eb89dd046697241467adb42a0df8e` |
+
+All three generated files were re-emitted from `measure.py` and match the
+committed copies byte for byte.
+
+### The clustering brief points at 94 claims, not 64
+
+`cluster-inventory.tsv` is emitted by `measure.py --cluster-inventory`: the
+**94 frozen claims** — round 16's 64 seed claims plus the 30 round 17 added —
+with `cluster_id` and canonical claim text only, sorted, ids unique. It is
+committed here as a zero-data artifact and the preflight checks it regenerates
+from its two sources.
+
+It exists because the obvious file to hand the clustering agent is
+`round-16/seed/inventory.tsv`, and that is **the seed alone**. A clustering
+brief that names 64 claims cannot recognise the 30 that round 17 adjudicated, so
+those thirty come back as new claims, get re-adjudicated by a second panel, and
+the append-only rule that makes `real` mean the same thing across rounds is
+broken from the inside. The preflight renders `brief-cluster.md` against this
+file with `--n-claims 94`, and `render.py`'s row-count check makes a mismatch
+between the file and the number fatal.
+
+## Briefs
+
+Four of the six render now. `adjudicate-new.md` and `adjudicate-tiebreak.md`
+cannot: their claim sets do not exist until the round produces new claims and
+until an adjudication panel splits three ways. They are rendered, hashed and
+recorded at those points.
+
+**`brief-W.md` and `brief-N.md` are identical modulo the catalogue path** —
+verified by substituting each arm's directory for `<CAT>` and comparing. The arm
+variable lives in the catalogue, where `arms.diff` puts it, and not in the brief.
+
+Rendered hashes below are from this preflight's build directory and are
+**path-dependent by construction**: the run's own renders will hash differently
+and must be recorded then, beside the template hashes above.
+
+| rendered | sha1 (this preflight build) |
+|---|---|
+| `brief-W.md` | `0c305475de9ff85a604378553429b81faae78821` |
+| `brief-N.md` | `7f442857bbb70a93cffd1428f113bb20cabb5167` |
+| `brief-cluster.md` | `0938500dd7e432aaa9d3ae82126c1971743d0ad2` |
+| `adjudicate-bridge.md` | `750b7c38d0550dcec466823a3e892654a2360e84` |
+
+## State
+
+| | |
+|---|---|
+| reachability probe | **NOT RUN** |
+| review agents launched | **0 of 72** |
+| measurement rows on disk | **0** — no `findings.tsv`, `clusters.tsv`, `reviews.tsv`, `tiebreak.tsv`, `adjudications/` or `bridge/` |
+| preflight verdict | **PASSED**, 0 failures |
+
+The preflight asserts the last row rather than trusting it: it fails if any
+round-24 measurement artifact exists.
+
+## What happens next, in order
+
+1. This preflight commit is reviewed.
+2. **Reachability gate only — 3 agents, arm W, explicitly approved.** Tool-call
+   traces are read; no finding, severity or count from those agents enters any
+   metric.
+3. **3/3** → the 72 review agents become a separate decision.
+   **1–2/3 or 0/3** → the round stops, per protocol, and the gate result is
+   published as a wiring result with no arm effect measured.
+
+Nothing beyond step 1 has been authorised.
