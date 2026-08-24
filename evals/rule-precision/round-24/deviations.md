@@ -198,3 +198,37 @@ identifier was not exposed, so the execution records say
 `NOT-EXPOSED-CODEX-CONTINUATION` rather than guessing. This differs from the
 previously observed `claude-opus-5` execution environment and must remain a
 declared environment deviation even after compliant replacements run.
+
+## 6. Clustering blocked by API 529 — twice, with nothing exposed
+
+Two attempts at the eight-agent clustering fan-out, at 2026-08-24T14:25 and
+14:33 JST, ended with **all eight agents terminating on `API Error: 529
+Overloaded`** — the second attempt with fresh agent handles. A server-side
+condition, not a round fault.
+
+**Delivery state after both attempts: nothing.** Zero of the eight registered
+outputs exist, no partial artifact was written anywhere under the measurement
+root, no sub-agent transcript was created, and the worktree is clean. So
+`--verify-sent` has nothing to check and there is nothing to quarantine.
+
+**Content exposure: none.** The only thing received was the server's own failure
+message. No claim, finding, severity, arm-side detail or review body reached the
+orchestrator, by reply or by trace.
+
+Unaffected and unchanged: `findings.tsv`, the eight packets, and
+`cluster-outputs.tsv` with its eight composed prompts — the prompt hashes are
+identical before and after both attempts.
+
+### What is not concluded from this
+
+**That eight concurrent agents caused it.** A 529 is capacity at the service, and
+if the service has no capacity then two agents fail for the same reason eight do.
+Cutting the fan-out would be a change made on an untested guess, so it is not
+made. The recorded plan instead waits for the service condition to change, then
+probes with a single sub-agent carrying no measurement data, then runs **one**
+clustering slot with a fresh agent, then the rest one at a time — stopping the
+moment a 529 recurs, with no automatic retry.
+
+That ordering exists so that a server outage cannot be paid for in measurement
+agents, and so that concurrency is only ever ruled in or out by evidence.
+
