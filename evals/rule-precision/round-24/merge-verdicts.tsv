@@ -1,0 +1,16 @@
+cluster_id	verdict	target	why
+R24DEL-01	keep		Asserts the subscription rule is an unnamed, untested inline expression, which no other new or existing claim states.
+R24DEL-02	keep		Asserts the matching operator's own semantics (case/whitespace sensitivity, substring behaviour on a bare string), distinct from the existing claim about unvalidated event-type names at registration.
+R24DEL-03	keep		Asserts a missing delay after a non-empty batch, a different defect from any other claim about the same loop.
+R24DEL-04	keep		Asserts the back-off is taken outside the lock so the lock churns once per poll, a different defect from the missing post-batch delay.
+R24DEL-05	keep		Asserts an inconsistency in explicit flush usage between the new writers, matched by nothing else.
+R24MOD-01	keep		Asserts an unguarded isoformat on a possibly-unset field, matched by nothing else.
+R24MOD-02	keep		Asserts a cascade declaration mismatch between model and migration, distinct from the existing type-mismatch and cascade-semantics claims.
+R24MOD-03	keep		Asserts the empty list is an overloaded in-band value; kept as the alphabetically first of the two claims making this assertion.
+R24MOD-04	keep		Asserts per-endpoint payload duplication, distinct from the existing claim about missing retention or size bounds.
+R24SET-01	merge	R24MOD-03	Same assertion that the empty event_types list is an overloaded in-band sentinel, resolved by the same change.
+R24SET-02	keep		Asserts blocking database work in the new async route handlers, a different code path from the existing claim about the delivery module's coroutines.
+R24SET-03	keep		Asserts the response is built before the transaction commits; kept as the alphabetically first of the two claims about that placement.
+R24SET-04	merge	R24SET-03	Same assertion that the response dict is constructed inside the session scope before commit, resolved by the same relocation.
+R24SET-05	keep		Asserts the absence of any reachability probe before returning 201, distinct from the existing scheme and host validation claims.
+R24SIG-01	keep		Asserts verify is unreachable from production code, distinct from the existing claims about verify's internal defects.
