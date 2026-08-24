@@ -1,0 +1,14 @@
+cluster_id	verdict	reason
+R24DEL-01	not-a-defect	preference
+R24DEL-02	not-a-defect	outside-diff
+R24DEL-03	not-a-defect	preference
+R24DEL-04	not-a-defect	preference
+R24DEL-05	not-a-defect	preference
+R24MOD-01	wrong	misreads-code
+R24MOD-02	real
+R24MOD-03	not-a-defect	preference
+R24MOD-04	not-a-defect	preference
+R24SET-02	not-a-defect	preference
+R24SET-03	not-a-defect	outside-diff
+R24SET-05	not-a-defect	scope
+R24SIG-01	not-a-defect	preference
