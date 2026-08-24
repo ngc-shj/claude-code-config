@@ -136,16 +136,65 @@ catalogue and output paths. `--verify-sent <agent_id>` compares the composed
 prompt against what the transcript shows the agent actually received, so the
 check survives the one step a script cannot perform.
 
-### `review-06-N-a`, first attempt: replaced
+### `review-06-N-a`, first attempt: replaced; stale output quarantined
 
-The first index-6 agent was launched from a hand-built prompt in which the
-output-path line had been **replaced** by the new instructions rather than
-augmented, so it was never told where to write. It made twelve tool calls, zero
-write-path calls, produced no file, and replied `DONE`. No review content was
-exposed.
+The first index-6 N-a agent, `a8a7edbfa562f5d95`, was launched from a
+hand-built prompt carrying the stale registered path for `review-05-N-a`
+instead of the registered `review-06-N-a` path. It made twelve tool calls and
+eventually landed a late file at the stale path, with its claim marker. The
+expected index-6 path remained absent.
 
-That is the exchange rule's first branch — no valid output, nothing read — so it
-is **replaced at the same index, arm and part**, and index 6 is not voided. The
-fault was the orchestrator's, not the agent's, and it is the reason the prompt is
-now composed by a script instead of by hand. Its cost stays in the record:
-`replaced-agents.tsv`, 12 calls, 0 tool errors, 590,525 raw tokens.
+The late file and claim marker were moved out of `reviews/` into the index-5
+quarantine and are excluded from extraction, clustering, adjudication and every
+metric. Its git-blob hash is pinned in `voided-index-05.tsv`. The attempt is
+still a replacement for the missing registered index-6 N-a output; the valid
+replacement subsequently received the exact composed prompt and landed at the
+registered index-6 path. The fault was the orchestrator's, not the agent's, and
+it is the reason the prompt is now composed by a script instead of by hand. Its
+cost stays in both execution records: `replaced-agents.tsv` identifies the
+failed index-6 attempt, and `voided-index-05.tsv` identifies the quarantined
+stale-path artifact.
+
+A prior authorizer saw partial raw text from this late quarantined review while
+investigating the write. No arm value, finding count, severity or review text
+was passed to the continuing authorizer. While confirming the physical
+quarantine, the continuing authorizer mistakenly requested file metadata and
+saw the late voided file's byte size. It did not open the file or see a size for
+any usable review. This is recorded because review size was inside the no-peek
+boundary even though the artifact was already excluded. No sample, metric,
+analysis, replacement, exclusion or continuation rule changed after either
+exposure. The exposed review was already assigned to void index 5 by its
+explicit registered output path; index 5 remains void in both arms, final n
+remains 11, and completed index 6 remains usable. The prior authorizer recused
+before index 7 and is not consulted again.
+
+## 6. Index 7 continuation attempt: invalid landings, replacement pending
+
+The continuation environment exposed no `Write` tool to its six fresh review
+agents. All six received the manifest-bound composed prompt, returned only
+`DONE`, and put files at the six registered index-7 paths, but a delivery-only
+audit established that each file was landed with `apply_patch`. No other write
+mechanism was used. No review body, arm value, finding count, severity count or
+content-derived quantity was read.
+
+The forward rule fixed after index 5 is categorical: a review counts as landed
+only if `Write` produced it. Therefore none of these six files is a valid
+output. They were moved out of `reviews/` to
+`quarantined/invalid-index-07-apply-patch/`, their blob identities were pinned
+in `quarantined-outputs.tsv`, and they are excluded from extraction,
+clustering, adjudication and every metric.
+
+Because nothing from their review content was exposed, the exchange rule's
+first branch applies: each agent is replaceable at the same index, arm and
+part. Replacement is recorded as `pending` in `replaced-agents.tsv`, not as
+completed. A fresh replacement cannot be launched from this environment
+without knowingly repeating the same deterministic transport failure; index 7
+therefore remains incomplete, not void, until a continuation environment with
+the required `Write` tool is available. No sample, metric, analysis, exclusion,
+replacement or continuation rule was changed.
+
+No per-agent model override was requested. The exact continuation-agent model
+identifier was not exposed, so the execution records say
+`NOT-EXPOSED-CODEX-CONTINUATION` rather than guessing. This differs from the
+previously observed `claude-opus-5` execution environment and must remain a
+declared environment deviation even after compliant replacements run.

@@ -5,3 +5,4 @@ review	arm	part	agent_id	model	tool_calls	tool_errors	raw_tokens	landed	write_me
 5	W	a	a02be3d64fbbc256e	claude-opus-5	25	5	2855607	yes	Bash	047331b5e07b4eb7ed1a45239e30a40300ea685f
 5	W	b	a48f44fe85e4b2a81	claude-opus-5	20	3	1836749	yes	Bash	30f8ab4ffefe114ca9edc3e38d5537d73d33dba2
 5	W	c	a2c62ea350e818894	claude-opus-5	15	3	594947	no	Write	-
+5	N	a	a8a7edbfa562f5d95	claude-opus-5	12	0	590525	yes	Write	ca19f223440cc4a7435968d5cadcea3ac7f74e68
