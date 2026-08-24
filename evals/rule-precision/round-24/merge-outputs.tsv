@@ -1,0 +1,2 @@
+role	input_new_claims	input_existing_claims	output
+merge	/home/noguchi/.local/state/claude-code-config/round-24-measurement/merge/new-claims-raw.tsv	/home/noguchi/.local/state/claude-code-config/round-24-measurement/merge/existing-claims.tsv	/home/noguchi/.local/state/claude-code-config/round-24-measurement/merge/merge-verdicts.tsv
