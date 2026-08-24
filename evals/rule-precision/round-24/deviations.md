@@ -201,19 +201,32 @@ declared environment deviation even after compliant replacements run.
 
 ## 7. Clustering blocked by API 529 — twice, with nothing exposed
 
-Two attempts at the eight-agent clustering fan-out, at 2026-08-24T14:25 and
-14:33 JST, ended with **all eight agents terminating on `API Error: 529
-Overloaded`** — the second attempt with fresh agent handles. A server-side
-condition, not a round fault.
+Two attempts at the eight-agent clustering fan-out, at 2026-08-24T14:25:20–14:26:51
+and 14:34:02–14:35:34 JST, ended with **all eight agents terminating on
+`API Error: 529 Overloaded`** — the second attempt with fresh agent handles. A
+server-side condition, not a round fault. The times are the transcripts' own
+timestamps; an earlier draft of this section said "14:33" from memory.
 
 **Delivery state after both attempts: nothing.** Zero of the eight registered
 outputs exist, no partial artifact was written anywhere under the measurement
-root, no sub-agent transcript was created, and the worktree is clean. So
-`--verify-sent` has nothing to check and there is nothing to quarantine.
+root, and the worktree is clean. There is nothing to quarantine.
+
+**Correction: sixteen sub-agent transcripts were created.** This section
+originally said none was, which was wrong — 8 per wave, and the error was found
+only when the round's material was archived. They are preserved in the private
+evidence archive at commit `fd84f1d`; the expanded prompt-verification record,
+including this 16/16 result, is committed at `64e0823`. Checking them
+**strengthens** the paragraph below rather than qualifying it: each of the sixteen matches exactly
+one of the eight composed clustering prompts, every target appearing once per
+wave; across all sixteen there are **zero `tool_use` blocks**, so no file was
+opened or written; and the only assistant text any of them produced is the
+server's `API Error: 529 Overloaded`. `--verify-sent` therefore has something to
+check after all, and it passes 16/16.
 
 **Content exposure: none.** The only thing received was the server's own failure
 message. No claim, finding, severity, arm-side detail or review body reached the
-orchestrator, by reply or by trace.
+orchestrator, by reply or by trace — now verifiable from the archived
+transcripts rather than asserted from their absence.
 
 Unaffected and unchanged: `findings.tsv`, the eight packets, and
 `cluster-outputs.tsv` with its eight composed prompts — the prompt hashes are
