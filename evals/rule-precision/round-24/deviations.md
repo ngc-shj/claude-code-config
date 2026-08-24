@@ -103,3 +103,49 @@ Registered here, effective from batch 6:
 Indices 6–12 run to completion with no outcome-dependent stopping. Only quota
 and technical success decide what happens next; index 5's leak is sealed as an
 excluded observation and does not inform any later choice.
+
+## 5. The delivery envelope — a transport amendment, and the text change it makes
+
+**The review brief is not edited.** Enforcing the rule above by rewriting the
+brief's Output section would make "the instrument is unchanged" false, which is
+a worse price than the problem. The output-path line that indices 1–4 already
+carried is instead replaced by a fixed **delivery envelope**, appended verbatim
+after the pinned brief:
+
+```
+1c4102d8129ff9fc1c0b9877e90473d62ad845a7  rule-precision/round-24/delivery-envelope.md
+```
+
+It carries the output path, requires `Write` and forbids the shell route, allows
+exactly one `Write` retry, and forbids the reply from containing, quoting,
+summarising or counting findings. Review criteria are untouched and the envelope
+is byte-identical in both arms.
+
+**The text agents receive therefore changes mid-round, and that is recorded
+rather than hidden:** indices 1–4 ran under the old envelope — a bare
+"Your output path is …" line — and indices 6–12 under this one. Index 5 is void.
+This is a transport-layer forward operational amendment, not a change to the
+review criteria. The primary analysis is unchanged; if a pre/post-envelope
+comparison is ever wanted it is descriptive and secondary.
+
+`compose-prompt.py` builds every prompt and checks rather than trusts: the slot
+is substituted exactly once, the path is the one `measurement-outputs.tsv`
+reserved for that (index, arm, part), the prompt is exactly brief + separator +
+envelope with nothing added by hand, and W and N are identical modulo the
+catalogue and output paths. `--verify-sent <agent_id>` compares the composed
+prompt against what the transcript shows the agent actually received, so the
+check survives the one step a script cannot perform.
+
+### `review-06-N-a`, first attempt: replaced
+
+The first index-6 agent was launched from a hand-built prompt in which the
+output-path line had been **replaced** by the new instructions rather than
+augmented, so it was never told where to write. It made twelve tool calls, zero
+write-path calls, produced no file, and replied `DONE`. No review content was
+exposed.
+
+That is the exchange rule's first branch — no valid output, nothing read — so it
+is **replaced at the same index, arm and part**, and index 6 is not voided. The
+fault was the orchestrator's, not the agent's, and it is the reason the prompt is
+now composed by a script instead of by hand. Its cost stays in the record:
+`replaced-agents.tsv`, 12 calls, 0 tool errors, 590,525 raw tokens.

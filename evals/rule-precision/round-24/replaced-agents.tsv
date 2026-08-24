@@ -1,0 +1,2 @@
+review	arm	part	agent_id	model	tool_calls	tool_errors	raw_tokens	cause	replaced
+6	N	a	a8a7edbfa562f5d95	claude-opus-5	12	0	590525	orchestrator prompt omitted the output path; agent made no write-path call and replied DONE with no review content exposed	yes
