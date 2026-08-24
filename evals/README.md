@@ -54,11 +54,21 @@ Each line exists because the previous one was blind to something:
   preferences) that no pinned input reproduces — it is cited there as the
   floor's recorded rationale, and this ledger's numbers are the re-runnable
   ones.
-- **CONFIRMED (F10) — the whole floor cuts Critical/Major `not-a-defect`
-  findings.** Round 24, the independent fixed-n, no-peek replication the earlier
-  entry called for: W − N = **−1.73**, Welch 95% CI **[−2.39, −1.07]**,
-  **n = 11 per arm** (planned 12; index 5 void in both arms, not backfilled).
-  The confirmatory rule was registered before any data existed and fires. This
+- **CONFIRMED (F10), under the registered-output-path attribution — the whole
+  floor cuts Critical/Major `not-a-defect` findings.** Round 24, the independent
+  fixed-n, no-peek replication the earlier entry called for: W − N = **−1.73**,
+  Welch 95% CI **[−2.39, −1.07]**, **n = 11 per arm** (planned 12; index 5 void
+  in both arms, not backfilled). The confirmatory rule was registered before any
+  data existed and fires. **The condition is not decoration.** One agent was
+  launched for index 6 and wrote to index 5's registered path, and part of that
+  file was read; the exchange rule voids "the whole review index" but registers
+  no priority for the case where the launch slot and the output path disagree.
+  Reading the output path as decisive gives n = 11 and this row. Reading the
+  launch slot as decisive gives n = 10, at which the round's own
+  design-integrity floor makes it **descriptive only and moves no grade**. The
+  n = 10 interval was deliberately not computed. Adjudicated after the fact in
+  `rule-precision/round-24/deviations.md` §9; never cite this row as an
+  unconditional CONFIRMED. This
   is the **whole-floor** contrast — all three clauses against no floor — and is
   **a different quantity from round 20's clause-1 contrast** below; the two
   CONFIRMED (F10) grades are not the same result and neither substitutes for
@@ -176,7 +186,7 @@ Each line exists because the previous one was blind to something:
 
 | shipped element | evidence | grade |
 |---|---|---|
-| Finding Floor, digest-wired | rounds 11 (diagnosis), 12, 17, 24, 7 (wiring) | **CONFIRMED (F10)** whole-floor, −1.73 CI [−2.39, −1.07], n = 11 (round 24); MEASURED (F9) + qualified replication (F10) from rounds 12, 17 |
+| Finding Floor, digest-wired | rounds 11 (diagnosis), 12, 17, 24, 7 (wiring) | **CONFIRMED (F10) under the registered-output-path attribution** — whole-floor, −1.73 CI [−2.39, −1.07], n = 11 (round 24; under the launch-slot reading n = 10 and descriptive only); MEASURED (F9) + qualified replication (F10) from rounds 12, 17 |
 | .. clause 1 kept | round 20 | CONFIRMED (F10), a different contrast from the row above; OPEN (F11) |
 | .. clauses 2, 3 kept | rounds 18, 19, 20 — nulls inside their MDEs | no deletion licensed |
 | Remedy Floor, wired | round 7 | MEASURED |

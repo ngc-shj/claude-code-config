@@ -532,8 +532,9 @@ neither file was opened until both had exited 0 with empty stderr.
 **n was not backfilled** — the registered rule voids the index rather than
 replacing a review whose output had already been read, and the void is a
 design-integrity fact, not a missing-data problem to repair. n = 11 meets the
-pre-registered floor of 11, so the round is analysed as registered. 1765
-findings, 107 claims, 13 of them added by this round.
+pre-registered floor of 11, so the round is analysed as registered — **subject
+to the index-attribution reading set out below**, under the other reading of
+which n would be 10. 1765 findings, 107 claims, 13 of them added by this round.
 
 | | W | N | diff | Welch 95% CI | df | |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -543,8 +544,24 @@ findings, 107 claims, 13 of them added by this round.
 
 **The confirmatory rule fires.** The interval lies entirely below zero, so the
 Finding Floor's whole-floor effect on Critical/Major `not-a-defect` findings is
-**CONFIRMED (F10)**. The interval states the size; the rule does not require it
-to match round 17's −2.67, and the round makes no claim that it does.
+**CONFIRMED (F10) under the registered-output-path attribution** — the
+condition is part of the grade and is stated wherever the grade is. The interval
+states the size; the rule does not require it to match round 17's −2.67, and the
+round makes no claim that it does.
+
+> **What the condition is.** One agent was launched for index 6 and wrote to
+> index 5's registered path, and part of that file was read (deviation 5). The
+> exchange rule voids "the whole review index" but never says which index when
+> the launch slot and the registered output path disagree — **the protocol
+> registers no priority**, and `deviations.md` §9 adjudicates it after the fact
+> rather than pretending it was settled in advance. Reading the **registered
+> output path** as decisive gives n = 11 and the table above. Reading the
+> **launch slot** as decisive voids index 6 as well, gives **n = 10**, and by
+> this round's own design-integrity floor the round would then be **DESCRIPTIVE
+> ONLY** — no confirmatory claim and no grade moved. **The n = 10 interval has
+> not been computed and will not be**: producing it with the result already
+> known is the selection this round exists to avoid, and it would not improve
+> the choice between readings.
 
 The **secondary is exploratory and moves no grade** — it is round 17's
 pre-registered primary, reported here with its interval so the two rounds can
@@ -626,6 +643,9 @@ Full narrative in `deviations.md`; the summary and the disposition:
 | 6 | index 7 written by a Codex continuation via `apply_patch` | six outputs **quarantined unread**; index re-run on the Claude path |
 | 7 | clustering blocked twice by API 529, nothing landed and nothing exposed | waited, then ran serially; no automatic retry |
 | 8 | six RECORDED outputs never implemented | published as missing, above |
+| 9 | **the exchange rule registers no priority** when an agent's launch slot and its registered output path name different indices | adjudicated after the fact for the output path; the grade carries the condition and the alternative (n = 10, descriptive only) |
+| 10 | index 7's six replacement rows sat at `pending`; the protocol puts replacement history in `reviews.tsv`, the round put it in a separate ledger | ledger completed with `replacement_agent_id`; `reviews.tsv` deliberately not amended after unblinding |
+| 11 | `measure.py` would not reject a finding in two clusters | forward-only gate; this round's data has none |
 
 **No quarantined or voided file was ever opened as a measurement input**, and
 nothing from any of them entered `findings.tsv`, the clustering, the

@@ -282,3 +282,135 @@ the next round is built. Nothing about it is retrofitted here.
 
 The duplicate `## 6.` heading in this file was corrected to `## 7.` when this
 section was added; no text of that section changed.
+
+## 9. Index attribution: adjudicated after the fact, not pre-registered
+
+Section 5 records what happened and what was decided at the time; it is left as
+written. This section records what a later review established about the
+*authority* for that decision, which is a different question and a weaker
+answer than section 5's wording implies.
+
+### The ambiguity
+
+`a8a7edbfa562f5d95` was launched as **index 6, arm N, part a**, and wrote to the
+registered path for **index 5, arm N, part a**. Part of that file's raw text was
+then read. The exchange rule says a read output means "the whole review index is
+voided in both arms" — but it never says which index, because it never
+anticipates the launch slot and the output path naming different ones.
+
+Two readings follow, and the protocol chooses neither:
+
+- **the registered output path decides** — the file is index 5's N-a slot, index
+  5 was already void, nothing further is voided, index 6 is re-run, **n = 11**;
+- **the launch slot decides** — the agent was index 6's, so index 6 is voided in
+  both arms too, **n = 10**, and by the registered design-integrity floor the
+  round would be **DESCRIPTIVE ONLY**: no confirmatory claim, no grade moved.
+
+Round 24 took the first reading. **The alternative interval at n = 10 has not
+been computed and will not be** — producing it now, with the result known, is
+the selection this round's structure exists to prevent, and the choice between
+readings is not improved by seeing what each pays.
+
+### What existed before the round, and what did not
+
+Searched at the protocol baseline `9f4026c` and at `39de187`, the last commit
+before any review agent ran.
+
+**Existed:**
+
+- `measurement-outputs.tsv` — a committed bijection of (index, arm, part) to
+  path, all 72 rows, written before any output existed;
+- `register-outputs.py`'s docstring: *"Extraction takes these paths explicitly.
+  It never globs `*.md` over a shared tree."* The analysed content of a slot is
+  defined as whatever is at that path — the writer is not part of the
+  definition;
+- protocol §"n comes from a manifest": `reviews.tsv` keys the round on the 24
+  registered (index × arm) pairs.
+
+**Did not exist:**
+
+- any wording anywhere anticipating launch slot ≠ output path, or ranking them;
+- `compose-prompt.py`, which mechanically binds a prompt's path to its
+  registered slot — it was written at `f07d53a`, *after* this incident and
+  because of it.
+
+So the registry settles **which file feeds which metric**. It does not settle
+**which index an agent's failure voids**, and the second does not follow from
+the first. Section 5's phrase "already assigned to void index 5 by its explicit
+registered output path" is a sound reading of a pre-registered artifact, but it
+is a reading made afterwards, not a rule applied.
+
+### The timeline, which supports the reading without establishing it
+
+| time (JST) | commit | event |
+| --- | --- | --- |
+| — | `39de187` | the 72-path registry is committed, before any review agent runs |
+| 08-24 10:16:35 | `db67210` | **index 5 voided in both arms** — cause: `review-05-W-a`'s severity summary reaching the orchestrator and a broken `Write`. Nothing to do with the index-6 agent |
+| 08-24 10:35:47 | `f07d53a` | the delivery envelope, `compose-prompt.py`, and this incident's record |
+| 08-24 11:24:38 | `9e16a55` | the late file `ca19f223…` pinned into `voided-index-05.tsv` as `5 / N / a` |
+
+Index 5 was already void, for an independent cause, nineteen minutes before the
+incident was recorded. Under the path reading the stale write added a file to an
+already-void index and changed nothing. That is a fact about ordering, not a
+pre-registered priority.
+
+The honest counter-argument is also on record: the twelve indices are
+replicates of the same (arm, fixture) cell, so what an authorizer saw was
+N-arm review text whatever index it is labelled, and the exchange rule's purpose
+— drop one index-pair, keep the arms balanced — is satisfied once under the
+path reading and twice under the slot reading. Neither is the registered answer,
+because there is no registered answer.
+
+### Consequence for the grade
+
+**The result is reported as CONFIRMED (F10) under the registered-output-path
+attribution**, and nowhere as an unconditional CONFIRMED. The round README, the
+ledger and the chapter each carry the condition and the alternative in the same
+place as the grade. The numbers are unaffected: −1.73, CI [−2.39, −1.07], n = 11
+are what the frozen `measure.py` computes from inputs no reading of this
+question changes.
+
+### Forward, not applied here
+
+A future protocol's exchange rule must state which of launch slot and registered
+output path determines the index when they diverge, and its prompt composer must
+make divergence impossible in the first place — round 24's does, from
+`f07d53a` onward, but that arrived one incident too late. Nothing is
+retrofitted to this round.
+
+## 10. Replacement ledger completed, and where the protocol says it should live
+
+`replaced-agents.tsv` carried `replaced=pending` on index 7's six Codex
+continuation attempts long after their compliant replacements had run and
+landed. The ledger is now final: every row reads `replaced=yes` and carries a
+new `replacement_agent_id` column naming the agent that filled the slot, matched
+against `batches.tsv`. No measured value depends on this file — nothing in
+`measure.py`, no test and no other script reads it — and none of the six
+quarantined outputs was ever opened.
+
+The protocol says something different from what the round did:
+
+> Every replacement and every void is written to `round-24/reviews.tsv` as it
+> happens, with its cause.
+
+`reviews.tsv` holds the two voids with their cause, and holds the 24 registered
+(index × arm) pairs and nothing else — it is the manifest `manifest()` reads to
+fix n. Replacement history went to `replaced-agents.tsv` and
+`quarantined-outputs.tsv` instead. **That divergence is a deviation and is
+recorded as one.** `reviews.tsv` is deliberately not amended now: it is an
+analysis input, and adding rows to it after unblinding would touch the path n is
+derived from to fix a bookkeeping defect that does not affect n.
+
+## 11. `measure.py` does not reject a finding in two clusters — forward only
+
+`assignment()` builds its finding-to-cluster map by plain assignment, so a
+finding id appearing in two clusters would silently take the later one instead
+of failing. Round 24's committed data does not exercise it: 1765 findings, 1765
+distinct membership entries, no id in more than one cluster, no unclustered
+finding and no unknown id — verified structurally against the committed
+`clusters.tsv`, and `apply-merge.py` regenerates the same file byte-for-byte.
+
+This is registered as a **gate a future round's analysis should carry**, and
+nothing more. `measure.py` is frozen, its outputs are committed, and a code
+change now would invalidate the byte-identity that makes those outputs
+checkable.
