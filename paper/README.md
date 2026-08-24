@@ -1,16 +1,22 @@
-# Monograph — working skeleton
+# Monograph — evidence map and writing record
 
 **Working title:** *Evidence-Calibrated Improvement of LLM Code Review: Rule
 Ablation, Claim-Level Quality, and Cheap Falsification of Token Optimizations*
 
-**Status:** all eight chapters drafted (`01`–`08`); chapters 7 and 6 merged
-after review; 4, 2, 3, 5, 1 and 8 under batch review on one branch, per the
-amended rule 5. This file fixes the thesis, the
-chapter-to-evidence mapping, and the writing rules **before prose exists**, for
-the same reason every protocol in `../evals/` fixed its rules before its
-numbers: the ledger (`../evals/README.md`) took two review rounds to purge ten
-aggregation errors, and a draft that cites evidence from memory will
-manufacture the same class of defect at chapter scale.
+**Status:** all eight chapters (`01`–`08`) are drafted and merged after review —
+7 and 6 first, then 4, 2, 3, 5, 1 and 8 as one batch (`433de72`, PR #184) under
+the amended rule 5. Round 24's conditional confirmation and the attribution
+limitation it carries are incorporated in chapters 4, 7 and 8 and in the map
+below.
+
+This file was written **before any prose existed**, for the same reason every
+protocol in `../evals/` fixed its rules before its numbers: the ledger
+(`../evals/README.md`) took two review rounds to purge ten aggregation errors,
+and a draft that cites evidence from memory will manufacture the same class of
+defect at chapter scale. It fixes the thesis, the chapter-to-evidence mapping
+and the writing rules, and now doubles as the monograph's index — which is why
+the sections below are kept current with the chapters rather than left as the
+skeleton they started as.
 
 ## Thesis
 

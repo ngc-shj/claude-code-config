@@ -32,16 +32,11 @@ intervention did. Each is a process record from the cited round document or
 protocol and carries the grade **MEASURED** unless tagged otherwise. **No new
 effect estimate is introduced here**; where the chapter names the series'
 substantive results in passing, it names them with their ledger grades — the
-Finding Floor's effect (CONFIRMED on F10 under the registered-output-path
-attribution; MEASURED on F9), the
-three candidate refutations (REPLAY-REFUTED, trace-conditional) — and their
-full statements live in Chapters 2–6.
-
-Where this chapter names the Finding Floor's effect, it uses the ledger's
-current grade: **CONFIRMED on F10 under the registered-output-path
-attribution — otherwise descriptive only**, and MEASURED on F9. The condition,
-the alternative reading and what each costs are §4.2.1's to state, not this
-chapter's.
+Finding Floor's effect (**CONFIRMED on F10 under the registered-output-path
+attribution, otherwise descriptive only**; MEASURED on F9), the three candidate
+refutations (REPLAY-REFUTED, trace-conditional) — and their full statements
+live in Chapters 2–6. That condition, the alternative reading and what each
+costs are §4.2.1's to state, not this chapter's.
 
 ## 7.1 Identification under pre-declared quality constraints
 
