@@ -1,0 +1,9 @@
+target	agent_id	model	tool_calls	tool_errors	write_mechanism	reply	output_git_blob_sha1
+app/api/routes/settings.py	a299772c1df24692e	claude-opus-5	6	0	Write	DONE	d384f68cd56bc202fdfd87cb1beb25df75d7180a
+app/events/dispatcher.py	a9a84e4fc7938a507	claude-opus-5	5	0	Write	DONE	6f2ef889e206a5a6bb6ad034815d54fade51f797
+app/webhooks/delivery.py	a09fff8a91419c91d	claude-opus-5	14	1	Write	DONE	778df7886cf3e6151739549b5badf44edb67e536
+app/webhooks/models.py	a1ba1f0aea0085f04	claude-opus-5	5	0	Write	DONE	4e2a789e90a608275fd3d057a20f3d9a0de79da2
+app/webhooks/signing.py	abe25f7bdbefd86d0	claude-opus-5	4	0	Write	DONE	660cccd46327263d6643c3d045992b7ac6dcc793
+docs/webhooks.md	a4168c46cc22753e7	claude-opus-5	4	0	Write	DONE	ad308cdeb8fc69ec9276dc53f2a7a5158bc63498
+migrations/0042_webhook_delivery.sql	a1d0e97bb2af3c3a7	claude-opus-5	5	0	Write	DONE	747efea1cf8036913db368edbf86bd17a517635b
+tests/webhooks/test_delivery.py	a5e5545b3a242155e	claude-opus-5	4	0	Write	DONE	5750ba32ff55a21e77c7a8d0d6cb9ddc95ca0575
