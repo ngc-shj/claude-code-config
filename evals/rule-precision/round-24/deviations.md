@@ -366,9 +366,11 @@ because there is no registered answer.
 **The result is reported as CONFIRMED (F10) under the registered-output-path
 attribution**, and nowhere as an unconditional CONFIRMED. The round README, the
 ledger and the chapter each carry the condition and the alternative in the same
-place as the grade. The numbers are unaffected: −1.73, CI [−2.39, −1.07], n = 11
-are what the frozen `measure.py` computes from inputs no reading of this
-question changes.
+place as the grade. The committed registered-output-path analysis is unchanged:
+it produces −1.73, CI [−2.39, −1.07], n = 11. **Under the launch-slot reading
+n would be 10** — `reviews.tsv` would carry index 6 as void in both arms and
+`manifest()` would return one fewer index — and the round would be descriptive
+only. No alternative interval has been computed.
 
 ### Forward, not applied here
 
