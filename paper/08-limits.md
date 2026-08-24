@@ -54,10 +54,17 @@ not been done.
 
 A master's-scale empirical claim: on this repository, under these
 instruments, the Finding Floor reduces Critical/Major non-defect findings
-with no detectable coverage change on F9, repeating in direction and size on
-F10 (MEASURED, with qualified replication evidence — the repeat's post-hoc
-extension keeps it short of REPLICATED); clause 1 is its only component with
-positive evidence, on one fixture (CONFIRMED); three token-optimization
+with no detectable coverage change on F9 (MEASURED), and the same effect is
+**CONFIRMED on F10 under the registered-output-path attribution** by round 24 —
+fixed-n and no-peek by design, with a recorded no-peek breach that the
+registered rule voided an index for, −1.73 and CI [−2.39, −1.07] at n = 11.
+**The condition is not removable**: the protocol never ranked an agent's launch
+slot against its registered output path, and under the launch-slot reading n
+would be 10 and the round descriptive only. **This is still not REPLICATED —
+one confirmed fixture, so fixture-independence is not established** — and round
+17's earlier F10 repeat remains qualified replication evidence, its post-hoc
+extension not repaired by a later round; clause 1 is its only component with
+positive evidence, on one fixture (CONFIRMED, a different contrast); three token-optimization
 candidates fail their bounds by causal replay (REPLAY-REFUTED —
 trace-conditional, at zero new review-agent cost); the reported cost figures
 were
