@@ -473,3 +473,33 @@ and the ids involved were computed inside the frozen functions and never
 printed; no majority verdict, verdict distribution or arm value was computed at
 all.
 
+
+## Bridge panel: delivered, unread
+
+Three fresh Claude sub-agents judged the 24 claims of `bridge-input.tsv` — the
+claim-only sibling of the frozen `bridge-sample.tsv`, whose verdicts are what
+the bridge exists to compare against. Launched one at a time in registered
+order, each on the session model with no per-call override:
+
+| panel | agent | model | calls | errors | write | reply | composed prompt sha1 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `a9059ba52a4aa4ac3` | `claude-opus-5` | 3 | 0 | `Write` | `DONE` | `042e89e0…` |
+| 2 | `a2d089be8f95a293f` | `claude-opus-5` | 3 | 0 | `Write` | `DONE` | `a0d09b8b…` |
+| 3 | `a8f5c4699decc4d73` | `claude-opus-5` | 3 | 0 | `Write` | `DONE` | `ffbbd9ed…` |
+
+`--verify-sent` compared each composed prompt against what the agent's own
+transcript shows it received: all three byte-identical. The three prompts differ
+only in the output path line. Each transcript's tool inputs were greped for
+`bridge-sample`, `adjudications/` and the other two panellists' paths — no hit
+in any of the three.
+
+Nine checks then ran over the sheets without displaying them: exactly three
+sheets; header `cluster_id / verdict / reason`; id set **and order** identical to
+`bridge-input.tsv`; no duplicate, missing or added id; verdict/reason
+combinations following the same rule as the new-claim panel; the three
+`adjudications/` sheets unchanged against a pre-launch hash snapshot; and no
+bridge-shaped output anywhere but `bridge/`. All nine pass.
+
+The sheets are committed unread. No agreement rate, verdict distribution,
+majority verdict or arm value has been computed — `measure.py --bridge` has not
+been run.

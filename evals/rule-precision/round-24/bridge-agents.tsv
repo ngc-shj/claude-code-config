@@ -1,0 +1,4 @@
+panel	agent_id	model	tool_calls	tool_errors	write_mechanism	reply	output_git_blob_sha1
+1	a9059ba52a4aa4ac3	claude-opus-5	3	0	Write	DONE	a0246db51ffbbaa77aba3f953ada689a52d40bc1
+2	a2d089be8f95a293f	claude-opus-5	3	0	Write	DONE	09e6938835b5b3ed4e52bc41e29e376940d1391f
+3	a8f5c4699decc4d73	claude-opus-5	3	0	Write	DONE	342443e48d2c82fff76ff9489499f5ed93019e9a

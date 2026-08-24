@@ -1,0 +1,25 @@
+cluster_id	verdict	reason
+DELIVERY-08	real
+DELIVERY-17	real
+TESTS-04	real
+SETTINGS-02	real
+NEWSET-03	not-a-defect	preference
+MIGRATION-08	not-a-defect	outside-diff
+NEWDEL-06	not-a-defect	outside-diff
+NEWDEL-03	not-a-defect	outside-diff
+MODELS-05	real
+DELIVERY-04	real
+DELIVERY-30	real
+TESTS-10	not-a-defect	preference
+B2TD-02	not-a-defect	preference
+NEWTD-02	wrong	misreads-code
+SIGNING-02	real
+DELIVERY-12	real
+SETTINGS-09	not-a-defect	scope
+NEWSET-01	not-a-defect	outside-diff
+NEWTD-04	not-a-defect	outside-diff
+MIGRATION-04	real
+DISPATCH-04	real
+NEWSCH-02	not-a-defect	scope
+SIGNING-06	real
+DELIVERY-18	wrong	misreads-code
