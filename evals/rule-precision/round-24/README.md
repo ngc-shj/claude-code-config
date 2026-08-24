@@ -42,7 +42,7 @@ be obtained it says so instead of estimating.
 | orchestrator model name | Opus 5 (1M context) | same |
 | model snapshot / build date | **NOT OBTAINABLE** — no dated snapshot identifier is exposed to the session. Not estimated. | — |
 | training cutoff | **May 2026** | session environment, "Assistant knowledge cutoff is May 2026". Month granularity is all that is published; no day is inferred. |
-| reviewer / clustering / adjudicator model | **NOT YET OBSERVED.** No round-24 agent has run. Sub-agents inherit the session model unless a call overrides it, and no round-24 call exists to inspect. | — |
+| reviewer / clustering / adjudicator model | **`claude-opus-5`** for every agent that produced an analysed artifact — recorded per agent in `batches.tsv`, `cluster-agents.tsv`, `merge-agent.tsv`, `adjudicate-agents.tsv`, `bridge-agents.tsv`. No per-call override was ever requested. The one exception is index 7's Codex continuation, whose identifier was never exposed and is recorded as `NOT-EXPOSED-CODEX-CONTINUATION`; its outputs are quarantined and analysed by nothing. Read before the round as **NOT YET OBSERVED**, since sub-agents inherit the session model and no round-24 call yet existed to inspect. | per-agent transcripts |
 | system-prompt fingerprint | **NOT OBTAINABLE** — the system prompt is not readable as a file from the session, so no hash can be taken. Not estimated. | — |
 | CLI | Claude Code **2.1.211** | `claude --version` |
 | Agent SDK | **0.3.220** | `CLAUDE_AGENT_SDK_VERSION` |
@@ -191,7 +191,11 @@ and must be recorded then, beside the template hashes above.
 | `brief-cluster.md` | `0938500dd7e432aaa9d3ae82126c1971743d0ad2` |
 | `adjudicate-bridge.md` | `750b7c38d0550dcec466823a3e892654a2360e84` |
 
-## State
+## State at preflight
+
+A snapshot of the moment the preflight ran, kept because a preflight that
+cannot show what it saw proves nothing. The round has since completed; the
+closing state is under "The result".
 
 | | |
 |---|---|
@@ -439,17 +443,235 @@ Re-running three agents now would also create an unregistered *second* gate with
 no rule for combining it with the first — a worse record than the one this
 paragraph replaces.
 
-## What happens next, in order
+## The authorization record, as it stood before the round ran
+
+Kept in its original form because the point of it was that each step needed its
+own decision. Every step below was subsequently authorised, one at a time, and
+the round is complete — see "The result".
 
 1. ~~The preflight commit is reviewed.~~ **Done** — #186, re-verified on merged
    `main`.
 2. ~~Reachability gate only, 3 agents, arm W, explicitly approved.~~ **Done —
    3/3.** Recorded above with the launch HEAD, the timestamps, and the
    sub-agent model identifier the round will carry.
-3. **The 72 review agents are a separate decision, and it has not been taken.**
-   The gate passing licenses nothing by itself: it says the manipulation
-   arrives, which is the precondition for the ablation meaning anything, not a
-   reason to spend ≈27.8M raw tokens on it.
+3. ~~**The 72 review agents are a separate decision, and it has not been
+   taken.** The gate passing licenses nothing by itself: it says the
+   manipulation arrives, which is the precondition for the ablation meaning
+   anything, not a reason to spend ≈27.8M raw tokens on it.~~ **Done** — run in
+   twelve authorised batches, 66 reviews analysable across indices 1–4 and
+   6–12.
 
-**Nothing beyond step 2 has been authorised.** The next thing that happens is
-someone deciding whether to run the round, with this record in front of them.
+At the time it was written, **nothing beyond step 2 had been authorised**. What
+followed it — extraction, clustering, merge, new-claim adjudication, the
+tie-break branch, the bridge panel, and finally unblinding — was each approved
+separately, and none of those approvals is retroactive.
+
+## Tie-break: not required
+
+`measure.py`'s own `new_ids()`, `panel()` and `splits()` were run unchanged over
+the three committed adjudication sheets. **`splits()` returned empty: no claim
+drew three different verdicts**, so the registered tie-break branch does not
+fire.
+
+Nothing was created for it, and that is the point of recording it. There is no
+`tiebreak.tsv`, not even a header-only one — `measure.py` refuses a tie-break
+file when nothing split, so an empty sheet written "for completeness" would stop
+the round rather than tidy it. No tie-break brief was rendered, no output
+manifest registered, no envelope or composer written, and no fourth adjudicator
+launched.
+
+The branch decision is the only thing this step produced. The number of splits
+and the ids involved were computed inside the frozen functions and never
+printed; no majority verdict, verdict distribution or arm value was computed at
+all.
+
+
+## Bridge panel: how it was delivered
+
+Three fresh Claude sub-agents judged the 24 claims of `bridge-input.tsv` — the
+claim-only sibling of the frozen `bridge-sample.tsv`, whose verdicts are what
+the bridge exists to compare against. Launched one at a time in registered
+order, each on the session model with no per-call override:
+
+| panel | agent | model | calls | errors | write | reply | composed prompt sha1 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `a9059ba52a4aa4ac3` | `claude-opus-5` | 3 | 0 | `Write` | `DONE` | `042e89e0…` |
+| 2 | `a2d089be8f95a293f` | `claude-opus-5` | 3 | 0 | `Write` | `DONE` | `a0d09b8b…` |
+| 3 | `a8f5c4699decc4d73` | `claude-opus-5` | 3 | 0 | `Write` | `DONE` | `ffbbd9ed…` |
+
+`--verify-sent` compared each composed prompt against what the agent's own
+transcript shows it received: all three byte-identical. The three prompts differ
+only in the output path line. Each transcript's tool inputs were greped for
+`bridge-sample`, `adjudications/` and the other two panellists' paths — no hit
+in any of the three.
+
+Nine checks then ran over the sheets without displaying them: exactly three
+sheets; header `cluster_id / verdict / reason`; id set **and order** identical to
+`bridge-input.tsv`; no duplicate, missing or added id; verdict/reason
+combinations following the same rule as the new-claim panel; the three
+`adjudications/` sheets unchanged against a pre-launch hash snapshot; and no
+bridge-shaped output anywhere but `bridge/`. All nine pass.
+
+The sheets were committed **unread**, in their own commit, before any agreement
+rate, verdict distribution, majority verdict or arm value existed;
+`measure.py --bridge` was run only at unblinding, one authorisation later. The
+agreement figures it produced are in "Bridge" under "The result".
+
+## The result
+
+Unblinded at HEAD `c7eacd047af09bf22c914a72a67e7258bfd95cdd` with a clean
+worktree and `measure.py` at blob
+`44e34485a473c8cd7e612249aef2d8763d9ce434` — the same bytes committed before
+the first review existed. `bats tests/round-24-*.bats`: 98/98. `tiebreak.tsv`
+absent in both the repo and the measurement root; `adjudications/` and
+`bridge/` hold three sheets each and nothing else. Both commands were run to
+completion with stdout redirected to `result-bridge.txt` and `result.txt`, and
+neither file was opened until both had exited 0 with empty stderr.
+
+**n = 11 per arm** against a planned 12. Index 5 is void in **both** arms and
+**n was not backfilled** — the registered rule voids the index rather than
+replacing a review whose output had already been read, and the void is a
+design-integrity fact, not a missing-data problem to repair. n = 11 meets the
+pre-registered floor of 11, so the round is analysed as registered — **subject
+to the index-attribution reading set out below**, under the other reading of
+which n would be 10. 1765 findings, 107 claims, 13 of them added by this round.
+
+| | W | N | diff | Welch 95% CI | df | |
+| --- | --- | --- | --- | --- | --- | --- |
+| **PRIMARY** C+M `not-a-defect` | 1.45 | 3.18 | **−1.73** | **[−2.39, −1.07]** | 13.6 | confirmatory |
+| SECONDARY C+M composite | 2.09 | 4.55 | −2.45 | [−3.34, −1.57] | 18.2 | exploratory |
+| CONTROL distinct `real` claims | 34.27 | 33.73 | +0.55 | [−1.82, 2.91] | 18.5 | fires no rule |
+
+**The confirmatory rule fires.** The interval lies entirely below zero, so the
+Finding Floor's whole-floor effect on Critical/Major `not-a-defect` findings is
+**CONFIRMED (F10) under the registered-output-path attribution** — the
+condition is part of the grade and is stated wherever the grade is. The interval
+states the size; the rule does not require it to match round 17's −2.67, and the
+round makes no claim that it does.
+
+> **What the condition is.** One agent was launched for index 6 and wrote to
+> index 5's registered path, and part of that file was read (deviation 5). The
+> exchange rule voids "the whole review index" but never says which index when
+> the launch slot and the registered output path disagree — **the protocol
+> registers no priority**, and `deviations.md` §9 adjudicates it after the fact
+> rather than pretending it was settled in advance. Reading the **registered
+> output path** as decisive gives n = 11 and the table above. Reading the
+> **launch slot** as decisive voids index 6 as well, gives **n = 10**, and by
+> this round's own design-integrity floor the round would then be **DESCRIPTIVE
+> ONLY** — no confirmatory claim and no grade moved. **The n = 10 interval has
+> not been computed and will not be**: producing it with the result already
+> known is the selection this round exists to avoid, and it would not improve
+> the choice between readings.
+
+The **secondary is exploratory and moves no grade** — it is round 17's
+pre-registered primary, reported here with its interval so the two rounds can
+be read on the same quantity, and nothing more.
+
+The **control shows no detectable change**. That phrasing is the registered one
+and is load-bearing: it is not non-inferiority, not equivalence, and not
+"coverage preserved". No margin was declared, so a flat control licenses no
+statement about coverage being maintained.
+
+Per-review primary, in registered index order:
+
+```
+W: 1, 0, 1, 1, 3, 2, 2, 0, 2, 2, 2      indices 1,2,3,4,6,7,8,9,10,11,12
+N: 3, 3, 3, 4, 3, 3, 4, 3, 3, 3, 3      void: 5 (cause in reviews.tsv)
+```
+
+### Bridge
+
+The bridge compares this round's blind panel against round 17's frozen verdicts
+on 24 claims. **It fires no rule and the frozen verdicts are not rewritten** —
+it is a calibration record, not evidence for or against the hypothesis, and no
+grade turns on it.
+
+- individual judgements **66/72 = 91.7%**
+- panel-majority verdicts **22/24 = 91.7%**, no three-way split
+- by frozen class: `real` 40/45, `not-a-defect` 20/21, `wrong` 6/6
+
+### RECORDED outputs, checked item by item against the protocol
+
+§Metrics item 4 lists what this round records beyond the three metrics. Each is
+either produced or listed below as missing — nothing is quietly dropped.
+
+| RECORDED item | where it is |
+| --- | --- |
+| total findings written | `result.txt` — 1765 |
+| new claims | `result.txt` — 13 added by this round, of 107 |
+| bridge agreement | `result-bridge.txt` — above |
+| replacements | `replaced-agents.tsv` (7 agents) and `quarantined-outputs.tsv` |
+| execution record of §"What cannot be held the same" | above: model identifier, stated training cutoff, CLI/SDK/entrypoint/effort, dates |
+
+**Not produced. Not computed now, and not treated as zero, non-significant or
+optional:**
+
+| missing item | status |
+| --- | --- |
+| `wrong` claims per review | no implementation in `measure.py` |
+| the Critical/Major-to-Minor ratio | no implementation in `measure.py` |
+| new claims' **per-arm share of the primary** | the count is printed; the share is not implemented |
+| per-agent tokens for the 66 executed reviews | `batches.tsv` has no `raw_tokens` column — tokens exist only for the voided and replaced agents |
+| round 12's F9 data re-analysed as a Welch interval | no implementation |
+| the index-paired **sensitivity analysis** (§Inference) | no implementation |
+
+All six gaps have the same cause and the same treatment. The cause: `measure.py`
+was written to satisfy the confirmatory path and its checks, and no test
+asserted that the RECORDED list was covered, so the omissions survived every
+review while the code was still blind. The treatment: **they are not computed
+now.** Two of them are trivially derivable from figures already on the page —
+which is precisely why the rule matters, since a number computed with the
+result in view can be selected even when nobody intends to select it. The
+round-12 clause was pre-registered in this protocol for exactly that reason.
+
+None of the six is a sensitivity gate on the primary, and none conditions the
+confirmatory rule; the primary's Welch interval and its verdict stand as
+registered. But the round's RECORDED list is **incomplete**, and it is
+published incomplete rather than completed after the fact.
+
+### Execution deviations and quarantined material
+
+Full narrative in `deviations.md`; the summary and the disposition:
+
+| # | deviation | disposition |
+| --- | --- | --- |
+| 1 | sub-agent model identifier differs from the orchestrator's | declared, unchanged |
+| 2 | host kernel changed between the gate and the round | declared environment fact |
+| 3 | the measurement moved off `/tmp` after a reboot destroyed it | declared; the probe's reviews were lost with it and were never restored or read |
+| 4 | **index 5: a broken `Write` and a no-peek breach** — one W-arm summary reached the orchestrator | both arms **void**, no replacement, **n = 11**, not backfilled |
+| 5 | delivery envelope introduced as a transport amendment; a hand-built prompt gave `review-06-N-a` the **stale `review-05-N-a` path**, and the agent landed a late file there — the registered index-6 path stayed empty | agent replaced; the stale-path file **quarantined** into the index-5 quarantine, hash-pinned in `voided-index-05.tsv`, excluded from every metric; every later prompt script-composed and `--verify-sent`-checked |
+| 6 | index 7 written by a Codex continuation via `apply_patch` | six outputs **quarantined unread**; index re-run on the Claude path |
+| 7 | clustering blocked twice by API 529, nothing landed and nothing exposed | waited, then ran serially; no automatic retry |
+| 8 | six RECORDED outputs never implemented | published as missing, above |
+| 9 | **the exchange rule registers no priority** when an agent's launch slot and its registered output path name different indices | adjudicated after the fact for the output path; the grade carries the condition and the alternative (n = 10, descriptive only) |
+| 10 | index 7's six replacement rows sat at `pending`; the protocol puts replacement history in `reviews.tsv`, the round put it in a separate ledger | ledger completed with `replacement_agent_id`; `reviews.tsv` deliberately not amended after unblinding |
+| 11 | `measure.py` would not reject a finding in two clusters | forward-only gate; this round's data has none |
+
+**No quarantined or voided file was ever opened as a measurement input**, and
+nothing from any of them entered `findings.tsv`, the clustering, the
+adjudication or any figure on this page. Index 5's landed outputs and index 7's
+six invalid landings are recorded by path and hash in `voided-index-05.tsv` and
+`quarantined-outputs.tsv`. The reviews lost to the `/tmp` reboot are unrecovered
+by choice.
+
+**"Never read" would be too strong, and three exposures are on record** — all
+of them to an authorizer, none of them into an analysis:
+
+- `review-05-W-a`'s reply carried its own severity summary — "10 Critical, 14
+  Major, 5 Minor … 29 findings" — which is an arm-dependent precursor of the
+  primary. This is the breach that voided index 5 in both arms;
+- **partial raw text** from the late quarantined `review-05-N-a`-path file was
+  seen by a prior authorizer while investigating the write. That authorizer
+  recused before index 7 and was not consulted again; no arm value, count,
+  severity or review text passed to the continuing authorizer;
+- the **byte size** of that same voided file was seen by the continuing
+  authorizer, through a metadata request made while confirming the physical
+  quarantine. The file was not opened, and no size for any usable review was
+  seen.
+
+Each is recorded in `deviations.md` with what it did and did not change: no
+sample, metric, analysis, replacement, exclusion or continuation rule moved
+after any of them, and the exposed review was already void by its own
+registered output path. **Index 7's six Codex-written outputs are the material
+that was never read at all** — quarantined by hash on discovery, never opened,
+never summarised.

@@ -1,0 +1,7 @@
+review	arm	part	agent_id	model	write_mechanism	output_git_blob_sha1	status	cause
+7	W	a	/root/r24_i07_w_a	NOT-EXPOSED-CODEX-CONTINUATION	apply_patch	83891a4e5533e3fb57e0edb29273e1913c189a92	quarantined	Write tool unavailable; invalid under delivery envelope; unread
+7	W	b	/root/r24_i07_w_b	NOT-EXPOSED-CODEX-CONTINUATION	apply_patch	d5e10305a7ceb153aaf0b237a4efab3621f85b79	quarantined	Write tool unavailable; invalid under delivery envelope; unread
+7	W	c	/root/r24_i07_w_c	NOT-EXPOSED-CODEX-CONTINUATION	apply_patch	8108369b7ed7c1e61b534782c44051f7b699598f	quarantined	Write tool unavailable; invalid under delivery envelope; unread
+7	N	a	/root/r24_i07_n_a	NOT-EXPOSED-CODEX-CONTINUATION	apply_patch	69c761b0d91e07990ab193e5de1847ac4d400e4c	quarantined	Write tool unavailable; invalid under delivery envelope; unread
+7	N	b	/root/r24_i07_n_b	NOT-EXPOSED-CODEX-CONTINUATION	apply_patch	968e55fc1e39d4816c93bf704891cbe16fa97a84	quarantined	Write tool unavailable; invalid under delivery envelope; unread
+7	N	c	/root/r24_i07_n_c	NOT-EXPOSED-CODEX-CONTINUATION	apply_patch	7e7330035662d400ae25a00d3f52771092784a17	quarantined	Write tool unavailable; invalid under delivery envelope; unread

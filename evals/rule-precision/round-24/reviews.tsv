@@ -1,0 +1,25 @@
+review	arm	status	cause
+1	W	complete	
+1	N	complete	
+2	W	complete	
+2	N	complete	
+3	W	complete	
+3	N	complete	
+4	W	complete	
+4	N	complete	
+5	W	void	void in both arms under the pre-registered exchange rule: part of W-a output (its severity counts) reached the orchestrator, so no replacement is permitted and n is not backfilled
+5	N	void	void in both arms under the pre-registered exchange rule: part of W-a output (its severity counts) reached the orchestrator, so no replacement is permitted and n is not backfilled
+6	W	complete	
+6	N	complete	
+7	W	complete	
+7	N	complete	
+8	W	complete	
+8	N	complete	
+9	W	complete	
+9	N	complete	
+10	W	complete	
+10	N	complete	
+11	W	complete	
+11	N	complete	
+12	W	complete	
+12	N	complete	

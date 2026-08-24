@@ -54,18 +54,44 @@ Each line exists because the previous one was blind to something:
   preferences) that no pinned input reproduces — it is cited there as the
   floor's recorded rationale, and this ledger's numbers are the re-runnable
   ones.
-- **MEASURED, with qualified replication evidence — the Finding Floor cuts
-  Critical/Major non-defects with no detectable coverage change.** Round 12
-  (F9): 1.62 vs 4.12 per review, t = −4.11, pre-registered and clean. Round 17
-  (F10, a fixture built blind to the floor): 2.44 vs 4.56, t = −3.05 — same
-  direction, same size, **but its n-extension was authorised after the arm
-  table had been seen and its literal sd gate still fails at n = 9**, so the
-  repeat does not meet this ledger's REPLICATED bar. Disclosure does not
-  restore confirmatory status; an independent fixed-n, no-peek replication
-  would. Coverage showed no detectable change in either (nulls inside their
-  MDEs, not equivalence). (Downgraded from REPLICATED 2026-08-23, on review.) The floor's digest wiring line exists because round 7 proved a
-  section no routing path names is dead text.
-- **CONFIRMED (F10) — clause 1 is the active component.** Round 20's 2×2: W −
+- **CONFIRMED (F10), under the registered-output-path attribution — the whole
+  floor cuts Critical/Major `not-a-defect` findings.** Round 24, the independent
+  fixed-n, no-peek replication the earlier entry called for: W − N = **−1.73**,
+  Welch 95% CI **[−2.39, −1.07]**, **n = 11 per arm** (planned 12; index 5 void
+  in both arms, not backfilled). The confirmatory rule was registered before any
+  data existed and fires. **The condition is not decoration.** One agent was
+  launched for index 6 and wrote to index 5's registered path, and part of that
+  file was read; the exchange rule voids "the whole review index" but registers
+  no priority for the case where the launch slot and the output path disagree.
+  Reading the output path as decisive gives n = 11 and this row. Reading the
+  launch slot as decisive gives n = 10, at which the round's own
+  design-integrity floor makes it **descriptive only and moves no grade**. The
+  n = 10 interval was deliberately not computed. Adjudicated after the fact in
+  `rule-precision/round-24/deviations.md` §9; never cite this row as an
+  unconditional CONFIRMED. This
+  is the **whole-floor** contrast — all three clauses against no floor — and is
+  **a different quantity from round 20's clause-1 contrast** below; the two
+  CONFIRMED (F10) grades are not the same result and neither substitutes for
+  the other. **It does not promote to REPLICATED**: that bar wants two
+  fixtures, and F10 is one. Coverage control: no detectable change (34.27 vs
+  33.73, CI [−1.82, 2.91]) — no margin was declared, so this is not
+  non-inferiority and not "coverage preserved". Round 24's RECORDED list is
+  published incomplete: six registered auxiliary outputs were never implemented
+  and were **not** computed after unblinding
+  (`rule-precision/round-24/README.md`).
+- **MEASURED (F9), with qualified replication evidence (F10) — the prior
+  record, kept.** Round 12 (F9): 1.62 vs 4.12 per review, t = −4.11,
+  pre-registered and clean. Round 17 (F10, a fixture built blind to the floor):
+  2.44 vs 4.56, t = −3.05 — same direction, same size, **but its n-extension
+  was authorised after the arm table had been seen and its literal sd gate
+  still fails at n = 9**, so that repeat does not meet this ledger's REPLICATED
+  bar and round 24 does not retroactively repair it. Coverage showed no
+  detectable change in either (nulls inside their MDEs, not equivalence).
+  (Downgraded from REPLICATED 2026-08-23, on review; F10 confirmed
+  independently by round 24, 2026-08-24.) The floor's digest wiring line exists
+  because round 7 proved a section no routing path names is dead text.
+- **CONFIRMED (F10) — clause 1 is the active component.** A **decomposition**
+  contrast, not the whole-floor one above. Round 20's 2×2: W −
   W₂₃ = −1.33, paired CI [−2.27, −0.39]. Clause 2 alone is indistinguishable
   from no floor (round 19: −0.17); clause 3 has no positive evidence in any
   cell — and no round licenses deleting it, because every null sat inside its
@@ -160,8 +186,8 @@ Each line exists because the previous one was blind to something:
 
 | shipped element | evidence | grade |
 |---|---|---|
-| Finding Floor, digest-wired | rounds 11 (diagnosis), 12, 17, 7 (wiring) | MEASURED (F9) + qualified replication (F10) |
-| .. clause 1 kept | round 20 | CONFIRMED (F10); OPEN (F11) |
+| Finding Floor, digest-wired | rounds 11 (diagnosis), 12, 17, 24, 7 (wiring) | **CONFIRMED (F10) under the registered-output-path attribution** — whole-floor, −1.73 CI [−2.39, −1.07], n = 11 (round 24; under the launch-slot reading n = 10 and descriptive only); MEASURED (F9) + qualified replication (F10) from rounds 12, 17 |
+| .. clause 1 kept | round 20 | CONFIRMED (F10), a different contrast from the row above; OPEN (F11) |
 | .. clauses 2, 3 kept | rounds 18, 19, 20 — nulls inside their MDEs | no deletion licensed |
 | Remedy Floor, wired | round 7 | MEASURED |
 | R54 extended obligations | rounds 6.5, 8 | MEASURED |

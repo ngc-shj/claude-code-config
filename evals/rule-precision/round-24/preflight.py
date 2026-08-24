@@ -102,6 +102,18 @@ def sh(*cmd, cwd=None):
     return r.returncode, r.stdout, r.stderr
 
 
+def measurement_artifacts(root):
+    """Which registered measurement artifacts exist under `root`.
+
+    Takes the directory rather than reading HERE, so the detection can be
+    exercised against a sandbox. The production call still passes HERE: the test
+    checks the rule, not the repository's current phase, and a test that asserted
+    the real round-24 directory were empty would go red the moment the round
+    legitimately started — as it did.
+    """
+    return [n for n in MEASUREMENT if os.path.exists(os.path.join(root, n))]
+
+
 def blob_sha1(data):
     """git hash-object, so digests match what the protocol and README quote."""
     return hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest()
@@ -213,7 +225,7 @@ def main():
           'the protocol commit is not in this history' if code else '')
 
     print('\n1. the round has not started')
-    started = [n for n in MEASUREMENT if os.path.exists(os.path.join(HERE, n))]
+    started = measurement_artifacts(HERE)
     check(not started, 'no measurement artifact in round-24/',
           f'found {started}' if started else '')
 

@@ -216,8 +216,39 @@ print(len(v))"
   [ "$output" = "94" ]
 }
 
-@test "no measurement artifact exists in round-24" {
-  for f in findings.tsv clusters.tsv reviews.tsv tiebreak.tsv adjudications bridge; do
-    [ ! -e "$R24/$f" ]
-  done
+@test "an empty round directory shows no measurement artifact" {
+  pf "
+assert p.measurement_artifacts('$SANDBOX') == [], p.measurement_artifacts('$SANDBOX')
+print('ok')"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "ok" ]]
+}
+
+@test "every registered measurement artifact is detected, one at a time" {
+  # The rule is checked against a sandbox, not against the real round-24
+  # directory: the round has legitimately started, so that directory holds these
+  # files now. What must stay true is that each of them is DETECTED.
+  pf "
+import os, shutil
+for name in p.MEASUREMENT:
+    root = '$SANDBOX/probe'
+    shutil.rmtree(root, ignore_errors=True); os.makedirs(root)
+    assert p.measurement_artifacts(root) == []
+    target = os.path.join(root, name)
+    os.makedirs(target) if '.' not in name else open(target, 'w').close()
+    got = p.measurement_artifacts(root)
+    assert got == [name], (name, got)
+print(len(p.MEASUREMENT))"
+  [ "$status" -eq 0 ]
+  [ "$output" = "6" ]
+}
+
+@test "the production check reads the round directory itself" {
+  pf "
+import inspect
+src = inspect.getsource(p.main)
+assert 'measurement_artifacts(HERE)' in src, 'production call does not pass HERE'
+print('ok')"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "ok" ]]
 }

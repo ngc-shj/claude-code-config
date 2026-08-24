@@ -1,0 +1,8 @@
+review	arm	part	agent_id	model	tool_calls	tool_errors	raw_tokens	cause	replaced	replacement_agent_id
+6	N	a	a8a7edbfa562f5d95	claude-opus-5	12	0	590525	orchestrator supplied the stale registered review-05-N-a path; the late Write output and claim marker were quarantined with void index 5, and the expected review-06-N-a path remained absent	yes	afeff40bc5bf2776d
+7	W	a	/root/r24_i07_w_a	NOT-EXPOSED-CODEX-CONTINUATION	12	0	-	output landed with apply_patch, not the required Write tool; no review content or content-derived quantity exposed	yes	abfb301773456b51e
+7	W	b	/root/r24_i07_w_b	NOT-EXPOSED-CODEX-CONTINUATION	12	0	-	output landed with apply_patch, not the required Write tool; no review content or content-derived quantity exposed	yes	abfbe2955e11f081c
+7	W	c	/root/r24_i07_w_c	NOT-EXPOSED-CODEX-CONTINUATION	24	0	-	output landed with apply_patch, not the required Write tool; no review content or content-derived quantity exposed	yes	ae20affae474fa49b
+7	N	a	/root/r24_i07_n_a	NOT-EXPOSED-CODEX-CONTINUATION	18	1	-	output landed with apply_patch, not the required Write tool; no review content or content-derived quantity exposed	yes	a863b3e0783aabbf1
+7	N	b	/root/r24_i07_n_b	NOT-EXPOSED-CODEX-CONTINUATION	12	0	-	output landed with apply_patch, not the required Write tool; no review content or content-derived quantity exposed	yes	afd74018e3f8e0796
+7	N	c	/root/r24_i07_n_c	NOT-EXPOSED-CODEX-CONTINUATION	25	0	-	output landed with apply_patch, not the required Write tool; no review content or content-derived quantity exposed	yes	a9075c6f26f011cf6
