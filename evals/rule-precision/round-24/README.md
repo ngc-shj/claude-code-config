@@ -453,3 +453,23 @@ paragraph replaces.
 
 **Nothing beyond step 2 has been authorised.** The next thing that happens is
 someone deciding whether to run the round, with this record in front of them.
+
+## Tie-break: not required
+
+`measure.py`'s own `new_ids()`, `panel()` and `splits()` were run unchanged over
+the three committed adjudication sheets. **`splits()` returned empty: no claim
+drew three different verdicts**, so the registered tie-break branch does not
+fire.
+
+Nothing was created for it, and that is the point of recording it. There is no
+`tiebreak.tsv`, not even a header-only one — `measure.py` refuses a tie-break
+file when nothing split, so an empty sheet written "for completeness" would stop
+the round rather than tidy it. No tie-break brief was rendered, no output
+manifest registered, no envelope or composer written, and no fourth adjudicator
+launched.
+
+The branch decision is the only thing this step produced. The number of splits
+and the ids involved were computed inside the frozen functions and never
+printed; no majority verdict, verdict distribution or arm value was computed at
+all.
+
