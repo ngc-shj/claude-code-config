@@ -55,5 +55,4 @@ One row for **every** id in the new-claims file, in the order given.
 A `merge` chain must not be circular, and a `merge` target must itself be a
 `keep` row or an existing id.
 
-After writing the file, run `wc -l` on it and reply with `DONE <n>` where <n> is
-that count. Do not reply before the file exists.
+{REPLY_RULE}
