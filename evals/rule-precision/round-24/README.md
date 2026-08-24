@@ -42,7 +42,7 @@ be obtained it says so instead of estimating.
 | orchestrator model name | Opus 5 (1M context) | same |
 | model snapshot / build date | **NOT OBTAINABLE** — no dated snapshot identifier is exposed to the session. Not estimated. | — |
 | training cutoff | **May 2026** | session environment, "Assistant knowledge cutoff is May 2026". Month granularity is all that is published; no day is inferred. |
-| reviewer / clustering / adjudicator model | **NOT YET OBSERVED.** No round-24 agent has run. Sub-agents inherit the session model unless a call overrides it, and no round-24 call exists to inspect. | — |
+| reviewer / clustering / adjudicator model | **`claude-opus-5`** for every agent that produced an analysed artifact — recorded per agent in `batches.tsv`, `cluster-agents.tsv`, `merge-agent.tsv`, `adjudicate-agents.tsv`, `bridge-agents.tsv`. No per-call override was ever requested. The one exception is index 7's Codex continuation, whose identifier was never exposed and is recorded as `NOT-EXPOSED-CODEX-CONTINUATION`; its outputs are quarantined and analysed by nothing. Read before the round as **NOT YET OBSERVED**, since sub-agents inherit the session model and no round-24 call yet existed to inspect. | per-agent transcripts |
 | system-prompt fingerprint | **NOT OBTAINABLE** — the system prompt is not readable as a file from the session, so no hash can be taken. Not estimated. | — |
 | CLI | Claude Code **2.1.211** | `claude --version` |
 | Agent SDK | **0.3.220** | `CLAUDE_AGENT_SDK_VERSION` |
@@ -191,7 +191,11 @@ and must be recorded then, beside the template hashes above.
 | `brief-cluster.md` | `0938500dd7e432aaa9d3ae82126c1971743d0ad2` |
 | `adjudicate-bridge.md` | `750b7c38d0550dcec466823a3e892654a2360e84` |
 
-## State
+## State at preflight
+
+A snapshot of the moment the preflight ran, kept because a preflight that
+cannot show what it saw proves nothing. The round has since completed; the
+closing state is under "The result".
 
 | | |
 |---|---|
@@ -439,20 +443,28 @@ Re-running three agents now would also create an unregistered *second* gate with
 no rule for combining it with the first — a worse record than the one this
 paragraph replaces.
 
-## What happens next, in order
+## The authorization record, as it stood before the round ran
+
+Kept in its original form because the point of it was that each step needed its
+own decision. Every step below was subsequently authorised, one at a time, and
+the round is complete — see "The result".
 
 1. ~~The preflight commit is reviewed.~~ **Done** — #186, re-verified on merged
    `main`.
 2. ~~Reachability gate only, 3 agents, arm W, explicitly approved.~~ **Done —
    3/3.** Recorded above with the launch HEAD, the timestamps, and the
    sub-agent model identifier the round will carry.
-3. **The 72 review agents are a separate decision, and it has not been taken.**
-   The gate passing licenses nothing by itself: it says the manipulation
-   arrives, which is the precondition for the ablation meaning anything, not a
-   reason to spend ≈27.8M raw tokens on it.
+3. ~~**The 72 review agents are a separate decision, and it has not been
+   taken.** The gate passing licenses nothing by itself: it says the
+   manipulation arrives, which is the precondition for the ablation meaning
+   anything, not a reason to spend ≈27.8M raw tokens on it.~~ **Done** — run in
+   twelve authorised batches, 66 reviews analysable across indices 1–4 and
+   6–12.
 
-**Nothing beyond step 2 has been authorised.** The next thing that happens is
-someone deciding whether to run the round, with this record in front of them.
+At the time it was written, **nothing beyond step 2 had been authorised**. What
+followed it — extraction, clustering, merge, new-claim adjudication, the
+tie-break branch, the bridge panel, and finally unblinding — was each approved
+separately, and none of those approvals is retroactive.
 
 ## Tie-break: not required
 
@@ -474,7 +486,7 @@ printed; no majority verdict, verdict distribution or arm value was computed at
 all.
 
 
-## Bridge panel: delivered, unread
+## Bridge panel: how it was delivered
 
 Three fresh Claude sub-agents judged the 24 claims of `bridge-input.tsv` — the
 claim-only sibling of the frozen `bridge-sample.tsv`, whose verdicts are what
@@ -500,9 +512,10 @@ combinations following the same rule as the new-claim panel; the three
 `adjudications/` sheets unchanged against a pre-launch hash snapshot; and no
 bridge-shaped output anywhere but `bridge/`. All nine pass.
 
-The sheets are committed unread. No agreement rate, verdict distribution,
-majority verdict or arm value has been computed — `measure.py --bridge` has not
-been run.
+The sheets were committed **unread**, in their own commit, before any agreement
+rate, verdict distribution, majority verdict or arm value existed;
+`measure.py --bridge` was run only at unblinding, one authorisation later. The
+agreement figures it produced are in "Bridge" under "The result".
 
 ## The result
 
@@ -609,13 +622,36 @@ Full narrative in `deviations.md`; the summary and the disposition:
 | 2 | host kernel changed between the gate and the round | declared environment fact |
 | 3 | the measurement moved off `/tmp` after a reboot destroyed it | declared; the probe's reviews were lost with it and were never restored or read |
 | 4 | **index 5: a broken `Write` and a no-peek breach** — one W-arm summary reached the orchestrator | both arms **void**, no replacement, **n = 11**, not backfilled |
-| 5 | delivery envelope introduced as a transport amendment; `review-06-N-a` wrote nothing after a hand-built prompt replaced the output-path line | agent replaced; every later prompt script-composed and `--verify-sent`-checked |
+| 5 | delivery envelope introduced as a transport amendment; a hand-built prompt gave `review-06-N-a` the **stale `review-05-N-a` path**, and the agent landed a late file there — the registered index-6 path stayed empty | agent replaced; the stale-path file **quarantined** into the index-5 quarantine, hash-pinned in `voided-index-05.tsv`, excluded from every metric; every later prompt script-composed and `--verify-sent`-checked |
 | 6 | index 7 written by a Codex continuation via `apply_patch` | six outputs **quarantined unread**; index re-run on the Claude path |
 | 7 | clustering blocked twice by API 529, nothing landed and nothing exposed | waited, then ran serially; no automatic retry |
 | 8 | six RECORDED outputs never implemented | published as missing, above |
 
-**Quarantined and voided material was never read.** Index 5's landed outputs and
-index 7's six invalid landings are recorded by path and hash in
-`voided-index-05.tsv` and `quarantined-outputs.tsv`, and no finding, severity or
-arm value from any of them entered `findings.tsv` or any figure on this page.
-The reviews lost to the `/tmp` reboot are likewise unrecovered by choice.
+**No quarantined or voided file was ever opened as a measurement input**, and
+nothing from any of them entered `findings.tsv`, the clustering, the
+adjudication or any figure on this page. Index 5's landed outputs and index 7's
+six invalid landings are recorded by path and hash in `voided-index-05.tsv` and
+`quarantined-outputs.tsv`. The reviews lost to the `/tmp` reboot are unrecovered
+by choice.
+
+**"Never read" would be too strong, and three exposures are on record** — all
+of them to an authorizer, none of them into an analysis:
+
+- `review-05-W-a`'s reply carried its own severity summary — "10 Critical, 14
+  Major, 5 Minor … 29 findings" — which is an arm-dependent precursor of the
+  primary. This is the breach that voided index 5 in both arms;
+- **partial raw text** from the late quarantined `review-05-N-a`-path file was
+  seen by a prior authorizer while investigating the write. That authorizer
+  recused before index 7 and was not consulted again; no arm value, count,
+  severity or review text passed to the continuing authorizer;
+- the **byte size** of that same voided file was seen by the continuing
+  authorizer, through a metadata request made while confirming the physical
+  quarantine. The file was not opened, and no size for any usable review was
+  seen.
+
+Each is recorded in `deviations.md` with what it did and did not change: no
+sample, metric, analysis, replacement, exclusion or continuation rule moved
+after any of them, and the exposed review was already void by its own
+registered output path. **Index 7's six Codex-written outputs are the material
+that was never read at all** — quarantined by hash on discovery, never opened,
+never summarised.
