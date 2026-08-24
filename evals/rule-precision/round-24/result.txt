@@ -1,0 +1,16 @@
+1765 findings, 107 claims (13 added here), n = 11 per arm (planned 12)
+
+                                   W       N    diff              95% CI     df
+PRIMARY   C+M not-a-defect      1.45    3.18   -1.73      [-2.39, -1.07]   13.6   confirmatory
+SECONDARY C+M composite         2.09    4.55   -2.45      [-3.34, -1.57]   18.2   exploratory
+CONTROL   real claims          34.27   33.73    0.55       [-1.82, 2.91]   18.5   no rule
+
+CONFIRMATORY RULE — the Welch 95% CI for W - N on the PRIMARY lies entirely below zero.
+  FIRES: [-2.39, -1.07]. The effect is CONFIRMED on F10.
+  Direction held. The interval, not the rule, states the size — the
+  rule does not require it to match round 17's 2.67.
+
+per-review primary  W: [1, 0, 1, 1, 3, 2, 2, 0, 2, 2, 2]
+                    N: [3, 3, 3, 4, 3, 3, 4, 3, 3, 3, 3]
+review indices      1,2,3,4,6,7,8,9,10,11,12
+void indices        5 — see reviews.tsv for cause. n is never backfilled.

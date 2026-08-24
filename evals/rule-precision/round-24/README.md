@@ -503,3 +503,35 @@ bridge-shaped output anywhere but `bridge/`. All nine pass.
 The sheets are committed unread. No agreement rate, verdict distribution,
 majority verdict or arm value has been computed — `measure.py --bridge` has not
 been run.
+
+## Unblinding and the registered analysis
+
+Run at HEAD `c7eacd047af09bf22c914a72a67e7258bfd95cdd`, worktree clean, with
+`measure.py` at blob `44e34485a473c8cd7e612249aef2d8763d9ce434` — the same
+bytes committed before any review existed. `bats tests/round-24-*.bats`: 98/98.
+`tiebreak.tsv` absent in both the repo and the measurement root; no stray file
+in `adjudications/` or `bridge/`.
+
+Both commands were run to completion with their stdout redirected to
+`result-bridge.txt` and `result.txt`, and neither file was read until both had
+exited 0 with empty stderr.
+
+**PRIMARY, Critical/Major `not-a-defect` per review, n = 11 per arm:** W 1.45,
+N 3.18, difference **−1.73**, Welch 95% CI **[−2.39, −1.07]**, df 13.6. The
+confirmatory rule fires: the interval lies entirely below zero. **CONFIRMED on
+F10.** Secondary (composite) −2.45, [−3.34, −1.57]; control (`real` claims)
++0.55, [−1.82, 2.91] — *no detectable change*, which is not non-inferiority and
+carries no margin.
+
+Bridge, which fires no rule: 66/72 individual judgements and 22/24
+panel-majority verdicts agree with round 17's frozen verdicts, no three-way
+split.
+
+### Two registered outputs the code does not produce
+
+The protocol registers an index-paired **sensitivity analysis** (§Inference) and
+a Welch re-analysis of **round 12's F9 data** (§RECORDED 4). Neither is
+implemented in `measure.py`, and the gap was not noticed while the code was
+still blind. Both are therefore **not reported**: writing the code now would put
+analysis after unblinding, which is the exact failure the round-12 clause was
+written to prevent. The omission is recorded here rather than repaired.

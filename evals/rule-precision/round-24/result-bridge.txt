@@ -1,0 +1,11 @@
+BRIDGE — the current panel against round 17's frozen verdicts.
+Fires no rule. The frozen verdicts are not rewritten.
+
+  individual judgements   66/72 = 91.7%
+  panel-majority verdicts 22/24 = 91.7%
+  no majority (three-way) 0 of 24
+
+frozen class       agree    of
+real                  40    45
+not-a-defect          20    21
+wrong                  6     6
