@@ -1,16 +1,22 @@
-# Monograph — working skeleton
+# Monograph — evidence map and writing record
 
 **Working title:** *Evidence-Calibrated Improvement of LLM Code Review: Rule
 Ablation, Claim-Level Quality, and Cheap Falsification of Token Optimizations*
 
-**Status:** all eight chapters drafted (`01`–`08`); chapters 7 and 6 merged
-after review; 4, 2, 3, 5, 1 and 8 under batch review on one branch, per the
-amended rule 5. This file fixes the thesis, the
-chapter-to-evidence mapping, and the writing rules **before prose exists**, for
-the same reason every protocol in `../evals/` fixed its rules before its
-numbers: the ledger (`../evals/README.md`) took two review rounds to purge ten
-aggregation errors, and a draft that cites evidence from memory will
-manufacture the same class of defect at chapter scale.
+**Status:** all eight chapters (`01`–`08`) are drafted and merged after review —
+7 and 6 first, then 4, 2, 3, 5, 1 and 8 as one batch (`433de72`, PR #184) under
+the amended rule 5. Round 24's conditional confirmation and the attribution
+limitation it carries are incorporated in chapters 4, 7 and 8 and in the map
+below.
+
+This file was written **before any prose existed**, for the same reason every
+protocol in `../evals/` fixed its rules before its numbers: the ledger
+(`../evals/README.md`) took two review rounds to purge ten aggregation errors,
+and a draft that cites evidence from memory will manufacture the same class of
+defect at chapter scale. It fixes the thesis, the chapter-to-evidence mapping
+and the writing rules, and now doubles as the monograph's index — which is why
+the sections below are kept current with the chapters rather than left as the
+skeleton they started as.
 
 ## Thesis
 
@@ -31,10 +37,25 @@ candidates under the trace-conditional model, and neither did the other's
 job.
 
 The earlier phrasing "identify effective interventions" is deliberately not
-used: the ledger's grades support *measured on one fixture, with qualified
-replication evidence on a second, open on a third* for the strongest positive
-result — the F10 repeat's post-hoc n-extension keeps it short of the
-REPLICATED bar — and the thesis claims exactly that and no more.
+used. For the strongest positive result the ledger's grades support
+*measured on one fixture, conditionally confirmed on a second, open on a
+third*, and the thesis claims exactly that and no more:
+
+- **F9 — MEASURED.** Round 12, pre-registered and clean, but its registered
+  rule was not an interval rule, so F9 is not a confirmatory fixture.
+- **F10 — CONFIRMED, under the registered-output-path attribution.** Round 24,
+  fixed-n and no-peek by design, −1.73 with a Welch 95% CI of [−2.39, −1.07] at
+  n = 11 per arm. **The condition is load-bearing**: the exchange rule never
+  ranked an agent's launch slot against its registered output path, and under
+  the launch-slot reading n would be 10 and the round **descriptive only**. The
+  alternative interval was deliberately not computed. Round 17's earlier F10
+  repeat stays *qualified replication evidence* — its post-hoc n-extension is
+  not repaired by a later round.
+- **F11 — OPEN.** Two rounds and ≈86M raw tokens did not resolve the transfer,
+  and the recorded decision is not to spend more.
+
+**This is not REPLICATED.** That bar wants two confirmed fixtures; there is
+one, so **fixture-independence is not established**.
 
 ## What this can and cannot be, on current evidence
 
@@ -109,19 +130,30 @@ difference, identical point estimates beside MDE 2.86).
 `../evals/rule-precision/measure.py` and
 `../evals/rule-precision/round-15/measure.py` re-runs.
 
-### 4. The Finding Floor: a measured intervention with qualified replication evidence, and its open edge
+### 4. The Finding Floor: a conditionally confirmed intervention, and its open edge
 
 Diagnosis re-run: 127 of 574 findings non-real, 2 misread — the failure mode
 is ungrounded assertion, not misreading. Effect: 1.62 vs 4.12 (F9), 2.44 vs
 4.56 (F10, fixture built blind to the floor), coverage with no detectable
-change in either. Decomposition: clause 1 CONFIRMED on F10 (paired CI
-[−2.27, −0.39]); clauses 2–3 nulls inside their MDEs, no deletion licensed.
+change in either. Confirmation: round 24, F10, fixed-n/no-peek by design with a
+recorded no-peek breach handled by the registered rule — **−1.73, Welch 95% CI
+[−2.39, −1.07], n = 11**, CONFIRMED *under the registered-output-path
+attribution*; under the launch-slot reading n = 10 and descriptive only, and
+that alternative interval was not computed. Six registered RECORDED outputs
+were never implemented and are published as missing rather than computed after
+unblinding. Decomposition: clause 1 CONFIRMED on F10 (paired CI
+[−2.27, −0.39]), a different contrast from the whole-floor one; clauses 2–3
+nulls inside their MDEs, no deletion licensed.
 The open edge, reported as such: F11 transfer not resolved (round 21 CI
 crosses zero; round 22's sensitivity gate fired, 1.41 vs 1.33), ≈86M raw /
 ≈61M api-eq processed by the two F11 rounds' review agents alone, and the
 recorded decision not to run round 23.
 *Sources:* `../evals/rule-precision/round-12/`,
-`../evals/rule-precision/round-17/`, `../evals/rule-precision/round-18/`,
+`../evals/rule-precision/round-17/`,
+`../evals/rule-precision/round-24/` (with its `deviations.md` §9 for the
+attribution and §8 for the missing RECORDED outputs),
+`../evals/rule-ablation/protocols/round-24.md`,
+`../evals/rule-precision/round-18/`,
 `../evals/rule-precision/round-19/`, `../evals/rule-precision/round-20/`,
 `../evals/rule-precision/round-21/`, `../evals/rule-precision/round-22/`;
 `../evals/rule-precision/design-audit/`.

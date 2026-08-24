@@ -1,19 +1,22 @@
-# 4. The Finding Floor: a measured intervention with qualified replication evidence, and its open edge
+# 4. The Finding Floor: a conditionally confirmed intervention, and its open edge
 
 The Finding Floor is three clauses inherited by every finding a reviewer
 writes, whichever rule routed it there: point at the evidence inside the
 change; treat a requirement you cannot ground as a question, ranked Minor;
 never state a preference as a defect
 (`../skills/triangulate/common-rules.md`, "Finding Floor"). It is the series'
-one intervention whose effect repeated on a second fixture — at qualified
-strength, short of the ledger's REPLICATED bar — and this chapter follows it
-through its full arc: the diagnosis it answers, the effect measured twice, the
-decomposition into clauses, the replication attempt that did not resolve, and
-the recorded decision to stop measuring. Its grades, up front and in the
+one intervention whose effect reached a confirmatory interval on a second
+fixture — conditionally, and still short of the ledger's REPLICATED bar, which
+wants two — and this chapter follows it through its full arc: the diagnosis it
+answers, the effect measured twice, the round that confirmed it and the
+condition that confirmation carries, the decomposition into clauses, the
+transfer attempt that did not resolve, and the recorded decision to stop
+measuring. Its grades, up front and in the
 ledger's vocabulary (`../evals/README.md`): the effect on Critical/Major
 `not-a-defect` findings is **CONFIRMED on F10 under the registered-output-path
-attribution** by a fixed-n, no-peek round (§4.2.1 states the condition and what
-the other reading costs) and **MEASURED on F9**; round 17's F10 repeat remains qualified
+attribution** by a round built to a fixed-n/no-peek design whose execution
+carried a recorded no-peek breach (§4.2.1 states the condition, the breach, and
+what the other reading costs) and **MEASURED on F9**; round 17's F10 repeat remains qualified
 replication evidence for the reasons §4.2 states rather than absorbs, and
 confirmation on one fixture is **not REPLICATED**, which wants two. Clause 1 as
 the active component is **CONFIRMED** on F10 — a decomposition contrast, not
@@ -70,15 +73,23 @@ grade follows the defects, not the disclosure: the extension was not
 pre-registered and was authorised in sight of the arm table, so F10 is
 **qualified replication evidence — direction and size repeat — and not a
 confirmed replication**; disclosure does not restore confirmatory status,
-and an independent fixed-n, no-peek replication would.
+and an independent fixed-n, no-peek replication would. §4.2.1 is that round;
+this paragraph's grade is round 17's own and is not amended by it.
 
-### 4.2.1 Round 24: the fixed-n, no-peek confirmation
+### 4.2.1 Round 24: a conditional confirmation, on a fixed-n/no-peek design with a recorded breach
 
 **Round 24, F10** (`../evals/rule-precision/round-24/`) is the replication the
-previous paragraph asks for, run to a protocol committed with its analysis code
-before any review existed: n fixed at 12 per arm, no interim look at an arm
-value, the confirmatory rule and the exact Welch machinery in the repository
-before the first agent launched. On Critical/Major `not-a-defect` findings the
+previous paragraph asks for. Its **design** is what that paragraph named: n
+fixed at 12 per arm before any data existed, no interim look at an arm value,
+and the confirmatory rule with the exact Welch machinery committed to the
+repository before the first agent launched. Its **execution** did not match the
+design in one respect, and the distinction is kept rather than smoothed: one
+review agent's reply carried its own severity counts to the orchestrator, an
+arm-dependent precursor of the primary. That is a **recorded no-peek breach**,
+and the registered rule was applied to it rather than argued with — the index
+was voided in **both** arms and n was not backfilled, which is where n = 11
+comes from. Nothing about the breach was left to judgement at the time it
+happened. On Critical/Major `not-a-defect` findings the
 arms separate by **−1.73**, Welch 95% CI **[−2.39, −1.07]**, df 13.6, at
 **n = 11 per arm** — index 5 was voided in both arms by the registered
 technical-failure rule and n was not backfilled, leaving the round above its
@@ -237,8 +248,10 @@ So the floor ships as follows, and the traceability is the point:
 ## 4.6 What this chapter claims, and no more
 
 The Finding Floor reduces Critical/Major `not-a-defect` findings on F10 —
-**CONFIRMED under the registered-output-path attribution**, on a fixed-n,
-no-peek round whose rule and analysis code predate its data, with the interval
+a **conditional confirmation — CONFIRMED under the registered-output-path
+attribution**, on a round designed fixed-n and no-peek, whose rule and analysis
+code predate its data and whose execution carried a recorded no-peek breach
+handled by the registered rule, with the interval
 [−2.39, −1.07] stating the size. The attribution is an after-the-fact
 adjudication of a case the protocol left unranked, and under the other reading
 the round is descriptive only (§4.2.1); the grade is never to be quoted without
