@@ -199,7 +199,7 @@ identifier was not exposed, so the execution records say
 previously observed `claude-opus-5` execution environment and must remain a
 declared environment deviation even after compliant replacements run.
 
-## 6. Clustering blocked by API 529 — twice, with nothing exposed
+## 7. Clustering blocked by API 529 — twice, with nothing exposed
 
 Two attempts at the eight-agent clustering fan-out, at 2026-08-24T14:25 and
 14:33 JST, ended with **all eight agents terminating on `API Error: 529
@@ -232,3 +232,53 @@ moment a 529 recurs, with no automatic retry.
 That ordering exists so that a server outage cannot be paid for in measurement
 agents, and so that concurrency is only ever ruled in or out by evidence.
 
+
+## 8. Six RECORDED outputs were never implemented, and were not computed after unblinding
+
+The protocol registers, beyond the three metrics, a RECORDED list (§Metrics
+item 4) and an index-paired **sensitivity analysis** (§Inference). Six of those
+items have no implementation in `measure.py`:
+
+| item | registered in |
+| --- | --- |
+| `wrong` claims per review | §Metrics 4 |
+| the Critical/Major-to-Minor ratio | §Metrics 4 |
+| new claims' per-arm share of the primary | §Metrics 4 (the count is produced; the share is not) |
+| per-agent tokens for the 66 executed reviews | §Metrics 4 — `batches.tsv` carries no `raw_tokens` column, so tokens exist only for the voided and replaced agents |
+| round 12's F9 data re-analysed as a Welch interval | §Metrics 4 |
+| the index-paired sensitivity analysis | §Inference |
+
+**When it was found: after unblinding**, while checking `result.txt` and
+`result-bridge.txt` against the protocol clause by clause. It was not found
+earlier because nothing looked for it — `measure.py` was reviewed hard on the
+confirmatory path, its inputs and its gates, and no test asserted that the
+RECORDED list was covered. The protocol's own §"The analysis is committed with
+the protocol" makes the confirmatory promise enforceable and says nothing about
+the recorded one, so a check that would have caught this had no place to live.
+
+**Decision: not computed.** Two of the six are derivable in a few lines from
+figures already published, which is the argument for computing them and the
+reason not to. The round-12 clause was pre-registered in *this* protocol
+precisely so that it could not be produced with this round's result already
+known and then read as corroboration; the same objection applies to the other
+five, and applying it selectively would be worse than applying it to none. A
+number computed after the fact can be selected without anyone intending to
+select it, and the point of the pre-registration is to make that impossible
+rather than unlikely.
+
+**What this does and does not touch.** None of the six is a gate, a
+sensitivity condition on the primary, or an input to the confirmatory rule; the
+primary's Welch interval and its verdict stand exactly as registered, computed
+by code committed before the first review existed. What is lost is real
+nonetheless: the index-paired sensitivity analysis was registered to show
+whether the independent-groups choice mattered, and its absence is published as
+a limitation, not as a null, a non-significant result, or an optional extra.
+The RECORDED list is **incomplete**, and it is published incomplete.
+
+**Forward, and not applied to this round:** a protocol's recorded outputs need
+the same enforcement its confirmatory path has — a test that fails when the
+analysis does not produce an item the protocol lists. That is a change to how
+the next round is built. Nothing about it is retrofitted here.
+
+The duplicate `## 6.` heading in this file was corrected to `## 7.` when this
+section was added; no text of that section changed.

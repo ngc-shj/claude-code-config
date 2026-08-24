@@ -11,11 +11,13 @@ through its full arc: the diagnosis it answers, the effect measured twice, the
 decomposition into clauses, the replication attempt that did not resolve, and
 the recorded decision to stop measuring. Its grades, up front and in the
 ledger's vocabulary (`../evals/README.md`): the effect on Critical/Major
-non-defect findings is **MEASURED on F9, with qualified replication evidence
-on F10** — the repeat does not meet the ledger's REPLICATED bar, for reasons
-§4.2 states rather than absorbs; clause 1 as the active component is
-**CONFIRMED** on F10; the transfer of that component to F11 is **OPEN**; and
-the clauses ship as they are, two of them on nulls that license nothing.
+`not-a-defect` findings is **CONFIRMED on F10** by a fixed-n, no-peek round
+(§4.2.1) and **MEASURED on F9**; round 17's F10 repeat remains qualified
+replication evidence for the reasons §4.2 states rather than absorbs, and
+confirmation on one fixture is **not REPLICATED**, which wants two. Clause 1 as
+the active component is **CONFIRMED** on F10 — a decomposition contrast, not
+the whole-floor one; the transfer of that component to F11 is **OPEN**; and the
+clauses ship as they are, two of them on nulls that license nothing.
 
 ## 4.1 The diagnosis it answers
 
@@ -68,6 +70,49 @@ pre-registered and was authorised in sight of the arm table, so F10 is
 **qualified replication evidence — direction and size repeat — and not a
 confirmed replication**; disclosure does not restore confirmatory status,
 and an independent fixed-n, no-peek replication would.
+
+### 4.2.1 Round 24: the fixed-n, no-peek confirmation
+
+**Round 24, F10** (`../evals/rule-precision/round-24/`) is the replication the
+previous paragraph asks for, run to a protocol committed with its analysis code
+before any review existed: n fixed at 12 per arm, no interim look at an arm
+value, the confirmatory rule and the exact Welch machinery in the repository
+before the first agent launched. On Critical/Major `not-a-defect` findings the
+arms separate by **−1.73**, Welch 95% CI **[−2.39, −1.07]**, df 13.6, at
+**n = 11 per arm** — index 5 was voided in both arms by the registered
+technical-failure rule and n was not backfilled, leaving the round above its
+pre-registered design-integrity floor of 11. The interval lies entirely below
+zero, so the whole floor's effect on this metric is **CONFIRMED (F10)**.
+
+Two things that grade does not say. **The interval states the size, not the
+rule**: the round was never required to reproduce round 17's −2.67, and the
+narrower −1.73 neither strengthens nor weakens the confirmation. And **one
+fixture is not two**: F10 is now a confirmed fixture and F9 is not, so the
+effect does not reach REPLICATED and **fixture-independence remains
+unestablished** — nothing here licenses the claim that the floor behaves this
+way on a fixture it has not met.
+
+The control moved by +0.55, CI [−1.82, 2.91]: **no detectable change**, with no
+declared margin behind it and therefore no claim that coverage is preserved. A
+blind bridge panel re-judged 24 of round 17's adjudicated claims and agreed on
+66 of 72 individual judgements and 22 of 24 majorities; that is a calibration
+record which fires no rule and rewrites no frozen verdict.
+
+The round's own deviation is in its record and belongs here. Six outputs the
+protocol registered under RECORDED — `wrong` claims per review, the
+Critical/Major-to-Minor ratio, the new claims' per-arm share, per-agent tokens
+for the executed reviews, a Welch re-analysis of round 12's F9 data, and the
+index-paired sensitivity analysis — were **never implemented**, and the gap was
+not caught while the code was still blind. They were **not computed after
+unblinding**, because a number produced with the result in view can be selected
+without anyone intending to select it; the round-12 clause was pre-registered
+in that protocol for precisely this reason. So the round is published with an
+incomplete RECORDED list, and none of the six is treated as zero,
+non-significant, or safely omitted. None of them gates the primary — the
+confirmatory interval and its verdict stand as registered — but the
+sensitivity analysis that would have shown whether the independent-groups
+choice mattered is among the missing, and its absence is a real limitation
+rather than a bookkeeping one.
 
 A post-hoc decomposition sharpens what the primary measures and is labelled
 as post-hoc (`../evals/rule-precision/README.md`, "The primary metric mixes
@@ -159,8 +204,9 @@ audit's own emphasis.
 
 So the floor ships as follows, and the traceability is the point:
 
-- the **three clauses, unchanged** — clause 1 on a CONFIRMED effect (F10) and
-  an OPEN transfer (F11); clauses 2 and 3 on nulls inside their MDEs, which
+- the **three clauses, unchanged** — the floor as a whole on a CONFIRMED effect
+  (F10, §4.2.1), clause 1 on a CONFIRMED effect of its own (F10) and an OPEN
+  transfer (F11); clauses 2 and 3 on nulls inside their MDEs, which
   license neither confidence nor deletion;
 - the **wiring line**, on the dead-text result and the 18/18-vs-0/18
   extraction rates;
@@ -169,10 +215,17 @@ So the floor ships as follows, and the traceability is the point:
 
 ## 4.6 What this chapter claims, and no more
 
-The Finding Floor reduces Critical/Major non-defect findings with no
-detectable coverage change on F9, and repeats that in direction and size on a
-fixture built blind to it — MEASURED, with qualified replication evidence,
-the F10 round's post-hoc extension keeping it short of REPLICATED. Clause 1 is the
+The Finding Floor reduces Critical/Major `not-a-defect` findings on F10 —
+**CONFIRMED**, on a fixed-n, no-peek round whose rule and analysis code
+predate its data, with the interval [−2.39, −1.07] stating the size. On F9 the
+effect is MEASURED; round 17's F10 repeat stays qualified replication evidence,
+its post-hoc extension not repaired by a later round. **Confirmation on one
+fixture is not REPLICATED and does not establish fixture-independence.**
+Coverage shows no detectable change in every round that measured it, which is
+an absence of evidence against a margin nobody declared. Round 24's six
+unimplemented RECORDED outputs — including the registered index-paired
+sensitivity analysis — were published as missing rather than computed after
+unblinding, and that limitation travels with its result. Clause 1 is the
 only component with positive evidence, on F10 — CONFIRMED there and OPEN on
 F11, where one round was a powered non-detection and the next was ruled
 ineligible for confirmatory inference by its own gate. Clause 2 alone shows
