@@ -24,7 +24,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 # (https://github.com/rtk-ai/rtk) auto-rewrite hook when it runs before
 # this one — RTK turns `git commit -m "msg"` into `rtk git commit -m "msg"`,
 # and without the prefix tolerance this hook would silently no-op on every
-# commit, defeating the Ollama message review.
+# commit, defeating the local-LLM message review.
 if ! echo "$COMMAND" | grep -qE '^(rtk[[:space:]]+)?git commit'; then
   echo '{"decision": "approve"}'
   exit 0
@@ -43,10 +43,10 @@ fi
 PROMPT="Review this git commit message. Reply with ONLY 'OK' if it follows best practices (concise, English, explains why not what, uses conventional prefix like feat/fix/refactor/docs/test/chore). Reply with a one-line suggestion if it needs improvement.
 
 Commit message: $COMMIT_MSG"
-REVIEW=$(printf '%s' "$PROMPT" | llm_request "gpt-oss:20b" "" 10 "" | head -1)
+REVIEW=$(printf '%s' "$PROMPT" | llm_request "llm:nothink" "" 10 "" | head -1)
 
 if [ -z "$REVIEW" ]; then
-  # Ollama unavailable, approve silently
+  # local LLM unavailable, approve silently
   echo '{"decision": "approve"}'
   exit 0
 fi
@@ -54,7 +54,7 @@ fi
 if echo "$REVIEW" | grep -qi '^OK'; then
   echo '{"decision": "approve"}'
 else
-  # Encode $REVIEW via jq so quotes/backslashes/newlines from Ollama output
+  # Encode $REVIEW via jq so quotes/backslashes/newlines from the model output
   # cannot produce malformed JSON. Even though the decision stays "approve"
   # either way, a fail-open harness on parse errors would silently drop the
   # suggestion message — defensible to keep the output well-formed.

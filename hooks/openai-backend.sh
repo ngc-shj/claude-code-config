@@ -29,19 +29,26 @@ _OPENAI_CACHE_FILE="${_OPENAI_HOST_CACHE:-$(_llm_state_dir)/openai-host-cache}"
 # variable (not a literal tab) so editors/linters cannot silently mangle it.
 _OPENAI_TAB=$'\t'
 
-# Default logical->real model mapping (env-overridable). 8080 has no 120b-class
-# model; the heavy slot maps to Qwen3.6-35B-A3B (top local coding-benchmark model)
-# on its MTP speculative-decoding preset for speed.
+# Default logical->real model mapping (env-overridable).
+#
+# The two logical slots name a REASONING MODE, not a model size: `llm:nothink`
+# is the budget the callers give to naming/classification (seconds, a line of
+# output), `llm:think` the one they give to review and analysis (minutes, a
+# report). A single modern model serves both — the mode is a request flag, see
+# openai_thinking_for — so OPENAI_MODEL alone is a complete configuration.
+# The per-slot vars exist for the case where one host holds a fast non-reasoning
+# model and another a reasoning one.
+#
+# The deprecated OPENAI_MODEL_SMALL/LARGE names are still honored: they were
+# named after the two gpt-oss tags (20b/120b) this harness first shipped with,
+# and describe parameter count rather than the role the caller selects.
 #
 # NOTE the quant tag is `Q4_K_XL`, not `UD-Q4_K_XL`: llama-server strips the
 # unsloth-Dynamic `UD-` prefix, so a model loaded from `...:UD-Q4_K_XL` is
 # exposed in /v1/models — and must be requested — as `...:Q4_K_XL`. Using the
 # UD- form here would fail discovery (no /v1/models id matches it).
-_OPENAI_MODEL_SMALL="${OPENAI_MODEL_SMALL:-unsloth/gpt-oss-20b-GGUF:F16}"
-_OPENAI_MODEL_LARGE="${OPENAI_MODEL_LARGE:-unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL}"
-# DeepSeek-V4 served by vLLM on :8000 (logical names ds4:flash / ds4:pro).
-_OPENAI_MODEL_DS4_FLASH="${OPENAI_MODEL_DS4_FLASH:-deepseek-v4-flash}"
-_OPENAI_MODEL_DS4_PRO="${OPENAI_MODEL_DS4_PRO:-deepseek-v4-pro}"
+_OPENAI_MODEL_NOTHINK="${OPENAI_MODEL_NOTHINK:-${OPENAI_MODEL:-${OPENAI_MODEL_SMALL:-unsloth/gpt-oss-20b-GGUF:F16}}}"
+_OPENAI_MODEL_THINK="${OPENAI_MODEL_THINK:-${OPENAI_MODEL:-${OPENAI_MODEL_LARGE:-unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL}}}"
 
 # Ports probed for a bare/`.local` host name (space-separated). Default covers
 # llama.cpp (8080) and vLLM (8000); override to add/remove OpenAI-surface ports.
@@ -181,9 +188,10 @@ openai_host_for_model() {
 
 # Send a prompt to the OpenAI-compatible /v1/chat/completions endpoint.
 # Args: $1=real_model $2=system $3=timeout $4=num_predict(max_tokens, default 16384)
+#       $5=thinking ("true"|"false"|"" — see openai_thinking_for; "" omits the key)
 # stdin = user prompt. stdout = model text (empty on any failure; exit 0).
 _openai_request() {
-  local model="$1" system="$2" timeout="$3" num_predict="${4:-16384}"
+  local model="$1" system="$2" timeout="$3" num_predict="${4:-16384}" thinking="${5:-}"
   # Treat empty OR 0 as "use default" — max_tokens:0 means "generate nothing" on
   # the OpenAI surface, which no caller intends.
   case "$num_predict" in ''|0) num_predict=16384 ;; esac
@@ -208,25 +216,32 @@ _openai_request() {
   printf '%s' "$system" > "$tmpdir/system"
   printf '%s' "$content" > "$tmpdir/prompt"
 
-  # Include the system message only when non-empty.
+  # Include the system message only when non-empty, and the reasoning mode only
+  # when the caller named a slot ($thinking empty → key omitted entirely).
   if [ -n "$system" ]; then
     jq -n \
       --arg model "$model" \
       --rawfile system "$tmpdir/system" \
       --rawfile prompt "$tmpdir/prompt" \
       --argjson max_tokens "$num_predict" \
+      --arg thinking "$thinking" \
       '{model: $model,
         messages: [{role: "system", content: $system}, {role: "user", content: $prompt}],
-        stream: false, max_tokens: $max_tokens}' \
+        stream: false, max_tokens: $max_tokens}
+       + (if $thinking == "" then {}
+          else {chat_template_kwargs: {enable_thinking: ($thinking == "true")}} end)' \
       > "$tmpdir/request.json"
   else
     jq -n \
       --arg model "$model" \
       --rawfile prompt "$tmpdir/prompt" \
       --argjson max_tokens "$num_predict" \
+      --arg thinking "$thinking" \
       '{model: $model,
         messages: [{role: "user", content: $prompt}],
-        stream: false, max_tokens: $max_tokens}' \
+        stream: false, max_tokens: $max_tokens}
+       + (if $thinking == "" then {}
+          else {chat_template_kwargs: {enable_thinking: ($thinking == "true")}} end)' \
       > "$tmpdir/request.json"
   fi
 
@@ -271,14 +286,31 @@ openai_available() {
 
 # Map a logical model name to its real /v1/models id on the OpenAI backend
 # (env-overridable defaults above). Unknown logical names pass through
-# unchanged. The Ollama mapping (identity) and backend selection live in
-# llm-utils.sh.
+# unchanged. The Ollama mapping and backend selection live in llm-utils.sh.
+#
+# gpt-oss:20b / gpt-oss:120b are retained as aliases: they are what every call
+# site said before the slots were named after the mode rather than the model,
+# and an external caller (a skill, a REVIEW_MODEL setting) may still pass them.
 openai_model_for() {
   case "$1" in
-    gpt-oss:20b)  printf '%s' "$_OPENAI_MODEL_SMALL" ;;
-    gpt-oss:120b) printf '%s' "$_OPENAI_MODEL_LARGE" ;;
-    ds4:flash)    printf '%s' "$_OPENAI_MODEL_DS4_FLASH" ;;
-    ds4:pro)      printf '%s' "$_OPENAI_MODEL_DS4_PRO" ;;
-    *)            printf '%s' "$1" ;;
+    llm:nothink|gpt-oss:20b)  printf '%s' "$_OPENAI_MODEL_NOTHINK" ;;
+    llm:think|gpt-oss:120b)   printf '%s' "$_OPENAI_MODEL_THINK" ;;
+    *)                        printf '%s' "$1" ;;
+  esac
+}
+
+# Reasoning mode for a logical name: "false" suppresses the model's thinking
+# pass, "true" requests it, empty means "send no mode at all" — a pass-through
+# model id carries no slot, and forcing a mode on it would override whatever
+# the server's own chat template decided.
+#
+# Sent as chat_template_kwargs.enable_thinking, which llama.cpp and vLLM honor.
+# A server that does not understand the key ignores it rather than failing, so
+# a mixed pool degrades to the server-side default instead of erroring.
+openai_thinking_for() {
+  case "$1" in
+    llm:nothink|gpt-oss:20b) printf 'false' ;;
+    llm:think|gpt-oss:120b)  printf 'true' ;;
+    *)                       : ;;
   esac
 }

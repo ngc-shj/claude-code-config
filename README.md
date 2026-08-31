@@ -76,7 +76,7 @@ claude-code-config/
    │                │                 │
    ▼                ▼                 ▼
 ┌────────┐  ┌─────────────┐  ┌──────────────────┐
-│Sonnet  │  │gpt-oss:120b │  │gpt-oss:20b       │
+│Sonnet  │  │llm:think    │  │llm:nothink       │
 │5       │  │(local)      │  │(local)           │
 │        │  │             │  │                  │
 │Explore │  │Code review  │  │Commit msg check  │
@@ -92,11 +92,12 @@ claude-code-config/
 | Claude Opus 5 | Main orchestrator | Architecture, planning, final decisions |
 | Claude Sonnet 5 | Sub-agent | Exploration, implementation, testing |
 | Claude Fable 5 | Hardest problems | Demanding reasoning, long-horizon agentic work (above Opus pricing) |
-| gpt-oss:120b | Local pre-screening | Code review, security analysis (before Claude) |
-| gpt-oss:20b | Local quick checks | Commit messages, lint, format, classification |
+| llm:think | Local pre-screening | Code review, security analysis (before Claude) |
+| llm:nothink | Local quick checks | Commit messages, lint, format, classification |
 
-The two local logical names (`gpt-oss:120b`, `gpt-oss:20b`) are what the hooks
-request; the active backend resolves them to a real model. Run via
+The two local logical names (`llm:think`, `llm:nothink`) are what the hooks
+request; they name a reasoning mode, not a model size, and one local model can
+serve both. The active backend resolves them to a real model. Run via
 [llama.cpp](https://github.com/ggml-org/llama.cpp) or [Ollama](https://ollama.com/)
 (auto-selected by the `llm-utils.sh` dispatcher, llama.cpp preferred) — **no API
 cost, no data leaves your machine**. Called via hooks (shell + curl) for
@@ -150,7 +151,7 @@ Blocks Edit/Write/MultiEdit operations on:
 
 ### commit-msg-check.sh (PreToolUse)
 
-Validates commit messages using the local LLM (logical model `gpt-oss:20b`, via the `llm-utils.sh` dispatcher — llama.cpp or Ollama):
+Validates commit messages using the local LLM (logical model `llm:nothink`, via the `llm-utils.sh` dispatcher — llama.cpp or Ollama):
 
 - Checks for conventional commit format (feat/fix/refactor/docs/test/chore)
 - Verifies the message is in English and concise
@@ -159,7 +160,7 @@ Validates commit messages using the local LLM (logical model `gpt-oss:20b`, via 
 
 ### pre-review.sh (Utility — called by skills)
 
-Pre-screening for code review and plan review using the local LLM (logical model `gpt-oss:120b`, via the `llm-utils.sh` dispatcher — llama.cpp or Ollama):
+Pre-screening for code review and plan review using the local LLM (logical model `llm:think`, via the `llm-utils.sh` dispatcher — llama.cpp or Ollama):
 
 ```bash
 # Review plan
@@ -193,14 +194,14 @@ reachable port. The implicit `localhost` default is probed on **8080 only** —
 it is not multi-port-probed, so an unrelated local service on 8000 that happens
 to answer `/v1/models` is never silently trusted; to use a local vLLM on 8000,
 name it explicitly with `LLM_TRUSTED_HOSTS="localhost"` or `OPENAI_HOST`.
-`OPENAI_HOST`/`OPENAI_HOSTS` pin or replace the candidate list. Hooks always pass logical model names — `gpt-oss:20b` /
-`gpt-oss:120b` map to `unsloth/gpt-oss-20b-GGUF:F16` /
-`unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (8080 has no 120b-class model, so the
-heavy slot maps to Qwen3.6-35B-A3B; note llama-server strips the unsloth `UD-`
-prefix, so the `UD-Q4_K_XL` build is addressed as `Q4_K_XL`), and `ds4:flash` /
-`ds4:pro` map to `deepseek-v4-flash` / `deepseek-v4-pro` (DeepSeek-V4 on vLLM).
-Overridable via `OPENAI_MODEL_SMALL`/`OPENAI_MODEL_LARGE` /
-`OPENAI_MODEL_DS4_FLASH`/`OPENAI_MODEL_DS4_PRO`. The command library
+`OPENAI_HOST`/`OPENAI_HOSTS` pin or replace the candidate list. Hooks always
+pass logical model names — `llm:nothink` / `llm:think`, which select a reasoning
+mode rather than a model. Both resolve to `OPENAI_MODEL`, and the mode travels
+with the request as `chat_template_kwargs.enable_thinking` (llama.cpp and vLLM
+honor it; a server that does not understand the key ignores it rather than
+failing). `OPENAI_MODEL_THINK`/`OPENAI_MODEL_NOTHINK` override a single slot,
+for a pool where one host holds a fast non-reasoning model and another a
+reasoning one. The command library
 (`llm-commands.sh`) and the direct-caller hooks (`pre-review.sh`,
 `commit-msg-check.sh`) source only `llm-utils.sh`.
 
@@ -277,11 +278,8 @@ across them:
       "LLM_TRUSTED_HOSTS": "llm-server-1 llm-server-2.your-tailnet.ts.net",
       "OLLAMA_DISCOVERY": "off",
       "LLM_OPENAI_PORTS": "8080 8000",
-      "OPENAI_MODEL_SMALL": "unsloth/gpt-oss-20b-GGUF:F16",
-      "OPENAI_MODEL_LARGE": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL",
-      "OPENAI_MODEL_DS4_FLASH": "deepseek-v4-flash",
-      "OPENAI_MODEL_DS4_PRO": "deepseek-v4-pro",
-      "REVIEW_MODEL": "gpt-oss:120b"
+      "OPENAI_MODEL": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL",
+      "REVIEW_MODEL": "llm:think"
     }
   }
   ```
@@ -306,12 +304,13 @@ across them:
   | `LLM_OPENAI_PORTS` | `8080 8000` | Ports probed for a bare OpenAI-backend host (llama.cpp 8080, vLLM 8000). A down bare host is probed on **every** port each hook call, so prune dead hosts — latency scales with the port count. |
   | `OPENAI_HOST` | _(unset)_ | Pin the OpenAI backend to one server; skips probing and the cache. |
   | `OPENAI_HOSTS` | _(unset)_ | Exclusive OpenAI-backend host list (replaces `LLM_TRUSTED_HOSTS` + localhost for this backend). |
-  | `OPENAI_MODEL_SMALL` | `unsloth/gpt-oss-20b-GGUF:F16` | Real model for the `gpt-oss:20b` logical name. |
-  | `OPENAI_MODEL_LARGE` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` | Real model for the `gpt-oss:120b` logical name. |
-  | `OPENAI_MODEL_DS4_FLASH` | `deepseek-v4-flash` | Real model for the `ds4:flash` logical name (vLLM). |
-  | `OPENAI_MODEL_DS4_PRO` | `deepseek-v4-pro` | Real model for the `ds4:pro` logical name (vLLM). |
+  | `OPENAI_MODEL` | _(unset)_ | Real model for **both** logical slots — the reasoning mode is a request flag, not a second model. Setting this alone is a complete model configuration. |
+  | `OPENAI_MODEL_NOTHINK` | `unsloth/gpt-oss-20b-GGUF:F16` | Real model for `llm:nothink`. Overrides `OPENAI_MODEL`; set it only to split the slots across different servers. |
+  | `OPENAI_MODEL_THINK` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` | Real model for `llm:think`. Overrides `OPENAI_MODEL`. |
+  | `OPENAI_MODEL_SMALL` / `OPENAI_MODEL_LARGE` | _(unset)_ | Deprecated spellings of the two above, still honored. They were named after the 20b/120b gpt-oss tags this harness first shipped with, so they describe parameter count rather than the role a caller selects. |
+  | `OLLAMA_MODEL_NOTHINK` / `OLLAMA_MODEL_THINK` | `gpt-oss:20b` / `gpt-oss:120b` | Ollama tags for the two slots. Ollama takes the reasoning mode as a `think` field rather than a chat-template kwarg, so on that backend the slot's model tag carries the mode. |
   | `LLM_BACKEND` | _(auto)_ | Pin the backend to `openai` or `ollama`; otherwise the OpenAI backend is auto-preferred when reachable. |
-  | `REVIEW_MODEL` | `gpt-oss:120b` | Logical model for `pre-review.sh`. |
+  | `REVIEW_MODEL` | `llm:think` | Logical model for `pre-review.sh`. |
   | `REVIEW_TIMEOUT` | `600` | Per-request timeout (seconds) for `pre-review.sh`. |
 
   Tailscale example — trust specific peers **and** let discovery add any other
@@ -428,7 +427,7 @@ A development workflow skill with three phases:
 2. **Coding** — Sonnet sub-agent implementation with deviation tracking
 3. **Code review** — Local LLM pre-screening + 3 Claude expert agents
 
-Each review phase uses local LLM (`gpt-oss:120b`) to catch obvious issues before launching Claude sub-agents. Implementation is delegated to Sonnet sub-agents while Opus orchestrates, reducing API cost while maintaining quality.
+Each review phase uses local LLM (`llm:think`) to catch obvious issues before launching Claude sub-agents. Implementation is delegated to Sonnet sub-agents while Opus orchestrates, reducing API cost while maintaining quality.
 
 ### simplify
 
@@ -482,7 +481,7 @@ Audits token overhead across agents, skills, rules, CLAUDE.md, and MCP servers, 
 
 Audits Claude Code configuration for common security misconfigurations — zero external dependencies:
 - Deterministic pattern checks (grep + jq) for secrets, `Bash(*)` wildcards, hook injection, MCP supply chain, prompt-injection surface in CLAUDE.md
-- Optional deep analysis via `gpt-oss:120b` through `llm-commands.sh analyze-security` (zero Claude tokens)
+- Optional deep analysis via `llm:think` through `llm-commands.sh analyze-security` (zero Claude tokens)
 - Graded A/F report with severity-classified findings
 - Concept borrowed from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (`skills/security-scan/`, which wraps the AgentShield npm package); reimplemented here as a self-contained shell + local-LLM workflow
 
@@ -580,7 +579,8 @@ simply renders nothing if it is absent.
 
 ### Install local models (optional)
 
-**Ollama backend** — the logical names are the real model tags:
+**Ollama backend** — the slots map to these tags by default
+(`OLLAMA_MODEL_NOTHINK` / `OLLAMA_MODEL_THINK` override them):
 
 ```bash
 ollama pull gpt-oss:20b
@@ -589,15 +589,18 @@ ollama pull gpt-oss:120b
 
 **OpenAI-compatible backend** — any server exposing `/v1/models` +
 `/v1/chat/completions`. Bare hosts are probed on `LLM_OPENAI_PORTS`
-(default `8080 8000`): run `llama-server` on 8080 and/or vLLM on 8000. Logical
-names map to these real model ids (override with the matching `OPENAI_MODEL_*`):
+(default `8080 8000`): run `llama-server` on 8080 and/or vLLM on 8000. One model
+covers both slots — set `OPENAI_MODEL` and the mode rides on the request:
 
-| Logical | Real model id (default) | Server |
-| --- | --- | --- |
-| `gpt-oss:20b` | `unsloth/gpt-oss-20b-GGUF:F16` | llama.cpp |
-| `gpt-oss:120b` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (8080 has no 120b-class model; llama-server strips the unsloth `UD-` prefix, so the `UD-Q4_K_XL` build is requested as `Q4_K_XL`) | llama.cpp |
-| `ds4:flash` | `deepseek-v4-flash` | vLLM (:8000) |
-| `ds4:pro` | `deepseek-v4-pro` | vLLM (:8000) |
+| Logical | Real model id (default) | Request carries | Server |
+| --- | --- | --- | --- |
+| `llm:nothink` | `unsloth/gpt-oss-20b-GGUF:F16` | `enable_thinking: false` | llama.cpp |
+| `llm:think` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (llama-server strips the unsloth `UD-` prefix, so the `UD-Q4_K_XL` build is requested as `Q4_K_XL`) | `enable_thinking: true` | llama.cpp |
+
+Not every model honors the flag — a non-reasoning model ignores it and answers
+in one pass. Check with `curl` before assigning one to `llm:think`: if
+`reasoning_content` comes back empty on a question that needs working out, that
+model is not a thinking model no matter what the flag says.
 
 When both backends are reachable, the OpenAI backend is auto-preferred; pin with
 `LLM_BACKEND=ollama` or `LLM_BACKEND=openai`.

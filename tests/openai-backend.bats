@@ -25,6 +25,9 @@ for ((i=0; i<${#args[@]}; i++)); do
   case "${args[i]}" in
     http://*|https://*) URL="${args[i]}"; echo "${args[i]}" >> "$LOG" ;;
     -o) OUTFILE="${args[i+1]}" ;;
+    # Capture the request body so tests can assert on what was actually sent
+    # (the caller passes it as -d @<file>).
+    -d) [ -n "${CURL_BODY_FILE:-}" ] && cat "${args[i+1]#@}" > "$CURL_BODY_FILE" ;;
   esac
 done
 # Defaults set as plain single-quoted literals (NOT inside ${:-...}) — nested
@@ -68,7 +71,7 @@ setup() {
   # Pin Ollama so sourcing llm-utils.sh does not run real Ollama discovery.
   export OLLAMA_HOST="http://dummy-ollama:11434"
   unset LLM_BACKEND OPENAI_HOST OPENAI_HOSTS LLM_TRUSTED_HOSTS LLM_OPENAI_PORTS
-  unset OPENAI_MODEL_SMALL OPENAI_MODEL_LARGE OPENAI_MODEL_DS4_FLASH OPENAI_MODEL_DS4_PRO
+  unset OPENAI_MODEL OPENAI_MODEL_THINK OPENAI_MODEL_NOTHINK OPENAI_MODEL_SMALL OPENAI_MODEL_LARGE
   setup_curl_mock
 }
 
@@ -80,25 +83,64 @@ teardown() {
 # openai_model_for — logical -> real model mapping
 # ---------------------------------------------------------------------------
 
-@test "model map: gpt-oss:20b -> default small model" {
-  result=$(source "$SCRIPT" && openai_model_for "gpt-oss:20b")
+@test "model map: llm:nothink -> default no-think model" {
+  result=$(source "$SCRIPT" && openai_model_for "llm:nothink")
   [ "$result" = "unsloth/gpt-oss-20b-GGUF:F16" ]
 }
 
-@test "model map: gpt-oss:120b -> default large (Qwen) model" {
-  result=$(source "$SCRIPT" && openai_model_for "gpt-oss:120b")
+@test "model map: llm:think -> default think (Qwen) model" {
+  result=$(source "$SCRIPT" && openai_model_for "llm:think")
   [ "$result" = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL" ]
 }
 
-@test "model map: env override is honored" {
-  export OPENAI_MODEL_SMALL="foo/bar:Q8"
-  result=$(source "$SCRIPT" && openai_model_for "gpt-oss:20b")
-  [ "$result" = "foo/bar:Q8" ]
+@test "model map: OPENAI_MODEL alone serves both slots" {
+  export OPENAI_MODEL="one/model:Q8"
+  result=$(source "$SCRIPT" && printf '%s %s' "$(openai_model_for llm:nothink)" "$(openai_model_for llm:think)")
+  [ "$result" = "one/model:Q8 one/model:Q8" ]
+}
+
+@test "model map: per-slot override beats OPENAI_MODEL" {
+  export OPENAI_MODEL="one/model:Q8" OPENAI_MODEL_THINK="deep/model:Q4"
+  result=$(source "$SCRIPT" && printf '%s %s' "$(openai_model_for llm:nothink)" "$(openai_model_for llm:think)")
+  [ "$result" = "one/model:Q8 deep/model:Q4" ]
+}
+
+@test "model map: deprecated OPENAI_MODEL_SMALL/LARGE still honored" {
+  export OPENAI_MODEL_SMALL="foo/bar:Q8" OPENAI_MODEL_LARGE="baz/qux:Q4"
+  result=$(source "$SCRIPT" && printf '%s %s' "$(openai_model_for llm:nothink)" "$(openai_model_for llm:think)")
+  [ "$result" = "foo/bar:Q8 baz/qux:Q4" ]
+}
+
+# The old names must keep resolving: a REVIEW_MODEL or an out-of-repo caller
+# set before the rename would otherwise silently fall through to pass-through
+# and request a model id no server has.
+@test "model map: legacy gpt-oss aliases resolve to the same slots" {
+  result=$(source "$SCRIPT" && printf '%s %s' "$(openai_model_for gpt-oss:20b)" "$(openai_model_for gpt-oss:120b)")
+  [ "$result" = "unsloth/gpt-oss-20b-GGUF:F16 unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL" ]
 }
 
 @test "model map: unknown logical name passes through unchanged" {
   result=$(source "$SCRIPT" && openai_model_for "some-model:7b")
   [ "$result" = "some-model:7b" ]
+}
+
+# ---------------------------------------------------------------------------
+# openai_thinking_for — reasoning mode per slot
+# ---------------------------------------------------------------------------
+
+@test "thinking mode: llm:nothink is false, llm:think is true" {
+  result=$(source "$SCRIPT" && printf '%s %s' "$(openai_thinking_for llm:nothink)" "$(openai_thinking_for llm:think)")
+  [ "$result" = "false true" ]
+}
+
+@test "thinking mode: legacy aliases carry the same mode" {
+  result=$(source "$SCRIPT" && printf '%s %s' "$(openai_thinking_for gpt-oss:20b)" "$(openai_thinking_for gpt-oss:120b)")
+  [ "$result" = "false true" ]
+}
+
+@test "thinking mode: pass-through model id carries no mode" {
+  result=$(source "$SCRIPT" && openai_thinking_for "some-model:7b")
+  [ -z "$result" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -258,6 +300,44 @@ teardown() {
   [ "$result" = "OK" ]
 }
 
+# ---------------------------------------------------------------------------
+# Reasoning mode on the wire — the slot must reach the server as a request flag
+# ---------------------------------------------------------------------------
+
+@test "wire: llm:nothink sends enable_thinking false" {
+  export LLM_BACKEND=openai CPP_SUCCEED_HOSTS="localhost:8080"
+  export CURL_BODY_FILE="$BATS_TEST_TMPDIR/body.json"
+  source "$SCRIPT" && printf 'hi' | llm_request "llm:nothink" "" 30 32 >/dev/null
+  [ "$(jq -r '.chat_template_kwargs.enable_thinking' "$CURL_BODY_FILE")" = "false" ]
+}
+
+@test "wire: llm:think sends enable_thinking true" {
+  export LLM_BACKEND=openai CPP_SUCCEED_HOSTS="localhost:8080"
+  export CPP_MODELS_JSON='{"data":[{"id":"unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL"}]}'
+  export CURL_BODY_FILE="$BATS_TEST_TMPDIR/body.json"
+  source "$SCRIPT" && printf 'hi' | llm_request "llm:think" "" 30 32 >/dev/null
+  [ "$(jq -r '.chat_template_kwargs.enable_thinking' "$CURL_BODY_FILE")" = "true" ]
+}
+
+@test "wire: a system message does not drop the reasoning mode" {
+  export LLM_BACKEND=openai CPP_SUCCEED_HOSTS="localhost:8080"
+  export CPP_MODELS_JSON='{"data":[{"id":"unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL"}]}'
+  export CURL_BODY_FILE="$BATS_TEST_TMPDIR/body.json"
+  source "$SCRIPT" && printf 'hi' | llm_request "llm:think" "be brief" 30 32 >/dev/null
+  [ "$(jq -r '.chat_template_kwargs.enable_thinking' "$CURL_BODY_FILE")" = "true" ]
+  [ "$(jq -r '.messages[0].role' "$CURL_BODY_FILE")" = "system" ]
+}
+
+# A raw model id names no slot, so forcing a mode on it would override whatever
+# the server's own chat template decided.
+@test "wire: pass-through model id sends no chat_template_kwargs at all" {
+  export LLM_BACKEND=openai CPP_SUCCEED_HOSTS="localhost:8080"
+  export CURL_BODY_FILE="$BATS_TEST_TMPDIR/body.json"
+  export CPP_MODELS_JSON='{"data":[{"id":"some-model:7b"}]}'
+  source "$SCRIPT" && printf 'hi' | llm_request "some-model:7b" "" 30 32 >/dev/null
+  [ "$(jq -r 'has("chat_template_kwargs")' "$CURL_BODY_FILE")" = "false" ]
+}
+
 # ===========================================================================
 # Trust boundary: cache lives in a user-private state dir (S2)
 # ===========================================================================
@@ -329,7 +409,7 @@ teardown() {
 }
 
 # ===========================================================================
-# Multi-port probing (llama.cpp :8080 + vLLM :8000) and ds4 logical models
+# Multi-port probing (llama.cpp :8080 + vLLM :8000)
 # ===========================================================================
 
 @test "multi-port: a bare trusted host is probed on both 8080 and 8000" {
@@ -344,7 +424,7 @@ teardown() {
 
 @test "multi-port: only the reachable port joins when one is down" {
   export LLM_TRUSTED_HOSTS="vllm-only"
-  # Only :8000 answers (vLLM), serving ds4; :8080 is down
+  # Only :8000 answers (vLLM); :8080 is down
   export CPP_SUCCEED_HOSTS="vllm-only:8000"
   export CPP_MODELS_JSON='{"data":[{"id":"deepseek-v4-flash"}]}'
   source "$SCRIPT"
@@ -382,28 +462,14 @@ teardown() {
   [ "$second" = "http://host-x:8000" ]
 }
 
-@test "model map: ds4:flash -> deepseek-v4-flash" {
-  result=$(source "$SCRIPT" && openai_model_for "ds4:flash")
-  [ "$result" = "deepseek-v4-flash" ]
-}
-
-@test "model map: ds4:pro -> deepseek-v4-pro" {
-  result=$(source "$SCRIPT" && openai_model_for "ds4:pro")
-  [ "$result" = "deepseek-v4-pro" ]
-}
-
-@test "model map: ds4 env override is honored" {
-  export OPENAI_MODEL_DS4_PRO="deepseek-v4-pro-fp8"
-  result=$(source "$SCRIPT" && openai_model_for "ds4:pro")
-  [ "$result" = "deepseek-v4-pro-fp8" ]
-}
-
-@test "model routing: ds4 request routes to the vLLM host that has it" {
+# The ds4:flash / ds4:pro logical names are gone — no hook ever requested them.
+# A vLLM-served model is still reachable, by its real id through pass-through.
+@test "model routing: a vLLM model id routes to the host that has it" {
   export LLM_TRUSTED_HOSTS="vllm-box"
   export CPP_SUCCEED_HOSTS="vllm-box:8000"
   export CPP_MODELS_JSON='{"data":[{"id":"deepseek-v4-flash"},{"id":"deepseek-v4-pro"}]}'
   source "$SCRIPT"
-  result=$(openai_host_for_model "$(openai_model_for ds4:pro)")
+  result=$(openai_host_for_model "$(openai_model_for deepseek-v4-pro)")
   [ "$result" = "http://vllm-box:8000" ]
 }
 

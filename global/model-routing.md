@@ -32,13 +32,17 @@ pins the backend, otherwise the OpenAI-compatible backend
 (`/v1/chat/completions`; llama.cpp on 8080 and/or vLLM on 8000 via
 `LLM_OPENAI_PORTS`) is auto-preferred when reachable, else Ollama
 (`/api/generate`). Hooks pass logical model names; each backend resolves them
-to a real model (OpenAI backend via `OPENAI_MODEL_SMALL`/`OPENAI_MODEL_LARGE`,
-and `ds4:flash`/`ds4:pro` for DeepSeek-V4 on vLLM).
+to a real model (`OPENAI_MODEL`, or `OLLAMA_MODEL_THINK`/`_NOTHINK`).
 
-| Logical model | Use case                                                                           |
-| ------------- | ---------------------------------------------------------------------------------- |
-| gpt-oss:20b   | Quick checks: lint, format validation, commit message review, simple summarization |
-| gpt-oss:120b  | Code review pre-screening, security pattern detection, detailed analysis           |
+The two logical names select a **reasoning mode**, not a model size. One model
+serves both: the OpenAI backend sends `chat_template_kwargs.enable_thinking`,
+so the same server answers in either mode. Set `OPENAI_MODEL_THINK` /
+`OPENAI_MODEL_NOTHINK` only to split the slots across different servers.
+
+| Logical model | Use case                                                                             |
+| ------------- | ------------------------------------------------------------------------------------ |
+| llm:nothink   | Quick checks: lint, format validation, commit message review, naming, classification |
+| llm:think     | Code review pre-screening, security pattern detection, detailed analysis             |
 
 ## How to call a local LLM
 

@@ -604,7 +604,7 @@ _summarize_artifact() {
   # Bounded like cmd_scout bounds its untrusted network input (--max-filesize
   # 5242880). This file comes from an untrusted sibling repository and is read
   # whole into a JSON request body before leaving the machine.
-  raw=$(head -c 5242880 < "$file" 2>/dev/null | llm_request "gpt-oss:120b" \
+  raw=$(head -c 5242880 < "$file" 2>/dev/null | llm_request "llm:think" \
     "You extract failure patterns from a code-review artifact. Output concise Symptom/Root-cause bullets. If the document has no actionable failure pattern, output exactly: NONE." \
     30 1024 2>/dev/null)
   [ -n "$raw" ] || return 0
@@ -845,7 +845,7 @@ _raw_llm_egress_ok() {
   fi
   [ "$egress_ok" -eq 1 ] || return 1
   command -v llm_request >/dev/null 2>&1 || return 1
-  probe=$(printf 'ping' | llm_request "gpt-oss:20b" "Reply with the single word: pong." 10 8 2>/dev/null)
+  probe=$(printf 'ping' | llm_request "llm:nothink" "Reply with the single word: pong." 10 8 2>/dev/null)
   [ -n "$probe" ]
 }
 
@@ -1106,7 +1106,7 @@ cmd_transcripts() {
   # "${excerpts[@]}" is an unbound-variable abort there on the bash 3.2 floor.
   for ev in ${excerpts[@]+"${excerpts[@]}"}; do
     local lesson
-    lesson=$(llm_request "gpt-oss:20b" \
+    lesson=$(llm_request "llm:nothink" \
       "Distill this event into a single project-neutral lesson. Remove all paths, code, identifiers, and specifics. Output one sentence. If nothing actionable, output exactly: NONE." \
       20 256 <<<"$ev" 2>/dev/null)
     [ -n "$lesson" ] || continue

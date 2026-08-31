@@ -416,3 +416,23 @@ _ollama_generate() {
     printf '%s\n' "$response"
   fi
 }
+
+# Map a logical model name to an Ollama tag. Historically this was identity —
+# the logical names WERE Ollama tags (gpt-oss:20b / gpt-oss:120b) — so the
+# role names introduced later have to be translated back to whatever this
+# machine's Ollama actually serves. Unknown names still pass through unchanged,
+# which keeps every pre-existing caller working.
+#
+# Ollama expresses the reasoning mode as a `think` field on /api/generate
+# rather than a chat-template kwarg, so the mode does not travel with the model
+# id here; the slot's model tag carries it.
+_OLLAMA_MODEL_NOTHINK="${OLLAMA_MODEL_NOTHINK:-gpt-oss:20b}"
+_OLLAMA_MODEL_THINK="${OLLAMA_MODEL_THINK:-gpt-oss:120b}"
+
+ollama_model_for() {
+  case "$1" in
+    llm:nothink) printf '%s' "$_OLLAMA_MODEL_NOTHINK" ;;
+    llm:think)   printf '%s' "$_OLLAMA_MODEL_THINK" ;;
+    *)           printf '%s' "$1" ;;
+  esac
+}

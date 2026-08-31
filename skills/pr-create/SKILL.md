@@ -1,6 +1,6 @@
 ---
 name: pr-create
-description: "Create a pull request with auto-generated description. Summarizes changes and generates PR body via local LLM (gpt-oss:120b), then creates the PR after user approval. Use this skill when: asked to create a PR; asked to submit changes for review; asked to open a pull request."
+description: "Create a pull request with auto-generated description. Summarizes changes and generates PR body via local LLM (llm:think), then creates the PR after user approval. Use this skill when: asked to create a PR; asked to submit changes for review; asked to open a pull request."
 ---
 
 # PR Create Skill

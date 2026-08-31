@@ -943,3 +943,26 @@ CACHE
   run grep -c 'decoy-file' "$CURL_LOG_FILE"
   [ "$output" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# ollama_model_for — role name -> Ollama tag
+# ---------------------------------------------------------------------------
+
+@test "model map: role names resolve to the default Ollama tags" {
+  result=$(source "$SCRIPT" && printf '%s %s' \
+    "$(ollama_model_for llm:nothink)" "$(ollama_model_for llm:think)")
+  [ "$result" = "gpt-oss:20b gpt-oss:120b" ]
+}
+
+@test "model map: OLLAMA_MODEL_THINK/NOTHINK override the tags" {
+  export OLLAMA_MODEL_NOTHINK="qwen3:8b" OLLAMA_MODEL_THINK="qwen3:32b"
+  result=$(source "$SCRIPT" && printf '%s %s' \
+    "$(ollama_model_for llm:nothink)" "$(ollama_model_for llm:think)")
+  [ "$result" = "qwen3:8b qwen3:32b" ]
+}
+
+# Identity for anything else keeps every pre-rename caller working.
+@test "model map: a raw Ollama tag passes through unchanged" {
+  result=$(source "$SCRIPT" && ollama_model_for "gpt-oss:120b")
+  [ "$result" = "gpt-oss:120b" ]
+}

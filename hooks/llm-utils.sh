@@ -221,15 +221,15 @@ llm_select_backend() {
   fi
 }
 
-# echo the real model id for a logical name under a backend. The Ollama backend
-# uses identity; the OpenAI-backend mapping (incl. env overrides) is owned by
-# the openai provider.
+# echo the real model id for a logical name under a backend. Each provider owns
+# its own mapping (incl. env overrides); unknown names pass through unchanged on
+# both sides.
 llm_model_for() {
   local logical="$1" backend="$2"
   if [ "$backend" = "openai" ]; then
     openai_model_for "$logical"
   else
-    printf '%s' "$logical"
+    ollama_model_for "$logical"
   fi
 }
 
@@ -253,13 +253,18 @@ llm_resolved_hosts() {
 # Route a generate request to the active backend.
 # Args: $1=logical_model $2=system $3=timeout $4=num_predict
 # stdin = prompt. stdout = model text (empty on failure; exit 0).
+#
+# The reasoning mode is derived from the logical name here rather than passed by
+# callers: a caller picks a slot ("answer now" vs "analyse"), and the mode is
+# what that slot MEANS. Letting a call site request llm:nothink and then ask for
+# thinking anyway would make the slot name stop describing the request.
 llm_request() {
   local logical="$1" system="$2" timeout="$3" num_predict="${4:-}"
   local backend real
   backend=$(llm_select_backend)
   real=$(llm_model_for "$logical" "$backend")
   if [ "$backend" = "openai" ]; then
-    _openai_request "$real" "$system" "$timeout" "$num_predict"
+    _openai_request "$real" "$system" "$timeout" "$num_predict" "$(openai_thinking_for "$logical")"
   else
     _ollama_generate "$real" "$system" "$timeout" "$num_predict"
   fi
