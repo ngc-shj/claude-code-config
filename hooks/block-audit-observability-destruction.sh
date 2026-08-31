@@ -33,7 +33,7 @@
 # Best-effort tripwire — bypasses exist (base64-decoded eval, alternate
 # shells, direct API calls bypassing the CLI). Primary enforcement
 # remains reviewer obligation R31. Override locally via
-# ~/.claude/settings.local.json.
+# .claude/settings.local.json.
 
 set -euo pipefail
 
@@ -68,7 +68,7 @@ DENY_REGEX="$DENY_REGEX"'|(az[[:space:]]+monitor[[:space:]]+(diagnostic-settings
 DENY_REGEX="$DENY_REGEX"'|(kubectl[[:space:]]+delete[[:space:]]+(prometheusrule|prometheusrules|servicemonitor|servicemonitors|podmonitor|podmonitors|alertmanagerconfig|alertmanagerconfigs)\b)'
 
 if echo "$COMMAND" | grep -qE "$DENY_REGEX"; then
-  REASON='Audit/observability destruction blocked (R31 category g — anti-forensic). Deleting log groups, alert rules, dashboards, monitoring CRDs, or paging policies erases the evidence and detection capability needed to recover from an incident — and is exactly what an attacker (or a panicking remediator) would run to hide a prior compromise. Before proceeding: (1) confirm with the team that the resource is genuinely orphaned and document the deletion reason in writing; (2) for retention shortening, prefer creating a NEW policy with the desired retention, then migrating writers, before deleting the old one; (3) for alert rule cleanup during refactors, disable the rule first (via update, not delete) so the change is reversible. To override this hook locally, edit ~/.claude/settings.local.json (NOT overwritten by install.sh).'
+  REASON='Audit/observability destruction blocked (R31 category g — anti-forensic). Deleting log groups, alert rules, dashboards, monitoring CRDs, or paging policies erases the evidence and detection capability needed to recover from an incident — and is exactly what an attacker (or a panicking remediator) would run to hide a prior compromise. Before proceeding: (1) confirm with the team that the resource is genuinely orphaned and document the deletion reason in writing; (2) for retention shortening, prefer creating a NEW policy with the desired retention, then migrating writers, before deleting the old one; (3) for alert rule cleanup during refactors, disable the rule first (via update, not delete) so the change is reversible. To override this hook locally, edit .claude/settings.local.json (NOT overwritten by install.sh).'
   printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
   exit 0
 fi

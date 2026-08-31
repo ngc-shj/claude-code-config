@@ -33,7 +33,8 @@ emit_block_early() {
 # It does NOT stop a determined bypass, and must not be relied on as though it
 # did: the real containment is that install.sh overwrites this tree, so any edge
 # case that slips through is reverted at the next install.
-# `~/.claude/settings.local.json` remains the sanctioned escape.
+# A project's `.claude/settings.local.json` remains the sanctioned escape — the
+# user-level spelling of that filename is not a settings source at all.
 #
 # Two conditions must BOTH hold, so read-only work on these paths stays free:
 # the command names a protected path, and it carries a write verb — except for
@@ -80,7 +81,7 @@ EOF
   if { printf '%s' "$NCMD" | grep -qE "$CLAUDE_DIR_RE" \
        && { printf '%s' "$NCMD" | grep -qE "$WRITE_RE" || printf '%s' "$NCMD" | grep -qE "$INPLACE_RE"; }; } \
      || [ "$DEST_HIT" -eq 1 ]; then
-    emit_block_early "Blocked: this command writes into the installed harness under ~/.claude/. install.sh overwrites that tree, so the edit is reverted on the next install — and a session that rewrites its own hooks can disable the tripwires meant to catch it. Edit the repo claude-code-config and run \`bash ./install.sh\`; use ~/.claude/settings.local.json for local overrides. (This is a heuristic guard on the Bash tool: it pairs a protected path with a write verb, so reading, grepping and running these files is unaffected.)"
+    emit_block_early "Blocked: this command writes into the installed harness under ~/.claude/. install.sh overwrites that tree, so the edit is reverted on the next install — and a session that rewrites its own hooks can disable the tripwires meant to catch it. Edit the repo claude-code-config and run \`bash ./install.sh\`; use a project .claude/settings.local.json for local overrides — a user-level settings.local.json is not a settings source, and machine-wide env belongs in the user settings.json, which the install merge preserves. (This is a heuristic guard on the Bash tool: it pairs a protected path with a write verb, so reading, grepping and running these files is unaffected.)"
     exit 0
   fi
   echo '{"decision": "approve"}'
@@ -144,11 +145,13 @@ esac
 # claude-code-config/ is the source of truth — edits belong there, then
 # `bash ./install.sh` syncs into ~/.claude/.
 #
-# Intentionally NOT blocked: ~/.claude/settings.local.json — that is the
-# documented override path (it is NOT overwritten by install.sh) and is
-# the only sanctioned way to disable a hook locally without modifying
-# the repo. See block-destructive-docker.sh's reason message for the
-# canonical override workflow.
+# Intentionally NOT blocked: ~/.claude/settings.local.json — install.sh does
+# not manage it, so blocking it would serve nothing. Note that Claude Code does
+# not READ a settings.local.json at the user level either (it resolves user
+# ~/.claude/settings.json, project .claude/settings.json, and project-local
+# .claude/settings.local.json), so the local override that actually takes
+# effect is the project-scoped one. See block-destructive-docker.sh's reason
+# message for the canonical override workflow.
 #
 # Normalize $HOME once, for every arm below: a trailing slash in $HOME
 # (e.g. HOME=/home/user/) would otherwise turn "$HOME/.claude/..." into
@@ -161,7 +164,7 @@ CLAUDE_HOME="${HOME:?}"; CLAUDE_HOME="${CLAUDE_HOME%/}/.claude"
 # harness-config arms below carry deliberately different wording, but an
 # identical message duplicated across arms drifts silently — and only the arm a
 # fixture happens to exercise would catch it.
-SKILLS_BLOCK_REASON="Blocked: editing an installed skill under ~/.claude/skills/ directly. If this skill is repo-managed, edit it in the claude-code-config repo and run \`bash ./install.sh\`. If it has no repo source (install.sh only removes and re-copies the skills it manages, so an unmanaged skill survives every install untouched), add it to the repo's skills/ directory, or exempt it via ~/.claude/settings.local.json."
+SKILLS_BLOCK_REASON="Blocked: editing an installed skill under ~/.claude/skills/ directly. If this skill is repo-managed, edit it in the claude-code-config repo and run \`bash ./install.sh\`. If it has no repo source (install.sh only removes and re-copies the skills it manages, so an unmanaged skill survives every install untouched), add it to the repo's skills/ directory, or exempt it via a project .claude/settings.local.json (the user-level spelling of that filename is not read)."
 # The guarded set is DERIVED from install.sh's write set, not from the paths
 # that happened to come up. install.sh overwrites, unconditionally:
 #   :79  CLAUDE.md            :84-85   RTK.md, model-routing.md
@@ -280,7 +283,7 @@ fi
 case "$CANON_PATH" in
   "$CLAUDE_HOME/hooks/"*|"$CLAUDE_HOME/settings.json"|"$CLAUDE_HOME/CLAUDE.md"|"$CLAUDE_HOME/rules/"*|"$CLAUDE_HOME/RTK.md"|"$CLAUDE_HOME/model-routing.md"|\
   "$CLAUDE_HOME_PHYS/hooks/"*|"$CLAUDE_HOME_PHYS/settings.json"|"$CLAUDE_HOME_PHYS/CLAUDE.md"|"$CLAUDE_HOME_PHYS/rules/"*|"$CLAUDE_HOME_PHYS/RTK.md"|"$CLAUDE_HOME_PHYS/model-routing.md")
-    emit_block "Blocked: editing harness config under ~/.claude/ directly (path resolves under the installed harness). The repo claude-code-config is the source of truth — edit there and run \`bash ./install.sh\`. To override a hook locally, use ~/.claude/settings.local.json (which is NOT blocked)."
+    emit_block "Blocked: editing harness config under ~/.claude/ directly (path resolves under the installed harness). The repo claude-code-config is the source of truth — edit there and run \`bash ./install.sh\`. To override locally, use a project .claude/settings.local.json; a user-level settings.local.json is not read at all, and machine-wide env belongs in the user settings.json, which the install merge preserves."
     exit 0
     ;;
   "$CLAUDE_HOME/skills/"*|"$CLAUDE_HOME_PHYS/skills/"*)

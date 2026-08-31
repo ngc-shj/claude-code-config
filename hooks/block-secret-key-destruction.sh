@@ -52,7 +52,7 @@
 #
 # Best-effort tripwire — bypasses exist (base64-decoded eval, alternate
 # shells, direct cloud-provider API calls). Override locally via
-# ~/.claude/settings.local.json.
+# .claude/settings.local.json.
 
 set -euo pipefail
 
@@ -93,7 +93,7 @@ DENY_REGEX="$DENY_REGEX"'|(gpg[[:space:]].*--delete-(secret-keys|secret-and-publ
 DENY_REGEX="$DENY_REGEX"'|(kubectl[[:space:]]+delete[[:space:]]+secret(s)?\b)'
 
 if echo "$COMMAND" | grep -qE "$DENY_REGEX"; then
-  REASON='Secret/key material destruction blocked (R31 category e). Permanently destroying KMS keys, secrets, certificates, signing material, or access credentials is unrecoverable — once the pending-deletion window closes (or `purge` runs), there is no recovery. Before proceeding: (1) confirm rotation is complete and the new credential is active across ALL consumers (services, CI, peer accounts) — destroying a key while a single consumer still uses it locks them out; (2) for KMS keys, prefer scheduling deletion with the maximum window (30 days for AWS, 24 hours minimum for GCP) so a misconfiguration can be caught before destruction; (3) for keyvault `purge`, never run without the vault soft-delete window having elapsed AND a backup of the material existing somewhere recoverable; (4) for `gpg --delete-secret-keys`, ensure the corresponding public key is no longer used to encrypt active material; (5) for `kubectl delete secret`, check no Pod still mounts it and that any ServiceAccount tokens have been replaced. To override this hook locally, edit ~/.claude/settings.local.json.'
+  REASON='Secret/key material destruction blocked (R31 category e). Permanently destroying KMS keys, secrets, certificates, signing material, or access credentials is unrecoverable — once the pending-deletion window closes (or `purge` runs), there is no recovery. Before proceeding: (1) confirm rotation is complete and the new credential is active across ALL consumers (services, CI, peer accounts) — destroying a key while a single consumer still uses it locks them out; (2) for KMS keys, prefer scheduling deletion with the maximum window (30 days for AWS, 24 hours minimum for GCP) so a misconfiguration can be caught before destruction; (3) for keyvault `purge`, never run without the vault soft-delete window having elapsed AND a backup of the material existing somewhere recoverable; (4) for `gpg --delete-secret-keys`, ensure the corresponding public key is no longer used to encrypt active material; (5) for `kubectl delete secret`, check no Pod still mounts it and that any ServiceAccount tokens have been replaced. To override this hook locally, edit .claude/settings.local.json.'
   printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
   exit 0
 fi

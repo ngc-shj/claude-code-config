@@ -213,6 +213,12 @@ setup() {
   export TMPDIR="$BATS_TEST_TMPDIR"
 
   unset LLM_BACKEND OPENAI_HOST OPENAI_HOSTS LLM_TRUSTED_HOSTS OLLAMA_HOST OLLAMA_EXTRA_HOSTS
+  # The model seam, not just the host seam. The mock pool advertises a fixed
+  # model id, so an inherited OPENAI_MODEL naming this machine's real model
+  # matches nothing in it, no host is found, and every case that needs the LLM
+  # "online" fails — as a property of the developer's shell, not of the code.
+  unset OPENAI_MODEL OPENAI_MODEL_THINK OPENAI_MODEL_NOTHINK OPENAI_MODEL_SMALL OPENAI_MODEL_LARGE
+  unset OPENAI_REASONING_EFFORT OLLAMA_MODEL_THINK OLLAMA_MODEL_NOTHINK REVIEW_MODEL
   unset CLAUDE_SESSION_ID
   unset GH_ABSENT GH_MISSING_AUTH GH_PR_LIST_JSON GH_PR_COMMENTS_BODY GH_PR_COMMENTS_BODIES
   # The present-instant seam. An inherited value rewrites the clock for every

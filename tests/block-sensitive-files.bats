@@ -244,7 +244,7 @@ run_hook() {
   # block occurred would not distinguish this branch from fixture 1's.
   run run_hook Edit "$HOME/.claude/skills/improve/SKILL.md"
   [[ "$output" == *'"decision":"block"'* ]]
-  echo "$output" | grep -qF "If it has no repo source (install.sh only removes and re-copies the skills it manages, so an unmanaged skill survives every install untouched), add it to the repo's skills/ directory, or exempt it via ~/.claude/settings.local.json."
+  echo "$output" | grep -qF "If it has no repo source (install.sh only removes and re-copies the skills it manages, so an unmanaged skill survives every install untouched), add it to the repo's skills/ directory, or exempt it via a project .claude/settings.local.json (the user-level spelling of that filename is not read)."
 }
 
 @test "approve: repo's own skills/ directory stays editable (not ~/.claude/skills/)" {

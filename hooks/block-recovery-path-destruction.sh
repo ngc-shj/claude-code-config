@@ -40,7 +40,7 @@
 #
 # Best-effort tripwire — bypasses exist (base64-decoded eval, alternate
 # shells, direct cloud-provider API calls bypassing the CLI). Override
-# locally via ~/.claude/settings.local.json.
+# locally via .claude/settings.local.json.
 
 set -euo pipefail
 
@@ -78,7 +78,7 @@ DENY_REGEX="$DENY_REGEX"'|(az[[:space:]]+backup[[:space:]]+(vault|item|policy)[[
 DENY_REGEX="$DENY_REGEX"'|(kubectl[[:space:]]+delete[[:space:]]+(volumesnapshot|volumesnapshots|pv|persistentvolume|persistentvolumes)\b)'
 
 if echo "$COMMAND" | grep -qE "$DENY_REGEX"; then
-  REASON='Recovery-path destruction blocked (R31 category h). Deleting a backup, snapshot, recovery point, or shortening a PITR/backup-retention window eliminates the rollback path. This is the operation that makes a subsequent destructive action irreversible — exactly what an attacker (or a panicking remediator) would run before destroying the live data. Before proceeding: (1) verify the backup is genuinely orphaned and document the retention-policy rationale (compliance windows often require minimum retention); (2) for retention shortening, prefer creating a new policy with the desired window, then migrating, then deleting the old — never directly modify the existing window without coordination; (3) for kubectl pv / volumesnapshot deletion, check that no PVC still claims the volume and that the snapshot has a successor in the chain. Note: `terraform destroy` is intentionally NOT blocked by this hook (too noisy in dev/CI); reviewer obligation R31 remains the primary control for production-state destroys. To override this hook locally, edit ~/.claude/settings.local.json.'
+  REASON='Recovery-path destruction blocked (R31 category h). Deleting a backup, snapshot, recovery point, or shortening a PITR/backup-retention window eliminates the rollback path. This is the operation that makes a subsequent destructive action irreversible — exactly what an attacker (or a panicking remediator) would run before destroying the live data. Before proceeding: (1) verify the backup is genuinely orphaned and document the retention-policy rationale (compliance windows often require minimum retention); (2) for retention shortening, prefer creating a new policy with the desired window, then migrating, then deleting the old — never directly modify the existing window without coordination; (3) for kubectl pv / volumesnapshot deletion, check that no PVC still claims the volume and that the snapshot has a successor in the chain. Note: `terraform destroy` is intentionally NOT blocked by this hook (too noisy in dev/CI); reviewer obligation R31 remains the primary control for production-state destroys. To override this hook locally, edit .claude/settings.local.json.'
   printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
   exit 0
 fi
