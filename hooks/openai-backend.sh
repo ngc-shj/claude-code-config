@@ -50,6 +50,12 @@ _OPENAI_TAB=$'\t'
 _OPENAI_MODEL_NOTHINK="${OPENAI_MODEL_NOTHINK:-${OPENAI_MODEL:-${OPENAI_MODEL_SMALL:-unsloth/gpt-oss-20b-GGUF:F16}}}"
 _OPENAI_MODEL_THINK="${OPENAI_MODEL_THINK:-${OPENAI_MODEL:-${OPENAI_MODEL_LARGE:-unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL}}}"
 
+# How hard the think slot reasons (see openai_thinking_for for why this is sent
+# at all). Default `low` is bounded by the tightest caller: retro-prescreen
+# gives the slot 30s, and on a Qwen3.8-Flash-Next the levels measured 1.3s at
+# low, 10.8s at medium and 52s at xhigh. Set empty to omit the key entirely.
+_OPENAI_REASONING_EFFORT="${OPENAI_REASONING_EFFORT-low}"
+
 # Ports probed for a bare/`.local` host name (space-separated). Default covers
 # llama.cpp (8080) and vLLM (8000); override to add/remove OpenAI-surface ports.
 _OPENAI_PORTS="${LLM_OPENAI_PORTS:-8080 8000}"
@@ -225,11 +231,13 @@ _openai_request() {
       --rawfile prompt "$tmpdir/prompt" \
       --argjson max_tokens "$num_predict" \
       --arg thinking "$thinking" \
+      --arg effort "$_OPENAI_REASONING_EFFORT" \
       '{model: $model,
         messages: [{role: "system", content: $system}, {role: "user", content: $prompt}],
         stream: false, max_tokens: $max_tokens}
        + (if $thinking == "" then {}
-          else {chat_template_kwargs: {enable_thinking: ($thinking == "true")}} end)' \
+          else {chat_template_kwargs: {enable_thinking: ($thinking == "true")}} end)
+       + (if $thinking == "true" and $effort != "" then {reasoning_effort: $effort} else {} end)' \
       > "$tmpdir/request.json"
   else
     jq -n \
@@ -237,11 +245,13 @@ _openai_request() {
       --rawfile prompt "$tmpdir/prompt" \
       --argjson max_tokens "$num_predict" \
       --arg thinking "$thinking" \
+      --arg effort "$_OPENAI_REASONING_EFFORT" \
       '{model: $model,
         messages: [{role: "user", content: $prompt}],
         stream: false, max_tokens: $max_tokens}
        + (if $thinking == "" then {}
-          else {chat_template_kwargs: {enable_thinking: ($thinking == "true")}} end)' \
+          else {chat_template_kwargs: {enable_thinking: ($thinking == "true")}} end)
+       + (if $thinking == "true" and $effort != "" then {reasoning_effort: $effort} else {} end)' \
       > "$tmpdir/request.json"
   fi
 
@@ -304,9 +314,20 @@ openai_model_for() {
 # model id carries no slot, and forcing a mode on it would override whatever
 # the server's own chat template decided.
 #
-# Sent as chat_template_kwargs.enable_thinking, which llama.cpp and vLLM honor.
-# A server that does not understand the key ignores it rather than failing, so
-# a mixed pool degrades to the server-side default instead of erroring.
+# Requesting the mode takes TWO keys, because the engines disagree on which one
+# is the switch (verified against both):
+#
+#   chat_template_kwargs.enable_thinking — llama.cpp and vLLM honor it;
+#                                          mlx-serve ignores it silently
+#   reasoning_effort (top level)         — mlx-serve's only switch, and it
+#                                          defaults to thinking OFF; llama.cpp
+#                                          accepts it and keeps thinking on
+#
+# So the think slot sends both. Sending only the llama.cpp key is the dangerous
+# half-measure: an mlx-serve host answers WITHOUT thinking and without an error,
+# so a review pass silently degrades to a one-shot answer. The no-think slot
+# needs only enable_thinking:false — mlx-serve is already off by default, and
+# omitting reasoning_effort is how you keep it that way.
 openai_thinking_for() {
   case "$1" in
     llm:nothink|gpt-oss:20b) printf 'false' ;;

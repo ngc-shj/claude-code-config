@@ -72,6 +72,7 @@ setup() {
   export OLLAMA_HOST="http://dummy-ollama:11434"
   unset LLM_BACKEND OPENAI_HOST OPENAI_HOSTS LLM_TRUSTED_HOSTS LLM_OPENAI_PORTS
   unset OPENAI_MODEL OPENAI_MODEL_THINK OPENAI_MODEL_NOTHINK OPENAI_MODEL_SMALL OPENAI_MODEL_LARGE
+  unset OPENAI_REASONING_EFFORT
   setup_curl_mock
 }
 
@@ -311,11 +312,45 @@ teardown() {
   [ "$(jq -r '.chat_template_kwargs.enable_thinking' "$CURL_BODY_FILE")" = "false" ]
 }
 
-@test "wire: llm:think sends enable_thinking true" {
+# mlx-serve defaults to thinking OFF and takes reasoning_effort as its only
+# switch, so sending the key here would turn thinking ON for the slot that
+# exists to avoid it.
+@test "wire: llm:nothink sends no reasoning_effort" {
+  export LLM_BACKEND=openai CPP_SUCCEED_HOSTS="localhost:8080"
+  export CURL_BODY_FILE="$BATS_TEST_TMPDIR/body.json"
+  source "$SCRIPT" && printf 'hi' | llm_request "llm:nothink" "" 30 32 >/dev/null
+  [ "$(jq -r 'has("reasoning_effort")' "$CURL_BODY_FILE")" = "false" ]
+}
+
+# Both keys, because the engines disagree on which one is the switch: sending
+# only enable_thinking leaves an mlx-serve host answering without thinking and
+# without an error.
+@test "wire: llm:think sends enable_thinking true AND reasoning_effort" {
   export LLM_BACKEND=openai CPP_SUCCEED_HOSTS="localhost:8080"
   export CPP_MODELS_JSON='{"data":[{"id":"unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL"}]}'
   export CURL_BODY_FILE="$BATS_TEST_TMPDIR/body.json"
   source "$SCRIPT" && printf 'hi' | llm_request "llm:think" "" 30 32 >/dev/null
+  [ "$(jq -r '.chat_template_kwargs.enable_thinking' "$CURL_BODY_FILE")" = "true" ]
+  [ "$(jq -r '.reasoning_effort' "$CURL_BODY_FILE")" = "low" ]
+}
+
+@test "wire: OPENAI_REASONING_EFFORT overrides the level" {
+  export LLM_BACKEND=openai CPP_SUCCEED_HOSTS="localhost:8080"
+  export CPP_MODELS_JSON='{"data":[{"id":"unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL"}]}'
+  export CURL_BODY_FILE="$BATS_TEST_TMPDIR/body.json"
+  export OPENAI_REASONING_EFFORT="medium"
+  source "$SCRIPT" && printf 'hi' | llm_request "llm:think" "" 30 32 >/dev/null
+  [ "$(jq -r '.reasoning_effort' "$CURL_BODY_FILE")" = "medium" ]
+}
+
+# Empty (not unset) is the escape hatch for a server that rejects the key.
+@test "wire: empty OPENAI_REASONING_EFFORT omits the key but keeps enable_thinking" {
+  export LLM_BACKEND=openai CPP_SUCCEED_HOSTS="localhost:8080"
+  export CPP_MODELS_JSON='{"data":[{"id":"unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL"}]}'
+  export CURL_BODY_FILE="$BATS_TEST_TMPDIR/body.json"
+  export OPENAI_REASONING_EFFORT=""
+  source "$SCRIPT" && printf 'hi' | llm_request "llm:think" "" 30 32 >/dev/null
+  [ "$(jq -r 'has("reasoning_effort")' "$CURL_BODY_FILE")" = "false" ]
   [ "$(jq -r '.chat_template_kwargs.enable_thinking' "$CURL_BODY_FILE")" = "true" ]
 }
 

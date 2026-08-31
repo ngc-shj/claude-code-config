@@ -35,8 +35,11 @@ pins the backend, otherwise the OpenAI-compatible backend
 to a real model (`OPENAI_MODEL`, or `OLLAMA_MODEL_THINK`/`_NOTHINK`).
 
 The two logical names select a **reasoning mode**, not a model size. One model
-serves both: the OpenAI backend sends `chat_template_kwargs.enable_thinking`,
-so the same server answers in either mode. Set `OPENAI_MODEL_THINK` /
+serves both: the OpenAI backend asks for the mode on the request, so the same
+server answers either way. The think slot sends two keys because the engines
+disagree on the switch — `chat_template_kwargs.enable_thinking` (llama.cpp,
+vLLM) and top-level `reasoning_effort` (mlx-serve's only one, default off);
+`OPENAI_REASONING_EFFORT` sets the level. Set `OPENAI_MODEL_THINK` /
 `OPENAI_MODEL_NOTHINK` only to split the slots across different servers.
 
 | Logical model | Use case                                                                             |
