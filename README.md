@@ -197,11 +197,12 @@ name it explicitly with `LLM_TRUSTED_HOSTS="localhost"` or `OPENAI_HOST`.
 `OPENAI_HOST`/`OPENAI_HOSTS` pin or replace the candidate list. Hooks always
 pass logical model names — `llm:nothink` / `llm:think`, which select a reasoning
 mode rather than a model. Both resolve to `OPENAI_MODEL`, and the mode travels
-with the request as `chat_template_kwargs.enable_thinking` (llama.cpp and vLLM
-honor it; a server that does not understand the key ignores it rather than
-failing). `OPENAI_MODEL_THINK`/`OPENAI_MODEL_NOTHINK` override a single slot,
-for a pool where one host holds a fast non-reasoning model and another a
-reasoning one. The command library
+with the request as **two** keys, because the engines disagree on which one is
+the switch: `chat_template_kwargs.enable_thinking` (llama.cpp, vLLM) and
+top-level `reasoning_effort` (mlx-serve's only switch, and it defaults to
+thinking off). The think slot sends both; the no-think slot sends only
+`enable_thinking:false`. `OPENAI_MODEL_THINK`/`OPENAI_MODEL_NOTHINK` override a
+single slot, for a pool that splits the modes across hosts. The command library
 (`llm-commands.sh`) and the direct-caller hooks (`pre-review.sh`,
 `commit-msg-check.sh`) source only `llm-utils.sh`.
 
@@ -308,6 +309,7 @@ across them:
   | `OPENAI_MODEL_NOTHINK` | `unsloth/gpt-oss-20b-GGUF:F16` | Real model for `llm:nothink`. Overrides `OPENAI_MODEL`; set it only to split the slots across different servers. |
   | `OPENAI_MODEL_THINK` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` | Real model for `llm:think`. Overrides `OPENAI_MODEL`. |
   | `OPENAI_MODEL_SMALL` / `OPENAI_MODEL_LARGE` | _(unset)_ | Deprecated spellings of the two above, still honored. They were named after the 20b/120b gpt-oss tags this harness first shipped with, so they describe parameter count rather than the role a caller selects. |
+  | `OPENAI_REASONING_EFFORT` | `low` | Level sent as top-level `reasoning_effort` on the `llm:think` slot — mlx-serve's only thinking switch, and accepted by llama.cpp. `low` is bounded by the tightest caller (`retro-prescreen.sh` gives the slot 30s; on Qwen3.8-Flash-Next the levels measured 1.3s / 10.8s / 52s for low / medium / xhigh). Set to the empty string to omit the key for a server that rejects it. |
   | `OLLAMA_MODEL_NOTHINK` / `OLLAMA_MODEL_THINK` | `gpt-oss:20b` / `gpt-oss:120b` | Ollama tags for the two slots. Ollama takes the reasoning mode as a `think` field rather than a chat-template kwarg, so on that backend the slot's model tag carries the mode. |
   | `LLM_BACKEND` | _(auto)_ | Pin the backend to `openai` or `ollama`; otherwise the OpenAI backend is auto-preferred when reachable. |
   | `REVIEW_MODEL` | `llm:think` | Logical model for `pre-review.sh`. |
@@ -595,12 +597,21 @@ covers both slots — set `OPENAI_MODEL` and the mode rides on the request:
 | Logical | Real model id (default) | Request carries | Server |
 | --- | --- | --- | --- |
 | `llm:nothink` | `unsloth/gpt-oss-20b-GGUF:F16` | `enable_thinking: false` | llama.cpp |
-| `llm:think` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (llama-server strips the unsloth `UD-` prefix, so the `UD-Q4_K_XL` build is requested as `Q4_K_XL`) | `enable_thinking: true` | llama.cpp |
+| `llm:think` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL` (llama-server strips the unsloth `UD-` prefix, so the `UD-Q4_K_XL` build is requested as `Q4_K_XL`) | `enable_thinking: true` + `reasoning_effort` | llama.cpp, mlx-serve |
 
-Not every model honors the flag — a non-reasoning model ignores it and answers
-in one pass. Check with `curl` before assigning one to `llm:think`: if
-`reasoning_content` comes back empty on a question that needs working out, that
-model is not a thinking model no matter what the flag says.
+**The engines disagree on which key is the thinking switch**, so the think slot
+sends both — measured against a live server of each:
+
+| Engine | `chat_template_kwargs.enable_thinking` | `reasoning_effort` |
+| --- | --- | --- |
+| llama.cpp | honored | accepted, keeps thinking on |
+| mlx-serve | **silently ignored** | the only switch; defaults to OFF |
+
+Sending only the llama.cpp key is the dangerous half-measure: an mlx-serve host
+answers without thinking and without an error, so a review pass degrades to a
+one-shot answer that reads fine. Still verify a model before assigning it to
+`llm:think` — if `reasoning_content` comes back empty on a question that needs
+working out, that model is not reasoning no matter which key you sent.
 
 When both backends are reachable, the OpenAI backend is auto-preferred; pin with
 `LLM_BACKEND=ollama` or `LLM_BACKEND=openai`.
