@@ -226,6 +226,11 @@ teardown() {
   run jq -e '.hooks.SessionStart[0].hooks[0].command | test("session-retrospect-check")' \
     "$TEST_HOME/.claude/settings.json"
   [ "$status" -eq 0 ]
+  # Both SessionStart hooks, not just the first: the merge replaces `hooks`
+  # wholesale, so a hook dropped from the template disappears silently.
+  run jq -e '[.hooks.SessionStart[0].hooks[].command] | any(test("session-llm-check"))' \
+    "$TEST_HOME/.claude/settings.json"
+  [ "$status" -eq 0 ]
 }
 
 @test "install: CLAUDE.md is delivered to ~/.claude/CLAUDE.md" {

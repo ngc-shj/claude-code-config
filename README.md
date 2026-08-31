@@ -146,8 +146,11 @@ Blocks Edit/Write/MultiEdit operations on:
   an edit there is silently reverted on the next install: `hooks/**` (any file type —
   `hooks/lib/` is re-copied wholesale), `skills/**`, `rules/**`, `settings.json`,
   `CLAUDE.md`, `RTK.md`, `model-routing.md`. Edit the repo and run `./install.sh`.
-  `~/.claude/settings.local.json` stays editable — it is the documented override path
-  and install.sh does not touch it — as does `~/.claude/projects/*/memory/`.
+  `~/.claude/settings.local.json` stays editable — install.sh does not touch it —
+  as does `~/.claude/projects/*/memory/`. Note that Claude Code does not read a
+  `settings.local.json` at the user level (only `.claude/settings.local.json`
+  inside a project), so it is not where machine-wide `env` belongs; see
+  "Configuration example" above.
 
 ### commit-msg-check.sh (PreToolUse)
 
@@ -264,13 +267,20 @@ across them:
   re-probed (up to ~2 s) on every hook invocation — prune dead hosts from
   `LLM_TRUSTED_HOSTS` to avoid the per-call latency.
 - **Configuration example** — hooks inherit Claude Code's process environment,
-  so the most reliable place for these variables is the `env` block of
-  `~/.claude/settings.local.json` (machine-specific, works for both IDE and
-  CLI launches; a shell-profile `export` also works for terminal launches).
-  Copy the template and edit the host list:
+  so these variables go in an `env` block that Claude Code actually reads.
+  **That is `~/.claude/settings.json`, not `~/.claude/settings.local.json`.**
+  Claude Code resolves three settings sources — user (`~/.claude/settings.json`),
+  project (`.claude/settings.json`) and project-local
+  (`.claude/settings.local.json`) — so a `settings.local.json` at the *user*
+  level is never loaded. Despite the general rule that `install.sh` owns
+  `~/.claude/settings.json`, an `env` block there survives every install: the
+  merge replaces only the template-owned `permissions` and `hooks` keys and
+  keeps the rest. (A shell-profile `export` also works, for terminal launches
+  only.) Copy the template's `env` block into your live file:
 
   ```bash
-  cp settings.local.json.example ~/.claude/settings.local.json
+  # merge this file's "env" into ~/.claude/settings.json
+  cat settings.local.json.example
   ```
 
   ```json
@@ -285,9 +295,13 @@ across them:
   }
   ```
 
-  Only `LLM_TRUSTED_HOSTS` needs editing — the other entries show the
-  defaults and are safe to keep or drop. If `~/.claude/settings.local.json`
-  already exists, merge the `env` block instead of overwriting.
+  Only `LLM_TRUSTED_HOSTS` and `OPENAI_MODEL` need editing — the other entries
+  show the defaults and are safe to keep or drop. Merge the `env` block into
+  the existing file rather than overwriting it.
+
+  Adding or changing a key takes effect in a running session; **removing** one
+  does not, because the deleted variable stays in the already-started process.
+  Restart to clear it.
 
 - **All environment variables** — the example ships the common defaults; the
   rest are optional and belong in the same `env` block only when you need them
@@ -568,7 +582,7 @@ The installer overwrites `~/.claude/CLAUDE.md` (from `global/`), hooks, skills, 
 
 `settings.json` is the exception: it is **merged** into any existing live file rather than overwritten, so user-managed top-level keys the template does not own (e.g. `mcpServers`) survive. `permissions` and `hooks` are template-owned and replaced wholesale, so a stale user sub-key or unmanaged hook event in the live file does not leak through. A non-object/garbage live file is backed up and replaced instead of merged. A timestamped `settings.json.bak.<ts>` (mode 600) is written first. Backups are not auto-pruned — purge old ones periodically.
 
-For local customizations that should survive installs, use `~/.claude/settings.local.json` instead of editing `~/.claude/settings.json` directly.
+Which file a local customization belongs in follows from that merge. `permissions` and `hooks` are template-owned, so put project-scoped overrides of those in a project's `.claude/settings.local.json`. Everything else — `env` above all — belongs in `~/.claude/settings.json`, where the merge preserves it: Claude Code does not read a user-level `settings.local.json` at all, so a machine-wide setting placed there is silently ignored rather than applied.
 
 ### Status line and usage history (optional)
 

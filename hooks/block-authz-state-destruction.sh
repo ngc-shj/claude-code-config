@@ -34,7 +34,7 @@
 #
 # Best-effort tripwire — bypasses exist (base64-decoded eval, alternate
 # shells, direct cloud-provider API calls). Override locally via
-# ~/.claude/settings.local.json.
+# .claude/settings.local.json.
 
 set -euo pipefail
 
@@ -66,7 +66,7 @@ DENY_REGEX="$DENY_REGEX"'|(az[[:space:]]+ad[[:space:]]+(group[[:space:]]+(delete
 DENY_REGEX="$DENY_REGEX"'|(kubectl[[:space:]]+delete[[:space:]]+(role|roles|rolebinding|rolebindings|clusterrole|clusterroles|clusterrolebinding|clusterrolebindings|serviceaccount|serviceaccounts)\b)'
 
 if echo "$COMMAND" | grep -qE "$DENY_REGEX"; then
-  REASON='Authorization-state destruction blocked (R31 category f). Removing a role, role binding, IAM policy attachment, group membership, or service account can immediately lock out legitimate operators and break runtime auth for services that depend on the binding. The over-privilege-revocation direction is Critical because it produces denial-of-service that surfaces only when the affected actor next tries to authenticate. Before proceeding: (1) identify ALL principals (users, services, CI runners, peer accounts) that depend on this binding — the binding may grant access transitively; (2) verify a replacement is in place AND active before removing the existing one (rotate, do not revoke); (3) for `gcloud projects set-iam-policy`, prefer `add-iam-policy-binding` / `remove-iam-policy-binding` for surgical changes — `set-iam-policy` REPLACES the entire policy and silently drops anything not in the new copy; (4) for `kubectl delete clusterrolebinding system:*` or similar built-in bindings, do NOT proceed without an offline confirmation — these often gate kube-controller-manager itself and removing one can render the cluster unrecoverable. To override this hook locally, edit ~/.claude/settings.local.json.'
+  REASON='Authorization-state destruction blocked (R31 category f). Removing a role, role binding, IAM policy attachment, group membership, or service account can immediately lock out legitimate operators and break runtime auth for services that depend on the binding. The over-privilege-revocation direction is Critical because it produces denial-of-service that surfaces only when the affected actor next tries to authenticate. Before proceeding: (1) identify ALL principals (users, services, CI runners, peer accounts) that depend on this binding — the binding may grant access transitively; (2) verify a replacement is in place AND active before removing the existing one (rotate, do not revoke); (3) for `gcloud projects set-iam-policy`, prefer `add-iam-policy-binding` / `remove-iam-policy-binding` for surgical changes — `set-iam-policy` REPLACES the entire policy and silently drops anything not in the new copy; (4) for `kubectl delete clusterrolebinding system:*` or similar built-in bindings, do NOT proceed without an offline confirmation — these often gate kube-controller-manager itself and removing one can render the cluster unrecoverable. To override this hook locally, edit .claude/settings.local.json.'
   printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
   exit 0
 fi

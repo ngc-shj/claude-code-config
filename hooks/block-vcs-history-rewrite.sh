@@ -62,7 +62,7 @@ fi
 DENY_REGEX='(git[[:space:]]+push[[:space:]].*--force([^-a-zA-Z]|$))|(git[[:space:]]+push(.*[[:space:]])(-f\b|-[a-zA-Z]*f[a-zA-Z]*\b))|(git[[:space:]]+filter-branch\b)|(git[[:space:]]+filter-repo\b)'
 
 if echo "$COMMAND" | grep -qE "$DENY_REGEX"; then
-  REASON='VCS history-rewrite operation blocked (R31 category d). Force-pushes and filter-* commands can overwrite or erase commits that other contributors have based work on. Recommended alternatives: (1) `git push --force-with-lease` — only force-pushes when the remote is what your local clone expected, preventing silent overwrites of teammates'"'"' commits; (2) `git push --force-if-includes` — even stricter, requires your local commit history to include the remote tip; (3) for `filter-branch`/`filter-repo` rewriting shared history, coordinate with the team and document the rewrite reason in the PR. To override this hook locally, edit ~/.claude/settings.local.json (NOT overwritten by install.sh).'
+  REASON='VCS history-rewrite operation blocked (R31 category d). Force-pushes and filter-* commands can overwrite or erase commits that other contributors have based work on. Recommended alternatives: (1) `git push --force-with-lease` — only force-pushes when the remote is what your local clone expected, preventing silent overwrites of teammates'"'"' commits; (2) `git push --force-if-includes` — even stricter, requires your local commit history to include the remote tip; (3) for `filter-branch`/`filter-repo` rewriting shared history, coordinate with the team and document the rewrite reason in the PR. To override this hook locally, edit .claude/settings.local.json (NOT overwritten by install.sh).'
   printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
   exit 0
 fi
