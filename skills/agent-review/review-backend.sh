@@ -6,7 +6,7 @@
 # depends on a single CLI. Reference backends, in default preference order
 # (free+private first, external second opinion next, token-spending last):
 #   ollama  — local, zero-cost, private. Reuses ~/.claude/hooks/llm-commands.sh
-#             (analyze-functionality / -security / -testing, gpt-oss:120b).
+#             (analyze-functionality / -security / -testing, llm:think).
 #   codex   — independent external model on the user's Codex login/quota.
 #   claude  — fresh headless Claude with no conversation context (spends tokens).
 #

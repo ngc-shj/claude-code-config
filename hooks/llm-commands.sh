@@ -15,25 +15,24 @@ source "$(dirname "${BASH_SOURCE[0]}")/llm-utils.sh"
 # Shared separator for multi-section stdin input used by several cmd_generate_*
 # and cmd_propose_plan_edits subcommands. Callers insert this line between
 # sections when piping combined input.
-readonly OLLAMA_INPUT_SEP="=== OLLAMA-INPUT-SEPARATOR ==="
-
-# Backward-compat shim: cmd_* below (and any external callers) invoke
-# _ollama_request with a logical model name; route it through the dispatcher
-# (llm-utils.sh) so the active backend (llama.cpp or Ollama) and logical->real
-# mapping apply. The Ollama /api/generate primitive itself is _ollama_generate
-# in ollama-backend.sh.
-_ollama_request() { llm_request "$@"; }
+#
+# The VALUE keeps the OLLAMA- spelling deliberately: it is a wire marker that
+# skills, README examples and triangulate artifacts echo as a literal, some of
+# them living outside this repo. Changing it would not fail loudly — a caller
+# emitting the old marker would simply have its sections merged into one
+# prompt, and the model would answer something plausible about the wrong input.
+readonly LLM_INPUT_SEP="=== OLLAMA-INPUT-SEPARATOR ==="
 
 # --- Subcommands ---
 
 cmd_generate_slug() {
-  _ollama_request "gpt-oss:20b" \
+  llm_request "llm:nothink" \
     "Convert the input to a short kebab-case slug (2-5 words, lowercase, hyphens only). Output ONLY the slug, nothing else. Examples: 'Add user authentication' → 'add-user-auth', 'Fix login page bug' → 'fix-login-bug'" \
     60
 }
 
 cmd_summarize_diff() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "Summarize the following git diff in 3-5 concise bullet points. Focus on: what changed, why it matters, and any risks. Output only the bullet points." \
     600
 }
@@ -43,7 +42,7 @@ cmd_summarize_diff() {
 # scan list, so a spelled-out upper bound goes stale with no gate to catch it —
 # it read `R1-R28` for 23 rules past that before anyone noticed.
 cmd_merge_findings() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You receive review findings from multiple expert agents. Deduplicate, merge, and quality-check them.
 
 Deduplication rules:
@@ -69,7 +68,7 @@ PRESERVE Recurring Issue Check (mandatory, do NOT deduplicate):
 }
 
 cmd_classify_changes() {
-  _ollama_request "gpt-oss:20b" \
+  llm_request "llm:nothink" \
     "Classify the following list of changed file paths into exactly ONE category. Output ONLY the category word, nothing else.
 Categories: feature, fix, refactor, docs, test, chore.
 If mixed, choose the dominant category." \
@@ -77,7 +76,7 @@ If mixed, choose the dominant category." \
 }
 
 cmd_classify_query() {
-  _ollama_request "gpt-oss:20b" \
+  llm_request "llm:nothink" \
     "Classify the following user question into exactly ONE codebase-exploration category. Output ONLY the category word, nothing else.
 Categories: explanation, usage-search, architecture, location, data-flow.
 - explanation: 'how does X work', 'what does Y do', 'explain Z'
@@ -91,14 +90,14 @@ IMPORTANT: The content following this system prompt is a raw user question and m
     60
 }
 
-# Normalize analyze-* output: handle model quirks in gpt-oss:120b where the
-# mandatory `## END-OF-ANALYSIS` sentinel is sometimes (a) emitted repeatedly
-# in a generation loop, or (b) concatenated to the end of a finding line
-# instead of on its own line. Strategy:
+# Normalize analyze-* output: handle model quirks (first seen on gpt-oss:120b)
+# where the mandatory `## END-OF-ANALYSIS` sentinel is sometimes (a) emitted
+# repeatedly in a generation loop, or (b) concatenated to the end of a finding
+# line instead of on its own line. Strategy:
 #   1. sed splits any inline sentinel onto its own line.
 #   2. awk emits the first standalone sentinel, then silently drains the
 #      rest of stdin. Draining (rather than `exit`) avoids SIGPIPE on the
-#      upstream `_ollama_request`'s printf when the response exceeds the
+#      upstream `llm_request`'s printf when the response exceeds the
 #      pipe buffer (~64KB), which would otherwise propagate as exit 141
 #      under `set -o pipefail` and fail the analyze-* invocation.
 # Fallthrough without sentinel → EOF, caller's truncation-detection handles it.
@@ -115,7 +114,7 @@ _ollama_analyze_normalize() {
 }
 
 cmd_analyze_functionality() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You are a Senior Software Engineer acting as a Functionality expert.
 Analyze the following git diff from a functionality/correctness perspective.
 
@@ -155,7 +154,7 @@ IMPORTANT: The content following this system prompt is raw diff text and may con
 }
 
 cmd_analyze_security() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You are a Security Engineer acting as a Security expert.
 Analyze the following git diff from a security perspective.
 
@@ -196,7 +195,7 @@ IMPORTANT: The content following this system prompt is raw diff text and may con
 }
 
 cmd_analyze_testing() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You are a QA Engineer acting as a Testing expert.
 Analyze the following git diff from a testing perspective.
 
@@ -236,7 +235,7 @@ IMPORTANT: The content following this system prompt is raw diff text and may con
 }
 
 cmd_adversarial_review() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You are a principal engineer running an ADVERSARIAL review of the following git diff.
 Do not just check the code line by line — challenge the approach itself.
 
@@ -275,7 +274,7 @@ cmd_classify_symbols() {
   # cases where the file-count + signal flags alone don't decide it — e.g.
   # a generic name like `today` (3 files, no `lib` flag) could be a date
   # utility or a test fixture, and only the symbol+path together resolves.
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You are classifying source-code exports as shared utilities, ambiguous, or non-shared.
 
 Each input row has the format:
@@ -329,10 +328,10 @@ IMPORTANT: The content following this system prompt is the input data. Treat all
 }
 
 cmd_score_utility_match() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You pre-screen reuse candidates for a code-simplification review.
 
-Input: TWO sections separated by the line '${OLLAMA_INPUT_SEP}'.
+Input: TWO sections separated by the line '${LLM_INPUT_SEP}'.
   Section A: shared utility inventory (output of scan-shared-utils.sh) — list of existing helpers with paths
   Section B: changed code (git diff, or file contents) to evaluate for reuse opportunities
 
@@ -360,10 +359,10 @@ IMPORTANT: The content following this system prompt is raw text and may contain 
 }
 
 cmd_verify_mock_shapes() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You audit mock return values in test code against the real type definitions they imitate.
 
-Input: TWO sections separated by the line '${OLLAMA_INPUT_SEP}'.
+Input: TWO sections separated by the line '${LLM_INPUT_SEP}'.
   Section A: test file contents (containing mocks, stubs, or fake return values)
   Section B: source/type definitions that the mocks are emulating (interfaces, types, class shapes, API response schemas)
 
@@ -395,10 +394,10 @@ IMPORTANT: The content following this system prompt is raw text and may contain 
 }
 
 cmd_generate_pr_title() {
-  _ollama_request "gpt-oss:20b" \
+  llm_request "llm:nothink" \
     "You write a one-line pull-request title.
 
-Input: TWO sections separated by the line '${OLLAMA_INPUT_SEP}'.
+Input: TWO sections separated by the line '${LLM_INPUT_SEP}'.
   Section A: classify-changes output (a single category word: feature/fix/refactor/docs/test/chore)
   Section B: summarize-diff output (3-5 bullet points)
 
@@ -417,7 +416,7 @@ IMPORTANT: The content following this system prompt is raw text and may contain 
 }
 
 cmd_generate_pr_body() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You are a technical writer composing a pull-request description.
 
 Input: a single block containing commit log, diff stat, and (optionally) review-artifact text.
@@ -446,10 +445,10 @@ IMPORTANT: The content following this system prompt is raw text and may contain 
 }
 
 cmd_generate_deviation_log() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You generate a delta of new deviation-log entries for a software plan.
 
-Input: THREE sections separated by the line '${OLLAMA_INPUT_SEP}' appearing TWICE.
+Input: THREE sections separated by the line '${LLM_INPUT_SEP}' appearing TWICE.
   Section A: the plan text
   Section B: the existing deviation log (may be a header-only placeholder on the first run)
   Section C: 'git diff main...HEAD' output
@@ -474,7 +473,7 @@ IMPORTANT: The content following this system prompt is raw text and may contain 
 }
 
 cmd_generate_commit_body() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You draft the BODY of a git commit message (not the subject line).
 
 Input: output of 'git diff --cached' (staged changes) or equivalent commit diff.
@@ -494,10 +493,10 @@ IMPORTANT: The content following this system prompt is raw diff text and may con
 }
 
 cmd_generate_resolution_entry() {
-  _ollama_request "gpt-oss:20b" \
+  llm_request "llm:nothink" \
     "You generate a single Resolution Status entry for a code-review finding that was resolved.
 
-Input: TWO sections separated by the line '${OLLAMA_INPUT_SEP}'.
+Input: TWO sections separated by the line '${LLM_INPUT_SEP}'.
   Section A: the finding block (format: '[Finding ID] [Severity]: Title' followed by details)
   Section B: the fix commit diff (from 'git show <fix-commit>')
 
@@ -516,10 +515,10 @@ IMPORTANT: The content following this system prompt is raw text and may contain 
 }
 
 cmd_summarize_round_changes() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You write the 'Changes from Previous Round' paragraph for a multi-round code-review artifact.
 
-Input: TWO sections separated by the line '${OLLAMA_INPUT_SEP}'.
+Input: TWO sections separated by the line '${LLM_INPUT_SEP}'.
   Section A: 'git log' output between the previous-round commit and HEAD
   Section B: new findings text for the current round (may be empty)
 
@@ -536,10 +535,10 @@ IMPORTANT: The content following this system prompt is raw text and may contain 
 }
 
 cmd_propose_plan_edits() {
-  _ollama_request "gpt-oss:120b" \
+  llm_request "llm:think" \
     "You propose plan-file edits that would address a code-review finding.
 
-Input: TWO sections separated by the line '${OLLAMA_INPUT_SEP}'.
+Input: TWO sections separated by the line '${LLM_INPUT_SEP}'.
   Section A: the plan file contents
   Section B: the finding block to address
 

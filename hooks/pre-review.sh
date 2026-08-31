@@ -9,12 +9,12 @@ set -euo pipefail
 # Source the common LLM layer for llm_request (backend-agnostic dispatcher).
 # shellcheck source=llm-utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/llm-utils.sh"
-MODEL="${REVIEW_MODEL:-gpt-oss:120b}"
+MODEL="${REVIEW_MODEL:-llm:think}"
 TIMEOUT="${REVIEW_TIMEOUT:-600}"
 MODE="${1:-code}"
 
 # Token budget: reserve space for output, use rest for input
-# ~3 chars per token as rough estimate; let Ollama manage num_ctx
+# ~3 chars per token as rough estimate; let the server manage num_ctx
 MAX_INPUT_TOKENS=128000
 NUM_PREDICT=8192
 MAX_INPUT_CHARS=$(( MAX_INPUT_TOKENS * 3 ))
@@ -22,7 +22,7 @@ MAX_INPUT_CHARS=$(( MAX_INPUT_TOKENS * 3 ))
 # Resolve the trusted root once: git toplevel if we're in a repo, else pwd.
 # PLAN_FILE (env var) must canonicalize to a path under this root — without
 # this check, a prompt-injected orchestrator that sets PLAN_FILE=/etc/passwd
-# (or ~/.ssh/id_rsa, etc.) would have the contents forwarded to Ollama and
+# (or ~/.ssh/id_rsa, etc.) would have the contents forwarded to the local LLM and
 # reflected back through the review output, creating an exfiltration channel.
 TRUSTED_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 TRUSTED_ROOT=$( (cd -P -- "$TRUSTED_ROOT" 2>/dev/null && pwd -P) || echo "$TRUSTED_ROOT")

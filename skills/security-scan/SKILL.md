@@ -8,7 +8,7 @@ origin: "Independent reimplementation inspired by everything-claude-code skills/
 
 Audit Claude Code configuration for common misconfigurations using deterministic pattern checks, with optional local-LLM deep analysis.
 
-Inventory and pattern matching are pure shell (zero Claude tokens). Ollama (`gpt-oss:120b` via `llm-commands.sh analyze-security`) provides optional depth. Claude only synthesizes the final report.
+Inventory and pattern matching are pure shell (zero Claude tokens). Ollama (`llm:think` via `llm-commands.sh analyze-security`) provides optional depth. Claude only synthesizes the final report.
 
 ---
 
@@ -25,7 +25,7 @@ Inventory and pattern matching are pure shell (zero Claude tokens). Ollama (`gpt
 
 Run each check; collect findings into `$FINDINGS` for the report. A finding is `[SEVERITY] path:line — problem`.
 
-**Step 2 is tuned for high recall, not precision.** False positives are expected — most get filtered when Step 3 runs the findings past `gpt-oss:120b` for contextual triage, or when Claude synthesizes the final report. Do not suppress findings at this stage. The danger is missing a real issue, not over-reporting.
+**Step 2 is tuned for high recall, not precision.** False positives are expected — most get filtered when Step 3 runs the findings past `llm:think` for contextual triage, or when Claude synthesizes the final report. Do not suppress findings at this stage. The danger is missing a real issue, not over-reporting.
 
 ### 2a. Hardcoded secrets
 
@@ -154,7 +154,7 @@ Severity: MEDIUM. Review whether the agent / skill actually needs Bash or Edit/W
 
 ## Step 3: Optional Ollama Deep Analysis
 
-Pipe the surfaced findings plus the raw config content to `gpt-oss:120b` for contextual analysis — zero Claude tokens.
+Pipe the surfaced findings plus the raw config content to `llm:think` for contextual analysis — zero Claude tokens.
 
 ```bash
 # Example: analyze settings.json for anything Step 2 missed

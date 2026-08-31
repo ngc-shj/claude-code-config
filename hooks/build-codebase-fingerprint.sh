@@ -82,10 +82,10 @@
 #   TOP_N (default: 30)              — max rows per section
 #   LITERAL_MIN_FILES (default: 3)   — literal must appear in >= N files
 #   SYMBOL_MIN_USAGE  (default: 3)   — symbol must be referenced from >= N files
-#   LLM_CLASSIFY (default: 1)        — call Ollama (gpt-oss:120b) to classify
+#   LLM_CLASSIFY (default: 1)        — call the local LLM (llm:think slot) to classify
 #                                      top-N symbols as shared / ambiguous /
 #                                      local. Set 0 to skip (faster, no
-#                                      Ollama dependency). LLM verdicts are
+#                                      local-LLM dependency). LLM verdicts are
 #                                      cached with the rest of the output.
 #   NOCACHE (default: 0)             — set 1 to force fingerprint rebuild
 
@@ -633,7 +633,7 @@ count_symbol_usage() {
   # Enrich the top-N rows with signals. Non-top rows skip the per-symbol
   # work entirely so signal computation cost scales with TOP_N, not with
   # the full export universe. Signals are accumulated to a temp file so a
-  # single LLM classification pass (gpt-oss:120b) can run on the full
+  # single LLM classification pass (llm:think slot) can run on the full
   # top-N batch before any row is printed — see LLM_CLASSIFY block below.
   awk -F'\t' -v min="$SYMBOL_MIN_USAGE" -v top="$TOP_N" '
       $1 >= min { n++; if (n > top) exit; print }' "$tmp_counts" \
@@ -656,7 +656,7 @@ count_symbol_usage() {
 
 # Optional: LLM classification pass over the full top-N batch. Disambiguates
   # cases where signals alone don't decide it — generic names like `today`,
-  # domain names under non-standard paths, etc. One Ollama call per cache
+  # domain names under non-standard paths, etc. One local-LLM call per cache
   # invalidation; cached output already includes the classification flags.
   # Set LLM_CLASSIFY=0 to skip (e.g. for fast iteration).
   if [ "${LLM_CLASSIFY:-1}" = "1" ] && [ -s "$tmp_top_n" ]; then
@@ -699,7 +699,7 @@ count_symbol_usage() {
 emit_symbol_section() {
   echo "## Top exported symbols by file-usage (>=$SYMBOL_MIN_USAGE files)"
   echo ""
-  echo "Signals: lib=under shared dir / route=under app|pages|routes / doc=has JSDoc or docstring / Nmo=age in months (relative; squash-merged repos compress) / stale=untouched >365d / Rn=re-exported by n barrel files / ★ ? ✗=LLM classification (shared / ambiguous / local — gpt-oss:120b verdict; absent when LLM_CLASSIFY=0 or Ollama unavailable)"
+  echo "Signals: lib=under shared dir / route=under app|pages|routes / doc=has JSDoc or docstring / Nmo=age in months (relative; squash-merged repos compress) / stale=untouched >365d / Rn=re-exported by n barrel files / ★ ? ✗=LLM classification (shared / ambiguous / local — llm:think verdict; absent when LLM_CLASSIFY=0 or the local LLM is unavailable)"
   echo ""
   printf '  %-7s  %-40s  %-50s  %s\n' "Files" "Symbol" "Defined at" "Signals"
   printf '  %-7s  %-40s  %-50s  %s\n' "-----" "------" "----------" "-------"
