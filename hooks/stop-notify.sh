@@ -53,9 +53,14 @@ _notify() {
     return
   fi
   command -v notify-send >/dev/null 2>&1 || return 0
-  # Backgrounded: notify-send makes a synchronous D-Bus call that blocks until
-  # the notification is dismissed when no daemon services it, which would hang
-  # the hook (and the harness).
+  # No display means an SSH session on a headless host. The session bus there
+  # still activates the desktop's notification daemon, which dies with "cannot
+  # open display" and leaves its user unit failed.
+  [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || return 0
+  # Backgrounded: notify-send makes a synchronous D-Bus call. If the bus has to
+  # start a notification daemon that then fails, the call waits out the bus's
+  # activation timeout (dbus-daemon logged 120s), which would hang the hook (and
+  # the harness).
   notify-send -a "$1" -u "${3:-normal}" "$1" "$2" 2>/dev/null &
 }
 

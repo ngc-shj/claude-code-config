@@ -42,35 +42,35 @@ EOF
 
 @test "notify: linux path dispatches notify-send and exits 0" {
   _stub_uname Linux; _stub paplay; _stub aplay; _stub notify-send
-  run env PATH="$STUBBIN:$PATH" timeout 5 bash "$NOTIFY" <<< '{"notification_type":"permission_prompt"}'
+  run env DISPLAY=:0 PATH="$STUBBIN:$PATH" timeout 5 bash "$NOTIFY" <<< '{"notification_type":"permission_prompt"}'
   [ "$status" -eq 0 ]
   grep -q '^notify-send ' "$STUB_LOG"
 }
 
 @test "notify: macOS path dispatches osascript and exits 0" {
   _stub_uname Darwin; _stub afplay; _stub osascript
-  run env PATH="$STUBBIN:$PATH" timeout 5 bash "$NOTIFY" <<< '{"notification_type":"idle_prompt"}'
+  run env DISPLAY=:0 PATH="$STUBBIN:$PATH" timeout 5 bash "$NOTIFY" <<< '{"notification_type":"idle_prompt"}'
   [ "$status" -eq 0 ]
   grep -q '^osascript ' "$STUB_LOG"
 }
 
 @test "notify: unknown notification_type is a no-op exit 0" {
   _stub_uname Linux; _stub paplay; _stub aplay; _stub notify-send
-  run env PATH="$STUBBIN:$PATH" timeout 5 bash "$NOTIFY" <<< '{"notification_type":"bogus"}'
+  run env DISPLAY=:0 PATH="$STUBBIN:$PATH" timeout 5 bash "$NOTIFY" <<< '{"notification_type":"bogus"}'
   [ "$status" -eq 0 ]
   [ ! -s "$STUB_LOG" ]
 }
 
 @test "stop-notify: linux path dispatches notify-send and exits 0" {
   _stub_uname Linux; _stub paplay; _stub aplay; _stub notify-send
-  run env PATH="$STUBBIN:$PATH" timeout 5 bash "$STOP_NOTIFY" <<< '{"stop_reason":"end_turn"}'
+  run env DISPLAY=:0 PATH="$STUBBIN:$PATH" timeout 5 bash "$STOP_NOTIFY" <<< '{"stop_reason":"end_turn"}'
   [ "$status" -eq 0 ]
   grep -q '^notify-send ' "$STUB_LOG"
 }
 
 @test "stop-notify: max_tokens path exits 0 (critical urgency)" {
   _stub_uname Linux; _stub paplay; _stub aplay; _stub notify-send
-  run env PATH="$STUBBIN:$PATH" timeout 5 bash "$STOP_NOTIFY" <<< '{"stop_reason":"max_tokens"}'
+  run env DISPLAY=:0 PATH="$STUBBIN:$PATH" timeout 5 bash "$STOP_NOTIFY" <<< '{"stop_reason":"max_tokens"}'
   [ "$status" -eq 0 ]
   grep -q 'critical' "$STUB_LOG"
 }
@@ -84,7 +84,7 @@ EOF
 sleep 30
 EOF
   chmod +x "$STUBBIN/notify-send"
-  run env PATH="$STUBBIN:$PATH" timeout 3 bash "$NOTIFY" <<< '{"notification_type":"permission_prompt"}'
+  run env DISPLAY=:0 PATH="$STUBBIN:$PATH" timeout 3 bash "$NOTIFY" <<< '{"notification_type":"permission_prompt"}'
   [ "$status" -ne 124 ]
   [ "$status" -eq 0 ]
 }
@@ -97,7 +97,7 @@ EOF
 sleep 30
 EOF
   chmod +x "$STUBBIN/notify-send"
-  run env PATH="$STUBBIN:$PATH" timeout 3 bash "$STOP_NOTIFY" <<< '{"stop_reason":"end_turn"}'
+  run env DISPLAY=:0 PATH="$STUBBIN:$PATH" timeout 3 bash "$STOP_NOTIFY" <<< '{"stop_reason":"end_turn"}'
   [ "$status" -ne 124 ]
   [ "$status" -eq 0 ]
 }
@@ -113,6 +113,30 @@ EOF
     printf '#!/bin/bash\nexit 1\n' > "$STUBBIN/$t"
     chmod +x "$STUBBIN/$t"
   done
-  run env PATH="$STUBBIN:$PATH" timeout 5 bash "$NOTIFY" <<< '{"notification_type":"permission_prompt"}'
+  run env DISPLAY=:0 PATH="$STUBBIN:$PATH" timeout 5 bash "$NOTIFY" <<< '{"notification_type":"permission_prompt"}'
   [ "$status" -eq 0 ]
+}
+
+# Headless regression: over SSH there is no display, and calling notify-send
+# anyway makes the session bus activate a notification daemon that fails and
+# leaves its user unit in the failed state.
+@test "notify: no display skips notify-send" {
+  _stub_uname Linux; _stub paplay; _stub aplay; _stub notify-send
+  run env -u DISPLAY -u WAYLAND_DISPLAY PATH="$STUBBIN:$PATH" timeout 5 bash "$NOTIFY" <<< '{"notification_type":"permission_prompt"}'
+  [ "$status" -eq 0 ]
+  ! grep -q '^notify-send ' "$STUB_LOG"
+}
+
+@test "stop-notify: no display skips notify-send" {
+  _stub_uname Linux; _stub paplay; _stub aplay; _stub notify-send
+  run env -u DISPLAY -u WAYLAND_DISPLAY PATH="$STUBBIN:$PATH" timeout 5 bash "$STOP_NOTIFY" <<< '{"stop_reason":"end_turn"}'
+  [ "$status" -eq 0 ]
+  ! grep -q '^notify-send ' "$STUB_LOG"
+}
+
+@test "notify: a Wayland display alone still dispatches notify-send" {
+  _stub_uname Linux; _stub paplay; _stub aplay; _stub notify-send
+  run env -u DISPLAY WAYLAND_DISPLAY=wayland-0 PATH="$STUBBIN:$PATH" timeout 5 bash "$NOTIFY" <<< '{"notification_type":"permission_prompt"}'
+  [ "$status" -eq 0 ]
+  grep -q '^notify-send ' "$STUB_LOG"
 }
