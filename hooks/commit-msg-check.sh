@@ -14,7 +14,6 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 
 # Only check Bash tool calls
 if [ "$TOOL_NAME" != "Bash" ]; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
@@ -26,7 +25,6 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 # and without the prefix tolerance this hook would silently no-op on every
 # commit, defeating the local-LLM message review.
 if ! echo "$COMMAND" | grep -qE '^(rtk[[:space:]]+)?git commit'; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
@@ -34,30 +32,29 @@ fi
 COMMIT_MSG=$(echo "$COMMAND" | sed -n 's/.*-m "\([^"]*\)".*/\1/p; s/.*-m '"'"'\([^'"'"']*\)'"'"'.*/\1/p' | head -1)
 
 if [ -z "$COMMIT_MSG" ]; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
 # Check with local LLM via the active backend (llama.cpp preferred, else Ollama).
-# An unreachable backend yields empty output → approve silently below.
+# An unreachable backend yields empty output → pass silently below.
 PROMPT="Review this git commit message. Reply with ONLY 'OK' if it follows best practices (concise, English, explains why not what, uses conventional prefix like feat/fix/refactor/docs/test/chore). Reply with a one-line suggestion if it needs improvement.
 
 Commit message: $COMMIT_MSG"
 REVIEW=$(printf '%s' "$PROMPT" | llm_request "llm:nothink" "" 10 "" | head -1)
 
 if [ -z "$REVIEW" ]; then
-  # local LLM unavailable, approve silently
-  echo '{"decision": "approve"}'
+  # local LLM unavailable, pass silently
   exit 0
 fi
 
 if echo "$REVIEW" | grep -qi '^OK'; then
-  echo '{"decision": "approve"}'
-else
-  # Encode $REVIEW via jq so quotes/backslashes/newlines from the model output
-  # cannot produce malformed JSON. Even though the decision stays "approve"
-  # either way, a fail-open harness on parse errors would silently drop the
-  # suggestion message — defensible to keep the output well-formed.
-  jq -nc --arg review "$REVIEW" \
-    '{decision: "approve", reason: "Commit message suggestion from local LLM: \($review)"}'
+  exit 0
 fi
+
+# The suggestion is advisory, so it carries no decision: an approve decision
+# would bypass the permission check for the commit itself, so systemMessage
+# shows it to the user and leaves the decision to the harness. Encode $REVIEW via
+# jq so quotes/backslashes/newlines from the model output cannot produce
+# malformed JSON that the harness would drop.
+jq -nc --arg review "$REVIEW" \
+  '{systemMessage: "Commit message suggestion from local LLM: \($review)"}'

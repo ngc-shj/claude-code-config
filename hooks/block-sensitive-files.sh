@@ -44,7 +44,7 @@ if [ "$(echo "$INPUT" | jq -r '.tool_name // empty')" = "Bash" ]; then
   CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
   # Normalize before matching, so trivial spellings of the same path are not
   # separate holes: `"$HOME"/.claude/...` and `~/.claude//hooks/...` both named
-  # a guarded file and both were approve. Quote removal is deliberately crude —
+  # a guarded file and both were let through. Quote removal is deliberately crude —
   # it is a tripwire input, not a shell parse.
   NCMD=$(printf '%s' "$CMD" \
     | sed -e 's/"\$HOME"/$HOME/g; s/'"'"'\$HOME'"'"'/$HOME/g; s/${HOME}/$HOME/g' \
@@ -84,12 +84,10 @@ EOF
     emit_block_early "Blocked: this command writes into the installed harness under ~/.claude/. install.sh overwrites that tree, so the edit is reverted on the next install — and a session that rewrites its own hooks can disable the tripwires meant to catch it. Edit the repo claude-code-config and run \`bash ./install.sh\`; use a project .claude/settings.local.json for local overrides — a user-level settings.local.json is not a settings source, and machine-wide env belongs in the user settings.json, which the install merge preserves. (This is a heuristic guard on the Bash tool: it pairs a protected path with a write verb, so reading, grepping and running these files is unaffected.)"
     exit 0
   fi
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
 if [ -z "$FILE_PATH" ]; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
@@ -114,7 +112,6 @@ case "$BASENAME" in
   .env.*)
     # Allow .env.example (template without secrets)
     if [ "$BASENAME" = ".env.example" ]; then
-      echo '{"decision": "approve"}'
       exit 0
     fi
     emit_block "Blocked: editing environment file ${BASENAME} which may contain secrets"
@@ -183,7 +180,7 @@ SKILLS_BLOCK_REASON="Blocked: editing an installed skill under ~/.claude/skills/
 # legitimate writes.
 # Match the canonical path as well as the raw one. A literal `case` comparison
 # treats `//`, `/./`, an intermediate `..`, and a symlink alias as different
-# strings from the path they name, so each was an approve on a file the arms
+# strings from the path they name, so each was let through on a file the arms
 # below are meant to guard — reproduced for all four forms. Resolve the deepest
 # existing ancestor physically (`cd -P`, which also chases symlinks) and
 # re-attach the part that does not exist yet, so a write to a not-yet-created
@@ -191,13 +188,13 @@ SKILLS_BLOCK_REASON="Blocked: editing an installed skill under ~/.claude/skills/
 # shorter but is GNU-only; this shape is the one hooks/retro-prescreen.sh
 # already uses. A RELATIVE path is made absolute against the hook's own working
 # directory first: the harness runs the hook in the session's cwd, so
-# `../../../../.claude/hooks/x.sh` names a real installed hook and was an
-# approve.
+# `../../../../.claude/hooks/x.sh` names a real installed hook and was let
+# through.
 #
 # A leading `~` is EXPANDED here rather than treated as unresolvable. Earlier
 # revisions kept literal-tilde paths out of physical resolution and judged them
 # by string alone, which cost both directions at once: `~/alias.sh` pointing at
-# an installed hook was an approve, and `~/.claude/skills/out-link/../x` whose
+# an installed hook was let through, and `~/.claude/skills/out-link/../x` whose
 # link leaves the tree was a block. The tilde has exactly one meaning — `$HOME`
 # — and this hook accepts the spelling as valid input, so expanding it is not a
 # guess. With every form absolute, resolution answers every question and the
@@ -221,7 +218,7 @@ esac
 # symlink, `..` names the parent of its TARGET, so collapsing first rewrites
 # the path to a different file. Reproduced — a link to `~/.claude/skills`
 # followed by `..` resolves into `~/.claude/hooks`, while the collapsed form
-# pointed at the link's own parent and approved the write. `cd -P` gets this
+# pointed at the link's own parent and let the write through. `cd -P` gets this
 # right for free because the kernel resolves each component in order, so the
 # un-collapsed path is both the correct input and the simpler one — and, once
 # the tilde is expanded above, the only one: there is no longer a form the
@@ -239,7 +236,7 @@ case "$ABS_PATH" in
       CANON_PATH="${_res}${_tail:+/$_tail}"
       # `cd -P` resolves symlinked DIRECTORY components only; a symlinked LEAF
       # survives as its own path, so `/tmp/alias.sh -> ~/.claude/hooks/x.sh` was
-      # an approve on a guarded file. Chase the whole chain, re-resolving the
+      # let through on a guarded file. Chase the whole chain, re-resolving the
       # containing directory each hop — one readlink is defeated by two links —
       # under a 40-hop cap. Same shape as `_containment_check` in
       # hooks/retro-prescreen.sh. Unlike a containment gate there is no
@@ -292,4 +289,4 @@ case "$CANON_PATH" in
     ;;
 esac
 
-echo '{"decision": "approve"}'
+exit 0

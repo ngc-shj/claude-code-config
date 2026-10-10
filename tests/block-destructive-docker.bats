@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Tests for hooks/block-destructive-docker.sh — verify deny patterns and
-# benign-command approval. Triggered by a dev DB data-loss incident from
+# benign-command pass-through. Triggered by a dev DB data-loss incident from
 # `docker compose down -v`; this fixture is the regression check.
 
 bats_require_minimum_version 1.5.0
@@ -113,75 +113,98 @@ run_hook() {
 }
 
 # ============================================================
-# APPROVE cases — benign / non-destructive commands
+# PASS cases — benign / non-destructive commands
 # ============================================================
 
-@test "approve: docker compose down (no volume flag)" {
+@test "pass: docker compose down (no volume flag)" {
   run run_hook Bash "docker compose down"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: docker compose down -t 30 (timeout flag, no -v)" {
+@test "pass: docker compose down -t 30 (timeout flag, no -v)" {
   run run_hook Bash "docker compose down -t 30"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: docker compose down --remove-orphans" {
+@test "pass: docker compose down --remove-orphans" {
   run run_hook Bash "docker compose down --remove-orphans"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: docker compose stop" {
+@test "pass: docker compose stop" {
   run run_hook Bash "docker compose stop"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: docker rm <container> (not a volume rm)" {
+@test "pass: docker rm <container> (not a volume rm)" {
   run run_hook Bash "docker rm my-container"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: docker run --rm myimage (--rm flag is not 'rm' subcommand)" {
+@test "pass: docker run --rm myimage (--rm flag is not 'rm' subcommand)" {
   run run_hook Bash "docker run --rm myimage"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: docker volume ls" {
+@test "pass: docker volume ls" {
   run run_hook Bash "docker volume ls"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: docker volume inspect <name>" {
+@test "pass: docker volume inspect <name>" {
   run run_hook Bash "docker volume inspect myvol"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: docker compose ps" {
+@test "pass: docker compose ps" {
   run run_hook Bash "docker compose ps"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: docker system prune (no volume flag)" {
+@test "pass: docker system prune (no volume flag)" {
   run run_hook Bash "docker system prune"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: docker system prune -f (force, no volume)" {
+@test "pass: docker system prune -f (force, no volume)" {
   run run_hook Bash "docker system prune -f"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git commit (Bash but unrelated to docker)" {
+@test "pass: git commit (Bash but unrelated to docker)" {
   run run_hook Bash "git commit -m 'msg'"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: non-Bash tool (Edit)" {
+@test "pass: non-Bash tool (Edit)" {
   run run_hook Edit "/tmp/foo.txt"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: empty command" {
+@test "pass: empty command" {
   run run_hook Bash ""
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
+}
+
+# A pass must print nothing. Claude Code honours `{"decision": "approve"}` as an
+# approval that skips the permission check for the call, so an approve here
+# would auto-approve every call this hook inspects and lets through.
+@test "regression: a call it lets through produces no decision" {
+  run --separate-stderr run_hook Bash "docker ps"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }

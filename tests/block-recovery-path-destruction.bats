@@ -2,7 +2,7 @@
 # Tests for hooks/block-recovery-path-destruction.sh — R31 (h) backup /
 # snapshot / recovery-point destruction is denied across the major
 # providers + Kubernetes; read/list/create operations and unrelated
-# CLIs (incl. `terraform destroy`) are approved.
+# CLIs (incl. `terraform destroy`) pass through with no decision.
 
 bats_require_minimum_version 1.5.0
 
@@ -159,108 +159,136 @@ run_hook() {
 }
 
 # ============================================================
-# APPROVE — read-only / list / describe operations
+# PASS — read-only / list / describe operations
 # ============================================================
 
-@test "approve: aws backup list-recovery-points-by-backup-vault" {
+@test "pass: aws backup list-recovery-points-by-backup-vault" {
   run run_hook Bash "aws backup list-recovery-points-by-backup-vault --backup-vault-name v"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws ec2 describe-snapshots" {
+@test "pass: aws ec2 describe-snapshots" {
   run run_hook Bash "aws ec2 describe-snapshots --owner-ids self"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws ec2 create-snapshot (creating, not destroying)" {
+@test "pass: aws ec2 create-snapshot (creating, not destroying)" {
   run run_hook Bash "aws ec2 create-snapshot --volume-id vol-1"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws rds describe-db-snapshots" {
+@test "pass: aws rds describe-db-snapshots" {
   run run_hook Bash "aws rds describe-db-snapshots"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws rds modify-db-instance (no retention flag)" {
+@test "pass: aws rds modify-db-instance (no retention flag)" {
   run run_hook Bash "aws rds modify-db-instance --db-instance-identifier mydb --allocated-storage 100"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud compute snapshots list" {
+@test "pass: gcloud compute snapshots list" {
   run run_hook Bash "gcloud compute snapshots list"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud sql backups list" {
+@test "pass: gcloud sql backups list" {
   run run_hook Bash "gcloud sql backups list --instance=my-instance"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: az snapshot list" {
+@test "pass: az snapshot list" {
   run run_hook Bash "az snapshot list --resource-group rg"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: az backup vault list" {
+@test "pass: az backup vault list" {
   run run_hook Bash "az backup vault list --resource-group rg"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl get pv" {
+@test "pass: kubectl get pv" {
   run run_hook Bash "kubectl get pv"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl describe volumesnapshot" {
+@test "pass: kubectl describe volumesnapshot" {
   run run_hook Bash "kubectl describe volumesnapshot snap1"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
-# APPROVE — terraform destroy is intentionally NOT blocked
+# PASS — terraform destroy is intentionally NOT blocked
 # ============================================================
 
-@test "approve: terraform destroy (intentionally not blocked — too noisy in dev/CI)" {
+@test "pass: terraform destroy (intentionally not blocked — too noisy in dev/CI)" {
   run run_hook Bash "terraform destroy -auto-approve"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: terraform destroy -target=resource.x (targeted)" {
+@test "pass: terraform destroy -target=resource.x (targeted)" {
   run run_hook Bash "terraform destroy -target=aws_instance.dev"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
-# APPROVE — unrelated commands that look superficially similar
+# PASS — unrelated commands that look superficially similar
 # ============================================================
 
-@test "approve: kubectl delete pod (not a recovery resource)" {
+@test "pass: kubectl delete pod (not a recovery resource)" {
   run run_hook Bash "kubectl delete pod my-pod"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl delete pvc (intentionally deferred to docker hook scope)" {
+@test "pass: kubectl delete pvc (intentionally deferred to docker hook scope)" {
   run run_hook Bash "kubectl delete pvc my-pvc"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws s3 delete-object (not a backup)" {
+@test "pass: aws s3 delete-object (not a backup)" {
   run run_hook Bash "aws s3api delete-object --bucket b --key k"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: regular shell commands" {
+@test "pass: regular shell commands" {
   run run_hook Bash "ls -la"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: non-Bash tool" {
+@test "pass: non-Bash tool" {
   run run_hook Edit "/tmp/foo.txt"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: empty command" {
+@test "pass: empty command" {
   run run_hook Bash ""
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
+}
+
+# A pass must print nothing. Claude Code honours `{"decision": "approve"}` as an
+# approval that skips the permission check for the call, so an approve here
+# would auto-approve every call this hook inspects and lets through.
+@test "regression: a call it lets through produces no decision" {
+  run --separate-stderr run_hook Bash "aws backup list-recovery-points-by-backup-vault --backup-vault-name v"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }

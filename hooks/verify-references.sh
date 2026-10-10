@@ -131,8 +131,11 @@ fi
 #   Path may optionally begin with '/' (absolute). Line is a single number or
 #   range (e.g., 42-51); only the start line is verified.
 # Grep returns a stream of raw matches; we dedupe and sort afterward.
+# grep exits 1 when nothing matches, which pipefail + set -e would turn into a
+# silent exit 1 for prose with no references; only that status is tolerated,
+# so a real grep error (2) still fails.
 REFS=$(printf '%s' "$INPUT" \
-  | grep -oE '(/?[A-Za-z0-9_.][A-Za-z0-9_./\-]*[A-Za-z0-9_]):[0-9]+(-[0-9]+)?' \
+  | { grep -oE '(/?[A-Za-z0-9_.][A-Za-z0-9_./\-]*[A-Za-z0-9_]):[0-9]+(-[0-9]+)?' || [ $? -eq 1 ]; } \
   | sort -u)
 
 if [ -z "$REFS" ]; then

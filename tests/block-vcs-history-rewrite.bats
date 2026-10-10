@@ -2,7 +2,7 @@
 # Tests for hooks/block-vcs-history-rewrite.sh — verifies R31 (d) verb
 # tokens are denied while safer alternatives (--force-with-lease,
 # --force-if-includes) and benign git operations (incl. `reset --hard`)
-# are approved.
+# pass through with no decision.
 
 bats_require_minimum_version 1.5.0
 
@@ -77,82 +77,104 @@ run_hook() {
 }
 
 # ============================================================
-# APPROVE cases — safer alternatives must NOT be blocked
+# PASS cases — safer alternatives must NOT be blocked
 # ============================================================
 
-@test "approve: git push --force-with-lease" {
+@test "pass: git push --force-with-lease" {
   run run_hook Bash "git push --force-with-lease"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git push --force-with-lease=main" {
+@test "pass: git push --force-with-lease=main" {
   run run_hook Bash "git push --force-with-lease=main origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git push --force-if-includes" {
+@test "pass: git push --force-if-includes" {
   run run_hook Bash "git push --force-if-includes origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
-# APPROVE cases — git reset --hard intentionally NOT blocked here
+# PASS cases — git reset --hard intentionally NOT blocked here
 # (existing settings.json permissions.deny covers direct invocations;
 # blocking it would produce too many false positives in normal local
 # workflow such as squash/fixup/rebase recovery)
 # ============================================================
 
-@test "approve: git reset --hard (this hook does not block; permissions.deny does)" {
+@test "pass: git reset --hard (this hook does not block; permissions.deny does)" {
   run run_hook Bash "git reset --hard HEAD~1"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
-# APPROVE cases — benign git operations
+# PASS cases — benign git operations
 # ============================================================
 
-@test "approve: git push (no flags)" {
+@test "pass: git push (no flags)" {
   run run_hook Bash "git push"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git push origin main" {
+@test "pass: git push origin main" {
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git push -u origin feature/x (set-upstream, no force)" {
+@test "pass: git push -u origin feature/x (set-upstream, no force)" {
   run run_hook Bash "git push -u origin feature/x"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git push --tags" {
+@test "pass: git push --tags" {
   run run_hook Bash "git push --tags"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git filter (filter is a flag prefix, not a subcommand)" {
+@test "pass: git filter (filter is a flag prefix, not a subcommand)" {
   # `git log --filter=...` — should not match filter-branch / filter-repo
   run run_hook Bash "git log --diff-filter=M"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git commit -m 'message'" {
+@test "pass: git commit -m 'message'" {
   run run_hook Bash "git commit -m 'docs: update README'"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git fetch --force (this is fetch, not push)" {
+@test "pass: git fetch --force (this is fetch, not push)" {
   run run_hook Bash "git fetch --force origin"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: non-Bash tool (Edit)" {
+@test "pass: non-Bash tool (Edit)" {
   run run_hook Edit "/tmp/foo.txt"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: empty command" {
+@test "pass: empty command" {
   run run_hook Bash ""
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
+}
+
+# A pass must print nothing. Claude Code honours `{"decision": "approve"}` as an
+# approval that skips the permission check for the call, so an approve here
+# would auto-approve every call this hook inspects and lets through.
+@test "regression: a call it lets through produces no decision" {
+  run --separate-stderr run_hook Bash "git push --force-with-lease"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }

@@ -93,6 +93,24 @@ paired_bats() {
   [[ "$output" == *"tests/neg.bats"* ]]
 }
 
+@test "hook decision: a paired no-decision assertion silences the file" {
+  # A pass that prints no decision is asserted as the token's absence, with no
+  # status check beside it here, so only the decision grammar can see it.
+  printf '@test "blocks" {\n  [[ "$output" == *'"'"'"decision":"block"'"'"'* ]]\n}\n@test "passes" {\n  [[ "$output" != *'"'"'"decision"'"'"'* ]]\n}\n' > tests/absent.bats
+  commit_tests
+  run bash "$HOOK" "$BASE"
+  [[ "$output" == *"Total findings: 0"* ]]
+}
+
+@test "hook decision: a bare decision token without != is not scored allow" {
+  # `== *"decision"*` asserts only that SOME decision was printed — a block
+  # satisfies it — so it must not silence a block-only suite.
+  printf '@test "blocks" {\n  [[ "$output" == *'"'"'"decision":"block"'"'"'* ]]\n}\n@test "decides" {\n  [[ "$output" == *'"'"'"decision"'"'"'* ]]\n}\n' > tests/bare.bats
+  commit_tests
+  run bash "$HOOK" "$BASE"
+  [[ "$output" == *"tests/bare.bats"* ]]
+}
+
 @test "hook decision: a negated block assertion is scored allow, not deny" {
   printf '@test "not blocked" {\n  [[ "$output" != *'"'"'"decision":"block"'"'"'* ]]\n}\n' > tests/negb.bats
   commit_tests

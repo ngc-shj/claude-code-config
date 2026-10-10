@@ -23,6 +23,13 @@
 #                allow [ "$status" -eq 0 ]
 #   hook decision deny "decision":"block"      allow "decision":"approve"
 #                 (either spacing; `!=` flips the polarity of both)
+#                                             allow `!=` a bare "decision"
+#                 A hook that lets a call through should print no decision
+#                 at all (an approve bypasses Claude Code's permission
+#                 check), so its pass assertion is "no decision token in the
+#                 output". A bare "decision" is one NOT followed by a colon;
+#                 without `!=` it is neutral, since it asserts only that some
+#                 decision was emitted.
 #
 # The Jest/Vitest allow side is deliberately GENERAL rather than an
 # enumeration of success spellings. Measured over 1022 real test files: an
@@ -201,6 +208,9 @@ BATS_ALLOW='\[[[:space:]]*"\$status"[[:space:]]*-eq[[:space:]]*0[[:space:]]*\]'
 
 DECISION_BLOCK='"decision"[[:space:]]*:[[:space:]]*"block"'
 DECISION_APPROVE='"decision"[[:space:]]*:[[:space:]]*"approve"'
+# A bare token: the next non-space character is not the colon of a key. Only
+# its negated form is scored (allow); see the grammar table above.
+DECISION_ABSENT='"decision"([[:space:]]*[^[:space:]:]|[[:space:]]*$)'
 # `!=` flips BOTH decision tokens: `!= *"decision": "approve"*` asserts the
 # input was not approved (a deny assertion), and `!= *"decision":"block"*`
 # asserts it was not blocked (an allow assertion).
@@ -343,6 +353,7 @@ while IFS= read -r -d '' f; do
          _DOG_JS_EXPECT="$JS_EXPECT" _DOG_JS_NEGATE="$JS_NEGATE" \
          _DOG_BATS_DENY="$BATS_DENY" _DOG_BATS_ALLOW="$BATS_ALLOW" \
          _DOG_DEC_BLOCK="$DECISION_BLOCK" _DOG_DEC_APPROVE="$DECISION_APPROVE" \
+         _DOG_DEC_ABSENT="$DECISION_ABSENT" \
          _DOG_DEC_NEGATE="$DECISION_NEGATE" \
          _DOG_EXTRA_DENY="${EXTRA_DENY_ASSERTION_RE:-}" \
          _DOG_EXTRA_ALLOW="${EXTRA_ALLOW_ASSERTION_RE:-}"
@@ -356,6 +367,7 @@ while IFS= read -r -d '' f; do
       bats_deny  = ENVIRON["_DOG_BATS_DENY"];  bats_allow = ENVIRON["_DOG_BATS_ALLOW"]
       dec_block  = ENVIRON["_DOG_DEC_BLOCK"];  dec_appr   = ENVIRON["_DOG_DEC_APPROVE"]
       dec_neg    = ENVIRON["_DOG_DEC_NEGATE"]
+      dec_absent = ENVIRON["_DOG_DEC_ABSENT"]
       x_deny     = ENVIRON["_DOG_EXTRA_DENY"]; x_allow    = ENVIRON["_DOG_EXTRA_ALLOW"]
       deny = 0; allow = 0; first_deny = 0
     }
@@ -381,6 +393,7 @@ while IFS= read -r -d '' f; do
         if (line ~ bats_allow) is_allow = 1
         if (line ~ dec_block)  { if (line ~ dec_neg) is_allow = 1; else is_deny = 1 }
         if (line ~ dec_appr)   { if (line ~ dec_neg) is_deny = 1;  else is_allow = 1 }
+        if (line ~ dec_absent && line ~ dec_neg) is_allow = 1
       }
 
       if (x_deny  != "" && line ~ x_deny)  is_deny = 1

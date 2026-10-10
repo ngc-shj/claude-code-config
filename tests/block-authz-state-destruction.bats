@@ -188,124 +188,156 @@ run_hook() {
 }
 
 # ============================================================
-# APPROVE — read-only / list / describe / create operations
+# PASS — read-only / list / describe / create operations
 # ============================================================
 
-@test "approve: aws iam list-roles" {
+@test "pass: aws iam list-roles" {
   run run_hook Bash "aws iam list-roles"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws iam get-role" {
+@test "pass: aws iam get-role" {
   run run_hook Bash "aws iam get-role --role-name R"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws iam create-role" {
+@test "pass: aws iam create-role" {
   run run_hook Bash "aws iam create-role --role-name R --assume-role-policy-document file://trust.json"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws iam attach-role-policy (granting, not removing)" {
+@test "pass: aws iam attach-role-policy (granting, not removing)" {
   run run_hook Bash "aws iam attach-role-policy --role-name R --policy-arn arn:..."
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws iam add-user-to-group (granting)" {
+@test "pass: aws iam add-user-to-group (granting)" {
   run run_hook Bash "aws iam add-user-to-group --user-name alice --group-name dev"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud iam roles list" {
+@test "pass: gcloud iam roles list" {
   run run_hook Bash "gcloud iam roles list --project=p"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud projects add-iam-policy-binding (surgical add)" {
+@test "pass: gcloud projects add-iam-policy-binding (surgical add)" {
   run run_hook Bash "gcloud projects add-iam-policy-binding p --member=user:a@x.com --role=roles/viewer"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud projects get-iam-policy" {
+@test "pass: gcloud projects get-iam-policy" {
   run run_hook Bash "gcloud projects get-iam-policy p"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: az role assignment list" {
+@test "pass: az role assignment list" {
   run run_hook Bash "az role assignment list --assignee a@x.com"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: az role assignment create" {
+@test "pass: az role assignment create" {
   run run_hook Bash "az role assignment create --assignee a@x.com --role Reader --resource-group rg"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: az ad group list" {
+@test "pass: az ad group list" {
   run run_hook Bash "az ad group list"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: az ad group member add (granting membership)" {
+@test "pass: az ad group member add (granting membership)" {
   run run_hook Bash "az ad group member add --group developers --member-id ABC"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl get role" {
+@test "pass: kubectl get role" {
   run run_hook Bash "kubectl get role -n default"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl describe rolebinding" {
+@test "pass: kubectl describe rolebinding" {
   run run_hook Bash "kubectl describe rolebinding app-reader -n default"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl create rolebinding" {
+@test "pass: kubectl create rolebinding" {
   run run_hook Bash "kubectl create rolebinding app-reader-bind --role=app-reader --user=alice -n default"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl create serviceaccount" {
+@test "pass: kubectl create serviceaccount" {
   run run_hook Bash "kubectl create serviceaccount app-sa -n default"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
-# APPROVE — unrelated commands that look superficially similar
+# PASS — unrelated commands that look superficially similar
 # ============================================================
 
-@test "approve: kubectl delete pod (not an authz resource)" {
+@test "pass: kubectl delete pod (not an authz resource)" {
   run run_hook Bash "kubectl delete pod my-pod"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl delete namespace (not authz; dangerous but different category)" {
+@test "pass: kubectl delete namespace (not authz; dangerous but different category)" {
   run run_hook Bash "kubectl delete namespace test"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws iam create-policy (creating, not deleting)" {
+@test "pass: aws iam create-policy (creating, not deleting)" {
   run run_hook Bash "aws iam create-policy --policy-name P --policy-document file://p.json"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud iam service-accounts create" {
+@test "pass: gcloud iam service-accounts create" {
   run run_hook Bash "gcloud iam service-accounts create sa --display-name='Service Account'"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: regular shell commands" {
+@test "pass: regular shell commands" {
   run run_hook Bash "ls -la"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: non-Bash tool" {
+@test "pass: non-Bash tool" {
   run run_hook Edit "/tmp/foo.txt"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: empty command" {
+@test "pass: empty command" {
   run run_hook Bash ""
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
+}
+
+# A pass must print nothing. Claude Code honours `{"decision": "approve"}` as an
+# approval that skips the permission check for the call, so an approve here
+# would auto-approve every call this hook inspects and lets through.
+@test "regression: a call it lets through produces no decision" {
+  run --separate-stderr run_hook Bash "aws iam list-roles"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }

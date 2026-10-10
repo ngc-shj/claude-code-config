@@ -63,80 +63,91 @@ commit_baseline() {
 }
 
 # ============================================================
-# APPROVE — no-op cases
+# PASS — no-op cases
 # ============================================================
 
-@test "approve: non-Bash tool" {
+@test "pass: non-Bash tool" {
   run run_hook Read ""
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: Bash with non-push command" {
+@test "pass: Bash with non-push command" {
   run run_hook Bash "ls -la"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git push but no scripts/pre-pr.sh in repo" {
+@test "pass: git push but no scripts/pre-pr.sh in repo" {
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gh pr create but no scripts/pre-pr.sh in repo" {
+@test "pass: gh pr create but no scripts/pre-pr.sh in repo" {
   run run_hook Bash "gh pr create --title foo --body bar"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git fetch (not a push verb)" {
+@test "pass: git fetch (not a push verb)" {
   write_script '#!/bin/bash' 'exit 1'
   run run_hook Bash "git fetch origin"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: git pushd (substring false-positive avoidance)" {
+@test "pass: git pushd (substring false-positive avoidance)" {
   write_script '#!/bin/bash' 'exit 1'
   run run_hook Bash "pushd /tmp"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: 'git pushd' (verb extending 'push' must not match)" {
+@test "pass: 'git pushd' (verb extending 'push' must not match)" {
   write_script '#!/bin/bash' 'exit 1'
   run run_hook Bash "git pushd /some/repo"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: malformed JSON on stdin fails open" {
+@test "pass: malformed JSON on stdin fails open" {
   run bash -c "printf 'garbage not json' | bash '$SCRIPT'"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ "$status" -eq 0 ]
 }
 
-@test "approve: chmod -x scripts/pre-pr.sh is treated as absent (hook gates on -x)" {
+@test "pass: chmod -x scripts/pre-pr.sh is treated as absent (hook gates on -x)" {
   write_script '#!/bin/bash' 'exit 1'
   chmod -x scripts/pre-pr.sh
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: outside any git repo, no CLAUDE_PROJECT_DIR" {
+@test "pass: outside any git repo, no CLAUDE_PROJECT_DIR" {
   cd /
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
-# APPROVE — pre-pr.sh passes
+# PASS — pre-pr.sh passes
 # ============================================================
 
-@test "approve: git push and pre-pr.sh exits 0" {
+@test "pass: git push and pre-pr.sh exits 0" {
   write_script '#!/bin/bash' 'echo ok' 'exit 0'
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gh pr create and pre-pr.sh exits 0" {
+@test "pass: gh pr create and pre-pr.sh exits 0" {
   write_script '#!/bin/bash' 'exit 0'
   run run_hook Bash "gh pr create --draft"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
@@ -235,11 +246,12 @@ EOF
 # ESCAPE HATCH
 # ============================================================
 
-@test "approve: SKIP_PRE_PR_GATE=1 bypasses a failing script" {
+@test "pass: SKIP_PRE_PR_GATE=1 bypasses a failing script" {
   write_script '#!/bin/bash' 'exit 1'
   input=$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')
   run env SKIP_PRE_PR_GATE=1 bash -c 'bash "$1"' _ "$SCRIPT" <<<"$input"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 @test "SKIP_PRE_PR_GATE=1 emits stderr breadcrumb" {
@@ -307,10 +319,11 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   run bash -c 'bash "$1" 2>&1' _ "$SCRIPT" <<<"$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [[ "$output" == *"already passed for identical source state"* ]]
 
   [ "$(wc -l <"$counter")" -eq 1 ]
@@ -322,7 +335,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   printf 'changed\n' >> scripts/pre-pr.sh
   chmod +x scripts/pre-pr.sh
@@ -337,7 +351,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   printf 'untracked\n' > untracked-file.txt
 
@@ -352,7 +367,8 @@ write_counting_script() {
   printf 'v1\n' > ./--help
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   # Content change in the dash-named file MUST invalidate the cache. An
@@ -373,7 +389,8 @@ write_counting_script() {
   printf 'v1\n' > ./-
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   # GNU sha256sum treats a bare '-' operand as stdin even after '--'; the
@@ -391,7 +408,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   printf 'more\n' > another-file.txt
   git add another-file.txt
@@ -407,7 +425,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   local cache_file old_stamp new_stamp fp
   cache_file="$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass"
@@ -428,11 +447,12 @@ write_counting_script() {
   cache_file="$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass"
 
   run env PRE_PR_CACHE_TTL=0 bash -c 'bash "$1"' _ "$SCRIPT" <<<"$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ ! -e "$cache_file" ]
 
   run env PRE_PR_CACHE_TTL=0 bash -c 'bash "$1"' _ "$SCRIPT" <<<"$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ ! -e "$cache_file" ]
 
   [ "$(wc -l <"$counter")" -eq 2 ]
@@ -458,14 +478,15 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   local cache_file
   cache_file="$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass"
   printf 'not-a-valid-cache-line\n' > "$cache_file"
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 2 ]
 }
 
@@ -475,7 +496,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   local cache_file real_target
   cache_file="$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass"
@@ -485,7 +507,7 @@ write_counting_script() {
   ln -s "$real_target" "$cache_file"
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 2 ]
 }
 
@@ -497,7 +519,7 @@ write_counting_script() {
   [ "$status" -eq 42 ]
 }
 
-@test "T10: run mode pass, then hook-mode push -> push approves, run-count stays 1 (cross-pattern dedup)" {
+@test "T10: run mode pass, then hook-mode push -> push passes, run-count stays 1 (cross-pattern dedup)" {
   local counter="$TMPREPO/../run-count-$(basename "$TMPREPO")"
   write_counting_script "$counter" 'exit 0'
   commit_baseline
@@ -506,7 +528,7 @@ write_counting_script() {
   [ "$status" -eq 0 ]
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
 
   [ "$(wc -l <"$counter")" -eq 1 ]
 }
@@ -519,10 +541,11 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
 
   # No cache recorded after the first (mutating) run means the second push
   # re-executed the script rather than skipping — observe via a second
@@ -537,7 +560,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   local cache_file fp future_stamp
   cache_file="$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass"
@@ -602,7 +626,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   local cache_file fp stamp
   cache_file="$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass"
@@ -620,7 +645,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   local cache_file fp stamp
   cache_file="$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass"
@@ -638,12 +664,13 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   # Malformed TTL = unset; with no declaration present that means cache
   # OFF (opt-in model), so the gate runs despite the fresh cache entry.
   run env PRE_PR_CACHE_TTL=abc bash -c 'bash "$1" 2>&1' _ "$SCRIPT" <<<"$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [[ "$output" == *"is not a non-negative integer; treating as unset"* ]]
   [ "$(wc -l <"$counter")" -eq 2 ]
 }
@@ -654,7 +681,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   local cache_file fp stamp
   cache_file="$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass"
@@ -677,9 +705,10 @@ write_counting_script() {
   unset PRE_PR_CACHE_TTL
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 2 ]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 }
@@ -692,9 +721,10 @@ write_counting_script() {
   unset PRE_PR_CACHE_TTL
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 }
 
@@ -707,7 +737,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   # The ignored file is excluded from git listings; only the declaration
@@ -728,7 +759,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   printf 'UNSAFE\n' > gate.dat
@@ -751,7 +783,7 @@ write_counting_script() {
   run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
     "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   # The symlink's TARGET STRING is fingerprint content.
@@ -770,7 +802,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   chmod +x tool.sh
@@ -786,7 +819,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   rm victim.txt
@@ -803,10 +837,11 @@ write_counting_script() {
 
   run env PRE_PR_CACHE_MAX_FILE_BYTES=10 bash -c 'printf "%s" "$1" | bash "$2"' _ \
     "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   run env PRE_PR_CACHE_MAX_FILE_BYTES=10 bash -c 'printf "%s" "$1" | bash "$2"' _ \
     "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 2 ]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 }
@@ -820,7 +855,8 @@ write_counting_script() {
   ln -s d c
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   # State B: delete c, retarget a so its target embeds what a forged
@@ -842,7 +878,8 @@ write_counting_script() {
 
   run bash -c 'printf "%s" "$1" | bash "$2" 2>&1' _ \
     "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [[ "$output" == *"does not exist — entries are literal paths, globs are not expanded"* ]]
 }
 
@@ -855,11 +892,12 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   # A directory contributes no recursive content hash; failing closed means
   # the second push cannot be a stale hit even on an unchanged tree.
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 2 ]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 
@@ -882,7 +920,8 @@ write_counting_script() {
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   # gitlink is a dir in the worktree -> fingerprint aborts -> never cached.
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 
@@ -905,7 +944,8 @@ write_counting_script() {
   # A declared FIFO must not be cacheable: no fingerprint -> full run, the
   # cache file is never written, and two passes both run.
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
   run run_hook Bash "git push origin main"
   [ "$(wc -l <"$counter")" -eq 2 ]
@@ -931,7 +971,8 @@ PY
   commit_baseline
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 
   # Swap the FIFO for a socket — a type change a gate testing [ -p ] would
   # reject. Skip only if the sandbox forbids AF_UNIX bind.
@@ -954,9 +995,10 @@ PY
   : > "$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
   # The declaration file lives in .git, so it never shows up as a worktree change.
   [ -z "$(git status --porcelain)" ]
@@ -972,7 +1014,8 @@ PY
   printf '.gate-state\n' > "$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   # Non-vacuity guard: an UNCHANGED tree must actually skip (proves the
@@ -998,7 +1041,8 @@ PY
   printf '.me-state\n' > "$(git rev-parse --git-common-dir)/pre-pr.cache-paths"
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ "$(wc -l <"$counter")" -eq 1 ]
 
   # A change to the TEAM-declared file invalidates.
@@ -1036,7 +1080,8 @@ PY
   # fingerprint does not otherwise read. The `-r` guard in _cache_declared
   # is what makes both explicit rather than incidental.)
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 
   printf 'UNSAFE\n' > .gate-state
@@ -1059,7 +1104,8 @@ PY
   chmod 000 "$decl"
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 
   printf 'UNSAFE\n' > .gate-state
@@ -1085,7 +1131,8 @@ PY
   chmod 000 unrelated-000
 
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   run run_hook Bash "git push origin main"
   [ "$(wc -l <"$counter")" -eq 1 ]
 
@@ -1111,7 +1158,7 @@ PY
   run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
     "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 
   rm -f "$decl"
@@ -1129,7 +1176,7 @@ PY
   run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
     "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 
   rm -f "$decl"
@@ -1145,7 +1192,7 @@ PY
   run timeout 30 bash -c 'printf "%s" "$1" | bash "$2"' _ \
     "$(jq -nc '{tool_name:"Bash", tool_input:{command:"git push origin main"}}')" "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 }
 
@@ -1168,10 +1215,21 @@ PY
   # regular file — opt-in and fingerprint both key off _usable_decl_file,
   # which never follows a symlink. Two pushes both run.
   run run_hook Bash "git push origin main"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   run run_hook Bash "git push origin main"
   [ "$(wc -l <"$counter")" -eq 2 ]
   [ ! -e "$(git rev-parse --absolute-git-dir)/claude-pre-pr-pass" ]
 
   rm -f "$decl" "$target"
+}
+
+# A pass must print nothing. Claude Code honours `{"decision": "approve"}` as an
+# approval that skips the permission check for the call, so an approve here
+# would auto-approve every call this hook inspects and lets through.
+@test "regression: a call it lets through produces no decision" {
+  write_script '#!/bin/bash' 'echo ok' 'exit 0'
+  run --separate-stderr run_hook Bash "git push origin main"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }

@@ -29,6 +29,14 @@ teardown() {
   [[ "$output" == *"total=0"* ]]
 }
 
+@test "non-empty input with no references: reports total=0" {
+  # Prose with no path:line token. grep finds nothing and exits 1; under
+  # pipefail that used to abort the script with no output and exit 1.
+  run bash -c "echo 'No citations in this paragraph.' | bash '$SCRIPT' --root '$ROOT_DIR' --strict"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"total=0"* ]]
+}
+
 @test "valid reference in range: reported as OK" {
   run bash -c "echo 'See src/foo.ts:3 for details.' | bash '$SCRIPT' --root '$ROOT_DIR'"
   [ "$status" -eq 0 ]
