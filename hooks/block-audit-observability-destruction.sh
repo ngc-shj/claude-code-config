@@ -48,12 +48,10 @@ TOOL_NAME="${PARSED%%$'\x1f'*}"
 COMMAND="${PARSED#*$'\x1f'}"
 
 if [ "$TOOL_NAME" != "Bash" ]; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
 if [ -z "$COMMAND" ]; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
@@ -73,4 +71,4 @@ if echo "$COMMAND" | grep -qE "$DENY_REGEX"; then
   exit 0
 fi
 
-echo '{"decision": "approve"}'
+exit 0

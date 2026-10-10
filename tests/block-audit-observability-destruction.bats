@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Tests for hooks/block-audit-observability-destruction.sh — R31 (g)
 # anti-forensic verbs are denied across the major providers + k8s, while
-# read-only / list / describe operations and unrelated CLIs are approved.
+# read-only / list / describe operations and unrelated CLIs pass through with no decision.
 
 bats_require_minimum_version 1.5.0
 
@@ -143,94 +143,120 @@ run_hook() {
 }
 
 # ============================================================
-# APPROVE — read-only / list / describe operations
+# PASS — read-only / list / describe operations
 # ============================================================
 
-@test "approve: aws logs describe-log-groups" {
+@test "pass: aws logs describe-log-groups" {
   run run_hook Bash "aws logs describe-log-groups"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws logs filter-log-events" {
+@test "pass: aws logs filter-log-events" {
   run run_hook Bash "aws logs filter-log-events --log-group-name g"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws cloudwatch describe-alarms" {
+@test "pass: aws cloudwatch describe-alarms" {
   run run_hook Bash "aws cloudwatch describe-alarms"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws cloudwatch get-dashboard" {
+@test "pass: aws cloudwatch get-dashboard" {
   run run_hook Bash "aws cloudwatch get-dashboard --dashboard-name ProdOverview"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws logs create-log-group (creating, not destroying)" {
+@test "pass: aws logs create-log-group (creating, not destroying)" {
   run run_hook Bash "aws logs create-log-group --log-group-name /app/new"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud logging logs list" {
+@test "pass: gcloud logging logs list" {
   run run_hook Bash "gcloud logging logs list"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud monitoring dashboards list" {
+@test "pass: gcloud monitoring dashboards list" {
   run run_hook Bash "gcloud monitoring dashboards list"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud monitoring alert-policies create" {
+@test "pass: gcloud monitoring alert-policies create" {
   run run_hook Bash "gcloud monitoring alert-policies create --policy-from-file policy.json"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl get prometheusrule" {
+@test "pass: kubectl get prometheusrule" {
   run run_hook Bash "kubectl get prometheusrule -A"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl describe servicemonitor" {
+@test "pass: kubectl describe servicemonitor" {
   run run_hook Bash "kubectl describe servicemonitor app -n monitoring"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
-# APPROVE — unrelated commands that look superficially similar
+# PASS — unrelated commands that look superficially similar
 # ============================================================
 
-@test "approve: kubectl delete pod (not a monitoring CRD)" {
+@test "pass: kubectl delete pod (not a monitoring CRD)" {
   run run_hook Bash "kubectl delete pod my-pod"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws s3 delete-bucket (not logs/cloudwatch)" {
+@test "pass: aws s3 delete-bucket (not logs/cloudwatch)" {
   run run_hook Bash "aws s3 delete-bucket --bucket old-bucket"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: az group delete (not monitor)" {
+@test "pass: az group delete (not monitor)" {
   run run_hook Bash "az group delete --name rg-test"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud compute instances delete (not logging/monitoring)" {
+@test "pass: gcloud compute instances delete (not logging/monitoring)" {
   run run_hook Bash "gcloud compute instances delete vm-test"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: regular shell commands" {
+@test "pass: regular shell commands" {
   run run_hook Bash "ls -la /var/log"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: non-Bash tool" {
+@test "pass: non-Bash tool" {
   run run_hook Edit "/tmp/foo.txt"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: empty command" {
+@test "pass: empty command" {
   run run_hook Bash ""
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
+}
+
+# A pass must print nothing. Claude Code honours `{"decision": "approve"}` as an
+# approval that skips the permission check for the call, so an approve here
+# would auto-approve every call this hook inspects and lets through.
+@test "regression: a call it lets through produces no decision" {
+  run --separate-stderr run_hook Bash "aws logs describe-log-groups"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }

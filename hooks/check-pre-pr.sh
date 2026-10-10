@@ -16,9 +16,10 @@
 #     when the user has `cd`'d into a non-repo directory before push.
 #   - When `<repo>/scripts/pre-pr.sh` exists and is executable, runs the
 #     script from the repo root.
-#   - Pass: approve.
+#   - Pass: no stdout, exit 0 — no decision, so the harness's own permission
+#     check still decides; an explicit approve decision would bypass it.
 #   - Fail: block with the captured output (tail-limited) in the reason.
-#   - No script present: approve (no-op for projects without the convention).
+#   - No script present: pass, as above (no-op for projects without the convention).
 #
 # Pass-cache (OPT-IN): a successful run's source-state fingerprint is
 # recorded to a file inside the repo's git dir. A later invocation against
@@ -544,28 +545,24 @@ INPUT=$(cat)
 
 # Fail-open on malformed JSON: a hook that crashes (non-zero exit, no
 # stdout) would otherwise block all Bash tool calls with a generic
-# harness error. Approving on parse failure trades correctness for
-# availability — the hook is a safety net, not the primary gate.
+# harness error. Letting the call through on parse failure trades correctness
+# for availability — the hook is a safety net, not the primary gate.
 if ! PARSED=$(echo "$INPUT" | jq -rj '(.tool_name // ""), "", (.tool_input.command // "")' 2>/dev/null); then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 TOOL_NAME="${PARSED%%$'\x1f'*}"
 COMMAND="${PARSED#*$'\x1f'}"
 
 if [ "$TOOL_NAME" != "Bash" ]; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
 if [ -z "$COMMAND" ]; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
 if [ "${SKIP_PRE_PR_GATE:-0}" = "1" ]; then
   printf 'check-pre-pr: SKIP_PRE_PR_GATE=1 — bypassing scripts/pre-pr.sh gate\n' >&2
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
@@ -579,7 +576,6 @@ fi
 PUSH_REGEX='(^|[^a-zA-Z0-9_-])git[[:space:]]+push($|[^a-zA-Z0-9_-])|(^|[^a-zA-Z0-9_-])gh[[:space:]]+pr[[:space:]]+create($|[^a-zA-Z0-9_-])'
 
 if ! echo "$COMMAND" | grep -qE "$PUSH_REGEX"; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
@@ -592,7 +588,6 @@ if [ -z "$REPO_ROOT" ]; then
   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
 fi
 if [ -z "$REPO_ROOT" ]; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
@@ -602,7 +597,6 @@ SCRIPT="$REPO_ROOT/scripts/pre-pr.sh"
 # exec bit must `chmod +x` it; this is a one-time fix and avoids the
 # "looks present but silently skipped" ambiguity of `-r`.
 if [ ! -x "$SCRIPT" ]; then
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
@@ -614,7 +608,6 @@ if [ "$(_cache_ttl "$REPO_ROOT")" -gt 0 ]; then
 fi
 if [ -n "$FP_PRE" ] && cache_fresh "$REPO_ROOT" "$FP_PRE"; then
   cache_breadcrumb "$CACHE_HIT_AGE"
-  echo '{"decision": "approve"}'
   exit 0
 fi
 
@@ -628,7 +621,6 @@ if (cd "$REPO_ROOT" && bash "$SCRIPT" </dev/null) >"$OUTPUT_FILE" 2>&1; then
   if [ -n "$FP_PRE" ] && [ -n "$FP_POST" ] && [ "$FP_PRE" = "$FP_POST" ]; then
     cache_record "$REPO_ROOT" "$FP_POST" || true
   fi
-  echo '{"decision": "approve"}'
   exit 0
 fi
 

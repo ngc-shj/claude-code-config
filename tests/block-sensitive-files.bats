@@ -4,17 +4,13 @@
 # while settings.local.json (the documented override path) remains
 # editable, plus the existing secret/lock/.git protections.
 #
-# JSON whitespace contract (asymmetric, shared by all 7 block-*.sh hooks):
-#   - approve decisions are emitted as `{"decision": "approve"}` (spaced)
+# Output contract, shared by all 7 block-*.sh hooks:
 #   - block decisions are emitted as `{"decision":"block","reason":...}` (compact)
-# The asymmetry exists because block uses `printf` with a JSON template
-# while approve uses bare `echo` of a hand-written literal. All 7 block-*.bats
-# files (this one included) substring-match against this exact spacing.
-# A future refactor that unifies the emit format (e.g., pipes both through
-# jq) MUST update all 7 test files in the same diff — silently switching
-# either format breaks the assertions here. The cleaner long-term fix is
-# to parse `$output` via `jq -r '.decision'` in a helper, but that touches
-# 7 files and was scoped out of the original fix.
+#     and the block-*.bats files substring-match against that exact spacing
+#   - a call the hook lets through gets NO stdout and exit 0, so Claude Code's
+#     own permission check still decides. An `{"decision": "approve"}` there
+#     would auto-approve every inspected call, bypassing permission mode; pass
+#     assertions therefore check `"decision"` is absent, not a specific value.
 
 bats_require_minimum_version 1.5.0
 
@@ -38,9 +34,10 @@ run_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
-@test "approve: .env.example (template)" {
+@test "pass: .env.example (template)" {
   run run_hook Edit "/repo/project/.env.example"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 @test "deny: credentials.json" {
@@ -102,51 +99,59 @@ run_hook() {
 # Override exception — settings.local.json must stay editable (M6 design)
 # ============================================================
 
-@test "approve: ~/.claude/settings.local.json (override path)" {
+@test "pass: ~/.claude/settings.local.json (override path)" {
   run run_hook Edit "$HOME/.claude/settings.local.json"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: literal ~/.claude/settings.local.json (un-expanded tilde)" {
+@test "pass: literal ~/.claude/settings.local.json (un-expanded tilde)" {
   run run_hook Edit "~/.claude/settings.local.json"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
-# Approve cases — non-harness paths must not be blocked
+# Pass cases — non-harness paths must not be blocked
 # ============================================================
 
-@test "approve: regular source file" {
+@test "pass: regular source file" {
   run run_hook Edit "/repo/project/src/main.go"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: README.md anywhere" {
+@test "pass: README.md anywhere" {
   run run_hook Write "/repo/project/README.md"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: settings.json NOT under ~/.claude/ (e.g., a project's vscode settings)" {
+@test "pass: settings.json NOT under ~/.claude/ (e.g., a project's vscode settings)" {
   run run_hook Edit "/repo/project/.vscode/settings.json"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: hooks/<name>.sh NOT under ~/.claude/ (e.g., the source repo's hooks/)" {
+@test "pass: hooks/<name>.sh NOT under ~/.claude/ (e.g., the source repo's hooks/)" {
   run run_hook Edit "/repo/claude-code-config/hooks/block-destructive-docker.sh"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: empty file_path (defensive default)" {
+@test "pass: empty file_path (defensive default)" {
   run run_hook Edit ""
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: non-Edit tool (Bash falls through unchanged)" {
+@test "pass: non-Edit tool (Bash falls through unchanged)" {
   # block-sensitive-files.sh only inspects file_path; other tool inputs
-  # without a file_path approve by default.
+  # without a file_path pass through by default.
   local input='{"tool_name":"Bash","tool_input":{"command":"ls"}}'
   run bash -c "printf '%s' '$input' | bash '$SCRIPT'"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
@@ -215,19 +220,20 @@ run_hook() {
 
 # T6: ${HOME:?} pins the fail direction when HOME is unset. Without a fixture,
 # nothing distinguishes "aborts with a stated precondition" from "falls through
-# and approves" — and for a guard, that difference is the whole point.
-@test "unset HOME aborts with a stated precondition rather than approving" {
+# to a pass" — and for a guard, that difference is the whole point.
+@test "unset HOME aborts with a stated precondition rather than passing" {
   run bash -c 'unset HOME; printf "%s" "$1" | bash "$2"' _     '{"tool_name":"Edit","tool_input":{"file_path":"/anywhere/x.sh"}}' "$SCRIPT"
   [ "$status" -ne 0 ]
   [[ "$output" != *'"decision": "approve"'* ]]
   [[ "$output" == *"HOME"* ]]
 }
 
-@test "approve: ~/.claude/projects/<slug>/memory/*.md is not install-managed" {
+@test "pass: ~/.claude/projects/<slug>/memory/*.md is not install-managed" {
   # Auto-memory is written by the running session and never overwritten by
   # install.sh; a guard that swept the whole of ~/.claude would break it.
   run run_hook Edit "$HOME/.claude/projects/some-slug/memory/feedback_example.md"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 @test "deny: literal ~/.claude/skills/<name>/... (un-expanded tilde)" {
@@ -247,21 +253,22 @@ run_hook() {
   echo "$output" | grep -qF "If it has no repo source (install.sh only removes and re-copies the skills it manages, so an unmanaged skill survives every install untouched), add it to the repo's skills/ directory, or exempt it via a project .claude/settings.local.json (the user-level spelling of that filename is not read)."
 }
 
-@test "approve: repo's own skills/ directory stays editable (not ~/.claude/skills/)" {
+@test "pass: repo's own skills/ directory stays editable (not ~/.claude/skills/)" {
   # The whole "edit the repo, run install.sh" workflow — and this fix's own
   # implementation — depends on the repo copy never being caught by the
   # ~/.claude/skills/ arms above.
   local repo_root
   repo_root="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
   run run_hook Edit "$repo_root/skills/triangulate/phases/phase-3-review.md"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 @test "deny: ~/.claude/skills/... still blocked when HOME has a trailing slash" {
   # Regression for the fail-open bug: without normalizing $HOME, a
   # trailing-slash HOME turns "$HOME/.claude/..." into "…//.claude/…",
   # which never matches the single-slash path the tool reports, and the
-  # guard silently approves instead of blocking. None of the fixtures
+  # guard silently lets it through instead of blocking. None of the fixtures
   # above can see this failure mode since they inherit the ambient $HOME.
   local input
   input=$(jq -nc --arg n "Edit" --arg p "$HOME/.claude/skills/triangulate/phases/phase-3-review.md" \
@@ -272,7 +279,7 @@ run_hook() {
 
 # ============================================================
 # Path-equivalence — a literal `case` compares strings, and these all name a
-# guarded file while spelling it differently. Each was an approve before the
+# guarded file while spelling it differently. Each was let through before the
 # normalization pass.
 # ============================================================
 
@@ -305,9 +312,10 @@ run_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
-@test "approve: .. that leaves the protected tree is not blocked by it" {
+@test "pass: .. that leaves the protected tree is not blocked by it" {
   run run_hook Edit "$HOME/.claude/hooks/../../scratch/notes.md"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
@@ -355,29 +363,33 @@ run_bash_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
-@test "approve (Bash): running an installed hook" {
+@test "pass (Bash): running an installed hook" {
   # The guard must not make the hooks unusable — every skill invokes them.
   run run_bash_hook 'bash ~/.claude/hooks/check-rule-sync.sh'
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve (Bash): reading and grepping protected paths" {
+@test "pass (Bash): reading and grepping protected paths" {
   run run_bash_hook 'cat ~/.claude/skills/triangulate/SKILL.md'
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
   run run_bash_hook 'grep -rn END-OF-PHASE ~/.claude/skills/'
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve (Bash): install.sh itself" {
+@test "pass (Bash): install.sh itself" {
   # The sanctioned writer. It names no protected path on the command line —
   # blocking it would make the documented workflow impossible.
   run run_bash_hook 'bash ./install.sh'
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve (Bash): a write verb aimed somewhere else" {
+@test "pass (Bash): a write verb aimed somewhere else" {
   run run_bash_hook 'cp hooks/x.sh /tmp/y.sh'
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # --- Bypasses closed after review (each reproduced before the fix) ---
@@ -413,11 +425,12 @@ run_bash_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
-@test "approve (Bash): cp OUT of the tree is a read-only backup" {
+@test "pass (Bash): cp OUT of the tree is a read-only backup" {
   # Previously blocked: the path matched and `cp` was a write verb, with no
   # check of which side was the destination.
   run run_bash_hook 'cp ~/.claude/hooks/block-sensitive-files.sh /tmp/backup.sh'
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 @test "deny: relative path resolving into the installed tree" {
@@ -449,7 +462,7 @@ run_bash_hook() {
   # `a/b/../c` is `a/c` only when b is a real directory. Through a symlink, `..`
   # names the parent of the TARGET — so a link to ~/.claude/skills plus `..`
   # resolves into ~/.claude/hooks. Collapsing `..` lexically before resolving
-  # sent this somewhere else entirely and approved the write.
+  # sent this somewhere else entirely and let the write through.
   ln -sfn "$HOME/.claude/skills" "$BATS_TEST_TMPDIR/skill-link"
   run run_hook Edit "$BATS_TEST_TMPDIR/skill-link/../hooks/block-sensitive-files.sh"
   [[ "$output" == *'"decision":"block"'* ]]
@@ -458,7 +471,7 @@ run_bash_hook() {
 @test "deny: a literal-tilde alias whose target is an installed hook" {
   # `~` has one meaning, and this hook accepts the spelling, so it is expanded
   # and resolved like anything else. Judging it by string alone cost both
-  # directions: this alias was an approve, and the fixture below was a block.
+  # directions: this alias was let through, and the fixture below was a block.
   fake="$BATS_TEST_TMPDIR/th-home"
   mkdir -p "$fake/.claude/hooks"
   printf 'x\n' > "$fake/.claude/hooks/target.sh"
@@ -468,16 +481,17 @@ run_bash_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
-@test "approve: a literal-tilde path whose link leaves the guarded tree" {
+@test "pass: a literal-tilde path whose link leaves the guarded tree" {
   fake="$BATS_TEST_TMPDIR/th-home2"
   mkdir -p "$fake/.claude/skills" "$BATS_TEST_TMPDIR/th-outside/inner"
   ln -sfn "$BATS_TEST_TMPDIR/th-outside/inner" "$fake/.claude/skills/out-link"
   input=$(jq -nc '{tool_name:"Edit", tool_input:{file_path:"~/.claude/skills/out-link/../harmless.txt"}}')
   run env HOME="$fake" bash -c "printf '%s' '$input' | bash '$SCRIPT'"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: a link inside the guarded tree pointing out of it, crossed by .." {
+@test "pass: a link inside the guarded tree pointing out of it, crossed by .." {
   # The over-block mirror of the symlink test below. Lexically,
   # `skills/out-link/..` collapses to `skills/`, which looks guarded; physically
   # the link leaves the tree, so the file is outside it. Fail-closed is not a
@@ -489,7 +503,8 @@ run_bash_hook() {
   input=$(jq -nc --arg p "$fake/.claude/skills/out-link/../harmless.txt" \
     '{tool_name:"Edit", tool_input:{file_path:$p}}')
   run env HOME="$fake" bash -c "printf '%s' '$input' | bash '$SCRIPT'"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 @test "deny: a genuinely guarded path under the same staged HOME" {
@@ -516,11 +531,21 @@ run_bash_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
-@test "approve: symlink pointing somewhere harmless" {
+@test "pass: symlink pointing somewhere harmless" {
   # Chain resolution must not over-block: a link to an unguarded file stays
   # editable.
   echo x > "$BATS_TEST_TMPDIR/plain.txt"
   ln -sf "$BATS_TEST_TMPDIR/plain.txt" "$BATS_TEST_TMPDIR/plain-alias.txt"
   run run_hook "Write" "$BATS_TEST_TMPDIR/plain-alias.txt"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
+}
+
+# A pass must print nothing. Claude Code honours `{"decision": "approve"}` as an
+# approval that skips the permission check for the call, so an approve here
+# would auto-approve every call this hook inspects and lets through.
+@test "regression: a call it lets through produces no decision" {
+  run --separate-stderr run_hook Edit "/repo/project/src/main.ts"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }

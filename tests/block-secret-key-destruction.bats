@@ -196,159 +196,198 @@ run_hook() {
 }
 
 # ============================================================
-# APPROVE — read-only / list / describe / create operations
+# PASS — read-only / list / describe / create operations
 # ============================================================
 
-@test "approve: aws kms describe-key" {
+@test "pass: aws kms describe-key" {
   run run_hook Bash "aws kms describe-key --key-id 12345"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws kms list-keys" {
+@test "pass: aws kms list-keys" {
   run run_hook Bash "aws kms list-keys"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws kms create-key" {
+@test "pass: aws kms create-key" {
   run run_hook Bash "aws kms create-key --description 'new key'"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws kms enable-key (re-enabling, not destructive)" {
+@test "pass: aws kms enable-key (re-enabling, not destructive)" {
   run run_hook Bash "aws kms enable-key --key-id 12345"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws kms cancel-key-deletion (REVERSING destruction)" {
+@test "pass: aws kms cancel-key-deletion (REVERSING destruction)" {
   run run_hook Bash "aws kms cancel-key-deletion --key-id 12345"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws secretsmanager get-secret-value" {
+@test "pass: aws secretsmanager get-secret-value" {
   run run_hook Bash "aws secretsmanager get-secret-value --secret-id prod/db"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws secretsmanager describe-secret" {
+@test "pass: aws secretsmanager describe-secret" {
   run run_hook Bash "aws secretsmanager describe-secret --secret-id prod/db"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws secretsmanager restore-secret (REVERSING destruction)" {
+@test "pass: aws secretsmanager restore-secret (REVERSING destruction)" {
   run run_hook Bash "aws secretsmanager restore-secret --secret-id prod/db"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws iam list-access-keys" {
+@test "pass: aws iam list-access-keys" {
   run run_hook Bash "aws iam list-access-keys --user-name alice"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws iam create-access-key" {
+@test "pass: aws iam create-access-key" {
   run run_hook Bash "aws iam create-access-key --user-name alice"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud secrets list" {
+@test "pass: gcloud secrets list" {
   run run_hook Bash "gcloud secrets list"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gcloud secrets create" {
+@test "pass: gcloud secrets create" {
   run run_hook Bash "gcloud secrets create my-secret --data-file=./secret.txt"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: az keyvault list" {
+@test "pass: az keyvault list" {
   run run_hook Bash "az keyvault list --resource-group rg"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: az keyvault key show" {
+@test "pass: az keyvault key show" {
   run run_hook Bash "az keyvault key show --vault-name v --name k"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: az keyvault key create" {
+@test "pass: az keyvault key create" {
   run run_hook Bash "az keyvault key create --vault-name v --name k --kty RSA"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: vault kv list" {
+@test "pass: vault kv list" {
   run run_hook Bash "vault kv list secret/"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: vault kv get" {
+@test "pass: vault kv get" {
   run run_hook Bash "vault kv get secret/my-app/db"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: vault kv put (writing, not destroying)" {
+@test "pass: vault kv put (writing, not destroying)" {
   run run_hook Bash "vault kv put secret/my-app/db password=xxx"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gpg --list-secret-keys (list only)" {
+@test "pass: gpg --list-secret-keys (list only)" {
   run run_hook Bash "gpg --list-secret-keys"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gpg -K (short for --list-secret-keys)" {
+@test "pass: gpg -K (short for --list-secret-keys)" {
   run run_hook Bash "gpg -K"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: gpg --import (importing, not destroying)" {
+@test "pass: gpg --import (importing, not destroying)" {
   run run_hook Bash "gpg --import key.asc"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl get secret" {
+@test "pass: kubectl get secret" {
   run run_hook Bash "kubectl get secret -n default"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl describe secret" {
+@test "pass: kubectl describe secret" {
   run run_hook Bash "kubectl describe secret my-tls -n default"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: kubectl create secret" {
+@test "pass: kubectl create secret" {
   run run_hook Bash "kubectl create secret generic my-secret --from-literal=k=v"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
 # ============================================================
-# APPROVE — unrelated commands
+# PASS — unrelated commands
 # ============================================================
 
-@test "approve: kubectl delete pod (not a secret)" {
+@test "pass: kubectl delete pod (not a secret)" {
   run run_hook Bash "kubectl delete pod my-pod"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: aws s3 delete-bucket (not a secret store)" {
+@test "pass: aws s3 delete-bucket (not a secret store)" {
   run run_hook Bash "aws s3api delete-bucket --bucket b"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: rm /tmp/some-key.pem (rm intentionally not in this hook)" {
+@test "pass: rm /tmp/some-key.pem (rm intentionally not in this hook)" {
   run run_hook Bash "rm /tmp/scratch-key.pem"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: regular shell commands" {
+@test "pass: regular shell commands" {
   run run_hook Bash "ls -la"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: non-Bash tool" {
+@test "pass: non-Bash tool" {
   run run_hook Edit "/tmp/foo.txt"
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
 }
 
-@test "approve: empty command" {
+@test "pass: empty command" {
   run run_hook Bash ""
-  [[ "$output" == *'"decision": "approve"'* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision"'* ]]
+}
+
+# A pass must print nothing. Claude Code honours `{"decision": "approve"}` as an
+# approval that skips the permission check for the call, so an approve here
+# would auto-approve every call this hook inspects and lets through.
+@test "regression: a call it lets through produces no decision" {
+  run --separate-stderr run_hook Bash "aws kms describe-key --key-id 12345"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
