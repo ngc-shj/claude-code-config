@@ -112,6 +112,22 @@ run_hook() {
   [[ "$output" == *"settings.local.json"* ]]
 }
 
+@test "deny block reason suggests only alternatives the hook lets through" {
+  # Suggested commands are the backticked templates with a <placeholder>;
+  # the incident's own `docker compose down -v` has none and is not advice.
+  run run_hook Bash "docker volume rm xyz"
+  local reason
+  reason=$(printf '%s' "$output" | jq -r .reason)
+  local suggestions
+  suggestions=$(printf '%s' "$reason" | grep -o '`docker[^`]*<[^`]*`' | tr -d '`' | sed 's/<[^>]*>/name/g')
+  [ -n "$suggestions" ]
+  while IFS= read -r cmd; do
+    run run_hook Bash "$cmd"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *'"decision"'* ]] || { echo "suggested but blocked: $cmd"; return 1; }
+  done <<< "$suggestions"
+}
+
 # ============================================================
 # PASS cases — benign / non-destructive commands
 # ============================================================

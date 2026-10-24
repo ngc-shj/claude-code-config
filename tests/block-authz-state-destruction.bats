@@ -233,6 +233,15 @@ run_hook() {
   [[ "$output" != *'"decision"'* ]]
 }
 
+@test "deny block reason does not offer remove-iam-policy-binding as a way past the gate" {
+  # the reason once recommended it as the surgical alternative, which this hook blocks
+  run run_hook Bash "gcloud projects set-iam-policy p policy.json"
+  local reason
+  reason=$(printf '%s' "$output" | jq -r .reason)
+  [[ "$reason" == *'`add-iam-policy-binding` for a grant passes this hook'* ]]
+  [[ "$reason" == *'`remove-iam-policy-binding` is gated here too'* ]]
+}
+
 @test "pass: gcloud projects get-iam-policy" {
   run run_hook Bash "gcloud projects get-iam-policy p"
   [ "$status" -eq 0 ]
