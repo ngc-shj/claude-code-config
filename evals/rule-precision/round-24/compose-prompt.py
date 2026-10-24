@@ -108,7 +108,10 @@ def check_arms(root, index):
 
 
 def sent_prompt(agent_id):
-    root = os.path.expanduser(f'~/.claude/projects/{PROJECT}')
+    # TRANSCRIPT_ROOT points the lookup at a fixture; transcripts age out of
+    # ~/.claude/projects, so a test reading a real one rots with the history.
+    root = os.environ.get('TRANSCRIPT_ROOT') or os.path.expanduser(
+        f'~/.claude/projects/{PROJECT}')
     hits = [p for p in
             __import__('glob').glob(f'{root}/*/subagents/agent-{agent_id}.jsonl')]
     if not hits:

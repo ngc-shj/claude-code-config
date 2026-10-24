@@ -123,10 +123,33 @@ print('ok')"
   [[ "$output" == "ok" ]]
 }
 
+# A subagent transcript whose first user message is the prompt in file $2.
+fake_transcript() {
+  export TRANSCRIPT_ROOT="$ROOT/transcripts"
+  mkdir -p "$TRANSCRIPT_ROOT/session/subagents"
+  python3 -c "
+import json, sys
+print(json.dumps({'message': {'role': 'user', 'content': open(sys.argv[1]).read()}}))" \
+    "$2" > "$TRANSCRIPT_ROOT/session/subagents/agent-$1.jsonl"
+}
+
 @test "--verify-sent refuses an agent whose prompt was not the composed one" {
   # the reachability probe was launched before the envelope existed
+  cp "$ROOT/briefs/brief-N.md" "$ROOT/probe.md"
+  fake_transcript probe "$ROOT/probe.md"
   run --separate-stderr python3 "$SCRIPT" --root "$ROOT" --index 6 --arm N --part a \
-    --verify-sent a3ed8e17ab309fbc6
+    --verify-sent probe
   [ "$status" -ne 0 ]
   [[ "$stderr" == *"not the composed one"* ]]
+}
+
+@test "--verify-sent accepts an agent that received exactly the composed prompt" {
+  # byte for byte: run strips trailing newlines, print() adds exactly one
+  python3 "$SCRIPT" --root "$ROOT" --index 6 --arm N --part a 2>/dev/null |
+    python3 -c "import sys; sys.stdout.write(sys.stdin.read()[:-1])" > "$ROOT/sent.md"
+  fake_transcript sent "$ROOT/sent.md"
+  run --separate-stderr python3 "$SCRIPT" --root "$ROOT" --index 6 --arm N --part a \
+    --verify-sent sent
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"RECEIVED EXACTLY THE COMPOSED PROMPT"* ]]
 }
