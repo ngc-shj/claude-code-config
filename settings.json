@@ -40,8 +40,6 @@
       "Bash(docker container prune*)",
       "Bash(docker push*)",
       "Bash(docker login*)",
-      "Bash(docker save*)",
-      "Bash(docker load*)",
       "Bash(docker-compose down -v*)",
       "Bash(docker compose down -v*)",
       "Bash(npm publish*)",
@@ -194,7 +192,9 @@
       "Bash(docker-compose down*)",
       "Bash(docker compose restart*)",
       "Bash(docker-compose restart*)",
-      "Bash(docker pull *)"
+      "Bash(docker pull *)",
+      "Bash(docker save*)",
+      "Bash(docker load*)"
     ]
   },
   "hooks": {
