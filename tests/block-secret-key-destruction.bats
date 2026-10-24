@@ -25,6 +25,14 @@ run_hook() {
   [[ "$output" == *'"decision":"block"'* ]]
 }
 
+@test "deny block reason says a maximum-window schedule is blocked too" {
+  # the 30-day schedule above is blocked, so the reason must not present it as a way past the gate
+  run run_hook Bash "aws kms schedule-key-deletion --key-id 12345-abc --pending-window-in-days 30"
+  local reason
+  reason=$(printf '%s' "$output" | jq -r .reason)
+  [[ "$reason" == *"does not inspect the window"* ]]
+}
+
 @test "deny: aws kms disable-key" {
   run run_hook Bash "aws kms disable-key --key-id 12345-abc"
   [[ "$output" == *'"decision":"block"'* ]]
